@@ -106,6 +106,7 @@ export type Opcao = {
   diasSemana?: string[] | null;
   turnoPadraoId?: string | null;
   vinculoAtivoId?: string | null;
+  temVinculoHistorico?: boolean;
   matricula?: string | null;
   funcaoNome?: string | null;
   diaDaSemana?: string;

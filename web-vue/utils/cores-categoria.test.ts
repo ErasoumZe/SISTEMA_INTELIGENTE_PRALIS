@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// @vitest-environment node
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CATEGORIA_POR_SECAO,
@@ -14,9 +15,9 @@ import { corCategoriaPorTela } from "./tema";
 
 // Le do DISCO, e nao por import: `main.css?raw` volta vazio (a config de teste do web-vue neutraliza
 // CSS) e `import.meta.url` nao e file:// neste ambiente. Os dois caminhos cobrem rodar a suite da
-// raiz do repo ou de dentro de web-vue.
-const caminho = [resolve("assets/main.css"), resolve("web-vue/assets/main.css")].find((p) => existsSync(p));
-if (!caminho) throw new Error("main.css nao encontrado — o guardiao de cor nao pode passar sem ler o CSS");
+// raiz do repo ou de dentro de web-vue. A resolucao parte deste modulo para funcionar tambem
+// quando a suite e disparada pelo workspace `tests`.
+const caminho = fileURLToPath(new URL("../assets/main.css", import.meta.url));
 const mainCss = readFileSync(caminho, "utf8");
 
 function tokenDoCss(nome: string): string | null {
@@ -222,8 +223,9 @@ describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () =>
 
   // Anti-falso-verde: se `SECOES_MENU` vier vazio (import quebrado, renome de arquivo), o teste
   // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as cinco secoes.
-  it("achou as cinco secoes declaradas — o teste acima nao passou no vazio", () => {
-    expect(titulosDasSecoes).toHaveLength(5);
+  it("achou as seis secoes declaradas — o teste acima nao passou no vazio", () => {
+    expect(titulosDasSecoes).toHaveLength(6);
+    expect(titulosDasSecoes).toContain("Departamento pessoal");
     expect(titulosDasSecoes).toContain("Saidas");
     expect(titulosDasSecoes).toContain("Configuração");
   });

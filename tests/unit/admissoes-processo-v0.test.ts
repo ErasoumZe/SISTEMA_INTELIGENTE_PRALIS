@@ -49,14 +49,13 @@ describe("a V0 nao cresce para fora do escopo", () => {
     ]);
   });
 
-  it("nao existe rota de iniciar admissao", () => {
-    // Escrito em pedacos para este arquivo nao ser o unico culpado da propria varredura.
-    for (const verbo of ["iniciar", "efetivar"]) {
-      const proibido = "/api/admissoes/" + "processos/:id/" + verbo;
-      for (const { nome, codigo } of fontes) {
-        expect(codigo, `${nome} (${verbo})`).not.toContain(proibido);
-      }
-    }
+  it("nao existe rota paralela para iniciar admissao", () => {
+    const iniciar = "/api/admissoes/" + "processos/:id/iniciar";
+    for (const { nome, codigo } of fontes) expect(codigo, nome).not.toContain(iniciar);
+
+    const controller = fontes.find((f) => f.nome === "processos.controller.ts");
+    const efetivacoes = controller?.codigo.match(/\/api\/admissoes\/processos\/:id\/efetivar/gu) ?? [];
+    expect(efetivacoes).toHaveLength(1);
   });
 
   it("existe UMA rota de criacao, e ela e a admissao direta", () => {
@@ -102,7 +101,7 @@ describe("a V0 nao cresce para fora do escopo", () => {
     const tela = semComentarios(
       readFileSync(join(RAIZ, "web-vue", "components", "admissoes", "AdmissoesProcessosPage.vue"), "utf8")
     );
-    for (const verbo of ["Iniciar admissão", "Efetivar", "Iniciar processo"]) {
+    for (const verbo of ["Iniciar admissão", "Iniciar processo"]) {
       expect(tela, verbo).not.toContain(verbo);
     }
     // Um unico BOTAO de criacao. Conta o gatilho, nao a palavra: o estado vazio tambem menciona
@@ -142,7 +141,7 @@ describe("a V0 nao cresce para fora do escopo", () => {
     expect(paginas).toEqual(["admissoes_processos"]);
     const pasta = join(RAIZ, "web-vue", "pages", "admissoes_processos");
     expect(readdirSync(pasta).sort()).toEqual(["[id]", "index.vue"]);
-    expect(readdirSync(join(pasta, "[id]"))).toEqual(["ficha.vue"]);
+    expect(readdirSync(join(pasta, "[id]")).sort()).toEqual(["efetivar.vue", "ficha.vue"]);
   });
 });
 
@@ -263,17 +262,18 @@ describe("a V0 e puramente aditiva", () => {
     expect(destinos).not.toContain(colaboradores);
   });
 
-  it("colaboradores continua sem unique novo", () => {
-    // A V0 nao pode ter tocado a tabela. `colaboradores_usuario_id_unico` e indice parcial, nao
-    // unique constraint — a lista de uniques da tabela tem de continuar vazia.
-    expect(getTableConfig(colaboradores).uniqueConstraints.map((u) => u.name)).toEqual([]);
+  it("E7 adiciona somente a chave composta exigida pelos vinculos", () => {
+    // E7 precisa da chave (id, empresa_id) para as FKs compostas dos vinculos. Ela nao cria uma
+    // segunda identidade funcional para o colaborador.
+    expect(getTableConfig(colaboradores).uniqueConstraints.map((u) => u.name)).toEqual([
+      "colaboradores_id_empresa_unica"
+    ]);
   });
 
   it("a migration nova nao altera tabela existente", () => {
-    // Enquanto a migration consolidada nao existir, o teste passa por ausencia — e volta a valer no minuto em que ela
-    // aparecer. E de proposito: o guarda precisa estar pronto ANTES da migration.
+    // E7 so toca as tabelas necessarias para vinculo, matricula, trilha e a chave composta.
     const dir = join(RAIZ, "db", "migrations");
-    const nova = readdirSync(dir).filter((n) => n.startsWith("0048_") && n.endsWith(".sql"));
+    const nova = readdirSync(dir).filter((n) => n.startsWith("0050_") && n.endsWith(".sql"));
     for (const arquivo of nova) {
       const sql = readFileSync(join(dir, arquivo), "utf8");
       const alterados = [...sql.matchAll(/ALTER TABLE "([a-z0-9_]+)"/gi)].map((m) => m[1]);
@@ -288,6 +288,12 @@ describe("a V0 e puramente aditiva", () => {
         "admissoes_processos_internos",
         "admissoes_testes",
         "admissoes_testes_historico",
+        "admissoes_processos_historico",
+        "colaboradores",
+        "colaboradores_eventos",
+        "colaboradores_vinculos",
+        "colaboradores_vinculos_desligamento_etapas",
+        "empresas",
         "funcoes_operacionais",
         "turnos"
       ]);
@@ -349,6 +355,7 @@ describe("a origem e o vinculo com o teste", () => {
       turnoDiasSemana: ["SEGUNDA", "TERCA"],
       // HISTORICO LEGADO: nulo em processo novo, preenchido nos que a V1A criou antes do catalogo.
       jornadaHorario: null,
+      fichaSituacao: null,
       internos,
       criadoPorNome: null,
       criadoEm: "2026-09-01T12:00:00.000Z",

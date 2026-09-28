@@ -693,7 +693,7 @@ describe("a ficha do candidato tem uma porta so, e ela leva para a tela propria"
     // continuaria apontando para a rota velha no dia em que ela mudasse.
     const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
     expect(processos).toContain("rotaRevisaoDaFicha(");
-    expect(processos).not.toMatch(/["'`]\/admissoes_processos\/\$\{/u);
+    expect(processos).not.toMatch(/["'`]\/admissoes_processos\/\$\{[^}]+\}\/ficha/u);
   });
 });
 

@@ -1,13 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// @vitest-environment node
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 // Le do DISCO, e nao por import: `main.css?raw` volta vazio (a config de teste do web-vue
-// neutraliza CSS). Mesmo motivo e mesmo molde de `web-vue/utils/cores-categoria.test.ts`, que
-// explica a armadilha na linha 13 dele. Os dois caminhos cobrem rodar a suite da raiz do repo
-// ou de dentro de web-vue.
-const caminho = [resolve("assets/main.css"), resolve("web-vue/assets/main.css")].find((p) => existsSync(p));
-if (!caminho) throw new Error("main.css nao encontrado — o guardiao de cor nao pode passar sem ler o CSS");
+// neutraliza CSS). O caminho e relativo a ESTE arquivo, nao ao diretorio de onde a suite foi
+// chamada: o workspace `tests` e a raiz do monorepo possuem CWDs diferentes.
+const caminho = fileURLToPath(new URL("./main.css", import.meta.url));
 const mainCss = readFileSync(caminho, "utf8");
 
 // Este arquivo e a regra §0.1 da DIRECAO_VISUAL_CICLUZ_PROPOSTA virando guardiao mecanico:
