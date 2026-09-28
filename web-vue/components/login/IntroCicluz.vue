@@ -10,7 +10,8 @@ const pathDaMarca = officialSvgRaw.match(/<path[^>]*d="([^"]+)"/i)?.[1] ?? "";
 const ids = {
   brilho: `intro-cicluz-brilho-${uid}`,
   aura: `intro-cicluz-aura-${uid}`,
-  gradiente: `intro-cicluz-gradiente-${uid}`
+  gradiente: `intro-cicluz-gradiente-${uid}`,
+  gradienteHalo: `intro-cicluz-gradiente-halo-${uid}`
 };
 
 let temporizador: number | undefined;
@@ -37,10 +38,17 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     <div class="intro-cicluz__radiancia"></div>
 
     <div class="intro-cicluz__marca">
-      <svg class="intro-cicluz__svg" viewBox="0 0 3986 4387" shape-rendering="geometricPrecision" focusable="false">
+      <!-- O halo e a linha principal sao SVGs separados. Assim, o blur nunca rasteriza a linha
+           que cresce na tela: o zoom acontece pelo viewBox vetorial, e nao por uma imagem ampliada. -->
+      <svg
+        class="intro-cicluz__svg intro-cicluz__svg--halo"
+        viewBox="-10507 -4838 25000 14062"
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+        focusable="false"
+      >
         <defs>
-          <linearGradient :id="ids.gradiente" x1="6%" y1="88%" x2="91%" y2="12%">
-            <!-- A cor viaja pelo traco; nao e uma troca abrupta de cor no CSS. -->
+          <linearGradient :id="ids.gradienteHalo" x1="6%" y1="88%" x2="91%" y2="12%">
             <animateTransform
               attributeName="gradientTransform"
               type="translate"
@@ -63,12 +71,21 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
             <feGaussianBlur stdDeviation="9" />
           </filter>
         </defs>
+        <animate
+          attributeName="viewBox"
+          dur="2600ms"
+          fill="freeze"
+          calcMode="spline"
+          keyTimes="0; 0.18; 0.60; 0.86; 1"
+          keySplines="0.16 1 0.3 1; 0.16 1 0.3 1; 0.7 0 0.84 0; 0.7 0 0.84 0"
+          values="-10507 -4838 25000 14062; -10507 -4838 25000 14062; -1000 509 5986 3367; -300 845 4586 2579; -300 845 4586 2579"
+        />
         <path
           class="intro-cicluz__aura"
           :d="pathDaMarca"
           :filter="`url(#${ids.aura})`"
           fill="none"
-          :stroke="`url(#${ids.gradiente})`"
+          :stroke="`url(#${ids.gradienteHalo})`"
           stroke-width="230"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -78,27 +95,48 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
           :d="pathDaMarca"
           :filter="`url(#${ids.brilho})`"
           fill="none"
-          :stroke="`url(#${ids.gradiente})`"
+          :stroke="`url(#${ids.gradienteHalo})`"
           stroke-width="216"
           stroke-linecap="round"
           stroke-linejoin="round"
         />
-        <!-- Um ponto de luz percorre a marca, como uma energia passando pelo circuito da Cicluz. -->
-        <path
-          class="intro-cicluz__fagulha"
-          :d="pathDaMarca"
-          :filter="`url(#${ids.brilho})`"
-          fill="none"
-          stroke="#ffffff"
-          stroke-width="216"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          pathLength="1000"
-          stroke-dasharray="88 912"
-          stroke-dashoffset="-88"
-        >
-          <animate attributeName="stroke-dashoffset" values="-88; -1088" dur="1.55s" repeatCount="indefinite" />
-        </path>
+      </svg>
+
+      <svg
+        class="intro-cicluz__svg intro-cicluz__svg--traco"
+        viewBox="-10507 -4838 25000 14062"
+        preserveAspectRatio="xMidYMid meet"
+        shape-rendering="geometricPrecision"
+        focusable="false"
+      >
+        <defs>
+          <linearGradient :id="ids.gradiente" x1="6%" y1="88%" x2="91%" y2="12%">
+            <!-- A cor percorre o tracado vetorial: sem textura, bitmap ou filtro na borda. -->
+            <animateTransform
+              attributeName="gradientTransform"
+              type="translate"
+              values="-0.85 0; 0.65 0; -0.85 0"
+              dur="1.9s"
+              repeatCount="indefinite"
+            />
+            <stop offset="0%" stop-color="#e83164" />
+            <stop offset="17%" stop-color="#ff5b22" />
+            <stop offset="34%" stop-color="#ffd224" />
+            <stop offset="51%" stop-color="#66d945" />
+            <stop offset="69%" stop-color="#20c8dc" />
+            <stop offset="85%" stop-color="#7259ff" />
+            <stop offset="100%" stop-color="#d932b7" />
+          </linearGradient>
+        </defs>
+        <animate
+          attributeName="viewBox"
+          dur="2600ms"
+          fill="freeze"
+          calcMode="spline"
+          keyTimes="0; 0.18; 0.60; 0.86; 1"
+          keySplines="0.16 1 0.3 1; 0.16 1 0.3 1; 0.7 0 0.84 0; 0.7 0 0.84 0"
+          values="-10507 -4838 25000 14062; -10507 -4838 25000 14062; -1000 509 5986 3367; -300 845 4586 2579; -300 845 4586 2579"
+        />
         <path
           class="intro-cicluz__traco"
           :d="pathDaMarca"
@@ -173,42 +211,40 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   animation: intro-radiancia var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__marca {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
-  width: clamp(152px, 27vmin, 282px);
-  aspect-ratio: 3986 / 4387;
-  /* A marca fica em escala de leitura. A expansao e da radiancia atras dela: ampliar uma camada
-     com filtros e o que fazia o compositor transformar o SVG em textura pixelada. */
-  will-change: transform, opacity;
+  pointer-events: none;
+  /* O SVG ocupa o viewport desde o inicio. Somente o viewBox e animado, preservando o vetor em
+     toda a aproximacao e evitando a textura craquelada que um scale grande produzia. */
+  will-change: opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
 }
-.intro-cicluz__aura,
-.intro-cicluz__brilho,
-.intro-cicluz__traco {
-  transform-box: fill-box;
-  transform-origin: center;
+.intro-cicluz__svg--halo {
+  opacity: 0.94;
+  animation: intro-halo var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__svg--traco {
+  opacity: 1;
 }
 .intro-cicluz__aura {
-  opacity: 0.21;
+  opacity: 0.18;
   animation: intro-pulso 1.15s ease-in-out infinite alternate;
 }
 .intro-cicluz__brilho {
-  opacity: 0.27;
+  opacity: 0.26;
   animation: intro-pulso 0.82s 120ms ease-in-out infinite alternate-reverse;
 }
 .intro-cicluz__traco {
-  /* O traco principal nunca recebe blur: e ele que mantem a marca nitida no zoom. */
-  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.34));
-}
-.intro-cicluz__fagulha {
-  opacity: 0.86;
-  mix-blend-mode: screen;
+  /* Nenhum filter/drop-shadow aqui: esta e a camada vetorial que o usuario ve nitida. */
 }
 .intro-cicluz__carregamento {
   position: absolute;
@@ -327,23 +363,35 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 @keyframes intro-marca {
   0% {
     opacity: 0;
-    transform: scale(0.88);
   }
   18% {
     opacity: 1;
-    transform: scale(1);
   }
-  56% {
+  70% {
     opacity: 1;
-    transform: scale(1.018);
   }
-  80% {
-    opacity: 0.94;
-    transform: scale(1.006);
+  88% {
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
-    transform: scale(0.94);
+  }
+}
+@keyframes intro-halo {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.74;
+  }
+  58% {
+    opacity: 0.94;
+  }
+  82% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0;
   }
 }
 @keyframes intro-pulso {
@@ -388,7 +436,6 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__marca,
   .intro-cicluz__aura,
   .intro-cicluz__brilho,
-  .intro-cicluz__fagulha,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento {
     animation: none;
