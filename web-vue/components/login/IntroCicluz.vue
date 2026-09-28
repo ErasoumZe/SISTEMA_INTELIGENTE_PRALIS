@@ -4,7 +4,7 @@ import officialSvgRaw from "~/assets/cicluz-simbolo-path.svg?raw";
 
 const emit = defineEmits<{ concluida: [] }>();
 
-const DURACAO_INTRO_MS = 2_150;
+const DURACAO_INTRO_MS = 2_600;
 const uid = useId().replace(/:/g, "");
 const pathDaMarca = officialSvgRaw.match(/<path[^>]*d="([^"]+)"/i)?.[1] ?? "";
 const ids = {
@@ -34,11 +34,20 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
     <div class="intro-cicluz__luzes"></div>
+    <div class="intro-cicluz__radiancia"></div>
 
     <div class="intro-cicluz__marca">
       <svg class="intro-cicluz__svg" viewBox="0 0 3986 4387" shape-rendering="geometricPrecision" focusable="false">
         <defs>
           <linearGradient :id="ids.gradiente" x1="6%" y1="88%" x2="91%" y2="12%">
+            <!-- A cor viaja pelo traco; nao e uma troca abrupta de cor no CSS. -->
+            <animateTransform
+              attributeName="gradientTransform"
+              type="translate"
+              values="-0.85 0; 0.65 0; -0.85 0"
+              dur="1.9s"
+              repeatCount="indefinite"
+            />
             <stop offset="0%" stop-color="#e83164" />
             <stop offset="17%" stop-color="#ff5b22" />
             <stop offset="34%" stop-color="#ffd224" />
@@ -48,10 +57,10 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
             <stop offset="100%" stop-color="#d932b7" />
           </linearGradient>
           <filter :id="ids.aura" x="-42%" y="-42%" width="184%" height="184%">
-            <feGaussianBlur stdDeviation="105" />
+            <feGaussianBlur stdDeviation="48" />
           </filter>
           <filter :id="ids.brilho" x="-28%" y="-28%" width="156%" height="156%">
-            <feGaussianBlur stdDeviation="34" />
+            <feGaussianBlur stdDeviation="16" />
           </filter>
         </defs>
         <path
@@ -60,7 +69,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
           :filter="`url(#${ids.aura})`"
           fill="none"
           :stroke="`url(#${ids.gradiente})`"
-          stroke-width="290"
+          stroke-width="230"
           stroke-linecap="round"
           stroke-linejoin="round"
         />
@@ -70,10 +79,26 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
           :filter="`url(#${ids.brilho})`"
           fill="none"
           :stroke="`url(#${ids.gradiente})`"
-          stroke-width="236"
+          stroke-width="216"
           stroke-linecap="round"
           stroke-linejoin="round"
         />
+        <!-- Um ponto de luz percorre a marca, como uma energia passando pelo circuito da Cicluz. -->
+        <path
+          class="intro-cicluz__fagulha"
+          :d="pathDaMarca"
+          :filter="`url(#${ids.brilho})`"
+          fill="none"
+          stroke="#ffffff"
+          stroke-width="216"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          pathLength="1000"
+          stroke-dasharray="88 912"
+          stroke-dashoffset="-88"
+        >
+          <animate attributeName="stroke-dashoffset" values="-88; -1088" dur="1.55s" repeatCount="indefinite" />
+        </path>
         <path
           class="intro-cicluz__traco"
           :d="pathDaMarca"
@@ -110,7 +135,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 .intro-cicluz__base,
 .intro-cicluz__vidro,
-.intro-cicluz__luzes {
+.intro-cicluz__luzes,
+.intro-cicluz__radiancia {
   position: absolute;
   inset: -5%;
   pointer-events: none;
@@ -121,9 +147,9 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 .intro-cicluz__vidro {
   background:
-    linear-gradient(120deg, rgb(9 14 24 / 0.82), rgb(15 12 34 / 0.56) 48%, rgb(12 18 27 / 0.8)), rgb(9 14 24 / 0.76);
-  backdrop-filter: blur(30px) saturate(145%);
-  -webkit-backdrop-filter: blur(30px) saturate(145%);
+    linear-gradient(120deg, rgb(9 14 24 / 0.66), rgb(15 12 34 / 0.38) 48%, rgb(12 18 27 / 0.62)), rgb(9 14 24 / 0.54);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
   animation: intro-vidro var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__luzes {
@@ -135,6 +161,17 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   filter: saturate(1.24);
   mix-blend-mode: screen;
   animation: intro-luzes var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__radiancia {
+  inset: 12%;
+  z-index: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 28% 72%, rgb(255 94 37 / 0.48), transparent 27%),
+    radial-gradient(circle at 72% 24%, rgb(110 89 255 / 0.44), transparent 30%),
+    radial-gradient(circle at 48% 48%, rgb(38 205 215 / 0.4), transparent 52%);
+  filter: blur(42px) saturate(1.35);
+  animation: intro-radiancia var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__marca {
   position: relative;
@@ -157,15 +194,20 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   transform-origin: center;
 }
 .intro-cicluz__aura {
-  opacity: 0.62;
+  opacity: 0.38;
   animation: intro-pulso 1.15s ease-in-out infinite alternate;
 }
 .intro-cicluz__brilho {
-  opacity: 0.88;
+  opacity: 0.5;
   animation: intro-pulso 0.82s 120ms ease-in-out infinite alternate-reverse;
 }
 .intro-cicluz__traco {
-  filter: drop-shadow(0 0 7px rgb(255 255 255 / 0.42));
+  /* O traco principal nunca recebe blur: e ele que mantem a marca nitida no zoom. */
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.34));
+}
+.intro-cicluz__fagulha {
+  opacity: 0.86;
+  mix-blend-mode: screen;
 }
 .intro-cicluz__carregamento {
   position: absolute;
@@ -226,22 +268,27 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
 }
 @keyframes intro-base {
-  0%,
-  67% {
+  0% {
     opacity: 1;
+  }
+  38% {
+    opacity: 0.52;
   }
   100% {
     opacity: 0;
   }
 }
 @keyframes intro-vidro {
-  0%,
-  56% {
+  0% {
     opacity: 1;
     transform: scale(1.025);
   }
-  78% {
-    opacity: 0.92;
+  44% {
+    opacity: 0.86;
+    transform: scale(1.016);
+  }
+  76% {
+    opacity: 0.72;
     transform: scale(1.008);
   }
   100% {
@@ -267,26 +314,48 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     transform: scale(1.24) rotate(5deg);
   }
 }
+@keyframes intro-radiancia {
+  0% {
+    opacity: 0;
+    transform: scale(0.54) rotate(-18deg);
+  }
+  18% {
+    opacity: 0.88;
+    transform: scale(0.9) rotate(-7deg);
+  }
+  56% {
+    opacity: 1;
+    transform: scale(1.2) rotate(8deg);
+  }
+  82% {
+    opacity: 0.58;
+    transform: scale(1.8) rotate(15deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.3) rotate(22deg);
+  }
+}
 @keyframes intro-marca {
   0% {
     opacity: 0;
     transform: scale(0.56);
   }
-  15% {
+  18% {
     opacity: 1;
-    transform: scale(0.98);
+    transform: scale(0.92);
   }
-  52% {
+  56% {
     opacity: 1;
-    transform: scale(1.08);
+    transform: scale(1.04);
   }
-  76% {
+  80% {
     opacity: 0.94;
-    transform: scale(3.7);
+    transform: scale(3.25);
   }
   100% {
     opacity: 0;
-    transform: scale(8.7);
+    transform: scale(7.8);
   }
 }
 @keyframes intro-pulso {
@@ -329,17 +398,17 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
       opacity: 0;
       transform: scale(0.56);
     }
-    15% {
+    18% {
       opacity: 1;
-      transform: scale(0.98);
+      transform: scale(0.92);
     }
-    52% {
+    56% {
       opacity: 1;
-      transform: scale(1.08);
+      transform: scale(1.04);
     }
-    76% {
+    80% {
       opacity: 0.94;
-      transform: scale(2.75);
+      transform: scale(2.42);
     }
     100% {
       opacity: 0;
@@ -354,9 +423,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__base,
   .intro-cicluz__vidro,
   .intro-cicluz__luzes,
+  .intro-cicluz__radiancia,
   .intro-cicluz__marca,
   .intro-cicluz__aura,
   .intro-cicluz__brilho,
+  .intro-cicluz__fagulha,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento,
   .intro-cicluz__marcador {
