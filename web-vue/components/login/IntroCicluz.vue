@@ -57,10 +57,10 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
             <stop offset="100%" stop-color="#d932b7" />
           </linearGradient>
           <filter :id="ids.aura" x="-42%" y="-42%" width="184%" height="184%">
-            <feGaussianBlur stdDeviation="48" />
+            <feGaussianBlur stdDeviation="30" />
           </filter>
           <filter :id="ids.brilho" x="-28%" y="-28%" width="156%" height="156%">
-            <feGaussianBlur stdDeviation="16" />
+            <feGaussianBlur stdDeviation="9" />
           </filter>
         </defs>
         <path
@@ -114,7 +114,6 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     <div class="intro-cicluz__carregamento">
       <div class="intro-cicluz__trilho">
         <span class="intro-cicluz__preenchimento"></span>
-        <span class="intro-cicluz__marcador"></span>
       </div>
     </div>
   </section>
@@ -128,7 +127,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: #0b1018;
+  background: transparent;
   pointer-events: auto;
   will-change: opacity;
   animation: intro-palco var(--intro-duracao) linear both;
@@ -178,6 +177,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   z-index: 1;
   width: clamp(152px, 27vmin, 282px);
   aspect-ratio: 3986 / 4387;
+  /* A marca fica em escala de leitura. A expansao e da radiancia atras dela: ampliar uma camada
+     com filtros e o que fazia o compositor transformar o SVG em textura pixelada. */
   will-change: transform, opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -194,11 +195,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   transform-origin: center;
 }
 .intro-cicluz__aura {
-  opacity: 0.38;
+  opacity: 0.21;
   animation: intro-pulso 1.15s ease-in-out infinite alternate;
 }
 .intro-cicluz__brilho {
-  opacity: 0.5;
+  opacity: 0.27;
   animation: intro-pulso 0.82s 120ms ease-in-out infinite alternate-reverse;
 }
 .intro-cicluz__traco {
@@ -215,20 +216,19 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   bottom: max(26px, env(safe-area-inset-bottom));
   left: max(24px, env(safe-area-inset-left));
   z-index: 2;
-  max-width: 440px;
+  max-width: clamp(88px, 18vw, 180px);
   margin: auto;
   animation: intro-carregamento var(--intro-duracao) linear both;
 }
 .intro-cicluz__trilho {
   position: relative;
-  height: 5px;
+  height: 3px;
   overflow: visible;
-  border: 1px solid rgb(255 255 255 / 0.32);
   border-radius: var(--cx-r-pill);
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.18);
   box-shadow:
-    inset 0 1px 1px rgb(0 0 0 / 0.26),
-    0 4px 20px rgb(0 0 0 / 0.26);
+    0 0 12px rgb(114 89 255 / 0.18),
+    inset 0 1px rgb(255 255 255 / 0.14);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -238,25 +238,10 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #e83164, #ff5b22 24%, #ffd224 43%, #66d945 59%, #20c8dc 75%, #7259ff 100%);
-  box-shadow: 0 0 16px rgb(114 89 255 / 0.78);
-  animation: intro-progresso 1.66s 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.intro-cicluz__marcador {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgb(255 255 255 / 0.66);
-  border-radius: 5px;
-  background: rgb(255 255 255 / 0.34);
   box-shadow:
-    0 2px 11px rgb(0 0 0 / 0.34),
-    inset 0 1px rgb(255 255 255 / 0.52);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transform: translate(-50%, -50%);
-  animation: intro-marcador 1.66s 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    0 0 12px rgb(32 200 220 / 0.92),
+    0 0 22px rgb(114 89 255 / 0.58);
+  animation: intro-progresso 2.04s 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes intro-palco {
   0%,
@@ -269,10 +254,13 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-base {
   0% {
-    opacity: 1;
+    opacity: 0.92;
   }
-  38% {
-    opacity: 0.52;
+  24% {
+    opacity: 0.58;
+  }
+  60% {
+    opacity: 0.16;
   }
   100% {
     opacity: 0;
@@ -280,15 +268,15 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-vidro {
   0% {
-    opacity: 1;
+    opacity: 0.9;
     transform: scale(1.025);
   }
   44% {
-    opacity: 0.86;
+    opacity: 0.58;
     transform: scale(1.016);
   }
   76% {
-    opacity: 0.72;
+    opacity: 0.26;
     transform: scale(1.008);
   }
   100% {
@@ -339,23 +327,23 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 @keyframes intro-marca {
   0% {
     opacity: 0;
-    transform: scale(0.56);
+    transform: scale(0.88);
   }
   18% {
     opacity: 1;
-    transform: scale(0.92);
+    transform: scale(1);
   }
   56% {
     opacity: 1;
-    transform: scale(1.04);
+    transform: scale(1.018);
   }
   80% {
     opacity: 0.94;
-    transform: scale(3.25);
+    transform: scale(1.006);
   }
   100% {
     opacity: 0;
-    transform: scale(7.8);
+    transform: scale(0.94);
   }
 }
 @keyframes intro-pulso {
@@ -382,38 +370,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     width: 100%;
   }
 }
-@keyframes intro-marcador {
-  to {
-    left: 100%;
-  }
-}
 @media (max-width: 560px) {
   .intro-cicluz__carregamento {
     right: max(20px, env(safe-area-inset-right));
     bottom: max(20px, env(safe-area-inset-bottom));
     left: max(20px, env(safe-area-inset-left));
-  }
-  @keyframes intro-marca {
-    0% {
-      opacity: 0;
-      transform: scale(0.56);
-    }
-    18% {
-      opacity: 1;
-      transform: scale(0.92);
-    }
-    56% {
-      opacity: 1;
-      transform: scale(1.04);
-    }
-    80% {
-      opacity: 0.94;
-      transform: scale(2.42);
-    }
-    100% {
-      opacity: 0;
-      transform: scale(6.2);
-    }
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -429,8 +390,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__brilho,
   .intro-cicluz__fagulha,
   .intro-cicluz__carregamento,
-  .intro-cicluz__preenchimento,
-  .intro-cicluz__marcador {
+  .intro-cicluz__preenchimento {
     animation: none;
   }
   .intro-cicluz__base,
@@ -442,9 +402,6 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
   .intro-cicluz__preenchimento {
     width: 100%;
-  }
-  .intro-cicluz__marcador {
-    left: 100%;
   }
 }
 </style>
