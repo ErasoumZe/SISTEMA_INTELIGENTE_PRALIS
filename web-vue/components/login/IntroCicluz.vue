@@ -5,6 +5,8 @@ const emit = defineEmits<{ concluida: [] }>();
 const props = withDefaults(defineProps<{ pronta?: boolean }>(), { pronta: true });
 
 const DURACAO_INTRO_MS = 2_800;
+const marcaFinal = [..."Cicluz"];
+const assinaturaFinal = [..."Sistema inteligente"];
 let temporizador: number | undefined;
 
 function iniciarIntro() {
@@ -110,6 +112,27 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
       <AppLogoAnimada size="clamp(148px, 27vmin, 310px)" :glow-intensity="0.4" :speed="2.1" />
     </div>
 
+    <div class="intro-cicluz__mensagem-final">
+      <p class="intro-cicluz__nome-final" aria-label="Cicluz">
+        <span
+          v-for="(letra, indice) in marcaFinal"
+          :key="`marca-${indice}`"
+          class="intro-cicluz__letra"
+          :style="{ animationDelay: `${1720 + indice * 48}ms` }"
+          >{{ letra }}</span
+        >
+      </p>
+      <p class="intro-cicluz__assinatura-final" aria-label="Sistema inteligente">
+        <span
+          v-for="(letra, indice) in assinaturaFinal"
+          :key="`assinatura-${indice}`"
+          class="intro-cicluz__letra intro-cicluz__letra--assinatura"
+          :style="{ animationDelay: `${1940 + indice * 20}ms` }"
+          >{{ letra === " " ? "\u00A0" : letra }}</span
+        >
+      </p>
+    </div>
+
     <div class="intro-cicluz__carregamento">
       <div class="intro-cicluz__trilho">
         <span class="intro-cicluz__preenchimento"></span>
@@ -202,12 +225,58 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   will-change: transform, opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+.intro-cicluz__mensagem-final {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  pointer-events: none;
+}
+.intro-cicluz__nome-final,
+.intro-cicluz__assinatura-final {
+  display: flex;
+  margin: 0;
+  white-space: pre;
+}
+.intro-cicluz__nome-final {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 3.2vmin, 40px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 22px rgb(118 89 255 / 0.42);
+}
+.intro-cicluz__assinatura-final {
+  margin-top: 4px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(11px, 1.35vmin, 15px);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  color: rgb(225 231 255 / 0.86);
+}
+.intro-cicluz__letra {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(7px) scale(0.92);
+  animation-name: intro-letra;
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+.intro-cicluz__letra--assinatura {
+  animation-duration: 170ms;
+}
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__base,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__vidro,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__cores,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__luz-central,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__orbitas,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__marca,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__mensagem-final,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__letra,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__carregamento,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__preenchimento {
   animation-play-state: paused;
@@ -363,13 +432,23 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     opacity: 1;
     transform: scale(1.035);
   }
-  87% {
-    opacity: 0.9;
+  79% {
+    opacity: 0.36;
     transform: scale(1.04);
+  }
+  90% {
+    opacity: 0;
+    transform: scale(1.045);
   }
   100% {
     opacity: 0;
     transform: scale(1.045);
+  }
+}
+@keyframes intro-letra {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 @keyframes intro-carregamento {
@@ -405,6 +484,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__luz-central,
   .intro-cicluz__orbitas,
   .intro-cicluz__marca,
+  .intro-cicluz__mensagem-final,
+  .intro-cicluz__letra,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento {
     animation: none;
