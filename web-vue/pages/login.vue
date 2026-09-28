@@ -21,7 +21,7 @@ const password = ref("");
 const loading = ref(false);
 const error = ref("");
 const mostrarSenha = ref(false);
-const introVisivel = ref(true);
+const introAposLogin = useState("padaria.intro-apos-login", () => false);
 
 async function login() {
   loading.value = true;
@@ -39,6 +39,7 @@ async function login() {
       // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
       // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
       limparEstadoWorkspace(useNuxtApp().payload.state);
+      introAposLogin.value = true;
       await router.push("/");
     } else {
       error.value = "E-mail ou senha inválidos.";
@@ -54,7 +55,6 @@ async function login() {
 <template>
   <v-main class="login-page tela-entrada d-flex align-center justify-center pa-4">
     <AppFundoEntrada />
-    <LoginIntroCicluz v-if="introVisivel" @concluida="introVisivel = false" />
 
     <div class="login-card cartao-entrada">
       <!-- A MARCA: simbolo animado em cima, palavra embaixo.

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import simboloVetorUrl from "~/assets/cicluz-simbolo-path.svg?url";
+
 const emit = defineEmits<{ concluida: [] }>();
 
 let temporizador: number | undefined;
@@ -11,6 +13,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (temporizador) window.clearTimeout(temporizador);
 });
+
+const estiloMarca = { "--intro-mascara": `url("${simboloVetorUrl}")` };
 </script>
 
 <template>
@@ -19,7 +23,7 @@ onBeforeUnmount(() => {
     <div class="intro-cicluz__vidro"></div>
 
     <div class="intro-cicluz__marca">
-      <AppLogoAnimada :size="'clamp(118px, 18vw, 194px)'" :speed="8" :glow-intensity="0.9" />
+      <div class="intro-cicluz__simbolo" :style="estiloMarca"></div>
     </div>
 
     <div class="intro-cicluz__carregamento">
@@ -34,19 +38,18 @@ onBeforeUnmount(() => {
 <style scoped>
 .intro-cicluz {
   position: fixed;
-  z-index: 20;
+  z-index: 3000;
   inset: 0;
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: rgb(9 11 20 / 0.88);
-  animation: intro-saida 300ms 850ms var(--cx-ease-out) both;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .intro-cicluz__vidro {
   position: absolute;
   inset: 0;
+  background-color: rgb(9 11 20 / 0.86);
   background:
     radial-gradient(
       55% 46% at 15% 84%,
@@ -54,17 +57,37 @@ onBeforeUnmount(() => {
       transparent 72%
     ),
     radial-gradient(54% 44% at 84% 18%, color-mix(in srgb, var(--cat-despesas-base) 28%, transparent), transparent 72%),
-    radial-gradient(46% 46% at 50% 0%, color-mix(in srgb, var(--cat-entradas-base) 22%, transparent), transparent 72%);
+    radial-gradient(46% 46% at 50% 0%, color-mix(in srgb, var(--cat-entradas-base) 22%, transparent), transparent 72%),
+    rgb(9 11 20 / 0.86);
   backdrop-filter: blur(26px) saturate(135%);
   -webkit-backdrop-filter: blur(26px) saturate(135%);
-  animation: intro-vidro 1.15s var(--cx-ease-out) both;
+  animation: intro-vidro 1.36s var(--cx-ease-out) both;
 }
 
 .intro-cicluz__marca {
   position: relative;
   z-index: 1;
-  filter: drop-shadow(0 0 26px rgb(255 255 255 / 0.18));
-  animation: intro-marca 1.12s cubic-bezier(0.24, 0.76, 0.08, 1) both;
+  width: clamp(148px, 27vmin, 264px);
+  aspect-ratio: 3986 / 4387;
+  filter: drop-shadow(0 0 30px rgb(255 255 255 / 0.22));
+  animation: intro-marca 1.34s cubic-bezier(0.2, 0.76, 0.08, 1) both;
+  will-change: transform, opacity;
+}
+
+.intro-cicluz__simbolo {
+  width: 100%;
+  height: 100%;
+  background: conic-gradient(
+    from 215deg,
+    var(--cat-despesas-base),
+    var(--cat-retiradas-base),
+    var(--cx-brand),
+    var(--cat-entradas-base),
+    var(--cat-despesas-base)
+  );
+  mask: var(--intro-mascara) center / contain no-repeat;
+  -webkit-mask: var(--intro-mascara) center / contain no-repeat;
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--cx-brand) 54%, transparent));
 }
 
 .intro-cicluz__carregamento {
@@ -102,7 +125,7 @@ onBeforeUnmount(() => {
     var(--cat-retiradas-base) 100%
   );
   box-shadow: 0 0 14px color-mix(in srgb, var(--cat-retiradas-base) 70%, transparent);
-  animation: intro-progresso 1.02s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
+  animation: intro-progresso 1.12s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
 }
 
 .intro-cicluz__marcador {
@@ -120,25 +143,25 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   transform: translate(-50%, -50%);
-  animation: intro-marcador 1.02s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
+  animation: intro-marcador 1.12s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
 }
 
 @keyframes intro-marca {
   0% {
     opacity: 0;
-    transform: scale(0.72);
+    transform: scale(0.56);
   }
-  16% {
+  13% {
     opacity: 1;
     transform: scale(1);
   }
-  68% {
+  57% {
     opacity: 1;
-    transform: scale(1.16);
+    transform: scale(1.1);
   }
   100% {
     opacity: 0;
-    transform: scale(7.8);
+    transform: scale(9.2);
   }
 }
 
@@ -148,7 +171,7 @@ onBeforeUnmount(() => {
     transform: scale(1.03);
   }
   to {
-    opacity: 0.12;
+    opacity: 0;
     transform: scale(1);
   }
 }
@@ -162,12 +185,6 @@ onBeforeUnmount(() => {
 @keyframes intro-marcador {
   to {
     left: 100%;
-  }
-}
-
-@keyframes intro-saida {
-  to {
-    opacity: 0;
   }
 }
 
@@ -185,26 +202,27 @@ onBeforeUnmount(() => {
   @keyframes intro-marca {
     0% {
       opacity: 0;
-      transform: scale(0.72);
+      transform: scale(0.56);
     }
-    16% {
+    13% {
       opacity: 1;
       transform: scale(1);
     }
-    68% {
+    57% {
       opacity: 1;
       transform: scale(1.1);
     }
     100% {
       opacity: 0;
-      transform: scale(4.2);
+      transform: scale(6.1);
     }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .intro-cicluz {
-    animation: intro-saida-reduzida 80ms linear both;
+    opacity: 0;
+    transition: opacity 80ms linear;
   }
 
   .intro-cicluz__vidro,
@@ -220,12 +238,6 @@ onBeforeUnmount(() => {
 
   .intro-cicluz__marcador {
     left: 100%;
-  }
-}
-
-@keyframes intro-saida-reduzida {
-  to {
-    opacity: 0;
   }
 }
 </style>
