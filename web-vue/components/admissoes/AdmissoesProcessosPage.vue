@@ -446,6 +446,7 @@ onMounted(async () => {
   <ProcessoInternosDialog
     :aberto="internosAberto"
     :internos="processo?.internos ?? null"
+    :efetivado="processo?.efetivado ?? false"
     :salvando="processando"
     :erro="internosErro"
     @fechar="internosAberto = false"

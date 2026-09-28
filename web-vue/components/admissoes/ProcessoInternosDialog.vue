@@ -19,6 +19,7 @@ import { rotuloSituacaoExame } from "~/utils/admissoes";
 const props = defineProps<{
   aberto: boolean;
   internos: DadosInternosDto | null;
+  efetivado: boolean;
   salvando: boolean;
   erro: string;
 }>();
@@ -168,7 +169,15 @@ function salvar() {
             persistent-hint
           />
 
-          <v-text-field v-model="formulario.dataAdmissao" label="Data de admissão" type="date" density="comfortable" />
+          <v-text-field
+            v-model="formulario.dataAdmissao"
+            label="Data de admissão"
+            type="date"
+            density="comfortable"
+            :disabled="efetivado"
+            :hint="efetivado ? 'Data de efetivação histórica: não pode ser alterada.' : undefined"
+            persistent-hint
+          />
           <v-text-field v-model="formulario.ctpsNumero" label="CTPS — número" density="comfortable" />
           <v-text-field v-model="formulario.ctpsSerie" label="CTPS — série" density="comfortable" />
           <v-text-field
