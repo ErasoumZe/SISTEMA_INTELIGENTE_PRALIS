@@ -1639,6 +1639,12 @@ const { atualizarCadastroLocal } = criarAtualizadorCadastroLocal({
 });
 
 function abrirCadastroNovo(tela: string, valores: Partial<CadastroForm> = {}) {
+  // Colaborador efetivo nasce no processo de admissão. Abrir o formulário legado daqui criaria
+  // uma segunda porta sem vínculo, matrícula ou linha do tempo.
+  if (tela === "colaboradores") {
+    void router.push("/admissoes_processos");
+    return;
+  }
   cadastroTela.value = tela;
   cadastroEditandoId.value = "";
   formCadastro.value = { ...formCadastroVazio(), ...valores };
@@ -1661,6 +1667,12 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 }
 
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
+  // A ficha única substitui o modal genérico para colaboradores: vínculo e dados pessoais não
+  // podem mais ser editados num formulário que mistura cargo de acesso com função de trabalho.
+  if (telaAtiva.value === "colaboradores" && linha.id) {
+    void router.push(`/colaboradores/${linha.id}`);
+    return;
+  }
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
   formCadastro.value = formCadastroDeLinha(linha, regrasDaLinha(linha));
@@ -1891,6 +1903,10 @@ const {
 });
 
 function abrirImportacao(tela = telaAtiva.value) {
+  if (tela === "colaboradores") {
+    notificar("Importação de colaboradores será feita pela conciliação de cadastros legados.", "info");
+    return;
+  }
   copiaModo.value = "importar";
   copiaTipo.value = tipoCopiaTela(tela);
   copiaRegistroId.value = "";
@@ -1900,6 +1916,10 @@ function abrirImportacao(tela = telaAtiva.value) {
 }
 
 function abrirExportacao(linha: Record<string, string | undefined>) {
+  if (telaAtiva.value === "colaboradores") {
+    notificar("A exportação de colaboradores será disponibilizada no fluxo Conplus.", "info");
+    return;
+  }
   copiaModo.value = "exportar";
   copiaTipo.value = tipoCopiaTela(telaAtiva.value);
   copiaRegistroId.value = linha.id ?? "";
