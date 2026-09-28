@@ -200,7 +200,8 @@ async function abrirDetalhe(id: string) {
       `/api/admissoes/processos/${id}/historico?page=1&pageSize=50`
     );
     historico.value = eventos.itens;
-    convite.value = await apiGet<PainelConviteDto>(`/api/admissoes/processos/${id}/convite`);
+    // A ficha é interna ao DP. Não carregamos nem oferecemos convite ao candidato neste fluxo.
+    convite.value = null;
   } catch (error) {
     detalheAberto.value = false;
     tratarErro(error);

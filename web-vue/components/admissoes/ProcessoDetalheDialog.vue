@@ -367,15 +367,15 @@ function confirmarCancelar() {
 
           <!-- O convite existe, mas quem decide se pode emitir e o SERVIDOR: a tela mostra a situacao e o
                motivo que vieram de la. Botao escondido nao protege de quem chama a rota direto. -->
-          <!-- A ficha é preenchida pelo DP; nenhum convite é oferecido na interface. -->
-          <section v-if="false" class="detalhe-convite">
+          <!-- Bloco legado: só monta se um convite histórico existir. A tela do DP não o carrega. -->
+          <section v-if="convite" class="detalhe-convite">
             <h3>Convite ao candidato</h3>
 
-            <v-alert v-if="convite?.situacao === 'indisponivel'" type="info" variant="tonal" density="compact">
+            <v-alert v-if="convite.situacao === 'indisponivel'" type="info" variant="tonal" density="compact">
               <strong>Indisponível.</strong> {{ convite.motivo }}
             </v-alert>
 
-            <template v-else-if="convite">
+            <template v-else>
               <p v-if="convite.situacao === 'ausente'" class="detalhe-convite__vazio">
                 Nenhum convite emitido. O link leva o candidato ao formulário e vale por 14 dias.
               </p>
