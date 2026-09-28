@@ -371,14 +371,14 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-base {
   0%,
-  55% {
+  35% {
     opacity: 1;
   }
-  75% {
-    opacity: 0.8;
+  48% {
+    opacity: 0.62;
   }
-  88% {
-    opacity: 0.42;
+  72% {
+    opacity: 0.16;
   }
   100% {
     opacity: 0;
@@ -386,16 +386,16 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-vidro {
   0%,
-  55% {
-    opacity: 0.96;
+  35% {
+    opacity: 0.93;
     transform: scale(1.018);
   }
-  76% {
-    opacity: 0.7;
+  50% {
+    opacity: 0.66;
     transform: scale(1.01);
   }
-  91% {
-    opacity: 0.36;
+  74% {
+    opacity: 0.26;
     transform: scale(1.006);
   }
   100% {
@@ -480,11 +480,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
   74% {
     opacity: 0.18;
-    transform: scale(1.1);
+    transform: scale(1.18);
   }
   86% {
     opacity: 0;
-    transform: scale(1.15);
+    transform: scale(1.26);
   }
   100% {
     opacity: 0;
@@ -504,10 +504,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     transform: translateY(8px) scale(0.94);
   }
   57%,
-  76% {
+  82% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+  94%,
   100% {
     opacity: 0;
     transform: translateY(-3px) scale(1.045);

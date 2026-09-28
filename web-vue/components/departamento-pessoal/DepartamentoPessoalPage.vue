@@ -100,31 +100,28 @@ onMounted(() => void carregarResumo());
       </div>
       <div class="grade-acoes">
         <v-card v-if="podeVerProcessos" class="acao-card acao-card--admissoes" variant="outlined">
-          <v-card-item>
-            <template #prepend><v-icon icon="mdi-clipboard-account-outline" color="primary" /></template>
-            <v-card-title>Admissão direta</v-card-title>
-            <v-card-subtitle>Pré-cadastro, ASO e efetivação. O convite para ficha é opcional.</v-card-subtitle>
-          </v-card-item>
+          <v-card-text class="acao-card__conteudo">
+            <span class="acao-card__icone"><v-icon icon="mdi-clipboard-account-outline" /></span>
+            <div><h3>Admissão direta</h3><p>Pré-cadastro, ASO e efetivação preenchidos pelo DP.</p></div>
+          </v-card-text>
           <v-card-actions class="acao-card__acoes"
             ><v-btn to="/admissoes_processos" color="primary" variant="flat">Abrir admissões</v-btn></v-card-actions
           >
         </v-card>
         <v-card v-if="podeVerTestes" class="acao-card acao-card--testes" variant="outlined">
-          <v-card-item>
-            <template #prepend><v-icon icon="mdi-account-clock-outline" color="info" /></template>
-            <v-card-title>Período de teste</v-card-title>
-            <v-card-subtitle>Registre, acompanhe o prazo e efetive para admissão.</v-card-subtitle>
-          </v-card-item>
+          <v-card-text class="acao-card__conteudo">
+            <span class="acao-card__icone"><v-icon icon="mdi-account-clock-outline" /></span>
+            <div><h3>Período de teste</h3><p>Registre, acompanhe o prazo e efetive para admissão.</p></div>
+          </v-card-text>
           <v-card-actions class="acao-card__acoes"
             ><v-btn to="/admissoes_testes" color="info" variant="flat">Abrir testes</v-btn></v-card-actions
           >
         </v-card>
         <v-card v-if="podeVerColaboradores" class="acao-card acao-card--colaboradores" variant="outlined">
-          <v-card-item>
-            <template #prepend><v-icon icon="mdi-account-group-outline" color="success" /></template>
-            <v-card-title>Colaboradores cadastrados</v-card-title>
-            <v-card-subtitle>Perfis, vínculos, matrícula e linha do tempo.</v-card-subtitle>
-          </v-card-item>
+          <v-card-text class="acao-card__conteudo">
+            <span class="acao-card__icone"><v-icon icon="mdi-account-group-outline" /></span>
+            <div><h3>Colaboradores cadastrados</h3><p>Perfis, vínculos, matrícula e linha do tempo.</p></div>
+          </v-card-text>
           <v-card-actions class="acao-card__acoes"
             ><v-btn to="/colaboradores" color="success" variant="flat">Abrir colaboradores</v-btn></v-card-actions
           >
@@ -253,25 +250,81 @@ h1 {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 .acao-card {
-  min-height: 0;
+  position: relative;
+  isolation: isolate;
+  min-height: 184px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-radius: 18px;
+  background: linear-gradient(145deg, var(--acao-vidro), rgb(var(--v-theme-surface) / 0.72));
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+}
+.acao-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  background: linear-gradient(135deg, var(--acao-vidro), transparent 62%);
+  pointer-events: none;
+}
+.acao-card__conteudo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 16px 8px;
+}
+.acao-card__icone {
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 13px;
+  color: rgb(255 255 255 / 0.94);
+  background: linear-gradient(135deg, var(--acao-inicio), var(--acao-fim));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--acao-inicio) 36%, transparent);
+}
+.acao-card__conteudo h3 {
+  margin: 0;
+  font-size: clamp(1rem, 2.7vw, 1.22rem);
+  line-height: 1.18;
+}
+.acao-card__conteudo p {
+  display: -webkit-box;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface) / 0.72);
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .acao-card__acoes {
-  padding: 0 16px 16px;
-  margin-top: 2px;
+  padding: 4px 16px 16px;
 }
 .acao-card__acoes .v-btn {
   min-width: 0;
+  letter-spacing: 0.04em;
 }
 .acao-card--admissoes {
-  border-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 42%, transparent);
+  --acao-inicio: #9b6cff;
+  --acao-fim: #6b36df;
+  --acao-vidro: rgb(155 108 255 / 0.16);
+  border-color: rgb(155 108 255 / 0.42);
 }
 .acao-card--testes {
-  border-color: color-mix(in srgb, rgb(var(--v-theme-info)) 42%, transparent);
+  --acao-inicio: #42b5ff;
+  --acao-fim: #1976d2;
+  --acao-vidro: rgb(66 181 255 / 0.16);
+  border-color: rgb(66 181 255 / 0.42);
 }
 .acao-card--colaboradores {
-  border-color: color-mix(in srgb, rgb(var(--v-theme-success)) 42%, transparent);
+  --acao-inicio: #48df8a;
+  --acao-fim: #139c60;
+  --acao-vidro: rgb(72 223 138 / 0.16);
+  border-color: rgb(72 223 138 / 0.42);
 }
 .fila-card .v-card-text {
   display: flex;
@@ -304,6 +357,15 @@ h1 {
   .atalhos-cadastros .v-btn {
     width: 100%;
     justify-content: flex-start;
+  }
+  .grade-acoes {
+    grid-template-columns: 1fr;
+  }
+  .acao-card {
+    min-height: 0;
+  }
+  .acao-card__acoes .v-btn {
+    width: 100%;
   }
 }
 </style>
