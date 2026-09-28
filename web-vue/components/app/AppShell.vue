@@ -72,6 +72,7 @@ const telaAtual = computed(
 );
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
 const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
+const temCaixa = computed(() => props.caixaStatus !== undefined);
 const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
 
@@ -384,6 +385,7 @@ onMounted(() => {
       v-if="viewportMobile && !drawerMobileAberto"
       :na-home="naHome"
       :caixa-aberto="caixaAberto"
+      :tem-caixa="temCaixa"
       :escuro="escuro"
       :notificacoes="notificacoes?.length ?? 0"
       @abrir-pendencias="emit('abrirPendencias')"

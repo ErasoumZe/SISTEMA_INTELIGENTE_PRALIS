@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import type { CaixaOperacional } from "~/types/padaria";
+
 const props = defineProps<{
   naHome: boolean;
-  caixaAberto: boolean | null;
+  caixaAberto: CaixaOperacional | null;
+  temCaixa: boolean;
   escuro: boolean;
   notificacoes: number;
 }>();
@@ -15,11 +18,7 @@ const quantidadeVisivel = computed(() => Math.min(props.notificacoes, 99));
 </script>
 
 <template>
-  <nav
-    class="atalhos-mobile"
-    :class="{ 'atalhos-mobile--sem-caixa': caixaAberto === null }"
-    aria-label="Atalhos rÃ¡pidos"
-  >
+  <nav class="atalhos-mobile" :class="{ 'atalhos-mobile--sem-caixa': !temCaixa }" aria-label="Atalhos rÃ¡pidos">
     <NuxtLink
       to="/"
       class="atalhos-mobile__item"
@@ -31,7 +30,7 @@ const quantidadeVisivel = computed(() => Math.min(props.notificacoes, 99));
     </NuxtLink>
 
     <NuxtLink
-      v-if="caixaAberto !== null"
+      v-if="temCaixa"
       to="/caixa"
       class="atalhos-mobile__item"
       :title="caixaAberto ? 'Ir para o caixa aberto' : 'Caixa fechado'"
