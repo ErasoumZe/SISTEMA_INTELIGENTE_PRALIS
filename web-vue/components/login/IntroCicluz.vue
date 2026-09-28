@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const emit = defineEmits<{ concluida: [] }>();
 
-let temporizador: ReturnType<typeof setTimeout> | undefined;
+let temporizador: number | undefined;
 
 onMounted(() => {
   const reduzirMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
