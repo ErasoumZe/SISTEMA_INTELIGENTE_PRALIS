@@ -388,6 +388,7 @@ onMounted(async () => {
   <v-main class="min-h-screen panel-bg d-flex justify-center pa-4">
     <div class="ficha">
       <header class="ficha__cabecalho">
+        <v-btn href="/" variant="text" prepend-icon="mdi-home" class="ficha__voltar">Voltar à página inicial</v-btn>
         <h1 class="ficha__titulo">Cadastro de admissão</h1>
         <p v-if="ficha" class="ficha__sub">
           {{ ficha.cabecalho.empresaNome }}
@@ -603,6 +604,10 @@ onMounted(async () => {
 .ficha__cabecalho {
   display: grid;
   gap: var(--cx-sp-1);
+}
+
+.ficha__voltar {
+  justify-self: start;
 }
 
 .ficha__titulo {
