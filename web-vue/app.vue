@@ -9,18 +9,22 @@ const introDashboardPronto = useState("padaria.intro-dashboard-pronto", () => fa
 // por si so nao basta: antes havia um spinner claro entre /login e o painel.
 watch([introPendente, introDashboardPronto], ([pendente, dashboardPronto]) => {
   if (!pendente || !dashboardPronto) return;
-  introPendente.value = false;
-  introDashboardPronto.value = false;
   introAposLogin.value = true;
 });
+
+function concluirIntro() {
+  introPendente.value = false;
+  introDashboardPronto.value = false;
+  introAposLogin.value = false;
+}
 </script>
 
 <template>
   <v-app :class="{ 'entrada-pos-login': introPendente || introAposLogin }">
-    <main :inert="introAposLogin || undefined">
+    <main :inert="introPendente || introAposLogin || undefined">
       <NuxtPage />
     </main>
-    <LoginIntroCicluz v-if="introAposLogin" @concluida="introAposLogin = false" />
+    <LoginIntroCicluz v-if="introPendente || introAposLogin" :pronta="introAposLogin" @concluida="concluirIntro" />
   </v-app>
 </template>
 

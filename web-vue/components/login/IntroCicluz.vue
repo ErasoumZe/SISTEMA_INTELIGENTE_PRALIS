@@ -2,14 +2,19 @@
 import { computed } from "vue";
 
 const emit = defineEmits<{ concluida: [] }>();
+const props = withDefaults(defineProps<{ pronta?: boolean }>(), { pronta: true });
 
 const DURACAO_INTRO_MS = 2_800;
 let temporizador: number | undefined;
 
-onMounted(() => {
+function iniciarIntro() {
+  if (!props.pronta || temporizador) return;
   const reduzirMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   temporizador = window.setTimeout(() => emit("concluida"), reduzirMovimento ? 120 : DURACAO_INTRO_MS);
-});
+}
+
+onMounted(iniciarIntro);
+watch(() => props.pronta, iniciarIntro);
 
 onBeforeUnmount(() => {
   if (temporizador) window.clearTimeout(temporizador);
@@ -21,7 +26,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 <template>
   <!-- A marca e exatamente o mesmo componente do login e do menu. Ela permanece abaixo de 310px
        (a arte de origem tem 510px); o impacto visual vem das luzes e do vidro, nunca de ampliar PNG. -->
-  <section class="intro-cicluz" :style="estiloDuracao" aria-hidden="true">
+  <section class="intro-cicluz" :class="{ 'intro-cicluz--pronta': pronta }" :style="estiloDuracao" aria-hidden="true">
     <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
     <div class="intro-cicluz__cores"></div>
@@ -52,6 +57,10 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   pointer-events: auto;
   will-change: opacity;
   animation: intro-palco var(--intro-duracao) linear both;
+  animation-play-state: paused;
+}
+.intro-cicluz--pronta {
+  animation-play-state: running;
 }
 .intro-cicluz__base,
 .intro-cicluz__vidro,
@@ -84,7 +93,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   animation: intro-cores var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__onda {
-  inset: 9%;
+  inset: 14%;
   border-radius: 50%;
   background: conic-gradient(
     from 212deg,
@@ -101,11 +110,12 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   -webkit-mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
   mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
   filter: saturate(1.16) blur(0.35px);
+  box-shadow: 0 0 34px rgb(83 137 255 / 0.22);
   mix-blend-mode: screen;
   animation: intro-onda var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__onda--interna {
-  inset: 21%;
+  inset: 27%;
   opacity: 0;
   background: conic-gradient(
     from 30deg,
@@ -128,6 +138,18 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   place-items: center;
   will-change: transform, opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__base,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__vidro,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__cores,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__onda,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__marca,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__carregamento,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__preenchimento {
+  animation-play-state: paused;
+}
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__carregamento {
+  opacity: 0;
 }
 .intro-cicluz__carregamento {
   position: absolute;
@@ -228,11 +250,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
   82% {
     opacity: 0.38;
-    transform: scale(1.32) rotate(39deg);
+    transform: scale(1.18) rotate(39deg);
   }
   100% {
     opacity: 0;
-    transform: scale(1.55) rotate(54deg);
+    transform: scale(1.28) rotate(54deg);
   }
 }
 @keyframes intro-onda-interna {
@@ -251,7 +273,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
   100% {
     opacity: 0;
-    transform: scale(1.42) rotate(-37deg);
+    transform: scale(1.2) rotate(-37deg);
   }
 }
 @keyframes intro-marca {

@@ -1079,6 +1079,8 @@ async function carregarTudo() {
     sessao.value = await carregarSessao();
     if (!sessao.value) {
       workspaceCarregado.value = false;
+      introPendente.value = false;
+      introDashboardPronto.value = false;
       await router.push("/login");
       return;
     }
@@ -1099,6 +1101,8 @@ async function carregarTudo() {
     workspaceCarregado.value = true;
   } catch (error) {
     erro.value = mensagemErro(error);
+    introPendente.value = false;
+    introDashboardPronto.value = false;
   } finally {
     carregando.value = false;
     await sinalizarDashboardProntoParaIntro();
