@@ -99,34 +99,34 @@ onMounted(() => void carregarResumo());
         </div>
       </div>
       <div class="grade-acoes">
-        <v-card v-if="podeVerProcessos" class="acao-card" variant="outlined">
+        <v-card v-if="podeVerProcessos" class="acao-card acao-card--admissoes" variant="outlined">
           <v-card-item>
             <template #prepend><v-icon icon="mdi-clipboard-account-outline" color="primary" /></template>
             <v-card-title>Admissão direta</v-card-title>
             <v-card-subtitle>Pré-cadastro, ASO e efetivação. O convite para ficha é opcional.</v-card-subtitle>
           </v-card-item>
-          <v-card-actions
+          <v-card-actions class="acao-card__acoes"
             ><v-btn to="/admissoes_processos" color="primary" variant="flat">Abrir admissões</v-btn></v-card-actions
           >
         </v-card>
-        <v-card v-if="podeVerTestes" class="acao-card" variant="outlined">
+        <v-card v-if="podeVerTestes" class="acao-card acao-card--testes" variant="outlined">
           <v-card-item>
-            <template #prepend><v-icon icon="mdi-account-clock-outline" color="primary" /></template>
+            <template #prepend><v-icon icon="mdi-account-clock-outline" color="info" /></template>
             <v-card-title>Período de teste</v-card-title>
             <v-card-subtitle>Registre, acompanhe o prazo e efetive para admissão.</v-card-subtitle>
           </v-card-item>
-          <v-card-actions
-            ><v-btn to="/admissoes_testes" color="primary" variant="flat">Abrir testes</v-btn></v-card-actions
+          <v-card-actions class="acao-card__acoes"
+            ><v-btn to="/admissoes_testes" color="info" variant="flat">Abrir testes</v-btn></v-card-actions
           >
         </v-card>
-        <v-card v-if="podeVerColaboradores" class="acao-card" variant="outlined">
+        <v-card v-if="podeVerColaboradores" class="acao-card acao-card--colaboradores" variant="outlined">
           <v-card-item>
-            <template #prepend><v-icon icon="mdi-account-group-outline" color="primary" /></template>
+            <template #prepend><v-icon icon="mdi-account-group-outline" color="success" /></template>
             <v-card-title>Colaboradores cadastrados</v-card-title>
             <v-card-subtitle>Perfis, vínculos, matrícula e linha do tempo.</v-card-subtitle>
           </v-card-item>
-          <v-card-actions
-            ><v-btn to="/colaboradores" color="primary" variant="flat">Abrir colaboradores</v-btn></v-card-actions
+          <v-card-actions class="acao-card__acoes"
+            ><v-btn to="/colaboradores" color="success" variant="flat">Abrir colaboradores</v-btn></v-card-actions
           >
         </v-card>
       </div>
@@ -253,10 +253,25 @@ h1 {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 .acao-card {
-  min-height: 178px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+}
+.acao-card__acoes {
+  padding: 0 16px 16px;
+  margin-top: 2px;
+}
+.acao-card__acoes .v-btn {
+  min-width: 0;
+}
+.acao-card--admissoes {
+  border-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 42%, transparent);
+}
+.acao-card--testes {
+  border-color: color-mix(in srgb, rgb(var(--v-theme-info)) 42%, transparent);
+}
+.acao-card--colaboradores {
+  border-color: color-mix(in srgb, rgb(var(--v-theme-success)) 42%, transparent);
 }
 .fila-card .v-card-text {
   display: flex;
