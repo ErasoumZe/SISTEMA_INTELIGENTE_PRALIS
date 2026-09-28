@@ -37,12 +37,16 @@ function aoAtualizarCep(valor: string) {
   props.formulario.cep = normalizarCep(valor);
 }
 
+function valorCampo(chave: string): string {
+  return props.formulario[chave] ?? "";
+}
+
 function aplicarEndereco(endereco: EnderecoViaCep) {
   props.formulario.cep = normalizarCep(endereco.cep);
-  props.formulario.logradouro = endereco.logradouro || props.formulario.logradouro || "";
-  props.formulario.bairro = endereco.bairro || props.formulario.bairro || "";
-  props.formulario.municipio = endereco.localidade || props.formulario.municipio || "";
-  props.formulario.uf = endereco.uf || props.formulario.uf || "";
+  props.formulario.logradouro = endereco.logradouro || valorCampo("logradouro");
+  props.formulario.bairro = endereco.bairro || valorCampo("bairro");
+  props.formulario.municipio = endereco.localidade || valorCampo("municipio");
+  props.formulario.uf = endereco.uf || valorCampo("uf");
   opcoesCep.value = [];
   buscarCepPorEndereco.value = false;
 }
@@ -59,7 +63,7 @@ async function requisitarViaCep(rota: string): Promise<EnderecoViaCep[] | null> 
 }
 
 async function preencherPorCep() {
-  const cep = normalizarCep(props.formulario.cep);
+  const cep = normalizarCep(valorCampo("cep"));
   props.formulario.cep = cep;
   if (cep.length !== 8 || props.somenteLeitura) return;
   const tentativa = ++sequenciaBusca;
@@ -83,9 +87,9 @@ async function preencherPorCep() {
 }
 
 async function procurarCepPeloEndereco() {
-  const uf = props.formulario.uf.trim().toUpperCase();
-  const municipio = props.formulario.municipio.trim();
-  const logradouro = props.formulario.logradouro.trim();
+  const uf = valorCampo("uf").trim().toUpperCase();
+  const municipio = valorCampo("municipio").trim();
+  const logradouro = valorCampo("logradouro").trim();
   if (!/^[A-Z]{2}$/.test(uf) || municipio.length < 3 || logradouro.length < 3) {
     erroCep.value = "Para encontrar o CEP, informe UF, município e pelo menos três letras do logradouro.";
     return;
@@ -124,7 +128,7 @@ function inputmode(campo: CampoFicha) {
       <template v-for="campo in grupo.campos" :key="campo.chave">
         <div v-if="campo.chave === 'cep'" class="dados__cep dados__campo">
           <v-text-field
-            :model-value="mascararCep(formulario.cep)"
+            :model-value="mascararCep(valorCampo('cep'))"
             :label="rotuloCampoFicha(campo)"
             :disabled="somenteLeitura"
             :loading="buscandoCep"
