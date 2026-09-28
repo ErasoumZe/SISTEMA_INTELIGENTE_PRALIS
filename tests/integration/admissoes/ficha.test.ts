@@ -229,6 +229,21 @@ describe("admissoes ficha publica integration", () => {
     expect(repetido.json().code).toBe("VERSAO_CONFLITANTE");
   });
 
+  it("Deve_AceitarNoCampoSexo_ApenasAsOpcoesDaFicha", async () => {
+    const { token } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    assertOk(aberta, 200);
+
+    const resposta = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/admissao/ficha",
+      headers: { [CABECALHO]: token },
+      payload: { versao: aberta.json().data.versao, sexo: "Outro" }
+    });
+
+    expect(resposta.statusCode).toBe(400);
+  });
+
   it("P0-V3 Deve_GravarAceiteVersionado_E_TrilhaComAtorExterno_Quando_Enviar", async () => {
     const { token, processoId } = await processoComToken();
     const aberta = await abrirFicha(token);

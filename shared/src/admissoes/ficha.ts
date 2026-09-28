@@ -26,7 +26,7 @@ const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "Data invalida");
 const camposDaFicha = {
   nomeSocial: texto().nullish(),
   nascimento: dataIso.nullish(),
-  sexo: texto().nullish(),
+  sexo: z.enum(["Masculino", "Feminino"], { message: "Selecione Masculino ou Feminino" }).nullish(),
   estadoCivil: texto().nullish(),
   racaCor: texto().nullish(),
   grauInstrucao: texto().nullish(),

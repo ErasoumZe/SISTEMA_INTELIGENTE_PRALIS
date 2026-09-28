@@ -6,6 +6,7 @@ import {
   type DependentesDto,
   type FichaPublicaDto
 } from "@padaria/shared";
+import FichaDadosCandidato from "~/components/admissoes/FichaDadosCandidato.vue";
 import { CABECALHO_DO_CONVITE, tokenDoFragmento } from "~/utils/convite-token";
 
 /**
@@ -436,18 +437,7 @@ onMounted(async () => {
         </section>
 
         <form class="ficha__secao" @submit.prevent="enviar">
-          <h2>Seus dados</h2>
-          <div class="ficha__campos">
-            <v-text-field
-              v-for="campo in CAMPOS"
-              :key="campo.chave"
-              v-model="formulario[campo.chave]"
-              :label="campo.rotulo"
-              :type="campo.tipo"
-              :disabled="somenteLeitura"
-              density="comfortable"
-            />
-          </div>
+          <FichaDadosCandidato :formulario="formulario" :somente-leitura="somenteLeitura" />
 
           <section class="dep">
             <h2>Dependentes</h2>
@@ -644,13 +634,6 @@ onMounted(async () => {
   color: var(--cx-ink);
 }
 
-.ficha__campos {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--cx-sp-3);
-  min-width: 0;
-}
-
 .ficha__conferencia {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -811,7 +794,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .ficha__campos,
   .ficha__conferencia,
   .dep__campos {
     grid-template-columns: minmax(0, 1fr);
