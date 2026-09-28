@@ -1940,17 +1940,32 @@ body {
   }
 }
 @media (width <= 768px) {
+  /* No celular a empresa nao pode virar so um icone: ela e o contexto operacional da pessoa.
+     A pilula curta preserva o nome (com reticencias quando necessario) e o avatar continua sendo
+     a identificacao do usuario. A seta sai porque, nesta largura, rouba texto sem acrescentar
+     informacao: o botao inteiro continua abrindo a mesma lista de empresas. */
   .shell-mobills .topbar-empresa > span {
-    display: none;
+    display: block;
+    max-width: 92px;
   }
   .shell-mobills .topbar-empresa {
-    max-width: none;
-    padding: 6px;
+    max-width: 124px;
+    padding: 6px 9px;
+  }
+  .shell-mobills .topbar-empresa .mdi-chevron-down {
+    display: none;
   }
 }
 @media (width <= 560px) {
   .shell-mobills .padaria-topbar {
     gap: 6px;
+  }
+  .shell-mobills .topbar-empresa > span {
+    max-width: 76px;
+  }
+  .shell-mobills .topbar-empresa {
+    max-width: 106px;
+    padding-inline: 7px;
   }
 }
 
