@@ -1,4 +1,4 @@
-import { camposObrigatoriosDaFicha } from "@padaria/shared";
+import { camposObrigatoriosDaFicha, estadosCivis } from "@padaria/shared";
 
 export type ChaveCampoFicha =
   | "nascimento"
@@ -64,7 +64,7 @@ function campo(
 export const camposDaFichaPublica: readonly CampoFicha[] = [
   campo("nascimento", "Data de nascimento", "pessoal", undefined, "date"),
   campo("sexo", "Sexo", "pessoal", ["Masculino", "Feminino"]),
-  campo("estadoCivil", "Estado civil", "pessoal"),
+  campo("estadoCivil", "Estado civil", "pessoal", estadosCivis),
   campo("racaCor", "Raça/cor", "pessoal"),
   campo("grauInstrucao", "Grau de instrução", "pessoal"),
   campo("nacionalidade", "Nacionalidade", "pessoal"),
@@ -110,4 +110,17 @@ export function rotuloCampoFicha(campo: CampoFicha): string {
 
 export function normalizarCep(valor: string): string {
   return valor.replace(/\D/g, "").slice(0, 8);
+}
+
+export function normalizarTelefone(valor: string): string {
+  return valor.replace(/\D/g, "").slice(0, 11);
+}
+
+export function mascararTelefone(valor: string): string {
+  const telefone = normalizarTelefone(valor);
+  if (telefone.length <= 2) return telefone;
+  const inicio = `(${telefone.slice(0, 2)}) `;
+  if (telefone.length <= 6) return `${inicio}${telefone.slice(2)}`;
+  const pontoDoTraco = telefone.length > 10 ? 7 : 6;
+  return `${inicio}${telefone.slice(2, pontoDoTraco)}-${telefone.slice(pontoDoTraco)}`;
 }

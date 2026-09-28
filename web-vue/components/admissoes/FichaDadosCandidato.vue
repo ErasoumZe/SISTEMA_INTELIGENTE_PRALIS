@@ -3,7 +3,9 @@ import {
   camposDaFichaPublica,
   gruposDaFichaPublica,
   normalizarCep,
+  normalizarTelefone,
   rotuloCampoFicha,
+  mascararTelefone,
   type CampoFicha
 } from "~/utils/ficha-campos";
 import { mascararCep } from "~/utils/formatacao";
@@ -35,6 +37,10 @@ const grupos = computed(() =>
 
 function aoAtualizarCep(valor: string) {
   props.formulario.cep = normalizarCep(valor);
+}
+
+function aoAtualizarTelefone(valor: string) {
+  props.formulario.telefone = normalizarTelefone(valor);
 }
 
 function valorCampo(chave: string): string {
@@ -113,7 +119,23 @@ async function procurarCepPeloEndereco() {
 }
 
 function inputmode(campo: CampoFicha) {
-  return campo.chave === "cep" || campo.chave === "telefone" ? "numeric" : undefined;
+  if (campo.chave === "telefone") return "tel";
+  if (
+    [
+      "cep",
+      "numero",
+      "rgNumero",
+      "tituloEleitor",
+      "tituloZona",
+      "tituloSecao",
+      "agencia",
+      "conta",
+      "contaDigito"
+    ].includes(campo.chave)
+  ) {
+    return "numeric";
+  }
+  return undefined;
 }
 </script>
 
@@ -160,6 +182,21 @@ function inputmode(campo: CampoFicha) {
           :aria-required="campo.obrigatorio"
           density="comfortable"
           :class="{ dados__obrigatorio: campo.obrigatorio }"
+        />
+
+        <v-text-field
+          v-else-if="campo.chave === 'telefone'"
+          :model-value="mascararTelefone(valorCampo('telefone'))"
+          :label="rotuloCampoFicha(campo)"
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
+          maxlength="15"
+          :disabled="somenteLeitura"
+          :aria-required="campo.obrigatorio"
+          density="comfortable"
+          :class="{ dados__obrigatorio: campo.obrigatorio }"
+          @update:model-value="aoAtualizarTelefone"
         />
 
         <v-text-field

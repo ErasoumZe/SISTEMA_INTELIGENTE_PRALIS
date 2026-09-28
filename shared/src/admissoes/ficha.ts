@@ -21,13 +21,21 @@ const LIMITE_LONGO = 240;
 
 const texto = (max = LIMITE_CURTO) => z.string().trim().max(max);
 const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "Data invalida");
+export const estadosCivis = [
+  "Solteiro",
+  "Casado",
+  "Separado judicialmente",
+  "Divorciado",
+  "Viúvo",
+  "União estável"
+] as const;
 
 /** Campos que o candidato preenche. Todos opcionais aqui; `fichaEnviarPayloadSchema` aperta. */
 const camposDaFicha = {
   nomeSocial: texto().nullish(),
   nascimento: dataIso.nullish(),
   sexo: z.enum(["Masculino", "Feminino"], { message: "Selecione Masculino ou Feminino" }).nullish(),
-  estadoCivil: texto().nullish(),
+  estadoCivil: z.enum(estadosCivis, { message: "Selecione um estado civil" }).nullish(),
   racaCor: texto().nullish(),
   grauInstrucao: texto().nullish(),
   nacionalidade: texto().nullish(),

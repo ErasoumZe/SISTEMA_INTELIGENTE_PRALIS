@@ -104,7 +104,7 @@ describe("admissoes ficha publica integration", () => {
       avisoPrivacidadeVersao: avisoPrivacidadeVigente,
       nascimento: "1995-04-10",
       sexo: "Feminino",
-      estadoCivil: "Solteira",
+      estadoCivil: "Solteiro",
       racaCor: "Parda",
       grauInstrucao: "Ensino medio completo",
       nacionalidade: "Brasileira",
