@@ -39,10 +39,10 @@ function aoAtualizarCep(valor: string) {
 
 function aplicarEndereco(endereco: EnderecoViaCep) {
   props.formulario.cep = normalizarCep(endereco.cep);
-  props.formulario.logradouro = endereco.logradouro || props.formulario.logradouro;
-  props.formulario.bairro = endereco.bairro || props.formulario.bairro;
-  props.formulario.municipio = endereco.localidade || props.formulario.municipio;
-  props.formulario.uf = endereco.uf || props.formulario.uf;
+  props.formulario.logradouro = endereco.logradouro || props.formulario.logradouro || "";
+  props.formulario.bairro = endereco.bairro || props.formulario.bairro || "";
+  props.formulario.municipio = endereco.localidade || props.formulario.municipio || "";
+  props.formulario.uf = endereco.uf || props.formulario.uf || "";
   opcoesCep.value = [];
   buscarCepPorEndereco.value = false;
 }
