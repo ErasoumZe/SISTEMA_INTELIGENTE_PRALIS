@@ -146,6 +146,8 @@ const router = useRouter();
 const { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiPatch, apiDelete, carregarSessao, aplicarTema } = useApi();
 
 const workspaceCarregado = useState("padaria.workspace.carregado", () => false);
+const introPendente = useState("padaria.intro-pendente", () => false);
+const introDashboardPronto = useState("padaria.intro-dashboard-pronto", () => false);
 const telaInicialNormalizada = computed(() =>
   paginaInicialNeutra.value ? "" : props.telaInicial && itemPorTela[props.telaInicial] ? props.telaInicial : "entradas"
 );
@@ -170,6 +172,20 @@ const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
 const atualizandoCaixaAutomaticamente = ref(false);
 const erro = ref("");
+
+const aguardarProximoQuadro = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+async function sinalizarDashboardProntoParaIntro() {
+  if (!introPendente.value || carregando.value || !sessao.value) return;
+
+  // Primeiro o v-if troca spinner por AppShell; depois damos dois frames ao navegador para pintar
+  // o shell escuro antes de o vidro revelar qualquer coisa atras da marca.
+  await nextTick();
+  await aguardarProximoQuadro();
+  await aguardarProximoQuadro();
+
+  if (introPendente.value && !carregando.value && sessao.value) introDashboardPronto.value = true;
+}
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
 const confirmacao = reactive({ aberto: false, titulo: "Confirmar ação", mensagem: "", textoConfirmar: "Confirmar" });
@@ -1085,6 +1101,7 @@ async function carregarTudo() {
     erro.value = mensagemErro(error);
   } finally {
     carregando.value = false;
+    await sinalizarDashboardProntoParaIntro();
   }
 }
 
@@ -2330,6 +2347,7 @@ onMounted(() => {
     erro.value = "";
     aplicarTema(temaAtual.value, temaResumoCaixa.value);
     void atualizarOperacoesAutomaticamente();
+    void sinalizarDashboardProntoParaIntro();
     return;
   }
   void carregarTudo();

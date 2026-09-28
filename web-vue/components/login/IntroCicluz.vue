@@ -1,19 +1,9 @@
 <script setup lang="ts">
-import { computed, useId } from "vue";
-import officialSvgRaw from "~/assets/cicluz-simbolo-path.svg?raw";
+import { computed } from "vue";
 
 const emit = defineEmits<{ concluida: [] }>();
 
-const DURACAO_INTRO_MS = 2_600;
-const uid = useId().replace(/:/g, "");
-const pathDaMarca = officialSvgRaw.match(/<path[^>]*d="([^"]+)"/i)?.[1] ?? "";
-const ids = {
-  brilho: `intro-cicluz-brilho-${uid}`,
-  aura: `intro-cicluz-aura-${uid}`,
-  gradiente: `intro-cicluz-gradiente-${uid}`,
-  gradienteHalo: `intro-cicluz-gradiente-halo-${uid}`
-};
-
+const DURACAO_INTRO_MS = 2_800;
 let temporizador: number | undefined;
 
 onMounted(() => {
@@ -29,124 +19,17 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 </script>
 
 <template>
-  <!-- O painel real ja existe por tras desta camada. O vidro so se abre no ultimo trecho, evitando
-       que a pintura clara de montagem apareca como flash branco. A marca e SVG puro em todas as escalas. -->
+  <!-- A marca e exatamente o mesmo componente do login e do menu. Ela permanece abaixo de 310px
+       (a arte de origem tem 510px); o impacto visual vem das luzes e do vidro, nunca de ampliar PNG. -->
   <section class="intro-cicluz" :style="estiloDuracao" aria-hidden="true">
     <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
-    <div class="intro-cicluz__luzes"></div>
-    <div class="intro-cicluz__radiancia"></div>
+    <div class="intro-cicluz__cores"></div>
+    <div class="intro-cicluz__onda"></div>
+    <div class="intro-cicluz__onda intro-cicluz__onda--interna"></div>
 
     <div class="intro-cicluz__marca">
-      <!-- O halo e a linha principal sao SVGs separados. Assim, o blur nunca rasteriza a linha
-           que cresce na tela: o zoom acontece pelo viewBox vetorial, e nao por uma imagem ampliada. -->
-      <svg
-        class="intro-cicluz__svg intro-cicluz__svg--halo"
-        viewBox="-10507 -4838 25000 14062"
-        preserveAspectRatio="xMidYMid meet"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <defs>
-          <linearGradient :id="ids.gradienteHalo" x1="6%" y1="88%" x2="91%" y2="12%">
-            <animateTransform
-              attributeName="gradientTransform"
-              type="translate"
-              values="-0.85 0; 0.65 0; -0.85 0"
-              dur="1.9s"
-              repeatCount="indefinite"
-            />
-            <stop offset="0%" stop-color="#e83164" />
-            <stop offset="17%" stop-color="#ff5b22" />
-            <stop offset="34%" stop-color="#ffd224" />
-            <stop offset="51%" stop-color="#66d945" />
-            <stop offset="69%" stop-color="#20c8dc" />
-            <stop offset="85%" stop-color="#7259ff" />
-            <stop offset="100%" stop-color="#d932b7" />
-          </linearGradient>
-          <filter :id="ids.aura" x="-42%" y="-42%" width="184%" height="184%">
-            <feGaussianBlur stdDeviation="30" />
-          </filter>
-          <filter :id="ids.brilho" x="-28%" y="-28%" width="156%" height="156%">
-            <feGaussianBlur stdDeviation="9" />
-          </filter>
-        </defs>
-        <animate
-          attributeName="viewBox"
-          dur="2600ms"
-          fill="freeze"
-          calcMode="spline"
-          keyTimes="0; 0.18; 0.60; 0.86; 1"
-          keySplines="0.16 1 0.3 1; 0.16 1 0.3 1; 0.7 0 0.84 0; 0.7 0 0.84 0"
-          values="-10507 -4838 25000 14062; -10507 -4838 25000 14062; -1000 509 5986 3367; -300 845 4586 2579; -300 845 4586 2579"
-        />
-        <path
-          class="intro-cicluz__aura"
-          :d="pathDaMarca"
-          :filter="`url(#${ids.aura})`"
-          fill="none"
-          :stroke="`url(#${ids.gradienteHalo})`"
-          stroke-width="230"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path
-          class="intro-cicluz__brilho"
-          :d="pathDaMarca"
-          :filter="`url(#${ids.brilho})`"
-          fill="none"
-          :stroke="`url(#${ids.gradienteHalo})`"
-          stroke-width="216"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-
-      <svg
-        class="intro-cicluz__svg intro-cicluz__svg--traco"
-        viewBox="-10507 -4838 25000 14062"
-        preserveAspectRatio="xMidYMid meet"
-        shape-rendering="geometricPrecision"
-        focusable="false"
-      >
-        <defs>
-          <linearGradient :id="ids.gradiente" x1="6%" y1="88%" x2="91%" y2="12%">
-            <!-- A cor percorre o tracado vetorial: sem textura, bitmap ou filtro na borda. -->
-            <animateTransform
-              attributeName="gradientTransform"
-              type="translate"
-              values="-0.85 0; 0.65 0; -0.85 0"
-              dur="1.9s"
-              repeatCount="indefinite"
-            />
-            <stop offset="0%" stop-color="#e83164" />
-            <stop offset="17%" stop-color="#ff5b22" />
-            <stop offset="34%" stop-color="#ffd224" />
-            <stop offset="51%" stop-color="#66d945" />
-            <stop offset="69%" stop-color="#20c8dc" />
-            <stop offset="85%" stop-color="#7259ff" />
-            <stop offset="100%" stop-color="#d932b7" />
-          </linearGradient>
-        </defs>
-        <animate
-          attributeName="viewBox"
-          dur="2600ms"
-          fill="freeze"
-          calcMode="spline"
-          keyTimes="0; 0.18; 0.60; 0.86; 1"
-          keySplines="0.16 1 0.3 1; 0.16 1 0.3 1; 0.7 0 0.84 0; 0.7 0 0.84 0"
-          values="-10507 -4838 25000 14062; -10507 -4838 25000 14062; -1000 509 5986 3367; -300 845 4586 2579; -300 845 4586 2579"
-        />
-        <path
-          class="intro-cicluz__traco"
-          :d="pathDaMarca"
-          fill="none"
-          :stroke="`url(#${ids.gradiente})`"
-          stroke-width="200"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
+      <AppLogoAnimada size="clamp(148px, 27vmin, 310px)" :glow-intensity="0.4" :speed="2.1" />
     </div>
 
     <div class="intro-cicluz__carregamento">
@@ -165,86 +48,86 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: transparent;
+  background: #080c14;
   pointer-events: auto;
   will-change: opacity;
   animation: intro-palco var(--intro-duracao) linear both;
 }
 .intro-cicluz__base,
 .intro-cicluz__vidro,
-.intro-cicluz__luzes,
-.intro-cicluz__radiancia {
+.intro-cicluz__cores,
+.intro-cicluz__onda {
   position: absolute;
-  inset: -5%;
+  inset: -6%;
   pointer-events: none;
 }
+/* Esta base so abre no final. Assim, se a API atrasar, aparece preto — nunca o fallback branco. */
 .intro-cicluz__base {
-  background: #0b1018;
-  animation: intro-base var(--intro-duracao) linear both;
+  background: #080c14;
+  animation: intro-base var(--intro-duracao) cubic-bezier(0.7, 0, 0.84, 0) both;
 }
 .intro-cicluz__vidro {
   background:
-    linear-gradient(120deg, rgb(9 14 24 / 0.66), rgb(15 12 34 / 0.38) 48%, rgb(12 18 27 / 0.62)), rgb(9 14 24 / 0.54);
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  animation: intro-vidro var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+    linear-gradient(128deg, rgb(3 7 14 / 0.9), rgb(13 13 29 / 0.72) 49%, rgb(8 12 20 / 0.88)), rgb(5 9 16 / 0.74);
+  backdrop-filter: blur(30px) saturate(135%);
+  -webkit-backdrop-filter: blur(30px) saturate(135%);
+  animation: intro-vidro var(--intro-duracao) cubic-bezier(0.7, 0, 0.84, 0) both;
 }
-.intro-cicluz__luzes {
+.intro-cicluz__cores {
   background:
-    radial-gradient(58% 58% at 13% 88%, rgb(35 205 219 / 0.52), transparent 70%),
-    radial-gradient(58% 56% at 87% 19%, rgb(255 72 56 / 0.48), transparent 70%),
-    radial-gradient(46% 50% at 50% -2%, rgb(255 215 42 / 0.36), transparent 68%),
-    radial-gradient(46% 50% at 50% 56%, rgb(117 78 255 / 0.24), transparent 72%);
-  filter: saturate(1.24);
+    radial-gradient(64% 68% at 6% 91%, rgb(16 184 207 / 0.38), transparent 69%),
+    radial-gradient(64% 60% at 95% 14%, rgb(224 52 81 / 0.32), transparent 70%),
+    radial-gradient(44% 52% at 48% -5%, rgb(104 82 255 / 0.34), transparent 70%),
+    radial-gradient(38% 44% at 48% 55%, rgb(255 205 34 / 0.18), transparent 71%);
+  filter: saturate(1.25);
   mix-blend-mode: screen;
-  animation: intro-luzes var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: intro-cores var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.intro-cicluz__radiancia {
-  inset: 12%;
-  z-index: 0;
+.intro-cicluz__onda {
+  inset: 9%;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 28% 72%, rgb(255 94 37 / 0.48), transparent 27%),
-    radial-gradient(circle at 72% 24%, rgb(110 89 255 / 0.44), transparent 30%),
-    radial-gradient(circle at 48% 48%, rgb(38 205 215 / 0.4), transparent 52%);
-  filter: blur(42px) saturate(1.35);
-  animation: intro-radiancia var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+  background: conic-gradient(
+    from 212deg,
+    transparent 0 7%,
+    #e83164 13%,
+    #ff5b22 20%,
+    #ffd224 29%,
+    #66d945 38%,
+    #20c8dc 48%,
+    #7259ff 56%,
+    #d932b7 64%,
+    transparent 72% 100%
+  );
+  -webkit-mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
+  mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
+  filter: saturate(1.16) blur(0.35px);
+  mix-blend-mode: screen;
+  animation: intro-onda var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__onda--interna {
+  inset: 21%;
+  opacity: 0;
+  background: conic-gradient(
+    from 30deg,
+    transparent 0 20%,
+    #20c8dc 29%,
+    #7259ff 40%,
+    #d932b7 50%,
+    #ff5b22 61%,
+    #ffd224 69%,
+    transparent 79% 100%
+  );
+  -webkit-mask: radial-gradient(circle, transparent 0 55%, #000 56% 64%, transparent 65%);
+  mask: radial-gradient(circle, transparent 0 55%, #000 56% 64%, transparent 65%);
+  animation-name: intro-onda-interna;
 }
 .intro-cicluz__marca {
-  position: absolute;
-  inset: 0;
+  position: relative;
   z-index: 1;
-  pointer-events: none;
-  /* O SVG ocupa o viewport desde o inicio. Somente o viewBox e animado, preservando o vetor em
-     toda a aproximacao e evitando a textura craquelada que um scale grande produzia. */
-  will-change: opacity;
+  display: grid;
+  place-items: center;
+  will-change: transform, opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.intro-cicluz__svg {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-.intro-cicluz__svg--halo {
-  opacity: 0.94;
-  animation: intro-halo var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.intro-cicluz__svg--traco {
-  opacity: 1;
-}
-.intro-cicluz__aura {
-  opacity: 0.18;
-  animation: intro-pulso 1.15s ease-in-out infinite alternate;
-}
-.intro-cicluz__brilho {
-  opacity: 0.26;
-  animation: intro-pulso 0.82s 120ms ease-in-out infinite alternate-reverse;
-}
-.intro-cicluz__traco {
-  /* Nenhum filter/drop-shadow aqui: esta e a camada vetorial que o usuario ve nitida. */
 }
 .intro-cicluz__carregamento {
   position: absolute;
@@ -254,19 +137,15 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   z-index: 2;
   max-width: clamp(88px, 18vw, 180px);
   margin: auto;
-  animation: intro-carregamento var(--intro-duracao) linear both;
+  animation: intro-carregamento var(--intro-duracao) cubic-bezier(0.7, 0, 0.84, 0) both;
 }
 .intro-cicluz__trilho {
   position: relative;
   height: 3px;
-  overflow: visible;
+  overflow: hidden;
   border-radius: var(--cx-r-pill);
-  background: rgb(255 255 255 / 0.18);
-  box-shadow:
-    0 0 12px rgb(114 89 255 / 0.18),
-    inset 0 1px rgb(255 255 255 / 0.14);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 1px rgb(255 255 255 / 0.12);
 }
 .intro-cicluz__preenchimento {
   display: block;
@@ -275,13 +154,14 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   border-radius: inherit;
   background: linear-gradient(90deg, #e83164, #ff5b22 24%, #ffd224 43%, #66d945 59%, #20c8dc 75%, #7259ff 100%);
   box-shadow:
-    0 0 12px rgb(32 200 220 / 0.92),
-    0 0 22px rgb(114 89 255 / 0.58);
-  animation: intro-progresso 2.04s 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    0 0 9px rgb(255 213 43 / 0.98),
+    0 0 20px rgb(32 200 220 / 0.84),
+    0 0 28px rgb(114 89 255 / 0.64);
+  animation: intro-progresso 2.3s 130ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes intro-palco {
   0%,
-  76% {
+  88% {
     opacity: 1;
   }
   100% {
@@ -289,128 +169,122 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
 }
 @keyframes intro-base {
-  0% {
-    opacity: 0.92;
+  0%,
+  74% {
+    opacity: 1;
   }
-  24% {
-    opacity: 0.58;
-  }
-  60% {
-    opacity: 0.16;
+  89% {
+    opacity: 0.74;
   }
   100% {
     opacity: 0;
   }
 }
 @keyframes intro-vidro {
-  0% {
-    opacity: 0.9;
-    transform: scale(1.025);
+  0%,
+  70% {
+    opacity: 0.96;
+    transform: scale(1.018);
   }
-  44% {
-    opacity: 0.58;
-    transform: scale(1.016);
-  }
-  76% {
-    opacity: 0.26;
-    transform: scale(1.008);
+  88% {
+    opacity: 0.56;
+    transform: scale(1.006);
   }
   100% {
     opacity: 0;
     transform: scale(1);
   }
 }
-@keyframes intro-luzes {
+@keyframes intro-cores {
   0% {
-    opacity: 0.64;
+    opacity: 0.46;
     transform: scale(0.96) rotate(-3deg);
   }
   42% {
-    opacity: 1;
-    transform: scale(1.08) rotate(1deg);
+    opacity: 0.86;
+    transform: scale(1.07) rotate(1deg);
   }
-  72% {
-    opacity: 0.82;
+  76% {
+    opacity: 0.62;
     transform: scale(1.16) rotate(3deg);
   }
   100% {
     opacity: 0;
-    transform: scale(1.24) rotate(5deg);
+    transform: scale(1.22) rotate(5deg);
   }
 }
-@keyframes intro-radiancia {
+@keyframes intro-onda {
   0% {
     opacity: 0;
-    transform: scale(0.54) rotate(-18deg);
+    transform: scale(0.48) rotate(-28deg);
   }
-  18% {
-    opacity: 0.88;
-    transform: scale(0.9) rotate(-7deg);
+  20% {
+    opacity: 0.7;
+    transform: scale(0.82) rotate(-9deg);
   }
-  56% {
-    opacity: 1;
-    transform: scale(1.2) rotate(8deg);
+  58% {
+    opacity: 0.9;
+    transform: scale(1.07) rotate(16deg);
   }
   82% {
-    opacity: 0.58;
-    transform: scale(1.8) rotate(15deg);
+    opacity: 0.38;
+    transform: scale(1.32) rotate(39deg);
   }
   100% {
     opacity: 0;
-    transform: scale(2.3) rotate(22deg);
+    transform: scale(1.55) rotate(54deg);
+  }
+}
+@keyframes intro-onda-interna {
+  0%,
+  16% {
+    opacity: 0;
+    transform: scale(0.34) rotate(45deg);
+  }
+  42% {
+    opacity: 0.72;
+    transform: scale(0.88) rotate(7deg);
+  }
+  70% {
+    opacity: 0.58;
+    transform: scale(1.16) rotate(-18deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42) rotate(-37deg);
   }
 }
 @keyframes intro-marca {
   0% {
     opacity: 0;
+    transform: scale(0.88);
   }
-  18% {
+  19% {
     opacity: 1;
+    transform: scale(1);
   }
-  70% {
+  69% {
     opacity: 1;
+    transform: scale(1.035);
   }
-  88% {
+  87% {
     opacity: 0.9;
+    transform: scale(1.04);
   }
   100% {
     opacity: 0;
-  }
-}
-@keyframes intro-halo {
-  0% {
-    opacity: 0;
-  }
-  18% {
-    opacity: 0.74;
-  }
-  58% {
-    opacity: 0.94;
-  }
-  82% {
-    opacity: 0.42;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-@keyframes intro-pulso {
-  from {
-    opacity: 0.58;
-  }
-  to {
-    opacity: 1;
+    transform: scale(1.045);
   }
 }
 @keyframes intro-carregamento {
   0%,
-  78% {
+  84% {
     opacity: 1;
     transform: translateY(0);
   }
   100% {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
 }
 @keyframes intro-progresso {
@@ -431,18 +305,16 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   }
   .intro-cicluz__base,
   .intro-cicluz__vidro,
-  .intro-cicluz__luzes,
-  .intro-cicluz__radiancia,
+  .intro-cicluz__cores,
+  .intro-cicluz__onda,
   .intro-cicluz__marca,
-  .intro-cicluz__aura,
-  .intro-cicluz__brilho,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento {
     animation: none;
   }
   .intro-cicluz__base,
   .intro-cicluz__vidro,
-  .intro-cicluz__luzes,
+  .intro-cicluz__cores,
   .intro-cicluz__marca,
   .intro-cicluz__carregamento {
     opacity: 0;

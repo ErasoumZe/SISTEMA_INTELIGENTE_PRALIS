@@ -22,6 +22,8 @@ const loading = ref(false);
 const error = ref("");
 const mostrarSenha = ref(false);
 const introAposLogin = useState("padaria.intro-apos-login", () => false);
+const introPendente = useState("padaria.intro-pendente", () => false);
+const introDashboardPronto = useState("padaria.intro-dashboard-pronto", () => false);
 
 async function login() {
   loading.value = true;
@@ -39,7 +41,11 @@ async function login() {
       // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
       // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
       limparEstadoWorkspace(useNuxtApp().payload.state);
-      introAposLogin.value = true;
+      // A intro NAO pode nascer sobre o login: ela so e ligada pelo AppWorkspace depois que o
+      // dashboard real terminou de montar, aplicar o tema e pintar dois frames.
+      introAposLogin.value = false;
+      introDashboardPronto.value = false;
+      introPendente.value = true;
       await router.push("/");
     } else {
       error.value = "E-mail ou senha inválidos.";
