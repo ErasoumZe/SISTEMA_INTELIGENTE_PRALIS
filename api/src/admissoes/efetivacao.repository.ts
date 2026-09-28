@@ -1,5 +1,6 @@
-import { and, desc, eq, max, sql } from "drizzle-orm";
+import { and, desc, eq, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { coalescerSql, cpfNormalizadoSql } from "@padaria/db/schema/expressions";
 import {
   admissoesProcessos,
   admissoesProcessosFicha,
@@ -25,20 +26,20 @@ export async function obterDadosEfetivacaoRepository(processoId: string, empresa
       processoId: admissoesProcessos.id,
       origem: admissoesProcessos.origem,
       status: admissoesProcessos.status,
-      nomeCompleto: sql<string | null>`coalesce(${admissoesTestes.nomeCompleto}, ${admissoesProcessos.nomeCompleto})`,
-      cpf: sql<string | null>`coalesce(${admissoesTestes.cpf}, ${admissoesProcessos.cpf})`,
-      funcaoId: sql<string | null>`coalesce(${admissoesTestes.funcaoId}, ${admissoesProcessos.funcaoId})`,
-      funcaoNome: sql<string | null>`coalesce(${funcaoTeste.nome}, ${funcaoProcesso.nome})`,
-      funcaoCbo: sql<string | null>`coalesce(${funcaoTeste.cbo}, ${funcaoProcesso.cbo})`,
+      nomeCompleto: coalescerSql<string | null>(admissoesTestes.nomeCompleto, admissoesProcessos.nomeCompleto),
+      cpf: coalescerSql<string | null>(admissoesTestes.cpf, admissoesProcessos.cpf),
+      funcaoId: coalescerSql<string | null>(admissoesTestes.funcaoId, admissoesProcessos.funcaoId),
+      funcaoNome: coalescerSql<string | null>(funcaoTeste.nome, funcaoProcesso.nome),
+      funcaoCbo: coalescerSql<string | null>(funcaoTeste.cbo, funcaoProcesso.cbo),
       jornadaHorario: admissoesTestes.jornadaHorario,
       turnoId: admissoesProcessos.turnoId,
       turnoRotulo: admissoesProcessos.turnoRotulo,
       // A tabela de processos antecede o tipo compartilhado de turno. O CHECK
       // dela já restringe os valores; a projeção devolve o tipo do contrato.
-      turnoEtiqueta: sql<EtiquetaTurno | null>`${admissoesProcessos.turnoEtiqueta}`,
+      turnoEtiqueta: admissoesProcessos.turnoEtiqueta,
       turnoHoraInicio: admissoesProcessos.turnoHoraInicio,
       turnoHoraFim: admissoesProcessos.turnoHoraFim,
-      turnoDiasSemana: sql<DiaSemana[] | null>`${admissoesProcessos.turnoDiasSemana}`,
+      turnoDiasSemana: admissoesProcessos.turnoDiasSemana,
       dataAdmissao: admissoesProcessosInternos.dataAdmissao,
       exameSituacao: admissoesProcessosInternos.exameSituacao,
       fichaSituacao: admissoesProcessosFicha.situacao
@@ -84,12 +85,7 @@ export async function localizarColaboradoresPorCpfRepository(cpf: string, empres
   return tx
     .select({ id: colaboradores.id, nome: colaboradores.nome })
     .from(colaboradores)
-    .where(
-      and(
-        eq(colaboradores.empresaId, empresaId),
-        sql`regexp_replace(${colaboradores.cpf}, '\\D', '', 'g') = ${cpf}`
-      )
-    )
+    .where(and(eq(colaboradores.empresaId, empresaId), eq(cpfNormalizadoSql(colaboradores.cpf), cpf)))
     .for("update");
 }
 
