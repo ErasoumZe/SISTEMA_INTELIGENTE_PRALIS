@@ -230,7 +230,7 @@ onMounted(() => {
 
                O AVISO DE CAIXA era um bloco no topo da sidebar ate hoje. Quem o preenche e o
                AppWorkspace, que e quem tem o status e a permissao — a casca so reserva o lugar. -->
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
+          <slot v-if="!viewportMobile" name="caixa" :caixa-aberto="caixaAberto" />
 
           <v-menu v-if="empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">
@@ -269,6 +269,7 @@ onMounted(() => {
                sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
                `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
           <v-btn
+            v-if="!viewportMobile"
             to="/"
             variant="text"
             class="topbar-painel"
@@ -281,6 +282,7 @@ onMounted(() => {
           </v-btn>
 
           <v-btn
+            v-if="!viewportMobile"
             :icon="escuro ? 'mdi-weather-sunny' : 'mdi-weather-night'"
             variant="text"
             :title="escuro ? 'Tema claro' : 'Tema escuro'"
@@ -288,7 +290,7 @@ onMounted(() => {
             @click="alternarModoEscuro"
           />
 
-          <v-menu location="bottom end" :close-on-content-click="false">
+          <v-menu v-if="!viewportMobile" location="bottom end" :close-on-content-click="false">
             <template #activator="{ props: menuProps }">
               <v-badge :content="notificacoes?.length ?? 0" :model-value="Boolean(notificacoes?.length)" color="error">
                 <v-btn v-bind="menuProps" icon="mdi-bell-outline" variant="text" aria-label="Notificações" />
@@ -367,9 +369,33 @@ onMounted(() => {
       <!-- `tela-com-cor` e o unico sinal que o CSS tem de que a tela pertence a uma categoria: o
            `--padaria-brand` e injetado em TODA tela (na neutra ele e a marca), entao ele nao serve
            para distinguir. A lista de quem tem cor continua sendo so o `CATEGORIA_POR_TELA`. -->
-      <div class="content-frame" :class="{ 'tela-com-cor': telaTemCategoria }">
+      <div
+        class="content-frame"
+        :class="{
+          'tela-com-cor': telaTemCategoria,
+          'tem-atalhos-mobile': viewportMobile && !drawerMobileAberto
+        }"
+      >
         <slot />
       </div>
     </v-main>
+
+    <AppAtalhosMobile
+      v-if="viewportMobile && !drawerMobileAberto"
+      :na-home="naHome"
+      :caixa-aberto="caixaAberto"
+      :escuro="escuro"
+      :notificacoes="notificacoes?.length ?? 0"
+      @abrir-pendencias="emit('abrirPendencias')"
+      @alternar-tema="alternarModoEscuro"
+    />
   </v-layout>
 </template>
+
+<style scoped>
+@media (width <= 768px) {
+  .content-frame.tem-atalhos-mobile {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+}
+</style>
