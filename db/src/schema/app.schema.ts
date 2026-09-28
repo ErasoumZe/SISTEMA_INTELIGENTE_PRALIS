@@ -3254,7 +3254,7 @@ export const admissoesProcessosHistorico = pgTable(
     ),
     check(
       "admissoes_processos_historico_acao_check",
-      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada', 'efetivado')`
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada', 'ficha_dp_alterada', 'ficha_dp_concluida', 'efetivado')`
     ),
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
@@ -3274,7 +3274,7 @@ export const admissoesProcessosHistorico = pgTable(
     uniqueIndex("admissoes_processos_historico_evento_unico")
       .on(table.processoId, table.versao)
       .where(
-        sql`${table.acao} not in ('cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
+        sql`${table.acao} not in ('cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada', 'ficha_dp_alterada', 'ficha_dp_concluida')`
       ),
     index("admissoes_processos_historico_processo_idx").on(
       table.empresaId,
@@ -3354,7 +3354,7 @@ export const admissoesProcessosFicha = pgTable(
     unique("admissoes_processos_ficha_processo_unico").on(table.processoId),
     check(
       "admissoes_processos_ficha_situacao_check",
-      sql`${table.situacao} in ('rascunho', 'enviada', 'devolvida', 'aprovada')`
+      sql`${table.situacao} in ('rascunho', 'enviada', 'devolvida', 'aprovada', 'rascunho_dp', 'concluida_dp')`
     ),
     check("admissoes_processos_ficha_versao_check", sql`${table.versao} > 0`),
     check("admissoes_processos_ficha_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
@@ -3374,6 +3374,14 @@ export const admissoesProcessosFicha = pgTable(
             and ${table.revisaoPendencias} is not null)
         or (${table.situacao} = 'aprovada' and ${table.enviadoEm} is not null
             and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null)
+        or (${table.situacao} = 'rascunho_dp' and ${table.enviadoEm} is null
+            and ${table.revisadoEm} is null and ${table.revisadoPor} is null
+            and ${table.revisaoPendencias} is null and ${table.avisoAceitoEm} is null
+            and ${table.avisoPrivacidadeVersao} is null)
+        or (${table.situacao} = 'concluida_dp' and ${table.enviadoEm} is null
+            and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null
+            and ${table.revisaoPendencias} is null and ${table.avisoAceitoEm} is null
+            and ${table.avisoPrivacidadeVersao} is null)
       )`
     ),
     index("admissoes_processos_ficha_empresa_situacao_idx").on(table.empresaId, table.situacao),

@@ -4,6 +4,7 @@ import {
   avisoPorVersao,
   avisoVigenteDoAmbiente,
   devolverFichaPayloadSchema,
+  fichaDpConcluirPayloadSchema,
   fichaEnviarPayloadSchema,
   fichaRascunhoPayloadSchema,
   aprovarFichaPayloadSchema,
@@ -392,6 +393,122 @@ export async function obterFichaParaRevisao(
       finalidades: dependente.finalidades
     }))
   };
+}
+
+/**
+ * Porta manual do DP. Um processo novo ganha rascunho interno na primeira abertura; uma ficha
+ * historica enviada por link e preservada como evidencia e nao e convertida silenciosamente.
+ */
+export async function obterFichaParaDp(processoId: string, perfil?: PerfilUsuario): Promise<FichaRevisaoDto> {
+  const empresaId = empresaDoAtor(perfil);
+  const processo = await obterProcessoRepository(processoId, empresaId);
+  if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
+
+  return executarEmTransacao(async (tx) => {
+    await garantirFichaRepository({ processoId, empresaId, situacao: "rascunho_dp" }, tx);
+    const ficha = await obterFichaRepository(processoId, empresaId, tx);
+    if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
+    const dependentes = await listarDependentesParaRevisaoRepository(processoId, empresaId, tx);
+    return {
+      situacao: ficha.situacao as FichaRevisaoDto["situacao"],
+      versao: ficha.versao,
+      semDependentes: ficha.semDependentes,
+      enviadoEm: ficha.enviadoEm?.toISOString() ?? null,
+      revisadoEm: ficha.revisadoEm?.toISOString() ?? null,
+      revisadoPorNome: ficha.revisadoPorNome,
+      revisaoPendencias: ficha.revisaoPendencias,
+      avisoPrivacidadeVersao: ficha.avisoPrivacidadeVersao,
+      avisoAceitoEm: ficha.avisoAceitoEm?.toISOString() ?? null,
+      campos: camposDaLinha(ficha),
+      dependentes: dependentes.map((dependente) => ({
+        id: dependente.id,
+        nomeCompleto: dependente.nomeCompleto,
+        nascimento: dependente.nascimento,
+        parentesco: dependente.parentesco,
+        cpfInformado: dependente.cpfInformado,
+        finalidades: dependente.finalidades
+      }))
+    };
+  });
+}
+
+export async function salvarFichaDp(processoId: string, body: DadosExternos, perfil?: PerfilUsuario) {
+  const empresaId = empresaDoAtor(perfil);
+  const ator = atorDoPerfil(perfil);
+  const dados = fichaRascunhoPayloadSchema.parse(body);
+  return executarEmTransacao(async (tx) => {
+    const processo = await bloquearProcessoRepository(processoId, empresaId, tx);
+    if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
+    const ficha = await bloquearFichaRepository(processoId, empresaId, tx);
+    if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
+    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada") {
+      throw conflito("Esta ficha ja foi concluida e nao pode ser alterada pelo DP.", "FICHA_DP_NAO_EDITAVEL");
+    }
+    if (ficha.versao !== dados.versao) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    if (dados.semDependentes === true) {
+      const quantos = await contarDependentesRepository(processoId, empresaId, tx);
+      if (quantos > 0) throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
+    }
+    const campos = camposDoPayload(dados);
+    const versao = await atualizarFichaRepository({
+      processoId,
+      empresaId,
+      versaoAtual: ficha.versao,
+      campos,
+      ...(dados.semDependentes === undefined ? {} : { semDependentes: dados.semDependentes })
+    }, tx);
+    if (versao === null) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    await registrarEventoProcessoRepository({
+      processoId,
+      empresaId,
+      versao: processo.versao,
+      acao: "ficha_dp_alterada",
+      atorUsuarioId: ator,
+      camposAlterados: [...Object.keys(campos), ...(dados.semDependentes === undefined ? [] : ["semDependentes"])]
+    }, tx);
+  });
+}
+
+export async function concluirFichaDp(processoId: string, body: DadosExternos, perfil?: PerfilUsuario) {
+  const empresaId = empresaDoAtor(perfil);
+  const ator = atorDoPerfil(perfil);
+  const dados = fichaDpConcluirPayloadSchema.parse(body);
+  return executarEmTransacao(async (tx) => {
+    const processo = await bloquearProcessoRepository(processoId, empresaId, tx);
+    if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
+    const ficha = await bloquearFichaRepository(processoId, empresaId, tx);
+    if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
+    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada") {
+      throw conflito("Esta ficha ja foi concluida e nao pode ser alterada pelo DP.", "FICHA_DP_NAO_EDITAVEL");
+    }
+    if (ficha.versao !== dados.versao) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    const quantos = await contarDependentesRepository(processoId, empresaId, tx);
+    if (dados.semDependentes && quantos > 0) throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
+    if (!dados.semDependentes && quantos === 0) throw conflito("Cadastre os dependentes antes de concluir a ficha.", "DEPENDENTES_INCOERENTES");
+    const versao = await atualizarFichaRepository({
+      processoId,
+      empresaId,
+      versaoAtual: ficha.versao,
+      campos: camposDoPayload(dados),
+      semDependentes: dados.semDependentes,
+      situacao: "concluida_dp",
+      revisadoEm: new Date(),
+      revisadoPor: ator,
+      revisaoPendencias: null,
+      enviadoEm: null,
+      avisoPrivacidadeVersao: null,
+      avisoAceitoEm: null
+    }, tx);
+    if (versao === null) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    await registrarEventoProcessoRepository({
+      processoId,
+      empresaId,
+      versao: processo.versao,
+      acao: "ficha_dp_concluida",
+      atorUsuarioId: ator,
+      camposAlterados: []
+    }, tx);
+  });
 }
 
 export async function devolverFicha(processoId: string, body: DadosExternos, perfil?: PerfilUsuario) {

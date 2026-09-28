@@ -135,6 +135,8 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   ficha_enviada: "Ficha enviada pelo candidato",
   ficha_devolvida: "Ficha devolvida para correção",
   ficha_aprovada: "Ficha aprovada",
+  ficha_dp_alterada: "Ficha preenchida pelo DP",
+  ficha_dp_concluida: "Conferência da ficha concluída pelo DP",
   efetivado: "Colaborador efetivado"
 };
 
@@ -275,17 +277,21 @@ export function motivoTurnoIndisponivel(turno: { ativo: boolean; completo: boole
 
 export const rotuloSituacaoFicha: Record<SituacaoFicha, string> = {
   rascunho: "Em preenchimento",
-  enviada: "Enviada — aguardando revisão",
+  enviada: "Em edição pelo DP",
   devolvida: "Devolvida para correção",
-  aprovada: "Aprovada"
+  aprovada: "Aprovada",
+  rascunho_dp: "Em preenchimento pelo DP",
+  concluida_dp: "Conferência do DP concluída"
 };
 
 /** O que cada situacao significa para quem revisa, dito na tela para a chip nao virar enigma. */
 export const explicacaoSituacaoFicha: Record<SituacaoFicha, string> = {
   rascunho: "O candidato abriu o link e ainda não enviou a ficha.",
-  enviada: "O candidato enviou a ficha. Confira os dados e decida: aprovar ou devolver.",
+  enviada: "Registro anterior agora aberto para preenchimento interno pelo DP.",
   devolvida: "O DP devolveu a ficha; o candidato corrige pelo mesmo link e envia de novo.",
-  aprovada: "A ficha foi aprovada. Ela não volta a ser editada pelo candidato."
+  aprovada: "A ficha foi aprovada. Ela não volta a ser editada pelo candidato.",
+  rascunho_dp: "O DP está preenchendo a ficha internamente.",
+  concluida_dp: "O DP concluiu a conferência interna desta ficha."
 };
 
 /**
@@ -294,7 +300,7 @@ export const explicacaoSituacaoFicha: Record<SituacaoFicha, string> = {
  */
 export function corSituacaoFicha(situacao: SituacaoFicha) {
   if (situacao === "enviada") return "primary";
-  if (situacao === "aprovada") return "success";
+  if (situacao === "aprovada" || situacao === "concluida_dp") return "success";
   return situacao === "devolvida" ? "warning" : undefined;
 }
 
@@ -337,7 +343,9 @@ export const iconeSituacaoFicha: Record<SituacaoFicha, string> = {
   rascunho: "mdi-pencil-outline",
   enviada: "mdi-clock-alert-outline",
   devolvida: "mdi-undo-variant",
-  aprovada: "mdi-check-circle-outline"
+  aprovada: "mdi-check-circle-outline",
+  rascunho_dp: "mdi-pencil-outline",
+  concluida_dp: "mdi-check-circle-outline"
 };
 
 /**

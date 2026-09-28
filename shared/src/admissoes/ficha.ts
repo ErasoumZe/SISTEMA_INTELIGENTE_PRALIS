@@ -157,7 +157,22 @@ export const fichaEnviarPayloadSchema = fichaRascunhoPayloadSchema
 
 export type FichaEnviarPayload = z.infer<typeof fichaEnviarPayloadSchema>;
 
-export const situacoesFicha = ["rascunho", "enviada", "devolvida", "aprovada"] as const;
+/** Mesmo conjunto mínimo da ficha enviada, sem aceite de aviso: é preenchimento interno do DP. */
+export const fichaDpConcluirPayloadSchema = fichaRascunhoPayloadSchema
+  .extend({ semDependentes: z.boolean() })
+  .superRefine((dados, ctx) => {
+    for (const campo of obrigatoriosParaEnviar) {
+      const valor = dados[campo];
+      if (valor === undefined || valor === null || valor === "") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [campo], message: "Campo obrigatorio" });
+      }
+    }
+  });
+export type FichaDpConcluirPayload = z.infer<typeof fichaDpConcluirPayloadSchema>;
+
+// A ficha pode ser preenchida pela pessoa convidada (ciclo legado) ou diretamente pelo DP.
+// Os dois ciclos nao se misturam: `rascunho_dp` e `concluida_dp` nunca carregam aceite publico.
+export const situacoesFicha = ["rascunho", "enviada", "devolvida", "aprovada", "rascunho_dp", "concluida_dp"] as const;
 export const situacaoFichaSchema = z.enum(situacoesFicha);
 export type SituacaoFicha = z.infer<typeof situacaoFichaSchema>;
 

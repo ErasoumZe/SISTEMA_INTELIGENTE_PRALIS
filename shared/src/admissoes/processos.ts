@@ -113,6 +113,8 @@ export const acoesHistoricoProcesso = [
   "ficha_enviada",
   "ficha_devolvida",
   "ficha_aprovada",
+  "ficha_dp_alterada",
+  "ficha_dp_concluida",
   // A efetivacao cria o vinculo e o cadastro operacional. O processo nao ganha status persistido:
   // a existencia desse vinculo unico e que prova a conclusao da etapa.
   "efetivado"

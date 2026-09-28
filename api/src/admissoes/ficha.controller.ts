@@ -8,8 +8,10 @@ import { statusErroValidacao } from "../utils.js";
 import { TETO_PUBLICO, tokenDoCabecalho } from "./convite-http.js";
 import {
   aprovarFicha,
+  concluirFichaDp,
   devolverFicha,
   enviarFicha,
+  obterFichaParaDp,
   obterFichaParaRevisao,
   obterFichaPublica,
   salvarRascunhoFicha
@@ -62,6 +64,48 @@ export async function registrarRotasAdmissaoFicha(app: FastifyInstance): Promise
       try {
         const { id } = processoParamsSchema.parse(request.params);
         return ok(await obterFichaParaRevisao(id, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  // Fluxo manual: somente sessao DP. Nenhum dado nem aceite do candidato e simulado aqui.
+  app.get(
+    "/api/admissoes/processos/:id/ficha-dp",
+    { preHandler: exigirPermissao("admissoes_processos_ver_ficha") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        return ok(await obterFichaParaDp(id, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.put(
+    "/api/admissoes/processos/:id/ficha-dp",
+    { preHandler: exigirPermissao("admissoes_processos_revisar_ficha") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        await salvarFichaDp(id, request.body ?? {}, request.perfilUsuario);
+        return semConteudo(reply);
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.post(
+    "/api/admissoes/processos/:id/ficha-dp/concluir",
+    { preHandler: exigirPermissao("admissoes_processos_revisar_ficha") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        await concluirFichaDp(id, request.body ?? {}, request.perfilUsuario);
+        return semConteudo(reply);
       } catch (error) {
         return responderErro(reply, error);
       }

@@ -367,7 +367,8 @@ function confirmarCancelar() {
 
           <!-- O convite existe, mas quem decide se pode emitir e o SERVIDOR: a tela mostra a situacao e o
                motivo que vieram de la. Botao escondido nao protege de quem chama a rota direto. -->
-          <section class="detalhe-convite">
+          <!-- A ficha é preenchida pelo DP; nenhum convite é oferecido na interface. -->
+          <section v-if="false" class="detalhe-convite">
             <h3>Convite ao candidato</h3>
 
             <v-alert v-if="convite?.situacao === 'indisponivel'" type="info" variant="tonal" density="compact">
@@ -481,11 +482,8 @@ function confirmarCancelar() {
             que a regra-mae proibe, e o modal ja passa de 600 linhas.
           -->
           <section v-if="podeRevisarFicha" class="detalhe-ficha">
-            <h3>Ficha do candidato</h3>
-            <p class="detalhe-derivacao">
-              Os dados enviados pelo link, a declaração de dependentes e a decisão de aprovar ou devolver ficam em tela
-              própria.
-            </p>
+            <h3>Ficha do DP</h3>
+            <p class="detalhe-derivacao">Preencha e mantenha os dados de admissão nesta tela.</p>
             <v-btn
               variant="tonal"
               size="small"
@@ -493,7 +491,7 @@ function confirmarCancelar() {
               class="detalhe-ficha__abrir"
               @click="emit('revisarFicha')"
             >
-              Abrir ficha do candidato
+              Abrir ficha do DP
             </v-btn>
           </section>
 

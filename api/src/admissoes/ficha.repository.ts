@@ -106,10 +106,13 @@ export async function bloquearFichaRepository(processoId: string, empresaId: str
 }
 
 /** A ficha nasce vazia no primeiro acesso do candidato. `do nothing` porque duas abas sao uma so. */
-export async function garantirFichaRepository(input: { processoId: string; empresaId: string }, db: TransacaoBanco) {
+export async function garantirFichaRepository(
+  input: { processoId: string; empresaId: string; situacao?: "rascunho" | "rascunho_dp" },
+  db: TransacaoBanco
+) {
   await db
     .insert(admissoesProcessosFicha)
-    .values({ processoId: input.processoId, empresaId: input.empresaId })
+    .values({ processoId: input.processoId, empresaId: input.empresaId, situacao: input.situacao ?? "rascunho" })
     .onConflictDoNothing();
 }
 
@@ -135,8 +138,8 @@ export async function atualizarFichaRepository(
     // `null` e valor de verdade aqui, e nao ausencia: e como a declaracao volta a ser
     // "nao respondeu" quando o candidato apaga o ultimo dependente.
     semDependentes?: boolean | null;
-    avisoPrivacidadeVersao?: string;
-    avisoAceitoEm?: Date;
+    avisoPrivacidadeVersao?: string | null;
+    avisoAceitoEm?: Date | null;
   },
   db: TransacaoBanco
 ) {
