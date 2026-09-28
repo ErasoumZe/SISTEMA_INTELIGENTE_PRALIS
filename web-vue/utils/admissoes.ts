@@ -323,16 +323,16 @@ export function rotuloDeclaracaoDependentes(semDependentes: boolean | null): str
 }
 
 /**
- * ADM-003 V6 — a ficha PEDE ACAO do DP? So estes dois estados pedem.
+ * ADM-003 V6 — a ficha pede ação do DP apenas quando há devolução histórica.
  *
- * A lista mostra sinal apenas para eles, pelo mesmo criterio do prazo do teste: alerta so onde ha
+ * A lista mostra sinal apenas nesse caso, pelo mesmo criterio do prazo do teste: alerta so onde ha
  * decisao humana pendente. `aprovada`, `rascunho` e sem-ficha ficam silenciosos, porque repetir o
  * normal em toda linha vira ruido — e ruido esconde justamente a excecao.
  *
- * Quem quiser ver os outros estados usa o filtro, que aceita os quatro.
+ * A ficha interna em edição é responsabilidade do próprio DP; ela não é pendência.
  */
 export function fichaPedeAtencao(situacao: SituacaoFicha | null): boolean {
-  return situacao === "enviada" || situacao === "devolvida";
+  return situacao === "devolvida";
 }
 
 /**

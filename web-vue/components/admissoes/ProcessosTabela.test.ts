@@ -76,12 +76,10 @@ function texto(wrapper: ReturnType<typeof montar>): string {
 
 describe("o sinal da ficha na listagem", () => {
   it("Deve_MostrarOSinal_So_Quando_A_FichaPedeAcao", () => {
-    // `enviada` e `devolvida` pedem decisao do DP. Repetir o estado normal em toda linha vira ruido,
-    // e ruido esconde a excecao — os demais estados se alcancam pelo filtro.
-    expect(texto(montar({ linhas: [linhaDe("enviada")] }))).toContain("Enviada — aguardando revisão");
+    // A ficha interna em edição não é pendência. Só uma devolução histórica pede ação na lista.
     expect(texto(montar({ linhas: [linhaDe("devolvida")] }))).toContain("Devolvida para correção");
 
-    for (const silencioso of ["aprovada", "rascunho", null] as const) {
+    for (const silencioso of ["enviada", "aprovada", "rascunho", null] as const) {
       const conteudo = texto(montar({ linhas: [linhaDe(silencioso)] }));
       expect(conteudo, String(silencioso)).not.toContain("aguardando revisão");
       expect(conteudo, String(silencioso)).not.toContain("Devolvida para correção");
@@ -91,17 +89,17 @@ describe("o sinal da ficha na listagem", () => {
 
   it("Deve_OSinalTerTextoEIcone_E_NaoSoCor", () => {
     // WCAG 1.4.1: quem nao distingue cor le o rotulo; quem le rapido reconhece a forma. Tres canais.
-    const wrapper = montar({ linhas: [linhaDe("enviada")] });
+    const wrapper = montar({ linhas: [linhaDe("devolvida")] });
     const chip = wrapper.find(".ficha-sinal .v-chip");
     expect(chip.exists()).toBe(true);
-    expect(chip.text()).toContain("Enviada — aguardando revisão");
+    expect(chip.text()).toContain("Devolvida para correção");
     expect(chip.find(".v-icon").exists()).toBe(true);
   });
 
   it("Deve_NomearOSinal_Para_LeitorDeTela", () => {
     // O chip mora na celula do candidato, entao o nome acessivel da celula vira "nome + rotulo".
     // O prefixo invisivel diz de que o rotulo esta falando.
-    const wrapper = montar({ linhas: [linhaDe("enviada")] });
+    const wrapper = montar({ linhas: [linhaDe("devolvida")] });
     expect(wrapper.find(".ficha-sinal .d-sr-only").text()).toBe("Ficha do candidato:");
   });
 
