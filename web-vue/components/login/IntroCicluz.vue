@@ -30,8 +30,81 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
     <div class="intro-cicluz__cores"></div>
-    <div class="intro-cicluz__onda"></div>
-    <div class="intro-cicluz__onda intro-cicluz__onda--interna"></div>
+    <div class="intro-cicluz__luz-central"></div>
+    <!-- Arcos SVG com ponta arredondada: diferentes de uma mascara CSS, eles nunca terminam com
+         corte reto nem encostam no limite da viewport. O halo esta separado do traco nitido. -->
+    <svg class="intro-cicluz__orbitas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <defs>
+        <linearGradient id="intro-orbita-cor" x1="4%" y1="92%" x2="92%" y2="8%">
+          <animateTransform
+            attributeName="gradientTransform"
+            type="translate"
+            values="-0.35 0; 0.35 0; -0.35 0"
+            dur="2.4s"
+            repeatCount="indefinite"
+          />
+          <stop offset="0%" stop-color="#e83164" />
+          <stop offset="24%" stop-color="#ff9b28" />
+          <stop offset="43%" stop-color="#ffd224" />
+          <stop offset="61%" stop-color="#20c8dc" />
+          <stop offset="79%" stop-color="#7259ff" />
+          <stop offset="100%" stop-color="#d932b7" />
+        </linearGradient>
+        <filter id="intro-orbita-brilho" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.25" />
+        </filter>
+      </defs>
+      <g class="intro-cicluz__orbita-halo" filter="url(#intro-orbita-brilho)">
+        <circle
+          cx="50"
+          cy="50"
+          r="43"
+          fill="none"
+          stroke="url(#intro-orbita-cor)"
+          stroke-width="2.8"
+          pathLength="100"
+          stroke-dasharray="59 41"
+          stroke-dashoffset="-5"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="29"
+          fill="none"
+          stroke="url(#intro-orbita-cor)"
+          stroke-width="2.5"
+          pathLength="100"
+          stroke-dasharray="46 54"
+          stroke-dashoffset="18"
+        />
+      </g>
+      <g class="intro-cicluz__orbita-traco">
+        <circle
+          cx="50"
+          cy="50"
+          r="43"
+          fill="none"
+          stroke="url(#intro-orbita-cor)"
+          stroke-width="1.34"
+          stroke-linecap="round"
+          pathLength="100"
+          stroke-dasharray="59 41"
+          stroke-dashoffset="-5"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="29"
+          fill="none"
+          stroke="url(#intro-orbita-cor)"
+          stroke-width="1.12"
+          stroke-linecap="round"
+          pathLength="100"
+          stroke-dasharray="46 54"
+          stroke-dashoffset="18"
+        />
+      </g>
+    </svg>
 
     <div class="intro-cicluz__marca">
       <AppLogoAnimada size="clamp(148px, 27vmin, 310px)" :glow-intensity="0.4" :speed="2.1" />
@@ -65,7 +138,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 .intro-cicluz__base,
 .intro-cicluz__vidro,
 .intro-cicluz__cores,
-.intro-cicluz__onda {
+.intro-cicluz__luz-central,
+.intro-cicluz__orbitas {
   position: absolute;
   inset: -6%;
   pointer-events: none;
@@ -92,44 +166,33 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   mix-blend-mode: screen;
   animation: intro-cores var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.intro-cicluz__onda {
-  inset: 14%;
+.intro-cicluz__luz-central {
+  inset: 24%;
+  z-index: 0;
   border-radius: 50%;
-  background: conic-gradient(
-    from 212deg,
-    transparent 0 7%,
-    #e83164 13%,
-    #ff5b22 20%,
-    #ffd224 29%,
-    #66d945 38%,
-    #20c8dc 48%,
-    #7259ff 56%,
-    #d932b7 64%,
-    transparent 72% 100%
-  );
-  -webkit-mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
-  mask: radial-gradient(circle, transparent 0 58%, #000 59% 64%, transparent 65%);
-  filter: saturate(1.16) blur(0.35px);
-  box-shadow: 0 0 34px rgb(83 137 255 / 0.22);
+  background:
+    radial-gradient(circle at 20% 72%, rgb(232 49 100 / 0.52), transparent 22%),
+    radial-gradient(circle at 78% 25%, rgb(38 207 222 / 0.48), transparent 25%),
+    radial-gradient(circle at 49% 45%, rgb(255 211 38 / 0.28), transparent 48%);
+  filter: blur(28px) saturate(1.25);
   mix-blend-mode: screen;
-  animation: intro-onda var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: intro-luz-central var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.intro-cicluz__onda--interna {
-  inset: 27%;
-  opacity: 0;
-  background: conic-gradient(
-    from 30deg,
-    transparent 0 20%,
-    #20c8dc 29%,
-    #7259ff 40%,
-    #d932b7 50%,
-    #ff5b22 61%,
-    #ffd224 69%,
-    transparent 79% 100%
-  );
-  -webkit-mask: radial-gradient(circle, transparent 0 55%, #000 56% 64%, transparent 65%);
-  mask: radial-gradient(circle, transparent 0 55%, #000 56% 64%, transparent 65%);
-  animation-name: intro-onda-interna;
+.intro-cicluz__orbitas {
+  z-index: 0;
+  inset: 0;
+  width: min(90vw, 90vh);
+  height: min(90vw, 90vh);
+  margin: auto;
+  overflow: visible;
+  filter: saturate(1.2);
+  animation: intro-orbitas var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__orbita-halo {
+  opacity: 0.6;
+}
+.intro-cicluz__orbita-traco {
+  opacity: 0.98;
 }
 .intro-cicluz__marca {
   position: relative;
@@ -142,7 +205,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__base,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__vidro,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__cores,
-.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__onda,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__luz-central,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__orbitas,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__marca,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__carregamento,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__preenchimento {
@@ -192,11 +256,14 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-base {
   0%,
-  74% {
+  60% {
     opacity: 1;
   }
+  80% {
+    opacity: 0.72;
+  }
   89% {
-    opacity: 0.74;
+    opacity: 0.46;
   }
   100% {
     opacity: 0;
@@ -204,12 +271,16 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-vidro {
   0%,
-  70% {
+  60% {
     opacity: 0.96;
     transform: scale(1.018);
   }
+  78% {
+    opacity: 0.76;
+    transform: scale(1.01);
+  }
   88% {
-    opacity: 0.56;
+    opacity: 0.46;
     transform: scale(1.006);
   }
   100% {
@@ -235,45 +306,48 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     transform: scale(1.22) rotate(5deg);
   }
 }
-@keyframes intro-onda {
+@keyframes intro-luz-central {
   0% {
     opacity: 0;
-    transform: scale(0.48) rotate(-28deg);
+    transform: scale(0.5);
   }
   20% {
-    opacity: 0.7;
-    transform: scale(0.82) rotate(-9deg);
+    opacity: 0.72;
+    transform: scale(0.86);
   }
   58% {
-    opacity: 0.9;
-    transform: scale(1.07) rotate(16deg);
+    opacity: 0.86;
+    transform: scale(1.2);
   }
   82% {
-    opacity: 0.38;
-    transform: scale(1.18) rotate(39deg);
+    opacity: 0.32;
+    transform: scale(1.62);
   }
   100% {
     opacity: 0;
-    transform: scale(1.28) rotate(54deg);
+    transform: scale(2);
   }
 }
-@keyframes intro-onda-interna {
-  0%,
-  16% {
+@keyframes intro-orbitas {
+  0% {
     opacity: 0;
-    transform: scale(0.34) rotate(45deg);
+    transform: scale(0.72) rotate(-26deg);
   }
-  42% {
-    opacity: 0.72;
-    transform: scale(0.88) rotate(7deg);
+  18% {
+    opacity: 0.74;
+    transform: scale(0.88) rotate(-8deg);
   }
-  70% {
-    opacity: 0.58;
-    transform: scale(1.16) rotate(-18deg);
+  58% {
+    opacity: 1;
+    transform: scale(1) rotate(15deg);
+  }
+  82% {
+    opacity: 0.42;
+    transform: scale(1.04) rotate(30deg);
   }
   100% {
     opacity: 0;
-    transform: scale(1.2) rotate(-37deg);
+    transform: scale(1.08) rotate(40deg);
   }
 }
 @keyframes intro-marca {
@@ -328,7 +402,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__base,
   .intro-cicluz__vidro,
   .intro-cicluz__cores,
-  .intro-cicluz__onda,
+  .intro-cicluz__luz-central,
+  .intro-cicluz__orbitas,
   .intro-cicluz__marca,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento {
