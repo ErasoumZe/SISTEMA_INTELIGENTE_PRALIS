@@ -175,6 +175,40 @@ describe("efetivação de colaboradores", () => {
     });
     assertProblem(resposta, 409, "COLABORADOR_LEGADO_SEM_VINCULO");
   });
+
+  it("expõe a efetivação e mantém sua data imutável", async () => {
+    const processo = await criarProcessoApto();
+    const efetivado = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${processo.id}/efetivar`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(efetivado);
+
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processo.id}`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(detalhe);
+    expect(detalhe.json().data).toMatchObject({ efetivado: true, dataEfetivacao: "2026-09-27" });
+
+    const dataAlterada = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processo.id}/internos`,
+      headers: { cookie: cookieDp },
+      payload: { versao: detalhe.json().data.internos.versao, dataAdmissao: "2026-10-01" }
+    });
+    assertProblem(dataAlterada, 409, "DATA_EFETIVACAO_IMUTAVEL");
+
+    const demaisDados = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processo.id}/internos`,
+      headers: { cookie: cookieDp },
+      payload: { versao: detalhe.json().data.internos.versao, dataAdmissao: "2026-09-27", ctpsNumero: "123456" }
+    });
+    expect(demaisDados.statusCode).toBe(204);
+  });
   it("localiza CPF legado mascarado pela mesma identidade normalizada", async () => {
     const cpf = proximoCpf();
     const cpfMascarado = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;

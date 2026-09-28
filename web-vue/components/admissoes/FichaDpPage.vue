@@ -3,9 +3,12 @@ import type { AuthSession, FichaRevisaoDto, ProcessoDetalheDto } from "@padaria/
 import type { Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import FichaDadosCandidato from "~/components/admissoes/FichaDadosCandidato.vue";
+import FichaRevisaoCampos from "~/components/admissoes/FichaRevisaoCampos.vue";
+import FichaRevisaoDependentes from "~/components/admissoes/FichaRevisaoDependentes.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 import { rotuloIdentidadeProcesso, rotuloTurnoDoProcesso } from "~/utils/admissoes";
+import { formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{ processoId: string }>();
 const router = useRouter();
@@ -18,6 +21,8 @@ const salvando = ref(false);
 const erro = ref("");
 const formulario = reactive<Record<string, string>>({});
 const semDependentes = ref<boolean | null>(null);
+const aba = ref("dados");
+const editando = ref(false);
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
@@ -35,6 +40,7 @@ const rota = computed(() => `/api/admissoes/processos/${props.processoId}/ficha-
 // pode completar e corrigir os dados sem devolver a ficha a uma pessoa candidata.
 const eManual = computed(() => ficha.value?.situacao === "rascunho_dp" || ficha.value?.situacao === "enviada" || ficha.value?.situacao === "concluida_dp");
 const concluida = computed(() => ficha.value?.situacao === "concluida_dp");
+const podeEditarFicha = computed(() => podeEditar.value && eManual.value && !concluida.value);
 
 function notificar(text: string, color = "success") {
   snackbar.text = text;
@@ -58,12 +64,22 @@ async function carregar() {
 function corpo() {
   return { versao: ficha.value?.versao, ...formulario, semDependentes: semDependentes.value };
 }
+function iniciarEdicao() {
+  if (!ficha.value || !podeEditarFicha.value) return;
+  preencherFormulario(ficha.value);
+  editando.value = true;
+}
+function cancelarEdicao() {
+  if (ficha.value) preencherFormulario(ficha.value);
+  editando.value = false;
+}
 async function salvar() {
   if (!ficha.value || !podeEditar.value || salvando.value || !eManual.value || concluida.value) return;
   salvando.value = true;
   try {
     await apiPut(rota.value, corpo());
     await carregar();
+    editando.value = false;
     notificar("Ficha do DP salva. A linha do tempo registrou a alteração.");
   } catch (causa) {
     notificar(mensagemErro(causa), "error");
@@ -77,6 +93,7 @@ async function concluir() {
   try {
     await apiPost(`${rota.value}/concluir`, corpo());
     await carregar();
+    editando.value = false;
     notificar("Conferência do DP concluída.");
   } catch (causa) {
     notificar(mensagemErro(causa), "error");
@@ -119,11 +136,15 @@ onMounted(async () => {
           <h1>{{ rotuloIdentidadeProcesso(processo.nomeCompleto) }}</h1>
           <span>{{ processo.funcaoNome }} · {{ rotuloTurnoDoProcesso(processo) }}</span>
         </div>
+        <v-spacer />
+        <v-btn v-if="!editando && podeEditarFicha" color="primary" prepend-icon="mdi-pencil" @click="iniciarEdicao">
+          Editar ficha
+        </v-btn>
       </header>
       <v-alert v-if="concluida" type="success" variant="tonal">
         Conferência do DP concluída. Para corrigir dados, registre uma nova etapa com o responsável do DP.
       </v-alert>
-      <template v-else-if="eManual">
+      <template v-if="eManual && editando">
         <v-alert type="info" variant="tonal">Preencha por blocos. Campos obrigatórios estão destacados; cada salvamento fica registrado na linha do tempo.</v-alert>
         <FichaDadosCandidato :formulario="formulario" :somente-leitura="!podeEditar" />
         <section class="ficha-dp__dependentes">
@@ -135,9 +156,46 @@ onMounted(async () => {
           <v-alert v-if="semDependentes === false" type="warning" variant="tonal" density="compact">O cadastro interno de dependentes será aberto nesta mesma ficha antes da conclusão.</v-alert>
         </section>
         <footer class="ficha-dp__acoes">
-          <v-btn variant="outlined" :loading="salvando" :disabled="!podeEditar" @click="salvar">Salvar ficha</v-btn>
+          <v-btn variant="outlined" :disabled="salvando" @click="cancelarEdicao">Cancelar</v-btn>
+          <v-btn color="primary" :loading="salvando" :disabled="!podeEditar" @click="salvar">Salvar alterações</v-btn>
           <v-btn color="success" :loading="salvando" :disabled="!podeEditar" @click="concluir">Concluir conferência do DP</v-btn>
         </footer>
+      </template>
+      <template v-else-if="eManual">
+        <v-card class="ficha-dp__resumo" variant="tonal">
+          <v-card-text>
+            <div><span class="ficha-dp__rotulo">Situação</span><strong>{{ concluida ? "Conferida pelo DP" : "Em preenchimento pelo DP" }}</strong></div>
+            <div><span class="ficha-dp__rotulo">Data de admissão</span><strong>{{ formatarDataSomenteDia(processo.internos.dataAdmissao) }}</strong></div>
+            <div><span class="ficha-dp__rotulo">Exame admissional</span><strong>{{ processo.internos.exameSituacao.replaceAll("_", " ") }}</strong></div>
+          </v-card-text>
+        </v-card>
+        <v-tabs v-model="aba" class="ficha-dp__abas" color="primary" show-arrows>
+          <v-tab value="dados">Dados pessoais</v-tab>
+          <v-tab value="endereco">Endereço</v-tab>
+          <v-tab value="documentos">Documentos</v-tab>
+          <v-tab value="dependentes">Dependentes</v-tab>
+          <v-tab value="vinculo">Vínculo</v-tab>
+        </v-tabs>
+        <v-window v-model="aba" class="ficha-dp__conteudo" :touch="false">
+          <v-window-item value="dados"><FichaRevisaoCampos :campos="ficha.campos" :secoes="['identificacao', 'contato']" /></v-window-item>
+          <v-window-item value="endereco"><FichaRevisaoCampos :campos="ficha.campos" :secoes="['endereco']" /></v-window-item>
+          <v-window-item value="documentos"><FichaRevisaoCampos :campos="ficha.campos" :secoes="['documentos', 'bancarios']" /></v-window-item>
+          <v-window-item value="dependentes"><FichaRevisaoDependentes :dependentes="ficha.dependentes" :sem-dependentes="ficha.semDependentes" /></v-window-item>
+          <v-window-item value="vinculo">
+            <section class="ficha-dp__vinculo">
+              <h2>Vínculo e etapa interna</h2>
+              <v-alert v-if="processo.efetivado" type="success" variant="tonal" density="compact">
+                Efetivado em {{ formatarDataSomenteDia(processo.dataEfetivacao) }}. Esta data é histórica e não pode ser alterada.
+              </v-alert>
+              <dl>
+                <div><dt>Data de admissão programada</dt><dd>{{ formatarDataSomenteDia(processo.internos.dataAdmissao) }}</dd></div>
+                <div><dt>Função</dt><dd>{{ processo.funcaoNome ?? "Não informada" }}</dd></div>
+                <div><dt>Turno</dt><dd>{{ rotuloTurnoDoProcesso(processo) }}</dd></div>
+              </dl>
+              <p>A data passa a ser somente leitura quando o colaborador for efetivado.</p>
+            </section>
+          </v-window-item>
+        </v-window>
       </template>
       <v-alert v-else type="warning" variant="tonal">
         Esta ficha pertence a um fluxo anterior encerrado e não pode ser reaberta automaticamente.
@@ -154,5 +212,15 @@ onMounted(async () => {
 .ficha-dp__cabecalho h1, .ficha-dp__dependentes h2 { margin: 0; color: var(--cx-ink); }
 .ficha-dp__dependentes { padding: var(--cx-sp-4); border-radius: var(--cx-r-lg); background: var(--cx-surface); box-shadow: var(--cx-e-1); }
 .ficha-dp__acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--cx-sp-2); }
+.ficha-dp__resumo :deep(.v-card-text) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--cx-sp-3); }
+.ficha-dp__resumo strong, .ficha-dp__rotulo { display: block; }
+.ficha-dp__rotulo { color: var(--cx-ink-soft); font-size: var(--cx-fs-caption); }
+.ficha-dp__conteudo { overflow: visible; }
+.ficha-dp__vinculo { display: grid; gap: var(--cx-sp-3); padding: var(--cx-sp-4) var(--cx-sp-5); border-radius: var(--cx-r-lg); background: var(--cx-surface); box-shadow: var(--cx-e-1); }
+.ficha-dp__vinculo h2, .ficha-dp__vinculo p { margin: 0; }
+.ficha-dp__vinculo p, .ficha-dp__vinculo dt { color: var(--cx-ink-soft); font-size: var(--cx-fs-caption); }
+.ficha-dp__vinculo dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--cx-sp-3); margin: 0; }
+.ficha-dp__vinculo dd { margin: 0; color: var(--cx-ink); overflow-wrap: anywhere; }
+@media (max-width: 768px) { .ficha-dp__resumo :deep(.v-card-text), .ficha-dp__vinculo dl { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .ficha-dp__acoes :deep(.v-btn) { width: 100%; } }
 </style>

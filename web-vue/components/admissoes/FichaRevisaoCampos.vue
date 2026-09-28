@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { FichaRevisaoDto } from "@padaria/shared";
 import { formatarDataSomenteDia, mascararCep, mascararWhatsapp } from "~/utils/formatacao";
 
@@ -18,7 +19,14 @@ type Formato = "texto" | "data" | "cep" | "telefone";
 type Campo = { chave: Chave; rotulo: string; formato?: Formato };
 type Secao = { id: string; titulo: string; campos: Campo[] };
 
-defineProps<{ campos: Campos }>();
+const props = withDefaults(
+  defineProps<{
+    campos: Campos;
+    /** Quando informado, mostra somente os blocos da aba atual do perfil. */
+    secoes?: string[];
+  }>(),
+  { secoes: () => [] }
+);
 
 const SECOES: Secao[] = [
   {
@@ -84,6 +92,10 @@ const SECOES: Secao[] = [
   }
 ];
 
+const secoesVisiveis = computed(() =>
+  props.secoes.length ? SECOES.filter((secao) => props.secoes.includes(secao.id)) : SECOES
+);
+
 /** `null` e "nao informado" — a celula mostra isso em vez de inventar um traco. */
 function exibir(valor: string | null | undefined, formato: Formato = "texto"): string | null {
   if (valor === null || valor === undefined || valor === "") return null;
@@ -95,7 +107,7 @@ function exibir(valor: string | null | undefined, formato: Formato = "texto"): s
 </script>
 
 <template>
-  <section v-for="secao in SECOES" :key="secao.id" class="bloco" :aria-labelledby="`revisao-${secao.id}`">
+  <section v-for="secao in secoesVisiveis" :key="secao.id" class="bloco" :aria-labelledby="`revisao-${secao.id}`">
     <h2 :id="`revisao-${secao.id}`" class="bloco__titulo">{{ secao.titulo }}</h2>
     <dl class="bloco__campos">
       <div v-for="campo in secao.campos" :key="campo.chave" class="bloco__campo">

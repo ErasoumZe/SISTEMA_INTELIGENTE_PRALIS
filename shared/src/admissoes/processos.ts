@@ -331,6 +331,9 @@ export const processoDetalheDtoSchema = z.object({
   // Fato vindo da ficha, para a tela orientar a etapa de efetivacao sem carregar nenhum campo
   // pessoal dela. A confirmacao continua no servidor.
   fichaSituacao: situacaoFichaSchema.nullable(),
+  // A efetivacao e provada pelo vinculo, nao por outro status gravado no processo.
+  efetivado: z.boolean(),
+  dataEfetivacao: z.string().nullable(),
   internos: dadosInternosDtoSchema,
   // SO o nome. E-mail nunca entra na projecao — e identificador reaproveitavel em outras rotas.
   criadoPorNome: z.string().nullable(),
