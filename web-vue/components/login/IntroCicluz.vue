@@ -4,9 +4,21 @@ import { computed } from "vue";
 const emit = defineEmits<{ concluida: [] }>();
 const props = withDefaults(defineProps<{ pronta?: boolean }>(), { pronta: true });
 
-const DURACAO_INTRO_MS = 2_800;
+const DURACAO_INTRO_MS = 3_400;
 const marcaFinal = [..."Cicluz"];
 const assinaturaFinal = [..."Sistema inteligente"];
+const particulasFinais = [
+  { x: -74, y: -34, cor: "#e83164", atraso: 2820 },
+  { x: -48, y: -65, cor: "#ff9b28", atraso: 2850 },
+  { x: -16, y: -47, cor: "#ffd224", atraso: 2810 },
+  { x: 20, y: -70, cor: "#66d945", atraso: 2860 },
+  { x: 62, y: -38, cor: "#20c8dc", atraso: 2835 },
+  { x: 78, y: 12, cor: "#7259ff", atraso: 2880 },
+  { x: 54, y: 57, cor: "#d932b7", atraso: 2840 },
+  { x: 12, y: 74, cor: "#e83164", atraso: 2890 },
+  { x: -28, y: 62, cor: "#ff9b28", atraso: 2828 },
+  { x: -69, y: 32, cor: "#20c8dc", atraso: 2870 }
+];
 let temporizador: number | undefined;
 
 function iniciarIntro() {
@@ -118,7 +130,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
           v-for="(letra, indice) in marcaFinal"
           :key="`marca-${indice}`"
           class="intro-cicluz__letra"
-          :style="{ animationDelay: `${1720 + indice * 48}ms` }"
+          :style="{ animationDelay: `${2050 + indice * 48}ms` }"
           >{{ letra }}</span
         >
       </p>
@@ -127,10 +139,18 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
           v-for="(letra, indice) in assinaturaFinal"
           :key="`assinatura-${indice}`"
           class="intro-cicluz__letra intro-cicluz__letra--assinatura"
-          :style="{ animationDelay: `${1940 + indice * 20}ms` }"
+          :style="{ animationDelay: `${2360 + indice * 20}ms` }"
           >{{ letra === " " ? "\u00A0" : letra }}</span
         >
       </p>
+    </div>
+
+    <div class="intro-cicluz__particulas" aria-hidden="true">
+      <i
+        v-for="(particula, indice) in particulasFinais"
+        :key="`particula-${indice}`"
+        :style="`--particula-x:${particula.x}px;--particula-y:${particula.y}px;--particula-cor:${particula.cor};--particula-atraso:${particula.atraso}ms`"
+      ></i>
     </div>
 
     <div class="intro-cicluz__carregamento">
@@ -175,8 +195,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 .intro-cicluz__vidro {
   background:
     linear-gradient(128deg, rgb(3 7 14 / 0.9), rgb(13 13 29 / 0.72) 49%, rgb(8 12 20 / 0.88)), rgb(5 9 16 / 0.74);
-  backdrop-filter: blur(30px) saturate(135%);
-  -webkit-backdrop-filter: blur(30px) saturate(135%);
+  backdrop-filter: blur(30px) saturate(0.08) grayscale(1) brightness(0.48);
+  -webkit-backdrop-filter: blur(30px) saturate(0.08) grayscale(1) brightness(0.48);
   animation: intro-vidro var(--intro-duracao) cubic-bezier(0.7, 0, 0.84, 0) both;
 }
 .intro-cicluz__cores {
@@ -235,6 +255,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   transform: translate(-50%, -50%);
   color: #fff;
   pointer-events: none;
+  animation: intro-mensagem var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .intro-cicluz__nome-final,
 .intro-cicluz__assinatura-final {
@@ -269,6 +290,26 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 .intro-cicluz__letra--assinatura {
   animation-duration: 170ms;
 }
+.intro-cicluz__particulas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.intro-cicluz__particulas i {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--particula-cor);
+  box-shadow: 0 0 10px var(--particula-cor);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.3);
+  animation: intro-particula 520ms var(--particula-atraso) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__base,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__vidro,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__cores,
@@ -277,6 +318,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__marca,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__mensagem-final,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__letra,
+.intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__particulas i,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__carregamento,
 .intro-cicluz:not(.intro-cicluz--pronta) .intro-cicluz__preenchimento {
   animation-play-state: paused;
@@ -312,11 +354,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     0 0 9px rgb(255 213 43 / 0.98),
     0 0 20px rgb(32 200 220 / 0.84),
     0 0 28px rgb(114 89 255 / 0.64);
-  animation: intro-progresso 2.3s 130ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: intro-progresso 2.9s 130ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes intro-palco {
   0%,
-  88% {
+  92% {
     opacity: 1;
   }
   100% {
@@ -325,14 +367,14 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-base {
   0%,
-  60% {
+  57% {
     opacity: 1;
   }
-  80% {
-    opacity: 0.72;
+  76% {
+    opacity: 0.8;
   }
-  89% {
-    opacity: 0.46;
+  88% {
+    opacity: 0.42;
   }
   100% {
     opacity: 0;
@@ -340,16 +382,16 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-vidro {
   0%,
-  60% {
+  57% {
     opacity: 0.96;
     transform: scale(1.018);
   }
   78% {
-    opacity: 0.76;
+    opacity: 0.7;
     transform: scale(1.01);
   }
-  88% {
-    opacity: 0.46;
+  90% {
+    opacity: 0.36;
     transform: scale(1.006);
   }
   100% {
@@ -366,8 +408,8 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     opacity: 0.86;
     transform: scale(1.07) rotate(1deg);
   }
-  76% {
-    opacity: 0.62;
+  66% {
+    opacity: 0.34;
     transform: scale(1.16) rotate(3deg);
   }
   100% {
@@ -428,11 +470,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     opacity: 1;
     transform: scale(1);
   }
-  69% {
+  66% {
     opacity: 1;
     transform: scale(1.035);
   }
-  79% {
+  77% {
     opacity: 0.36;
     transform: scale(1.04);
   }
@@ -449,6 +491,37 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+@keyframes intro-mensagem {
+  0%,
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+  86% {
+    opacity: 0.94;
+    transform: translate(-50%, -50%) scale(1.035);
+    filter: blur(0.6px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.08);
+    filter: blur(5px);
+  }
+}
+@keyframes intro-particula {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--particula-x)), calc(-50% + var(--particula-y))) scale(0.6);
   }
 }
 @keyframes intro-carregamento {
@@ -486,6 +559,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   .intro-cicluz__marca,
   .intro-cicluz__mensagem-final,
   .intro-cicluz__letra,
+  .intro-cicluz__particulas i,
   .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento {
     animation: none;
