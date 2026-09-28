@@ -42,6 +42,12 @@ export type CampoFicha = {
   obrigatorio: boolean;
 };
 
+export type GrupoFichaPublica = {
+  id: CampoFicha["grupo"];
+  titulo: string;
+  descricao?: string;
+};
+
 const obrigatorios = new Set(camposObrigatoriosDaFicha);
 
 function campo(
@@ -89,14 +95,14 @@ export const camposDaFichaPublica: readonly CampoFicha[] = [
   campo("contaTipo", "Tipo de conta", "bancario")
 ];
 
-export const gruposDaFichaPublica = [
+export const gruposDaFichaPublica: readonly GrupoFichaPublica[] = [
   { id: "pessoal", titulo: "Dados pessoais", descricao: "Informações de identificação da pessoa." },
   { id: "endereco", titulo: "Endereço", descricao: "Use o CEP para preencher o endereço mais rápido." },
   { id: "contato", titulo: "Contato" },
   { id: "identidade", titulo: "Documento de identificação" },
   { id: "eleitoral", titulo: "Título eleitoral", descricao: "Opcional." },
   { id: "bancario", titulo: "Dados bancários", descricao: "Opcional." }
-] as const;
+];
 
 export function rotuloCampoFicha(campo: CampoFicha): string {
   return campo.obrigatorio ? `${campo.rotulo} *` : campo.rotulo;
