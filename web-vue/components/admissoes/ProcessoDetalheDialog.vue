@@ -209,7 +209,7 @@ const efetivavel = computed(
     props.podeEfetivar &&
     props.processo?.status === "iniciado" &&
     props.processo.internos.exameSituacao === "aso_apto" &&
-    props.processo.fichaSituacao === "aprovada"
+    Boolean(props.processo.internos.dataAdmissao)
 );
 
 /**

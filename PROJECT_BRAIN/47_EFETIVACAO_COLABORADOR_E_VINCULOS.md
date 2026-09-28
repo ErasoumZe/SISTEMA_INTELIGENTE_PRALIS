@@ -1,7 +1,8 @@
 # 47 — Efetivação, cadastro único e vínculos do colaborador
 
 **Data:** 26/09/2026
-**Estado:** desenho aprovado para implementação; nenhuma migration foi gerada ou aplicada.
+**Estado:** E7 implementada em branch local, com migration candidata `0050` ainda não aplicada; depende de preflight
+autorizado dos CPFs existentes e da validação final.
 **Fontes:** decisão de Marco em 26/09/2026, documentos 35, 36, 39, 41 e 46, planilha `COLABORADORES (KAY)` analisada localmente e Manual do eSocial.
 
 ## 1. Decisão de identidade e recontratação
@@ -121,6 +122,6 @@ um documento só fica `concluído` depois de um dossiê válido. Não haverá co
 
 ## 7. Próximo ato técnico
 
-Antes de alterar schema, preparar o SQL da E7 e apresentar para aprovação. O pacote precisa incluir
-o preflight somente leitura de CPF existente e a estratégia para não quebrar os cadastros operacionais
-atuais que ainda usam `colaboradores` em Caixa, despesas e retiradas.
+Antes de aplicar a migration `0050`, executar e revisar o preflight somente leitura de CPF existente e definir a
+estratégia para não quebrar os cadastros operacionais atuais que ainda usam `colaboradores` em Caixa, despesas e
+retiradas. Nenhum dado histórico será corrigido automaticamente.

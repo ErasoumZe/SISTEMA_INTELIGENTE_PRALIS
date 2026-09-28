@@ -31,7 +31,6 @@ const pronto = computed(
   () =>
     processo.value?.status === "iniciado" &&
     processo.value.internos.exameSituacao === "aso_apto" &&
-    processo.value.fichaSituacao === "aprovada" &&
     Boolean(processo.value.internos.dataAdmissao)
 );
 
@@ -122,7 +121,8 @@ onMounted(async () => {
         <v-card-title>Conferência antes de efetivar</v-card-title>
         <v-card-text>
           <p class="mb-4">
-            A efetivação cria a matrícula e o vínculo histórico. Nenhum dado é digitado novamente nesta etapa.
+            A efetivação cria a matrícula e o vínculo histórico. A ficha por link é opcional nesta fase: o DP começa o
+            dossiê diretamente no perfil do colaborador.
           </p>
           <v-list density="comfortable" class="efetivacao__lista">
             <v-list-item :prepend-icon="processo.status === 'iniciado' ? 'mdi-check-circle' : 'mdi-alert-circle'">
@@ -137,14 +137,6 @@ onMounted(async () => {
               <v-list-item-title>ASO apto</v-list-item-title>
               <v-list-item-subtitle>{{
                 processo.internos.exameSituacao === "aso_apto" ? "Confirmado" : "Registre o ASO como apto."
-              }}</v-list-item-subtitle>
-            </v-list-item>
-            <v-list-item
-              :prepend-icon="processo.fichaSituacao === 'aprovada' ? 'mdi-check-circle' : 'mdi-alert-circle'"
-            >
-              <v-list-item-title>Ficha aprovada pelo DP</v-list-item-title>
-              <v-list-item-subtitle>{{
-                processo.fichaSituacao === "aprovada" ? "Confirmada" : "A ficha precisa ser aprovada."
               }}</v-list-item-subtitle>
             </v-list-item>
             <v-list-item :prepend-icon="processo.internos.dataAdmissao ? 'mdi-check-circle' : 'mdi-alert-circle'">

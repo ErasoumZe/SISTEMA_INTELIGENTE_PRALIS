@@ -85,6 +85,7 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
       exameAtualizadoPorNome: "Ana do DP",
       exameAtualizadoEm: "2026-08-30T12:00:00.000Z"
     },
+    fichaSituacao: null,
     criadoPorNome: "Ana do DP",
     criadoEm: "2026-08-28T12:00:00.000Z",
     atualizadoPorNome: "Ana do DP",
@@ -126,6 +127,7 @@ type Cenario = {
   aberto?: boolean;
   processo?: ProcessoDetalheDto | null;
   podeCancelar?: boolean;
+  podeEfetivar?: boolean;
   podeEditarInternos?: boolean;
   /** O default e a tela de Testes, que TEM caminho de volta. A de Processos passa `false`. */
   podeVerTeste?: boolean;
@@ -154,6 +156,7 @@ function montar(cenario: Cenario = {}) {
       processo: cenario.processo === undefined ? processoDe("iniciado") : cenario.processo,
       historico: HISTORICO,
       podeCancelar: cenario.podeCancelar ?? true,
+      podeEfetivar: cenario.podeEfetivar ?? false,
       podeEditarInternos: cenario.podeEditarInternos ?? true,
       podeVerTeste: cenario.podeVerTeste ?? true,
       podeVerCpf: cenario.podeVerCpf ?? false,
@@ -244,6 +247,30 @@ describe("o detalhe abre como modal central", () => {
     // encostada na borda isso passava; uma caixa em branco no meio da tela, nao.
     montar({ processo: null, carregando: true });
     expect(textoDoModal()).toContain("Carregando o processo");
+  });
+});
+
+describe("a efetivação manual", () => {
+  it("Deve_OferecerEfetivar_Quando_ProcessoASOeDataEstaoProntosMesmoSemFicha", async () => {
+    const wrapper = montar({ podeEfetivar: true });
+    const botao = botaoPorTexto("Efetivar colaborador");
+    expect(botao).toBeTruthy();
+
+    botao?.click();
+    await nextTick();
+    expect(wrapper.emitted("efetivar")).toHaveLength(1);
+  });
+
+  it("Deve_NaoOferecerEfetivar_Quando_FaltaDataDeAdmissao", () => {
+    const processo = processoDe("iniciado");
+    processo.internos.dataAdmissao = null;
+    montar({ processo, podeEfetivar: true });
+    expect(botaoPorTexto("Efetivar colaborador")).toBeUndefined();
+  });
+
+  it("Deve_NaoOferecerEfetivar_Quando_UsuarioNaoTemPermissao", () => {
+    montar({ podeEfetivar: false });
+    expect(botaoPorTexto("Efetivar colaborador")).toBeUndefined();
   });
 });
 

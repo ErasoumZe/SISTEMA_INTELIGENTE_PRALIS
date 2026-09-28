@@ -161,8 +161,8 @@ onMounted(async () => {
               <span v-else>{{ vinculoAtivo.jornadaHorario }}</span>
             </v-card-text>
             <v-card-text v-else
-              >Sem vínculo ativo. O cadastro permanece disponível para consulta, edição e eventual
-              recontratação.</v-card-text
+              >Sem vínculo ativo. O cadastro permanece disponível para consulta e edição do nome. A recontratação só é
+              liberada depois do desligamento registrado.</v-card-text
             >
           </v-card>
 

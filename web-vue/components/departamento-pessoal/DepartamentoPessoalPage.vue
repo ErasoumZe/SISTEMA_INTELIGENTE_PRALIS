@@ -103,7 +103,7 @@ onMounted(() => void carregarResumo());
           <v-card-item>
             <template #prepend><v-icon icon="mdi-clipboard-account-outline" color="primary" /></template>
             <v-card-title>Admissão direta</v-card-title>
-            <v-card-subtitle>Pré-cadastro, ASO, convite e revisão da ficha.</v-card-subtitle>
+            <v-card-subtitle>Pré-cadastro, ASO e efetivação. O convite para ficha é opcional.</v-card-subtitle>
           </v-card-item>
           <v-card-actions
             ><v-btn to="/admissoes_processos" color="primary" variant="flat">Abrir admissões</v-btn></v-card-actions
@@ -123,7 +123,7 @@ onMounted(() => void carregarResumo());
           <v-card-item>
             <template #prepend><v-icon icon="mdi-account-group-outline" color="primary" /></template>
             <v-card-title>Colaboradores cadastrados</v-card-title>
-            <v-card-subtitle>Consulta do cadastro operacional já existente.</v-card-subtitle>
+            <v-card-subtitle>Perfis, vínculos, matrícula e linha do tempo.</v-card-subtitle>
           </v-card-item>
           <v-card-actions
             ><v-btn to="/colaboradores" color="primary" variant="flat">Abrir colaboradores</v-btn></v-card-actions
@@ -194,9 +194,10 @@ onMounted(() => void carregarResumo());
     </section>
 
     <v-alert type="info" variant="tonal" density="comfortable" icon="mdi-shield-account-outline">
-      <strong>Próxima estrutura ainda não cadastrável:</strong> efetivação com vínculo, documentos, uniforme/EPI,
-      contrato e assinatura, ponto, folha e a fila Conplus. Esses itens não aparecem como “pendentes” porque a base
-      ainda não registra esses fatos. Assim o painel não cria controle falso.
+      <strong>Já disponível:</strong> efetivação, vínculo, matrícula e linha do tempo.
+      <strong>Próximas estruturas:</strong>
+      dossiê documental, uniforme/EPI, contrato e assinatura, ponto, folha e Conplus. Elas só aparecerão como pendências
+      quando cada uma puder registrar fatos reais, sem controle falso.
     </v-alert>
   </section>
 </template>
