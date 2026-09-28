@@ -446,6 +446,7 @@ onMounted(async () => {
             <v-radio-group
               ref="grupoDeclaracao"
               v-model="declaracao"
+              class="ficha__obrigatorio"
               :disabled="somenteLeitura"
               density="compact"
               hide-details="auto"
@@ -565,6 +566,7 @@ onMounted(async () => {
             <pre class="ficha__aviso-texto">{{ ficha.avisoTexto }}</pre>
             <v-checkbox
               v-model="aceite"
+              class="ficha__obrigatorio"
               :disabled="somenteLeitura"
               density="compact"
               :label="`Li e aceito o aviso de privacidade (versão ${ficha.avisoVersaoVigente}).`"
@@ -665,6 +667,12 @@ onMounted(async () => {
   font-size: var(--cx-fs-caption);
   white-space: pre-wrap;
   font-family: inherit;
+}
+
+.ficha__obrigatorio :deep(.v-label),
+.ficha__obrigatorio :deep(.v-radio-group__label) {
+  color: rgb(var(--v-theme-error));
+  font-weight: 700;
 }
 
 .ficha__nota {
