@@ -21,6 +21,7 @@ const password = ref("");
 const loading = ref(false);
 const error = ref("");
 const mostrarSenha = ref(false);
+const introVisivel = ref(true);
 
 async function login() {
   loading.value = true;
@@ -53,6 +54,7 @@ async function login() {
 <template>
   <v-main class="login-page tela-entrada d-flex align-center justify-center pa-4">
     <AppFundoEntrada />
+    <LoginIntroCicluz v-if="introVisivel" @concluida="introVisivel = false" />
 
     <div class="login-card cartao-entrada">
       <!-- A MARCA: simbolo animado em cima, palavra embaixo.
