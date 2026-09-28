@@ -18,7 +18,6 @@ const processo = ref<ProcessoDetalheDto | null>(null);
 const carregando = ref(true);
 const efetivando = ref(false);
 const erro = ref("");
-const resultado = ref<ResultadoEfetivacao | null>(null);
 
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const { telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(permissoes, () => false);
@@ -43,7 +42,8 @@ async function efetivar() {
   efetivando.value = true;
   erro.value = "";
   try {
-    resultado.value = await apiPost<ResultadoEfetivacao>(`/api/admissoes/processos/${props.processoId}/efetivar`, {});
+    const resultado = await apiPost<ResultadoEfetivacao>(`/api/admissoes/processos/${props.processoId}/efetivar`, {});
+    await router.push(`/colaboradores/${resultado.colaboradorId}`);
   } catch (error) {
     erro.value = mensagemErro(error);
     // O servidor é a fonte de verdade: se houve alteração concorrente, a tela relê as condições.
@@ -104,20 +104,7 @@ onMounted(async () => {
 
       <v-alert v-if="erro" type="error" variant="tonal" class="mb-5">{{ erro }}</v-alert>
 
-      <v-card v-if="resultado" variant="outlined" class="efetivacao__resultado">
-        <v-card-item>
-          <template #prepend><v-icon icon="mdi-check-decagram" color="success" /></template>
-          <v-card-title>{{ resultado.repetido ? "Efetivação já registrada" : "Colaborador efetivado" }}</v-card-title>
-          <v-card-subtitle
-            >Matrícula {{ resultado.matricula }}. O vínculo e a linha do tempo foram registrados.</v-card-subtitle
-          >
-        </v-card-item>
-        <v-card-actions>
-          <v-btn color="primary" variant="flat" :to="`/colaboradores/${resultado.colaboradorId}`">Abrir perfil</v-btn>
-        </v-card-actions>
-      </v-card>
-
-      <v-card v-else-if="processo" variant="outlined">
+      <v-card v-if="processo" variant="outlined">
         <v-card-title>Conferência antes de efetivar</v-card-title>
         <v-card-text>
           <p class="mb-4">
@@ -189,9 +176,6 @@ onMounted(async () => {
 }
 .efetivacao__lista {
   padding: 0;
-}
-.efetivacao__resultado {
-  border-color: rgb(var(--v-theme-success));
 }
 @media (max-width: 480px) {
   .efetivacao {

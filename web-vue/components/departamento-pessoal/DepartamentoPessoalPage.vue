@@ -105,7 +105,7 @@ onMounted(() => void carregarResumo());
             <div><h3>Admissão direta</h3><p>Pré-cadastro, ASO e efetivação preenchidos pelo DP.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
-            ><v-btn to="/admissoes_processos" color="primary" variant="flat">Abrir admissões</v-btn></v-card-actions
+            ><v-btn to="/admissoes_processos" color="primary" variant="flat" prepend-icon="mdi-clipboard-account-outline">Abrir admissões</v-btn></v-card-actions
           >
         </v-card>
         <v-card v-if="podeVerTestes" class="acao-card acao-card--testes" variant="outlined">
@@ -114,7 +114,7 @@ onMounted(() => void carregarResumo());
             <div><h3>Período de teste</h3><p>Registre, acompanhe o prazo e efetive para admissão.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
-            ><v-btn to="/admissoes_testes" color="info" variant="flat">Abrir testes</v-btn></v-card-actions
+            ><v-btn to="/admissoes_testes" color="info" variant="flat" prepend-icon="mdi-account-clock-outline">Abrir testes</v-btn></v-card-actions
           >
         </v-card>
         <v-card v-if="podeVerColaboradores" class="acao-card acao-card--colaboradores" variant="outlined">
@@ -123,7 +123,7 @@ onMounted(() => void carregarResumo());
             <div><h3>Colaboradores cadastrados</h3><p>Perfis, vínculos, matrícula e linha do tempo.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
-            ><v-btn to="/colaboradores" color="success" variant="flat">Abrir colaboradores</v-btn></v-card-actions
+            ><v-btn to="/colaboradores" color="success" variant="flat" prepend-icon="mdi-account-group-outline">Abrir colaboradores</v-btn></v-card-actions
           >
         </v-card>
       </div>
@@ -137,37 +137,35 @@ onMounted(() => void carregarResumo());
         </div>
       </div>
       <div class="grade-filas">
-        <v-card v-if="podeVerTestes" variant="tonal" class="fila-card">
-          <v-card-text
-            ><span>Testes em andamento</span><strong>{{ formatarTotal(totais.testesAtivos) }}</strong></v-card-text
-          >
-          <v-card-actions><v-btn to="/admissoes_testes" variant="text">Ver testes</v-btn></v-card-actions>
+        <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--ativos">
+          <v-card-text class="fila-card__conteudo">
+            <span class="fila-card__icone"><v-icon icon="mdi-account-clock-outline" /></span>
+            <span class="fila-card__texto"><span>Testes em andamento</span><strong>{{ formatarTotal(totais.testesAtivos) }}</strong></span>
+          </v-card-text>
         </v-card>
-        <v-card v-if="podeVerTestes" variant="tonal" class="fila-card atencao">
-          <v-card-text
-            ><span>Testes que vencem hoje</span
-            ><strong>{{ formatarTotal(totais.testesVencemHoje) }}</strong></v-card-text
-          >
-          <v-card-actions><v-btn to="/admissoes_testes" variant="text">Ver testes</v-btn></v-card-actions>
+        <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--hoje">
+          <v-card-text class="fila-card__conteudo">
+            <span class="fila-card__icone"><v-icon icon="mdi-calendar-clock-outline" /></span>
+            <span class="fila-card__texto"><span>Testes que vencem hoje</span><strong>{{ formatarTotal(totais.testesVencemHoje) }}</strong></span>
+          </v-card-text>
         </v-card>
-        <v-card v-if="podeVerTestes" variant="tonal" class="fila-card alerta">
-          <v-card-text
-            ><span>Testes vencidos</span><strong>{{ formatarTotal(totais.testesVencidos) }}</strong></v-card-text
-          >
-          <v-card-actions><v-btn to="/admissoes_testes" variant="text">Ver testes</v-btn></v-card-actions>
+        <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--vencidos">
+          <v-card-text class="fila-card__conteudo">
+            <span class="fila-card__icone"><v-icon icon="mdi-alert-circle-outline" /></span>
+            <span class="fila-card__texto"><span>Testes vencidos</span><strong>{{ formatarTotal(totais.testesVencidos) }}</strong></span>
+          </v-card-text>
         </v-card>
-        <v-card v-if="podeVerProcessos" variant="tonal" class="fila-card">
-          <v-card-text
-            ><span>Fichas enviadas para revisão</span
-            ><strong>{{ formatarTotal(totais.fichasEnviadas) }}</strong></v-card-text
-          >
-          <v-card-actions><v-btn to="/admissoes_processos" variant="text">Ver processos</v-btn></v-card-actions>
+        <v-card v-if="podeVerProcessos" to="/admissoes_processos" link class="fila-card fila-card--fichas">
+          <v-card-text class="fila-card__conteudo">
+            <span class="fila-card__icone"><v-icon icon="mdi-file-document-check-outline" /></span>
+            <span class="fila-card__texto"><span>Fichas em revisão</span><strong>{{ formatarTotal(totais.fichasEnviadas) }}</strong></span>
+          </v-card-text>
         </v-card>
-        <v-card v-if="podeVerProcessos" variant="tonal" class="fila-card alerta">
-          <v-card-text
-            ><span>Processos pausados</span><strong>{{ formatarTotal(totais.processosPausados) }}</strong></v-card-text
-          >
-          <v-card-actions><v-btn to="/admissoes_processos" variant="text">Ver processos</v-btn></v-card-actions>
+        <v-card v-if="podeVerProcessos" to="/admissoes_processos" link class="fila-card fila-card--pausados">
+          <v-card-text class="fila-card__conteudo">
+            <span class="fila-card__icone"><v-icon icon="mdi-pause-circle-outline" /></span>
+            <span class="fila-card__texto"><span>Processos pausados</span><strong>{{ formatarTotal(totais.processosPausados) }}</strong></span>
+          </v-card-text>
         </v-card>
       </div>
     </section>
@@ -249,6 +247,9 @@ h1 {
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
+.grade-filas {
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+}
 .acao-card {
   position: relative;
   isolation: isolate;
@@ -260,6 +261,10 @@ h1 {
   background: linear-gradient(145deg, var(--acao-vidro), rgb(var(--v-theme-surface) / 0.72));
   backdrop-filter: blur(18px) saturate(1.12);
   -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.acao-card:hover {
+  transform: translateY(-2px);
 }
 .acao-card::before {
   position: absolute;
@@ -277,9 +282,9 @@ h1 {
 }
 .acao-card__icone {
   display: grid;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 0.18);
   border-radius: 13px;
@@ -307,6 +312,10 @@ h1 {
 .acao-card__acoes .v-btn {
   min-width: 0;
   letter-spacing: 0.04em;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.acao-card__acoes .v-btn:active {
+  transform: scale(0.97);
 }
 .acao-card--admissoes {
   --acao-inicio: #9b6cff;
@@ -326,21 +335,72 @@ h1 {
   --acao-vidro: rgb(72 223 138 / 0.16);
   border-color: rgb(72 223 138 / 0.42);
 }
-.fila-card .v-card-text {
+.fila-card {
+  --fila-cor: 139 92 246;
+  overflow: hidden;
+  min-height: 86px;
+  border: 1px solid rgb(var(--fila-cor) / 0.38);
+  border-radius: 15px;
+  background: linear-gradient(135deg, rgb(var(--fila-cor) / 0.18), rgb(var(--v-theme-surface) / 0.74));
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fila-card:hover {
+  transform: translateY(-2px);
+}
+.fila-card:active {
+  transform: scale(0.98);
+}
+.fila-card:focus-visible {
+  outline: 2px solid rgb(var(--fila-cor));
+  outline-offset: 2px;
+}
+.fila-card__conteudo {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 96px;
+  align-items: center;
+  gap: 11px;
+  min-height: 84px;
+  padding: 13px;
 }
-.fila-card strong {
-  font-size: 2rem;
-  line-height: 1;
+.fila-card__icone {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 11px;
+  color: rgb(255 255 255 / 0.96);
+  background: rgb(var(--fila-cor) / 0.74);
 }
-.fila-card.atencao {
-  border-left: 4px solid #d99200;
+.fila-card__texto {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  color: rgb(var(--v-theme-on-surface) / 0.76);
+  font-size: 0.84rem;
+  line-height: 1.2;
 }
-.fila-card.alerta {
-  border-left: 4px solid #d22929;
+.fila-card__texto strong {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+.fila-card--ativos {
+  --fila-cor: 139 92 246;
+}
+.fila-card--hoje {
+  --fila-cor: 230 163 38;
+}
+.fila-card--vencidos {
+  --fila-cor: 228 82 82;
+}
+.fila-card--fichas {
+  --fila-cor: 44 183 225;
+}
+.fila-card--pausados {
+  --fila-cor: 111 126 160;
 }
 .atalhos-cadastros {
   display: flex;
@@ -361,11 +421,27 @@ h1 {
   .grade-acoes {
     grid-template-columns: 1fr;
   }
+  .grade-filas {
+    grid-template-columns: 1fr;
+  }
   .acao-card {
     min-height: 0;
   }
   .acao-card__acoes .v-btn {
     width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acao-card,
+  .acao-card__acoes .v-btn,
+  .fila-card {
+    transition: none;
+  }
+  .acao-card:hover,
+  .fila-card:hover,
+  .fila-card:active,
+  .acao-card__acoes .v-btn:active {
+    transform: none;
   }
 }
 </style>

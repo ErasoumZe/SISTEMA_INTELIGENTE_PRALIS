@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import logoCicluzUrl from "~/assets/cicluz-simbolo-animado.png";
 
 const emit = defineEmits<{ concluida: [] }>();
 const props = withDefaults(defineProps<{ pronta?: boolean }>(), { pronta: true });
@@ -43,7 +44,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 </script>
 
 <template>
-  <!-- A marca da intro usa a mesma geometria oficial da Cicluz, em SVG, para o zoom nunca rasterizar. -->
+  <!-- A marca e o PNG oficial ja aprovado no login e no menu. Nenhuma mascara ou traco e reaplicado aqui. -->
   <section class="intro-cicluz" :class="{ 'intro-cicluz--pronta': pronta }" :style="estiloDuracao" aria-hidden="true">
     <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
@@ -125,7 +126,7 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
     </svg>
 
     <div class="intro-cicluz__marca">
-      <LoginIntroMarcaVetorial />
+      <img :src="logoCicluzUrl" alt="" class="intro-cicluz__marca-png" />
     </div>
 
     <div class="intro-cicluz__mensagem-final">
@@ -238,6 +239,14 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
   place-items: center;
   will-change: transform, opacity;
   animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__marca-png {
+  display: block;
+  width: clamp(148px, 24vmin, 250px);
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .intro-cicluz__mensagem-final {
   position: absolute;
@@ -371,11 +380,11 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-base {
   0%,
-  35% {
+  18% {
     opacity: 1;
   }
-  48% {
-    opacity: 0.62;
+  43% {
+    opacity: 0.68;
   }
   72% {
     opacity: 0.16;
@@ -386,12 +395,12 @@ const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}m
 }
 @keyframes intro-vidro {
   0%,
-  35% {
+  18% {
     opacity: 0.93;
     transform: scale(1.018);
   }
-  50% {
-    opacity: 0.66;
+  46% {
+    opacity: 0.7;
     transform: scale(1.01);
   }
   74% {
