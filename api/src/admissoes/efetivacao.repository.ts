@@ -1,4 +1,4 @@
-import { and, coalesce, desc, eq, max, sql } from "drizzle-orm";
+import { and, desc, eq, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   admissoesProcessos,
@@ -25,18 +25,20 @@ export async function obterDadosEfetivacaoRepository(processoId: string, empresa
       processoId: admissoesProcessos.id,
       origem: admissoesProcessos.origem,
       status: admissoesProcessos.status,
-      nomeCompleto: coalesce(admissoesTestes.nomeCompleto, admissoesProcessos.nomeCompleto),
-      cpf: coalesce(admissoesTestes.cpf, admissoesProcessos.cpf),
-      funcaoId: coalesce(admissoesTestes.funcaoId, admissoesProcessos.funcaoId),
-      funcaoNome: coalesce(funcaoTeste.nome, funcaoProcesso.nome),
-      funcaoCbo: coalesce(funcaoTeste.cbo, funcaoProcesso.cbo),
+      nomeCompleto: sql<string | null>`coalesce(${admissoesTestes.nomeCompleto}, ${admissoesProcessos.nomeCompleto})`,
+      cpf: sql<string | null>`coalesce(${admissoesTestes.cpf}, ${admissoesProcessos.cpf})`,
+      funcaoId: sql<string | null>`coalesce(${admissoesTestes.funcaoId}, ${admissoesProcessos.funcaoId})`,
+      funcaoNome: sql<string | null>`coalesce(${funcaoTeste.nome}, ${funcaoProcesso.nome})`,
+      funcaoCbo: sql<string | null>`coalesce(${funcaoTeste.cbo}, ${funcaoProcesso.cbo})`,
       jornadaHorario: admissoesTestes.jornadaHorario,
       turnoId: admissoesProcessos.turnoId,
       turnoRotulo: admissoesProcessos.turnoRotulo,
-      turnoEtiqueta: admissoesProcessos.turnoEtiqueta,
+      // A tabela de processos antecede o tipo compartilhado de turno. O CHECK
+      // dela já restringe os valores; a projeção devolve o tipo do contrato.
+      turnoEtiqueta: sql<EtiquetaTurno | null>`${admissoesProcessos.turnoEtiqueta}`,
       turnoHoraInicio: admissoesProcessos.turnoHoraInicio,
       turnoHoraFim: admissoesProcessos.turnoHoraFim,
-      turnoDiasSemana: admissoesProcessos.turnoDiasSemana,
+      turnoDiasSemana: sql<DiaSemana[] | null>`${admissoesProcessos.turnoDiasSemana}`,
       dataAdmissao: admissoesProcessosInternos.dataAdmissao,
       exameSituacao: admissoesProcessosInternos.exameSituacao,
       fichaSituacao: admissoesProcessosFicha.situacao

@@ -36,7 +36,7 @@ describe("efetivação de colaboradores", () => {
       usuariosTeste.caixa.email
     ]);
     if (!alvo) throw new Error("usuário DP ausente");
-    const permissoes = permissoesPorCargo.DP as Permissao[];
+    const permissoes = permissoesPorCargo["DP"] as Permissao[];
     await executarSql(
       `insert into permissoes_usuarios (usuario_id, regras) values ($1, $2::jsonb)
        on conflict (usuario_id) do update set regras = excluded.regras`,
@@ -49,7 +49,7 @@ describe("efetivação de colaboradores", () => {
       usuariosTeste.gerente.email
     ]);
     if (!alvo) throw new Error("usuário Gerência ausente");
-    const permissoes = permissoesPorCargo.Gerencia as Permissao[];
+    const permissoes = permissoesPorCargo["Gerencia"] as Permissao[];
     await executarSql(
       `insert into permissoes_usuarios (usuario_id, regras) values ($1, $2::jsonb)
        on conflict (usuario_id) do update set regras = excluded.regras`,
