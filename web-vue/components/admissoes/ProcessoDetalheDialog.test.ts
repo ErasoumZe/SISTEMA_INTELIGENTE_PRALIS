@@ -233,7 +233,6 @@ describe("o detalhe abre como modal central", () => {
       "Dados internos do DP",
       "Exame admissional",
       "PIS / PASEP / NIT",
-      "Convite ao candidato",
       "Iniciado por Ana do DP",
       "Histórico",
       "Admissão iniciada"
@@ -627,7 +626,7 @@ describe("o painel lateral saiu de verdade", () => {
 // ===== a ficha tem UMA porta, e ela leva para fora do modal ======================================
 
 describe("a ficha do candidato tem uma porta so, e ela leva para a tela propria", () => {
-  const PORTA = "Abrir ficha do candidato";
+  const PORTA = "Abrir ficha do DP";
 
   it("Deve_NaoMostrarAPorta_Quando_ATelaNaoLevaAFicha", () => {
     // `false` e o que a tela de Testes passa: dali o processo e so leitura, e a revisao e um ato que
