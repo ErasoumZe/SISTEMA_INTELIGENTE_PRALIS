@@ -8,6 +8,7 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
       id: empresas.id,
       nome: empresas.nome,
       cnpj: empresas.cnpj,
+      matriculaPrefixo: empresas.matriculaPrefixo,
       contaCofreId: empresas.contaCofreId,
       configuracoesAparencia: empresas.configuracoesAparencia
     })
@@ -17,16 +18,19 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
 }
 
 export async function salvarEmpresaRepository(
-  input: { id?: string; nome: string; cnpj: string | null },
+  input: { id?: string; nome: string; cnpj: string | null; matriculaPrefixo: string },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
-    await db.update(empresas).set({ nome: input.nome, cnpj: input.cnpj }).where(eq(empresas.id, input.id));
-    return { id: input.id, nome: input.nome, cnpj: input.cnpj };
+    await db
+      .update(empresas)
+      .set({ nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo })
+      .where(eq(empresas.id, input.id));
+    return { id: input.id, nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo };
   }
   const [criada] = await db
     .insert(empresas)
-    .values({ nome: input.nome, cnpj: input.cnpj })
+    .values({ nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo })
     .returning({ id: empresas.id });
   return criada;
 }

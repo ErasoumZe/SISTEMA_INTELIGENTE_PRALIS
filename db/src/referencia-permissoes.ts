@@ -296,6 +296,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // das duas — mesma fronteira do bloco interno, pelo mesmo motivo.
       "admissoes_processos_ver_ficha",
       "admissoes_processos_revisar_ficha",
+      // A efetivação cria pessoa, matrícula e vínculo. É uma decisão terminal do DP; Gerência
+      // continua podendo iniciar e acompanhar o processo, mas não efetivá-lo.
+      "admissoes_processos_efetivar",
       // ADM-003 V1B: o turno e campo OBRIGATORIO da admissao direta, e quem admite precisa poder
       // cadastrar o turno que falta sem depender da Gerencia no meio do atendimento. Ver e criar,
       // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.

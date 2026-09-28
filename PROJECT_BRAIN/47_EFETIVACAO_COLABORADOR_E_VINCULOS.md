@@ -33,14 +33,19 @@ um processo de admissão:
 ```text
 teste efetivado OU admissão direta
 → ASO apto
-→ convite / ficha
-→ revisão DP aprovada
+→ conferência dos dados básicos pelo DP
 → efetivar
 → pessoa + vínculo + primeira linha da timeline
+→ dossiê documental manual no perfil
 ```
 
 O botão **Efetivar** só aparece quando os fatos acima estiverem satisfeitos. Ele é idempotente: repetir
 o clique devolve o mesmo resultado, nunca cria uma segunda pessoa ou vínculo.
+
+O convite com link para o colaborador continua sendo uma coleta auxiliar já existente, mas **não bloqueia
+a efetivação nesta fase** e não haverá envio automático por e-mail ou WhatsApp. Se o DP decidir usar o
+convite, copia e entrega o link manualmente. O canal automático, consentimento, provedor, rastreio de
+entrega e assinatura ficam para a vertical de contrato/assinatura.
 
 Após efetivado, o DP trabalha na ficha única do colaborador. A tela mostra uma única ação principal de
 acordo com o próximo item obrigatório, em vez de vários botões concorrentes.

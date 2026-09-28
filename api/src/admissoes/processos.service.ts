@@ -76,6 +76,7 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
     turnoHoraFim: linha.turnoHoraFim,
     turnoDiasSemana: linha.turnoDiasSemana,
     jornadaHorario: linha.jornadaHorario,
+    fichaSituacao: linha.fichaSituacao,
     internos: {
       versao: linha.internosVersao,
       dataAdmissao: linha.internosDataAdmissao,

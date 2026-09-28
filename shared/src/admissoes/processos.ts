@@ -326,6 +326,9 @@ export const processoDetalheDtoSchema = z.object({
    * qual turno da empresa aquele texto era.
    */
   jornadaHorario: z.string().nullable(),
+  // Fato vindo da ficha, para a tela orientar a etapa de efetivacao sem carregar nenhum campo
+  // pessoal dela. A confirmacao continua no servidor.
+  fichaSituacao: situacaoFichaSchema.nullable(),
   internos: dadosInternosDtoSchema,
   // SO o nome. E-mail nunca entra na projecao — e identificador reaproveitavel em outras rotas.
   criadoPorNome: z.string().nullable(),

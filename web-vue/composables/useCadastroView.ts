@@ -86,6 +86,10 @@ export function useCadastroView(params: {
         setor: item.setorNome ?? item.descricao,
         setorId: item.setorId ?? undefined,
         turnoPadraoId: item.turnoPadraoId ?? undefined,
+        vinculoAtivoId: item.vinculoAtivoId ?? null,
+        matricula: item.matricula ?? null,
+        funcaoNome: item.funcaoNome ?? null,
+        situacao: item.vinculoAtivoId ? "Ativo" : "Inativo",
         cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
         cargoId: item.cargoIds?.[0] ?? item.cargoId ?? ""
       }));

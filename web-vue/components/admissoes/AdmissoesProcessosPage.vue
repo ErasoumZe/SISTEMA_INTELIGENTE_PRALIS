@@ -39,6 +39,7 @@ const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeCriarDireta = computed(() => temPermissao(permissoes.value, "admissoes_processos_criar_direta"));
 const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_processos_cancelar"));
+const podeEfetivar = computed(() => temPermissao(permissoes.value, "admissoes_processos_efetivar"));
 const podeEditarInternos = computed(() => temPermissao(permissoes.value, "admissoes_processos_editar_internos"));
 // Revelar CPF usa a permissao de VISUALIZAR, nao uma terceira: quem pode abrir o processo pode ver
 // o documento de quem esta sendo admitido — o que muda e que fica registrado quem viu e quando.
@@ -206,6 +207,13 @@ async function abrirDetalhe(id: string) {
   } finally {
     detalheCarregando.value = false;
   }
+}
+
+function abrirEfetivacao() {
+  const id = processo.value?.id;
+  if (!id) return;
+  detalheAberto.value = false;
+  void router.push(`/admissoes_processos/${id}/efetivar`);
 }
 
 async function criarDireta(dados: {
@@ -455,6 +463,7 @@ onMounted(async () => {
     :historico="historico"
     :carregando="detalheCarregando"
     :pode-cancelar="podeCancelar"
+    :pode-efetivar="podeEfetivar"
     :pode-editar-internos="podeEditarInternos"
     :processando="processando"
     :pode-ver-teste="false"
@@ -469,6 +478,7 @@ onMounted(async () => {
     @emitir-convite="emitirConvite"
     @revogar-convite="revogarConvite"
     @revisar-ficha="revisarFicha"
+    @efetivar="abrirEfetivacao"
     @fechar="fecharDetalhe"
     @cancelar="cancelarProcesso"
     @revelar-cpf="revelarCpf"

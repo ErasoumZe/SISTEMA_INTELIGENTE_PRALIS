@@ -40,6 +40,7 @@ import {
   salvarColaborador
 } from "./colaboradores.service.js";
 import { statusErroValidacao } from "../utils.js";
+import { editarNomeDoColaborador, obterPerfilColaborador } from "./perfil.service.js";
 
 async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   const query = empresaQuerySchema.parse(request.query);
@@ -155,6 +156,37 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+      }
+    }
+  );
+
+  // Perfil do Departamento Pessoal. E uma leitura distinta da lista operacional usada pelo Caixa:
+  // a lista continua minimizada para quem so opera caixa/despesa; o perfil exige permissao de DP.
+  app.get(
+    "/api/colaboradores/:id/perfil",
+    { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
+    async (request, reply) => {
+      try {
+        const { id } = idParamsSchema.parse(request.params);
+        return ok(await obterPerfilColaborador(id, request.perfilUsuario));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.put(
+    "/api/colaboradores/:id/perfil",
+    { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
+    async (request, reply) => {
+      try {
+        const { id } = idParamsSchema.parse(request.params);
+        await editarNomeDoColaborador(id, request.body ?? {}, request.perfilUsuario);
+        return semConteudo(reply);
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
       }
     }
   );

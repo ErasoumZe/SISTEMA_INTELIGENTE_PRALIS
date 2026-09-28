@@ -16,6 +16,7 @@ import {
   revelarCpfDoProcesso,
   salvarDadosInternos
 } from "./processos.service.js";
+import { efetivarProcesso } from "./efetivacao.service.js";
 
 function responderErro(reply: FastifyReply, error: DadosExternos) {
   const mensagem = mensagemDominioOuRelancar(error);
@@ -151,6 +152,19 @@ export async function registrarRotasAdmissoesProcessos(app: FastifyInstance) {
       try {
         const { id } = processoParamsSchema.parse(request.params);
         return ok(await revelarCpfDoProcesso(id, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.post(
+    "/api/admissoes/processos/:id/efetivar",
+    { preHandler: exigirPermissao("admissoes_processos_efetivar") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        return ok(await efetivarProcesso(id, request.perfilUsuario));
       } catch (error) {
         return responderErro(reply, error);
       }

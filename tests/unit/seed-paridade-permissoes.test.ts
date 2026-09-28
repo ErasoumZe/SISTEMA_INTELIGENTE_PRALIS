@@ -72,6 +72,8 @@ describe("db/seed.ts usa a referencia de permissoes, e nao uma copia", () => {
     // O bloco interno e do DP. A Gerencia carrega o processo, mas nao o ASO.
     expect(permissoesPorCargo["DP"]).toContain("admissoes_processos_editar_internos");
     expect(permissoesPorCargo["Gerencia"]).not.toContain("admissoes_processos_editar_internos");
+    expect(permissoesPorCargo["DP"]).toContain("admissoes_processos_efetivar");
+    expect(permissoesPorCargo["Gerencia"]).not.toContain("admissoes_processos_efetivar");
     // E o cargo do diretor segue vazio: o acesso total dele vem do role usuario_admin.
     expect(permissoesPorCargo["Diretor Geral"]).toEqual([]);
   });

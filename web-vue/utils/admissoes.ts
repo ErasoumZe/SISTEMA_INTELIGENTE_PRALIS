@@ -134,7 +134,8 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   convite_revogado: "Convite revogado",
   ficha_enviada: "Ficha enviada pelo candidato",
   ficha_devolvida: "Ficha devolvida para correção",
-  ficha_aprovada: "Ficha aprovada"
+  ficha_aprovada: "Ficha aprovada",
+  efetivado: "Colaborador efetivado"
 };
 
 /**

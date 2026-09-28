@@ -44,3 +44,11 @@ export function sqlTravarCadastroDeProdutosDaEmpresa(empresaId: string) {
 export function sqlTravarAdmissaoDaPessoa(empresaId: string, cpf: string) {
   return sql`select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext(${empresaId}::text || ':' || ${cpf}::text))`;
 }
+
+/**
+ * A matricula e sequencial dentro de uma empresa. A escolha do proximo numero le um agregado, e
+ * agregado nao se trava sozinho em READ COMMITTED; por isso a trava advisory e por empresa.
+ */
+export function sqlTravarMatriculaDaEmpresa(empresaId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('dp:matricula'), hashtext(${empresaId}::text))`;
+}

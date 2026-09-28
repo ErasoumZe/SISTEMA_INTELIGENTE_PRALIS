@@ -4,6 +4,7 @@ import {
   cargos,
   colaboradores,
   colaboradoresCargos,
+  colaboradoresVinculos,
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
   setores,
@@ -38,11 +39,22 @@ export async function listarColaboradoresRepository(escopoEmpresas: string[]) {
       empresaId: colaboradores.empresaId,
       nome: colaboradores.nome,
       cpf: colaboradores.cpf,
+      vinculoAtivoId: colaboradoresVinculos.id,
+      matricula: colaboradoresVinculos.matricula,
+      funcaoNome: colaboradoresVinculos.funcaoNome,
       setorId: setores.id,
       turnoPadraoId: turnos.id,
       usuarioId: colaboradores.usuarioId
     })
     .from(colaboradores)
+    .leftJoin(
+      colaboradoresVinculos,
+      and(
+        eq(colaboradoresVinculos.colaboradorId, colaboradores.id),
+        eq(colaboradoresVinculos.empresaId, colaboradores.empresaId),
+        eq(colaboradoresVinculos.status, "ativo")
+      )
+    )
     .leftJoin(setores, and(eq(setores.id, colaboradores.setorId), eq(setores.empresaId, colaboradores.empresaId)))
     .leftJoin(turnos, and(eq(turnos.id, colaboradores.turnoPadraoId), eq(turnos.empresaId, colaboradores.empresaId)))
     .where(inArray(colaboradores.empresaId, escopoEmpresas))
