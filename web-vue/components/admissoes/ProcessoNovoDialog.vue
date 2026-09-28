@@ -21,6 +21,8 @@ import {
 const props = defineProps<{
   aberto: boolean;
   funcoes: FuncaoOpcaoDto[];
+  // Sem este sinal, lista vazia por erro e lista vazia por cadastro vazio sao indistinguiveis.
+  funcoesFalharam: boolean;
   turnos: TurnoOpcaoDto[];
   // Sem este sinal, lista vazia por erro e lista vazia por cadastro vazio sao indistinguiveis.
   turnosFalharam: boolean;
@@ -54,6 +56,11 @@ watch(
 
 // So as funcoes ATIVAS: este e um cadastro NOVO, e apontar para catalogo fora de uso ja nasceria errado.
 const funcoesAtivas = computed(() => props.funcoes.filter((funcao) => funcao.ativo));
+const avisoFuncoes = computed(() => {
+  if (props.funcoesFalharam) return "Não foi possível carregar as funções. Feche e tente novamente.";
+  if (funcoesAtivas.value.length === 0) return "Cadastre uma função operacional ativa antes de iniciar a admissão.";
+  return "";
+});
 
 /**
  * Turno INCOMPLETO aparece na lista, desabilitado, dizendo o que falta.
@@ -125,6 +132,10 @@ function salvar() {
       <v-card-text>
         <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4" role="alert">
           {{ erro }}
+        </v-alert>
+
+        <v-alert v-if="avisoFuncoes" type="warning" variant="tonal" density="compact" class="mb-4" role="alert">
+          {{ avisoFuncoes }}
         </v-alert>
 
         <!-- Empresa e CNPJ vêm do perfil. Não há seletor, e não há como digitá-los. -->

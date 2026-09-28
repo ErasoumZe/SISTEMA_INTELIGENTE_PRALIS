@@ -431,6 +431,7 @@ onMounted(async () => {
   <ProcessoNovoDialog
     :aberto="novoAberto"
     :funcoes="funcoes"
+    :funcoes-falharam="funcoesFalharam"
     :turnos="turnos"
     :turnos-falharam="turnosFalharam"
     :empresa-nome="empresaNome"
