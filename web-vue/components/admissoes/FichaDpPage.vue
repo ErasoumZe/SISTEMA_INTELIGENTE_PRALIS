@@ -40,7 +40,7 @@ const rota = computed(() => `/api/admissoes/processos/${props.processoId}/ficha-
 // pode completar e corrigir os dados sem devolver a ficha a uma pessoa candidata.
 const eManual = computed(() => ficha.value?.situacao === "rascunho_dp" || ficha.value?.situacao === "enviada" || ficha.value?.situacao === "concluida_dp");
 const concluida = computed(() => ficha.value?.situacao === "concluida_dp");
-const podeEditarFicha = computed(() => podeEditar.value && eManual.value && !concluida.value);
+const podeEditarFicha = computed(() => podeEditar.value && eManual.value);
 
 function notificar(text: string, color = "success") {
   snackbar.text = text;
@@ -74,7 +74,7 @@ function cancelarEdicao() {
   editando.value = false;
 }
 async function salvar() {
-  if (!ficha.value || !podeEditar.value || salvando.value || !eManual.value || concluida.value) return;
+  if (!ficha.value || !podeEditar.value || salvando.value || !eManual.value) return;
   salvando.value = true;
   try {
     await apiPut(rota.value, corpo());

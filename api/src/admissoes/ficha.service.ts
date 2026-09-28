@@ -441,8 +441,8 @@ export async function salvarFichaDp(processoId: string, body: DadosExternos, per
     if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
     const ficha = await bloquearFichaRepository(processoId, empresaId, tx);
     if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
-    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada") {
-      throw conflito("Esta ficha ja foi concluida e nao pode ser alterada pelo DP.", "FICHA_DP_NAO_EDITAVEL");
+    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada" && ficha.situacao !== "concluida_dp") {
+      throw conflito("Esta ficha nao pertence ao preenchimento interno do DP.", "FICHA_DP_NAO_EDITAVEL");
     }
     if (ficha.versao !== dados.versao) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
     if (dados.semDependentes === true) {
