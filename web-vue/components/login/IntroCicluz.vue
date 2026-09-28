@@ -1,29 +1,89 @@
 <script setup lang="ts">
-import simboloVetorUrl from "~/assets/cicluz-simbolo-path.svg?url";
+import { computed, useId } from "vue";
+import officialSvgRaw from "~/assets/cicluz-simbolo-path.svg?raw";
 
 const emit = defineEmits<{ concluida: [] }>();
+
+const DURACAO_INTRO_MS = 2_150;
+const uid = useId().replace(/:/g, "");
+const pathDaMarca = officialSvgRaw.match(/<path[^>]*d="([^"]+)"/i)?.[1] ?? "";
+const ids = {
+  brilho: `intro-cicluz-brilho-${uid}`,
+  aura: `intro-cicluz-aura-${uid}`,
+  gradiente: `intro-cicluz-gradiente-${uid}`
+};
 
 let temporizador: number | undefined;
 
 onMounted(() => {
   const reduzirMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  temporizador = window.setTimeout(() => emit("concluida"), reduzirMovimento ? 80 : 1160);
+  temporizador = window.setTimeout(() => emit("concluida"), reduzirMovimento ? 120 : DURACAO_INTRO_MS);
 });
 
 onBeforeUnmount(() => {
   if (temporizador) window.clearTimeout(temporizador);
 });
 
-const estiloMarca = { "--intro-mascara": `url("${simboloVetorUrl}")` };
+const estiloDuracao = computed(() => ({ "--intro-duracao": `${DURACAO_INTRO_MS}ms` }));
 </script>
 
 <template>
-  <!-- Camada visual breve: nao representa percentual real de rede e, por isso, nao se anuncia como progresso. -->
-  <section class="intro-cicluz" aria-hidden="true">
+  <!-- O painel real ja existe por tras desta camada. O vidro so se abre no ultimo trecho, evitando
+       que a pintura clara de montagem apareca como flash branco. A marca e SVG puro em todas as escalas. -->
+  <section class="intro-cicluz" :style="estiloDuracao" aria-hidden="true">
+    <div class="intro-cicluz__base"></div>
     <div class="intro-cicluz__vidro"></div>
+    <div class="intro-cicluz__luzes"></div>
 
     <div class="intro-cicluz__marca">
-      <div class="intro-cicluz__simbolo" :style="estiloMarca"></div>
+      <svg class="intro-cicluz__svg" viewBox="0 0 3986 4387" shape-rendering="geometricPrecision" focusable="false">
+        <defs>
+          <linearGradient :id="ids.gradiente" x1="6%" y1="88%" x2="91%" y2="12%">
+            <stop offset="0%" stop-color="#e83164" />
+            <stop offset="17%" stop-color="#ff5b22" />
+            <stop offset="34%" stop-color="#ffd224" />
+            <stop offset="51%" stop-color="#66d945" />
+            <stop offset="69%" stop-color="#20c8dc" />
+            <stop offset="85%" stop-color="#7259ff" />
+            <stop offset="100%" stop-color="#d932b7" />
+          </linearGradient>
+          <filter :id="ids.aura" x="-42%" y="-42%" width="184%" height="184%">
+            <feGaussianBlur stdDeviation="105" />
+          </filter>
+          <filter :id="ids.brilho" x="-28%" y="-28%" width="156%" height="156%">
+            <feGaussianBlur stdDeviation="34" />
+          </filter>
+        </defs>
+        <path
+          class="intro-cicluz__aura"
+          :d="pathDaMarca"
+          :filter="`url(#${ids.aura})`"
+          fill="none"
+          :stroke="`url(#${ids.gradiente})`"
+          stroke-width="290"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          class="intro-cicluz__brilho"
+          :d="pathDaMarca"
+          :filter="`url(#${ids.brilho})`"
+          fill="none"
+          :stroke="`url(#${ids.gradiente})`"
+          stroke-width="236"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          class="intro-cicluz__traco"
+          :d="pathDaMarca"
+          fill="none"
+          :stroke="`url(#${ids.gradiente})`"
+          stroke-width="200"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </div>
 
     <div class="intro-cicluz__carregamento">
@@ -43,53 +103,70 @@ const estiloMarca = { "--intro-mascara": `url("${simboloVetorUrl}")` };
   display: grid;
   place-items: center;
   overflow: hidden;
+  background: #0b1018;
   pointer-events: auto;
+  will-change: opacity;
+  animation: intro-palco var(--intro-duracao) linear both;
 }
-
-.intro-cicluz__vidro {
+.intro-cicluz__base,
+.intro-cicluz__vidro,
+.intro-cicluz__luzes {
   position: absolute;
-  inset: 0;
-  background-color: rgb(9 11 20 / 0.86);
-  background:
-    radial-gradient(
-      55% 46% at 15% 84%,
-      color-mix(in srgb, var(--cat-retiradas-base) 32%, transparent),
-      transparent 72%
-    ),
-    radial-gradient(54% 44% at 84% 18%, color-mix(in srgb, var(--cat-despesas-base) 28%, transparent), transparent 72%),
-    radial-gradient(46% 46% at 50% 0%, color-mix(in srgb, var(--cat-entradas-base) 22%, transparent), transparent 72%),
-    rgb(9 11 20 / 0.86);
-  backdrop-filter: blur(26px) saturate(135%);
-  -webkit-backdrop-filter: blur(26px) saturate(135%);
-  animation: intro-vidro 1.36s var(--cx-ease-out) both;
+  inset: -5%;
+  pointer-events: none;
 }
-
+.intro-cicluz__base {
+  background: #0b1018;
+  animation: intro-base var(--intro-duracao) linear both;
+}
+.intro-cicluz__vidro {
+  background:
+    linear-gradient(120deg, rgb(9 14 24 / 0.82), rgb(15 12 34 / 0.56) 48%, rgb(12 18 27 / 0.8)), rgb(9 14 24 / 0.76);
+  backdrop-filter: blur(30px) saturate(145%);
+  -webkit-backdrop-filter: blur(30px) saturate(145%);
+  animation: intro-vidro var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.intro-cicluz__luzes {
+  background:
+    radial-gradient(58% 58% at 13% 88%, rgb(35 205 219 / 0.52), transparent 70%),
+    radial-gradient(58% 56% at 87% 19%, rgb(255 72 56 / 0.48), transparent 70%),
+    radial-gradient(46% 50% at 50% -2%, rgb(255 215 42 / 0.36), transparent 68%),
+    radial-gradient(46% 50% at 50% 56%, rgb(117 78 255 / 0.24), transparent 72%);
+  filter: saturate(1.24);
+  mix-blend-mode: screen;
+  animation: intro-luzes var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 .intro-cicluz__marca {
   position: relative;
   z-index: 1;
-  width: clamp(148px, 27vmin, 264px);
+  width: clamp(152px, 27vmin, 282px);
   aspect-ratio: 3986 / 4387;
-  filter: drop-shadow(0 0 30px rgb(255 255 255 / 0.22));
-  animation: intro-marca 1.34s cubic-bezier(0.2, 0.76, 0.08, 1) both;
   will-change: transform, opacity;
+  animation: intro-marca var(--intro-duracao) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
-.intro-cicluz__simbolo {
+.intro-cicluz__svg {
+  display: block;
   width: 100%;
   height: 100%;
-  background: conic-gradient(
-    from 215deg,
-    var(--cat-despesas-base),
-    var(--cat-retiradas-base),
-    var(--cx-brand),
-    var(--cat-entradas-base),
-    var(--cat-despesas-base)
-  );
-  mask: var(--intro-mascara) center / contain no-repeat;
-  -webkit-mask: var(--intro-mascara) center / contain no-repeat;
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--cx-brand) 54%, transparent));
+  overflow: visible;
 }
-
+.intro-cicluz__aura,
+.intro-cicluz__brilho,
+.intro-cicluz__traco {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.intro-cicluz__aura {
+  opacity: 0.62;
+  animation: intro-pulso 1.15s ease-in-out infinite alternate;
+}
+.intro-cicluz__brilho {
+  opacity: 0.88;
+  animation: intro-pulso 0.82s 120ms ease-in-out infinite alternate-reverse;
+}
+.intro-cicluz__traco {
+  filter: drop-shadow(0 0 7px rgb(255 255 255 / 0.42));
+}
 .intro-cicluz__carregamento {
   position: absolute;
   right: max(24px, env(safe-area-inset-right));
@@ -98,144 +175,203 @@ const estiloMarca = { "--intro-mascara": `url("${simboloVetorUrl}")` };
   z-index: 2;
   max-width: 440px;
   margin: auto;
+  animation: intro-carregamento var(--intro-duracao) linear both;
 }
-
 .intro-cicluz__trilho {
   position: relative;
   height: 5px;
-  border: 1px solid rgb(255 255 255 / 0.28);
+  overflow: visible;
+  border: 1px solid rgb(255 255 255 / 0.32);
   border-radius: var(--cx-r-pill);
-  background: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.12);
   box-shadow:
-    inset 0 1px 1px rgb(0 0 0 / 0.2),
-    0 4px 20px rgb(0 0 0 / 0.22);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+    inset 0 1px 1px rgb(0 0 0 / 0.26),
+    0 4px 20px rgb(0 0 0 / 0.26);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
-
 .intro-cicluz__preenchimento {
   display: block;
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    var(--cat-despesas-base) 0%,
-    var(--cat-entradas-base) 49%,
-    var(--cat-retiradas-base) 100%
-  );
-  box-shadow: 0 0 14px color-mix(in srgb, var(--cat-retiradas-base) 70%, transparent);
-  animation: intro-progresso 1.12s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
+  background: linear-gradient(90deg, #e83164, #ff5b22 24%, #ffd224 43%, #66d945 59%, #20c8dc 75%, #7259ff 100%);
+  box-shadow: 0 0 16px rgb(114 89 255 / 0.78);
+  animation: intro-progresso 1.66s 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
 .intro-cicluz__marcador {
   position: absolute;
   top: 50%;
   left: 0;
   width: 14px;
   height: 14px;
-  border: 1px solid rgb(255 255 255 / 0.58);
+  border: 1px solid rgb(255 255 255 / 0.66);
   border-radius: 5px;
-  background: rgb(255 255 255 / 0.28);
+  background: rgb(255 255 255 / 0.34);
   box-shadow:
-    0 2px 10px rgb(0 0 0 / 0.3),
-    inset 0 1px rgb(255 255 255 / 0.5);
+    0 2px 11px rgb(0 0 0 / 0.34),
+    inset 0 1px rgb(255 255 255 / 0.52);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   transform: translate(-50%, -50%);
-  animation: intro-marcador 1.12s 80ms cubic-bezier(0.2, 0.8, 0.16, 1) both;
+  animation: intro-marcador 1.66s 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
+@keyframes intro-palco {
+  0%,
+  76% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes intro-base {
+  0%,
+  67% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes intro-vidro {
+  0%,
+  56% {
+    opacity: 1;
+    transform: scale(1.025);
+  }
+  78% {
+    opacity: 0.92;
+    transform: scale(1.008);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+@keyframes intro-luzes {
+  0% {
+    opacity: 0.64;
+    transform: scale(0.96) rotate(-3deg);
+  }
+  42% {
+    opacity: 1;
+    transform: scale(1.08) rotate(1deg);
+  }
+  72% {
+    opacity: 0.82;
+    transform: scale(1.16) rotate(3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.24) rotate(5deg);
+  }
+}
 @keyframes intro-marca {
   0% {
     opacity: 0;
     transform: scale(0.56);
   }
-  13% {
+  15% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(0.98);
   }
-  57% {
+  52% {
     opacity: 1;
-    transform: scale(1.1);
+    transform: scale(1.08);
+  }
+  76% {
+    opacity: 0.94;
+    transform: scale(3.7);
   }
   100% {
     opacity: 0;
-    transform: scale(9.2);
+    transform: scale(8.7);
   }
 }
-
-@keyframes intro-vidro {
+@keyframes intro-pulso {
   from {
-    opacity: 1;
-    transform: scale(1.03);
+    opacity: 0.58;
   }
   to {
-    opacity: 0;
-    transform: scale(1);
+    opacity: 1;
   }
 }
-
+@keyframes intro-carregamento {
+  0%,
+  78% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
 @keyframes intro-progresso {
   to {
     width: 100%;
   }
 }
-
 @keyframes intro-marcador {
   to {
     left: 100%;
   }
 }
-
 @media (max-width: 560px) {
-  .intro-cicluz__marca {
-    transform-origin: center;
-  }
-
   .intro-cicluz__carregamento {
     right: max(20px, env(safe-area-inset-right));
     bottom: max(20px, env(safe-area-inset-bottom));
     left: max(20px, env(safe-area-inset-left));
   }
-
   @keyframes intro-marca {
     0% {
       opacity: 0;
       transform: scale(0.56);
     }
-    13% {
+    15% {
       opacity: 1;
-      transform: scale(1);
+      transform: scale(0.98);
     }
-    57% {
+    52% {
       opacity: 1;
-      transform: scale(1.1);
+      transform: scale(1.08);
+    }
+    76% {
+      opacity: 0.94;
+      transform: scale(2.75);
     }
     100% {
       opacity: 0;
-      transform: scale(6.1);
+      transform: scale(6.2);
     }
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .intro-cicluz {
-    opacity: 0;
-    transition: opacity 80ms linear;
+    animation-duration: 120ms;
   }
-
+  .intro-cicluz__base,
   .intro-cicluz__vidro,
+  .intro-cicluz__luzes,
   .intro-cicluz__marca,
+  .intro-cicluz__aura,
+  .intro-cicluz__brilho,
+  .intro-cicluz__carregamento,
   .intro-cicluz__preenchimento,
   .intro-cicluz__marcador {
     animation: none;
   }
-
+  .intro-cicluz__base,
+  .intro-cicluz__vidro,
+  .intro-cicluz__luzes,
+  .intro-cicluz__marca,
+  .intro-cicluz__carregamento {
+    opacity: 0;
+  }
   .intro-cicluz__preenchimento {
     width: 100%;
   }
-
   .intro-cicluz__marcador {
     left: 100%;
   }
