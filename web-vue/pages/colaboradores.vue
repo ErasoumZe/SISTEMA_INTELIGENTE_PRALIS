@@ -9,6 +9,12 @@ const colunas = [
   { title: "Matrícula", key: "matricula" },
   { title: "Ação", key: "acoes", sortable: false, align: "end" as const }
 ];
+
+function situacaoDoColaborador(item: { vinculoAtivoId?: string | null; temVinculoHistorico?: boolean }) {
+  if (item.vinculoAtivoId) return { texto: "Ativo", cor: "success" };
+  if (item.temVinculoHistorico) return { texto: "Inativo", cor: "default" };
+  return { texto: "Histórico a conciliar", cor: "warning" };
+}
 </script>
 
 <template>
@@ -23,8 +29,8 @@ const colunas = [
       </header>
       <v-data-table :headers="colunas" :items="ctx.linhasCadastro" item-value="id" class="colaboradores-dp__tabela">
         <template #item.situacao="{ item }"
-          ><v-chip :color="item.vinculoAtivoId ? 'success' : 'default'" size="small" variant="tonal">{{
-            item.situacao
+          ><v-chip :color="situacaoDoColaborador(item).cor" size="small" variant="tonal">{{
+            situacaoDoColaborador(item).texto
           }}</v-chip></template
         >
         <template #item.funcaoNome="{ item }">{{ item.funcaoNome || "Sem vínculo cadastrado" }}</template>

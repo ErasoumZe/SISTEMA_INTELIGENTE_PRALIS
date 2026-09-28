@@ -30,7 +30,9 @@ export async function obterPerfilColaborador(id: string, perfil?: PerfilUsuario)
   const vinculoAtivo = vinculos.find((vinculo) => vinculo.status === "ativo") ?? null;
   return {
     ...colaborador,
-    situacao: vinculoAtivo ? "ativo" : "inativo",
+    // Ausência de vínculo não prova desligamento. Cadastros anteriores à E7
+    // devem ser conciliados antes de qualquer recontratação.
+    situacao: vinculoAtivo ? "ativo" : vinculos.length ? "inativo" : "conciliacao_pendente",
     vinculoAtivoId: vinculoAtivo?.id ?? null,
     vinculos: vinculos.map((vinculo) => ({
       ...vinculo,

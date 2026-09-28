@@ -463,11 +463,13 @@ export const colaboradores = pgTable(
     // Chave composta para as FKs do vinculo trabalhista. O id ja e globalmente unico, mas a
     // composicao impede que um vinculo de uma empresa aponte por engano para o colaborador de outra.
     unique("colaboradores_id_empresa_unica").on(table.id, table.empresaId),
-    // Um cadastro operacional por CPF dentro da empresa. A migration candidata exige preflight
-    // antes de ser aplicada: nunca se escolhe arbitrariamente entre cadastros historicos duplicados.
+    // Um cadastro operacional por CPF NORMALIZADO dentro da empresa. A base legada aceita CPF
+    // mascarado, por isso comparar o texto cru permitiria duas pessoas com o mesmo documento.
+    // A migration candidata exige preflight antes de ser aplicada: nunca se escolhe arbitrariamente
+    // entre cadastros historicos duplicados.
     uniqueIndex("colaboradores_empresa_cpf_unico")
-      .on(table.empresaId, table.cpf)
-      .where(sql`${table.cpf} is not null`),
+      .on(table.empresaId, sql`regexp_replace(${table.cpf}, '\\D', '', 'g')`)
+      .where(sql`regexp_replace(${table.cpf}, '\\D', '', 'g') ~ '^[0-9]{11}$'`),
     uniqueIndex("colaboradores_usuario_id_unico")
       .on(table.usuarioId)
       .where(sql`${table.usuarioId} is not null`)

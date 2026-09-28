@@ -125,3 +125,17 @@ um documento só fica `concluído` depois de um dossiê válido. Não haverá co
 Antes de aplicar a migration `0050`, executar e revisar o preflight somente leitura de CPF existente e definir a
 estratégia para não quebrar os cadastros operacionais atuais que ainda usam `colaboradores` em Caixa, despesas e
 retiradas. Nenhum dado histórico será corrigido automaticamente.
+
+### Correção técnica registrada em 27/09/2026
+
+O CPF na tabela legada pode estar formatado ou apenas com dígitos. A unicidade e a busca da E7 devem usar a versão
+normalizada (somente os 11 dígitos), nunca o texto cru; caso contrário, `123.456.789-09` e `12345678909` poderiam
+virar dois cadastros da mesma pessoa. A migration candidata passou a criar índice único de CPF normalizado somente
+para valores com 11 dígitos, e o serviço localiza o legado pela mesma normalização.
+
+O preflight obrigatório passa a revisar, por empresa:
+
+- duplicidades de CPF normalizado com 11 dígitos;
+- valores não vazios que não resultam em 11 dígitos;
+- CPF ausente;
+- cadastros sem vínculo, que devem ser marcados na interface como **histórico a conciliar**, não como inativos.

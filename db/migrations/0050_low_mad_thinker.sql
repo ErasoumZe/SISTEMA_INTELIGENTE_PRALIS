@@ -105,7 +105,7 @@ CREATE UNIQUE INDEX "colaboradores_vinculos_colaborador_ativo_unico" ON "colabor
 CREATE INDEX "colaboradores_vinculos_empresa_colaborador_idx" ON "colaboradores_vinculos" USING btree ("empresa_id","colaborador_id","criado_em");--> statement-breakpoint
 CREATE INDEX "colaboradores_vinculos_empresa_status_idx" ON "colaboradores_vinculos" USING btree ("empresa_id","status","admitido_em");--> statement-breakpoint
 CREATE INDEX "colaboradores_vinculos_desligamento_etapas_empresa_vinculo_idx" ON "colaboradores_vinculos_desligamento_etapas" USING btree ("empresa_id","vinculo_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "colaboradores_empresa_cpf_unico" ON "colaboradores" USING btree ("empresa_id","cpf") WHERE "colaboradores"."cpf" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "colaboradores_empresa_cpf_unico" ON "colaboradores" USING btree ("empresa_id",regexp_replace("cpf", '\D', '', 'g')) WHERE regexp_replace("cpf", '\D', '', 'g') ~ '^[0-9]{11}$';--> statement-breakpoint
 ALTER TABLE "colaboradores" ADD CONSTRAINT "colaboradores_id_empresa_unica" UNIQUE("id","empresa_id");--> statement-breakpoint
 ALTER TABLE "admissoes_processos_historico" ADD CONSTRAINT "admissoes_processos_historico_acao_check" CHECK ("admissoes_processos_historico"."acao" in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada', 'efetivado'));--> statement-breakpoint
 ALTER TABLE "empresas" ADD CONSTRAINT "empresas_matricula_prefixo_check" CHECK ("empresas"."matricula_prefixo" ~ '^[A-Z0-9]{2,8}$');

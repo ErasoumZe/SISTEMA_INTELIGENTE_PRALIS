@@ -30,7 +30,7 @@ type Perfil = {
   nome: string;
   cpf: string | null;
   criadoEm: string;
-  situacao: "ativo" | "inativo";
+  situacao: "ativo" | "inativo" | "conciliacao_pendente";
   vinculoAtivoId: string | null;
   vinculos: Vinculo[];
   eventos: Evento[];
@@ -54,6 +54,12 @@ const empresas = computed<Opcao[]>(() =>
 );
 const empresaId = computed(() => sessao.value?.perfil?.empresaId ?? empresas.value[0]?.id ?? "");
 const vinculoAtivo = computed(() => perfil.value?.vinculos.find((vinculo) => vinculo.status === "ativo") ?? null);
+const rotuloSituacao = computed(() => {
+  if (perfil.value?.situacao === "ativo") return "Ativo";
+  if (perfil.value?.situacao === "inativo") return "Inativo";
+  return "Histórico a conciliar";
+});
+const corSituacao = computed(() => (perfil.value?.situacao === "ativo" ? "success" : "warning"));
 
 const rotuloEvento: Record<string, string> = {
   efetivado: "Colaborador efetivado",
@@ -123,8 +129,8 @@ onMounted(async () => {
           <p class="perfil__contexto">Departamento pessoal</p>
           <div class="perfil__titulo">
             <h1>{{ perfil?.nome ?? "Colaborador" }}</h1>
-            <v-chip :color="perfil?.situacao === 'ativo' ? 'success' : 'default'" size="small" variant="tonal">
-              {{ perfil?.situacao === "ativo" ? "Ativo" : "Inativo" }}
+            <v-chip :color="corSituacao" size="small" variant="tonal">
+              {{ rotuloSituacao }}
             </v-chip>
           </div>
           <p>{{ perfil?.cpf ? mascararCpf(perfil.cpf) : "CPF não cadastrado" }}</p>
@@ -160,16 +166,26 @@ onMounted(async () => {
               >
               <span v-else>{{ vinculoAtivo.jornadaHorario }}</span>
             </v-card-text>
-            <v-card-text v-else
+            <v-card-text v-else-if="perfil.situacao === 'inativo'"
               >Sem vínculo ativo. O cadastro permanece disponível para consulta e edição do nome. A recontratação só é
               liberada depois do desligamento registrado.</v-card-text
+            >
+            <v-card-text v-else
+              >Este cadastro é anterior ao controle de vínculos. Concilie o histórico antes de registrar desligamento ou
+              recontratação.</v-card-text
             >
           </v-card>
 
           <v-card variant="outlined">
             <v-card-title>Checklist desta etapa</v-card-title>
             <v-card-text class="perfil__checklist">
-              <span><v-icon color="success" icon="mdi-check-circle" /> Cadastro e vínculo registrados</span>
+              <span v-if="vinculoAtivo"><v-icon color="success" icon="mdi-check-circle" /> Cadastro e vínculo registrados</span>
+              <span v-else-if="perfil.situacao === 'inativo'"
+                ><v-icon color="success" icon="mdi-check-circle" /> Vínculo encerrado e preservado no histórico</span
+              >
+              <span v-else
+                ><v-icon color="warning" icon="mdi-alert-circle" /> Histórico anterior a vínculos: conciliação pendente</span
+              >
               <span
                 ><v-icon color="info" icon="mdi-information" /> Documentos, foto, contrato, uniforme/EPI, ponto e folha
                 entram nas próximas etapas reais.</span

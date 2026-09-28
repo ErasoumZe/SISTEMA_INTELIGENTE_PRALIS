@@ -1,4 +1,4 @@
-import { and, coalesce, desc, eq, max } from "drizzle-orm";
+import { and, coalesce, desc, eq, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   admissoesProcessos,
@@ -82,7 +82,12 @@ export async function localizarColaboradoresPorCpfRepository(cpf: string, empres
   return tx
     .select({ id: colaboradores.id, nome: colaboradores.nome })
     .from(colaboradores)
-    .where(and(eq(colaboradores.empresaId, empresaId), eq(colaboradores.cpf, cpf)))
+    .where(
+      and(
+        eq(colaboradores.empresaId, empresaId),
+        sql`regexp_replace(${colaboradores.cpf}, '\\D', '', 'g') = ${cpf}`
+      )
+    )
     .for("update");
 }
 

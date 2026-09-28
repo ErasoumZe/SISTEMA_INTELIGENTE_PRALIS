@@ -175,4 +175,20 @@ describe("efetivação de colaboradores", () => {
     });
     assertProblem(resposta, 409, "COLABORADOR_LEGADO_SEM_VINCULO");
   });
+  it("localiza CPF legado mascarado pela mesma identidade normalizada", async () => {
+    const cpf = proximoCpf();
+    const cpfMascarado = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+    await executarSql("insert into colaboradores (empresa_id, nome, cpf) values ($1, $2, $3)", [
+      idsTeste.empresaA,
+      "Cadastro legado mascarado",
+      cpfMascarado
+    ]);
+    const processo = await criarProcessoApto(cpf, "Cadastro legado mascarado");
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${processo.id}/efetivar`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertProblem(resposta, 409, "COLABORADOR_LEGADO_SEM_VINCULO");
+  });
 });
