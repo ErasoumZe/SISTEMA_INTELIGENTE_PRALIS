@@ -16,13 +16,17 @@ import { rotuloSituacaoExame } from "~/utils/admissoes";
  * Aqui os dois viram um formulario so. O exame continua sendo uma acao PROPRIA no servidor — rota e
  * versao proprias —, mas quem opera ve um lugar so.
  */
-const props = defineProps<{
-  aberto: boolean;
-  internos: DadosInternosDto | null;
-  efetivado: boolean;
-  salvando: boolean;
-  erro: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    aberto: boolean;
+    internos: DadosInternosDto | null;
+    /** Processos ainda não efetivados mantêm o comportamento anterior. */
+    efetivado?: boolean;
+    salvando: boolean;
+    erro: string;
+  }>(),
+  { efetivado: false }
+);
 
 const emit = defineEmits<{
   (event: "fechar"): void;
