@@ -3196,6 +3196,70 @@ export const admissoesProcessosInternos = pgTable(
  * Sem `atualizado_em` e sem trigger, de proposito: convite nao se edita. Acesso e revogacao tem
  * colunas proprias, e a linha nunca muda de identidade.
  */
+// Cadastro proprio por empresa. Nao reutiliza fornecedor (financeiro) nem cliente (comercial):
+// a clinica e escolhida para emitir uma guia de exame e suas unidades podem mudar sem reescrever
+// uma guia historica. Excluir nao faz parte do ciclo; o cadastro e desativado.
+export const clinicasOcupacionais = pgTable(
+  "clinicas_ocupacionais",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    cnpj: text("cnpj"),
+    email: text("email"),
+    whatsapp: text("whatsapp"),
+    contatoNome: text("contato_nome"),
+    observacoes: text("observacoes"),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("clinicas_ocupacionais_id_empresa_unica").on(table.id, table.empresaId),
+    unique("clinicas_ocupacionais_empresa_nome_unico").on(table.empresaId, table.nome),
+    check("clinicas_ocupacionais_nome_check", sql`length(btrim(${table.nome})) > 0`),
+    check("clinicas_ocupacionais_cnpj_check", sql`${table.cnpj} is null or ${table.cnpj} ~ '^[0-9]{14}$'`),
+    check("clinicas_ocupacionais_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`),
+    index("clinicas_ocupacionais_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
+  ]
+);
+
+export const clinicasOcupacionaisUnidades = pgTable(
+  "clinicas_ocupacionais_unidades",
+  {
+    id: idUuid,
+    empresaId,
+    clinicaId: uuid("clinica_id").notNull(),
+    nome: text("nome").notNull(),
+    email: text("email"),
+    whatsapp: text("whatsapp"),
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    municipio: text("municipio"),
+    uf: text("uf"),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.clinicaId, table.empresaId],
+      foreignColumns: [clinicasOcupacionais.id, clinicasOcupacionais.empresaId],
+      name: "clinicas_ocupacionais_unidades_clinica_empresa_fk"
+    }).onDelete("restrict"),
+    unique("clinicas_ocupacionais_unidades_id_empresa_unica").on(table.id, table.empresaId),
+    unique("clinicas_ocupacionais_unidades_clinica_nome_unico").on(table.clinicaId, table.nome),
+    check("clinicas_ocupacionais_unidades_nome_check", sql`length(btrim(${table.nome})) > 0`),
+    check("clinicas_ocupacionais_unidades_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`),
+    check("clinicas_ocupacionais_unidades_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
+    check("clinicas_ocupacionais_unidades_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
+    index("clinicas_ocupacionais_unidades_clinica_ativo_nome_idx").on(table.empresaId, table.clinicaId, table.ativo, table.nome)
+  ]
+);
+
 export const admissoesConvites = pgTable(
   "admissoes_convites",
   {
