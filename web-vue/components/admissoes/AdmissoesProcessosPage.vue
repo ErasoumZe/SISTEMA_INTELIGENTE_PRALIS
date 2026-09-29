@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import type {
-  ConviteEmitidoDto,
-  PainelConviteDto,
   AuthSession,
-  DadosInternosDto,
+  ConviteEmitidoDto,
   FuncaoOpcaoDto,
-  HistoricoProcessoDto,
+  PainelConviteDto,
   ProcessoDetalheDto,
   ProcessoListaDto,
   SituacaoExame,
@@ -15,10 +13,7 @@ import { temPermissao } from "@padaria/shared";
 import { mascararCnpj } from "~/utils/formatacao";
 import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
-import { formatarDataHora } from "~/utils/formatacao";
 import { rotaRevisaoDaFicha } from "~/utils/admissoes";
-import GuiaExameOcupacionalDialog from "~/components/admissoes/GuiaExameOcupacionalDialog.vue";
-import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
 import ProcessosFiltros, { type FiltrosProcessos } from "~/components/admissoes/ProcessosFiltros.vue";
 import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
@@ -41,13 +36,13 @@ const podeCriarDireta = computed(() => temPermissao(permissoes.value, "admissoes
 const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_processos_cancelar"));
 const podeEfetivar = computed(() => temPermissao(permissoes.value, "admissoes_processos_efetivar"));
 const podeEditarInternos = computed(() => temPermissao(permissoes.value, "admissoes_processos_editar_internos"));
+const podeVerCpf = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
+const podeConvidar = computed(() => temPermissao(permissoes.value, "admissoes_processos_convidar"));
+const podeRevisarFicha = computed(() => temPermissao(permissoes.value, "admissoes_processos_ver_ficha"));
 // Revelar CPF usa a permissao de VISUALIZAR, nao uma terceira: quem pode abrir o processo pode ver
 // o documento de quem esta sendo admitido — o que muda e que fica registrado quem viu e quando.
-const podeVerCpf = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
 // ADM-003 V2. Emitir e revogar sao o MESMO direito: quem abre precisa poder fechar.
-const podeConvidar = computed(() => temPermissao(permissoes.value, "admissoes_processos_convidar"));
 // ADM-003 V5. Ver a ficha abre a tela de revisao; DECIDIR e outra permissao, conferida la.
-const podeRevisarFicha = computed(() => temPermissao(permissoes.value, "admissoes_processos_ver_ficha"));
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
@@ -87,25 +82,25 @@ const empresaDoPerfil = computed(() => {
 const empresaNome = computed(() => empresaDoPerfil.value?.nome ?? "");
 const empresaCnpj = computed(() => (empresaDoPerfil.value?.cnpj ? mascararCnpj(empresaDoPerfil.value.cnpj) : ""));
 
+// O detalhe agora mora na rota propria. Estes estados permanecem temporariamente apenas para
+// preservar a tipagem do codigo legado enquanto a pagina nova concentra as acoes do processo.
 const internosAberto = ref(false);
 const internosErro = ref("");
 const guiaAberta = ref(false);
-
 const detalheAberto = ref(false);
-const detalheCarregando = ref(false);
 const processando = ref(false);
 const processo = ref<ProcessoDetalheDto | null>(null);
-const historico = ref<HistoricoProcessoDto[]>([]);
-
-// O CPF revelado vive SO na memoria da tela, e so enquanto o detalhe estiver aberto. Nao vai para
-// URL, store, storage nem listagem — e some no fechamento, em `fecharDetalhe`.
 const cpfRevelado = ref<string | null>(null);
-// O painel do convite e o token vivem AQUI, e nao no modal: e a pagina que faz as chamadas e que
-// limpa os dois ao fechar. Token que sobrevive ao fechamento vira segredo esquecido na tela.
 const convite = ref<PainelConviteDto | null>(null);
 const tokenEmitido = ref<string | null>(null);
 const convitePendente = ref(false);
 const revelandoCpf = ref(false);
+
+
+// O CPF revelado vive SO na memoria da tela, e so enquanto o detalhe estiver aberto. Nao vai para
+// URL, store, storage nem listagem — e some no fechamento, em `fecharDetalhe`.
+// O painel do convite e o token vivem AQUI, e nao no modal: e a pagina que faz as chamadas e que
+// limpa os dois ao fechar. Token que sobrevive ao fechamento vira segredo esquecido na tela.
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 
@@ -425,25 +420,6 @@ onMounted(async () => {
     :erro="novoErro"
     @fechar="novoAberto = false"
     @salvar="criarDireta"
-  />
-
-  <ProcessoInternosDialog
-    :aberto="internosAberto"
-    :internos="processo?.internos ?? null"
-    :efetivado="processo?.efetivado ?? false"
-    :salvando="processando"
-    :erro="internosErro"
-    @fechar="internosAberto = false"
-    @salvar="salvarInternos"
-  />
-
-  <GuiaExameOcupacionalDialog
-    :aberto="guiaAberta"
-    :processo="processo"
-    :cpf="cpfRevelado"
-    :empresa-nome="empresaDoPerfil?.nome ?? ''"
-    :empresa-cnpj="empresaDoPerfil?.cnpj ?? ''"
-    @fechar="guiaAberta = false"
   />
 
   <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>

@@ -18,7 +18,6 @@ import { corPrazoTeste, corStatusTeste, rotuloPrazoTeste, rotuloStatusTeste } fr
 // O detalhe do processo é o MESMO componente da tela de Processos — e agora vem importado.
 // Ele era usado só pela tag, e o auto-import do Nuxt registra `AdmissoesProcessoDetalhe*`, não o
 // nome curto: a tag não resolvia e o processo, visto daqui, nunca aparecia.
-import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import TesteDetalhePainel from "~/components/admissoes/TesteDetalhePainel.vue";
 import TesteFormDialog from "~/components/admissoes/TesteFormDialog.vue";
 import TestesFiltros, { type FiltrosTestes } from "~/components/admissoes/TestesFiltros.vue";
@@ -484,29 +483,6 @@ onMounted(async () => {
     `pode-revisar-ficha` e falso pela mesma logica: revisar a ficha e um ato, e o ato mora na tela
     "Processos de admissao", que e a dona. Daqui o processo e so leitura.
   -->
-  <ProcessoDetalheDialog
-    :aberto="processoAberto"
-    :processo="processo"
-    :historico="historicoProcesso"
-    :carregando="processoCarregando"
-    :pode-cancelar="podeCancelarProcesso"
-    :pode-efetivar="false"
-    :pode-editar-internos="false"
-    :processando="processoProcessando"
-    :pode-ver-teste="true"
-    :pode-ver-cpf="false"
-    :cpf-revelado="null"
-    :revelando-cpf="false"
-    :convite="null"
-    :pode-convidar="false"
-    :token-emitido="null"
-    :convite-pendente="false"
-    :pode-revisar-ficha="false"
-    @cancelar="cancelarProcessoAdmissao"
-    @fechar="processoAberto = false"
-    @ver-teste="voltarAoTeste"
-  />
-
   <TesteDetalhePainel
     :aberto="detalheAberto"
     :teste="detalhe"
