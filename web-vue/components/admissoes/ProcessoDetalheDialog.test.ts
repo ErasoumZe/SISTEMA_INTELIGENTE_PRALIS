@@ -85,6 +85,8 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
       exameAtualizadoPorNome: "Ana do DP",
       exameAtualizadoEm: "2026-08-30T12:00:00.000Z"
     },
+    efetivado: false,
+    dataEfetivacao: null,
     fichaSituacao: null,
     criadoPorNome: "Ana do DP",
     criadoEm: "2026-08-28T12:00:00.000Z",
