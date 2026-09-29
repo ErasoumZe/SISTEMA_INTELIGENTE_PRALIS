@@ -290,6 +290,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // ADM-003 V1A: o DP opera a admissao direta por inteiro — abre e preenche o bloco interno.
       "admissoes_processos_criar_direta",
       "admissoes_processos_editar_internos",
+      "admissoes_clinicas_ocupacionais_visualizar",
+      "admissoes_clinicas_ocupacionais_criar",
+      "admissoes_clinicas_ocupacionais_editar",
       // ADM-003 V2: o DP e quem conversa com o candidato, entao e ele quem emite e revoga o convite.
       "admissoes_processos_convidar",
       // ADM-003 V3: e e ele quem le e revisa a ficha que volta. A Gerencia nao recebe nenhuma

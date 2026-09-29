@@ -6,6 +6,7 @@ export * from "./cadastros/index.js";
 export * from "./caixa/index.js";
 export * from "./areas/index.js";
 export * from "./clientes/index.js";
+export * from "./clinicas/index.js";
 export * from "./colaboradores/index.js";
 export * from "./contas/index.js";
 export * from "./empresas/index.js";

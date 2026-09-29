@@ -71,6 +71,11 @@
       "development": "./src/clientes/index.ts",
       "default": "./dist/clientes/index.js"
     },
+    "./clinicas": {
+      "types": "./dist/clinicas/index.d.ts",
+      "development": "./src/clinicas/index.ts",
+      "default": "./dist/clinicas/index.js"
+    },
     "./colaboradores": {
       "types": "./dist/colaboradores/index.d.ts",
       "development": "./src/colaboradores/index.ts",

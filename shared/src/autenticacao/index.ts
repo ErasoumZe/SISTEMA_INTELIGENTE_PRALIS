@@ -153,6 +153,9 @@ export const permissoes = [
   // Separada de `criar_direta` porque o bloco interno carrega CTPS, PIS/NIT e o exame: a Gerencia
   // inicia o processo, o DP e quem preenche.
   "admissoes_processos_editar_internos",
+  "admissoes_clinicas_ocupacionais_visualizar",
+  "admissoes_clinicas_ocupacionais_criar",
+  "admissoes_clinicas_ocupacionais_editar",
   // ADM-003 V2. Emitir e revogar o convite do candidato e ato PROPRIO: quem cria a admissao nao
   // necessariamente e quem manda o link para uma pessoa de fora. Uma permissao para os dois atos,
   // porque revogar e a correcao de emitir — separa-las deixaria alguem podendo abrir e nao fechar.
