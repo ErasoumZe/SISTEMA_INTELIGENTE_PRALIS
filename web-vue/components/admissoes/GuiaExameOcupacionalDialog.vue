@@ -60,24 +60,26 @@ function imprimir() {
   const janela = window.open("", "_blank");
   if (!janela) return;
   janela.opener = null;
-  const linhas: Array<[string, string]> = [
-    ["Empresa", valor(props.empresaNome)],
-    ["CNPJ", valor(props.empresaCnpj)],
-    ["Clínica", valor(processo.internos.exameClinica)],
-    ["Colaborador", valor(processo.nomeCompleto)],
-    ["CPF", valor(props.cpf)],
-    ["Função", valor(processo.funcaoNome)],
-    ["Data de admissão", data(processo.internos.dataAdmissao)],
-    ["Tipo de exame", tipoExame.value],
-    ["Exames complementares", complementares.value],
-    ["Unidade", valor(processo.internos.exameUnidade)],
+  const linhas = (
     [
-      "Agendado para",
-      processo.internos.exameAgendadoPara ? formatarDataHora(processo.internos.exameAgendadoPara) : "Não informado"
-    ],
-    ["Responsável", valor(processo.internos.exameResponsavelNome)],
-    ["Telefone", valor(processo.internos.exameResponsavelTelefone)]
-  ]
+      ["Empresa", valor(props.empresaNome)],
+      ["CNPJ", valor(props.empresaCnpj)],
+      ["Clínica", valor(processo.internos.exameClinica)],
+      ["Colaborador", valor(processo.nomeCompleto)],
+      ["CPF", valor(props.cpf)],
+      ["Função", valor(processo.funcaoNome)],
+      ["Data de admissão", data(processo.internos.dataAdmissao)],
+      ["Tipo de exame", tipoExame.value],
+      ["Exames complementares", complementares.value],
+      ["Unidade", valor(processo.internos.exameUnidade)],
+      [
+        "Agendado para",
+        processo.internos.exameAgendadoPara ? formatarDataHora(processo.internos.exameAgendadoPara) : "Não informado"
+      ],
+      ["Responsável", valor(processo.internos.exameResponsavelNome)],
+      ["Telefone", valor(processo.internos.exameResponsavelTelefone)]
+    ] satisfies Array<[string, string]>
+  )
     .map(([rotulo, conteudo]) => `<tr><th>${escaparHtml(rotulo)}</th><td>${escaparHtml(conteudo)}</td></tr>`)
     .join("");
 
