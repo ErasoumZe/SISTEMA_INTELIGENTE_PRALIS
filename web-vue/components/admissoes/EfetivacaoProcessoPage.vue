@@ -43,7 +43,7 @@ async function efetivar() {
   erro.value = "";
   try {
     const resultado = await apiPost<ResultadoEfetivacao>(`/api/admissoes/processos/${props.processoId}/efetivar`, {});
-    await router.push(`/colaboradores/${resultado.colaboradorId}`);
+    await router.push({ path: "/colaboradores", query: { novo: resultado.colaboradorId } });
   } catch (error) {
     erro.value = mensagemErro(error);
     // O servidor é a fonte de verdade: se houve alteração concorrente, a tela relê as condições.

@@ -140,9 +140,15 @@ function inputmode(campo: CampoFicha) {
 </script>
 
 <template>
-  <section v-for="grupo in grupos" :key="grupo.id" class="dados" :aria-labelledby="`dados-${grupo.id}`">
+  <section
+    v-for="grupo in grupos"
+    :id="`dados-${grupo.id}`"
+    :key="grupo.id"
+    class="dados"
+    :aria-labelledby="`titulo-${grupo.id}`"
+  >
     <header class="dados__cabecalho">
-      <h2 :id="`dados-${grupo.id}`">{{ grupo.titulo }}</h2>
+      <h2 :id="`titulo-${grupo.id}`">{{ grupo.titulo }}</h2>
       <p v-if="grupo.descricao">{{ grupo.descricao }}</p>
     </header>
 

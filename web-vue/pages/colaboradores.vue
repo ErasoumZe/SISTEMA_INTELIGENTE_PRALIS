@@ -2,6 +2,11 @@
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 
 const router = useRouter();
+const route = useRoute();
+const colaboradorNovoId = computed(() => {
+  const valor = route.query.novo;
+  return typeof valor === "string" ? valor : "";
+});
 const colunas = [
   { title: "Colaborador", key: "nome" },
   { title: "Situação", key: "situacao" },
@@ -27,6 +32,14 @@ function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistor
           <span>O cadastro nasce pela efetivação da admissão. Abra o perfil para acompanhar vínculos e histórico.</span>
         </div>
       </header>
+      <v-alert v-if="colaboradorNovoId" type="success" variant="tonal" class="mb-4">
+        Colaborador efetivado e incluído nesta lista.
+        <template #append>
+          <v-btn size="small" variant="text" @click="router.push(`/colaboradores/${colaboradorNovoId}`)"
+            >Abrir perfil</v-btn
+          >
+        </template>
+      </v-alert>
       <v-data-table :headers="colunas" :items="ctx.linhasCadastro" item-value="id" class="colaboradores-dp__tabela">
         <template #item.situacao="{ item }"
           ><v-chip :color="situacaoDoColaborador(item).cor" size="small" variant="tonal">{{
