@@ -3,6 +3,7 @@ import type { AuthSession } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import CadastroColaboradorTabs from "~/components/colaboradores/CadastroColaboradorTabs.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { formatarDataHora, formatarDataSomenteDia, mascararCpf } from "~/utils/formatacao";
 import { mensagemErro } from "~/utils/domain";
@@ -177,7 +178,7 @@ onMounted(async () => {
           </v-card>
 
           <v-card variant="outlined">
-            <v-card-title>Checklist desta etapa</v-card-title>
+            <v-card-title>Fluxo de onboarding</v-card-title>
             <v-card-text class="perfil__checklist">
               <span v-if="vinculoAtivo"><v-icon color="success" icon="mdi-check-circle" /> Cadastro e vínculo registrados</span>
               <span v-else-if="perfil.situacao === 'inativo'"
@@ -186,13 +187,12 @@ onMounted(async () => {
               <span v-else
                 ><v-icon color="warning" icon="mdi-alert-circle" /> Histórico anterior a vínculos: conciliação pendente</span
               >
-              <span
-                ><v-icon color="info" icon="mdi-information" /> Documentos, foto, contrato, uniforme/EPI, ponto e folha
-                entram nas próximas etapas reais.</span
-              >
+              <span><v-icon color="info" icon="mdi-information" /> Complete os dados pessoais, contato e dados bancários antes do envio à contabilidade.</span>
             </v-card-text>
           </v-card>
         </section>
+
+        <CadastroColaboradorTabs :colaborador-id="colaboradorId" :pode-editar="podeEditar" />
 
         <section class="perfil__secao">
           <h2>Vínculos</h2>
