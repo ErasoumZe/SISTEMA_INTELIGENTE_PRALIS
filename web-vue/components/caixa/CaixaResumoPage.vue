@@ -14,6 +14,7 @@ import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamento
 import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
 import CaixaSangriasDialog from "~/components/caixa/CaixaSangriasDialog.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
+import IconeDestaque from "~/components/comum/IconeDestaque.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 const { apiGet } = useApi();
 
@@ -846,7 +847,7 @@ function confirmarFechamento() {
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
               <div class="cat-head">
-                <span class="cat-chip"><v-icon :icon="cat.icone" size="18" /></span>
+                <IconeDestaque :icone="cat.icone" cor="var(--cat-faixa)" tamanho="sm" />
                 <span class="cat-titulo">{{ cat.titulo }}</span>
               </div>
               <div class="cat-valor">{{ dinheiro(cat.valor) }}</div>
@@ -872,7 +873,7 @@ function confirmarFechamento() {
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
               <div class="cat-head">
-                <span class="cat-chip"><v-icon icon="mdi-cancel" size="18" /></span>
+                <IconeDestaque icone="mdi-cancel" cor="var(--cat-faixa)" tamanho="sm" />
                 <span class="cat-titulo">Vendas canceladas</span>
               </div>
               <div class="cat-valor">{{ vendasCanceladasQuantidade }}</div>
@@ -887,7 +888,7 @@ function confirmarFechamento() {
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
               <div class="cat-head">
-                <span class="cat-chip"><v-icon icon="mdi-cash-multiple" size="18" /></span>
+                <IconeDestaque icone="mdi-cash-multiple" cor="var(--cat-faixa)" tamanho="sm" />
                 <span class="cat-titulo">Resultado no caixa</span>
               </div>
               <div class="cat-valor">{{ dinheiro(resumoAtual.saldo) }}</div>
@@ -908,7 +909,7 @@ function confirmarFechamento() {
               class="pagamento-card"
               :class="classeFormaPagamento(forma.titulo)"
             >
-              <span class="pagamento-card__icone"><v-icon :icon="forma.icone" size="18" /></span>
+              <IconeDestaque :icone="forma.icone" cor="var(--pagamento-cor)" tamanho="sm" class="pagamento-card__icone" />
               <span class="pagamento-card__titulo">{{ forma.titulo }}</span>
               <strong class="pagamento-card__valor">{{ dinheiro(forma.valor) }}</strong>
               <span class="pagamento-card__quantidade">
@@ -1423,18 +1424,6 @@ function confirmarFechamento() {
   gap: 8px;
 }
 
-.cat-chip {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  /* O chip agora fica SOBRE o fundo -soft: se ele tambem fosse -soft, sumiria. Cheio, com icone
-     branco, ele volta a ser o ponto de leitura do card. */
-  background: var(--cat-faixa);
-  color: #fff;
-}
-
 .cat-titulo {
   overflow: hidden;
   color: var(--cat-tinta);
@@ -1561,16 +1550,8 @@ function confirmarFechamento() {
   border-radius: 12px;
   background: color-mix(in srgb, var(--pagamento-cor) 10%, transparent);
 }
-
 .pagamento-card__icone {
-  display: grid;
   grid-row: span 2;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  background: var(--pagamento-cor);
-  color: #fff;
 }
 
 .pagamento-card__titulo,
@@ -1662,11 +1643,6 @@ function confirmarFechamento() {
     min-width: 0;
   }
 
-  .cat-grid .cat-card:not(.cat-resultado) .cat-chip {
-    flex: 0 0 26px;
-    width: 26px;
-    height: 26px;
-  }
 
   .cat-grid .cat-card:not(.cat-resultado) .cat-valor {
     flex: 0 0 auto;

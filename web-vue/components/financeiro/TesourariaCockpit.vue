@@ -18,6 +18,7 @@ import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padar
 import CancelarPlanejamentoRetornoDialog from "./CancelarPlanejamentoRetornoDialog.vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
+import IconeDestaque from "~/components/comum/IconeDestaque.vue";
 import {
   camposConferenciaVazios,
   lacreConfereEntrega,
@@ -499,21 +500,21 @@ function limparFiltrosTransferencias() {
     <!-- Cards de total: Saida · Entrada · Saldo (cor --cat-transferencias) -->
     <section class="tes-cards" aria-label="Totais de transferências">
       <article class="tes-card">
-        <span class="tes-cic"><v-icon icon="mdi-arrow-up-right" size="20" /></span>
+        <IconeDestaque icone="mdi-arrow-up-right" cor="var(--cx-negative)" tamanho="md" />
         <span class="tes-copy">
           <span class="tes-lbl">Saída </span>
           <span class="tes-val neg" :class="{ pend: saida === null }">{{ dinheiro(saida) }}</span>
         </span>
       </article>
       <article class="tes-card">
-        <span class="tes-cic"><v-icon icon="mdi-arrow-down-left" size="20" /></span>
+        <IconeDestaque icone="mdi-arrow-down-left" cor="var(--cx-positive)" tamanho="md" />
         <span class="tes-copy">
           <span class="tes-lbl">Entrada </span>
           <span class="tes-val pos" :class="{ pend: entrada === null }">{{ dinheiro(entrada) }}</span>
         </span>
       </article>
       <article class="tes-card">
-        <span class="tes-cic"><v-icon icon="mdi-scale-balance" size="20" /></span>
+        <IconeDestaque icone="mdi-scale-balance" cor="var(--cat-transferencias-faixa)" tamanho="md" />
         <span class="tes-copy">
           <span class="tes-lbl">Saldo </span>
           <span class="tes-val">{{ dinheiro(saldo) }}</span>
@@ -1101,16 +1102,6 @@ function limparFiltrosTransferencias() {
     0 2px 1px -1px rgb(0 0 0 / 0.2),
     0 1px 1px 0 rgb(0 0 0 / 0.14),
     0 1px 3px 0 rgb(0 0 0 / 0.12);
-}
-.tes-cic {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--cat-transferencias-soft, #fff1e8);
-  color: var(--cat-transferencias-base, #c2410c);
 }
 .tes-copy {
   display: grid;

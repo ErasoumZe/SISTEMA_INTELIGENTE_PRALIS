@@ -22,6 +22,7 @@ import { FAIXA_DIA, FAIXA_IR_PARA, FAIXA_PRECISA, FAIXA_RELATORIOS } from "~/uti
 import { atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas, pontosDaSparkline } from "~/utils/dashboard";
 import { dinheiro, rotaTela } from "~/utils/domain";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import IconeDestaque from "~/components/comum/IconeDestaque.vue";
 
 const props = defineProps<{
   /** A MESMA lista que o menu recebe. Nenhuma permissao e recalculada aqui. */
@@ -125,7 +126,7 @@ function escrever(metrica: MetricaDemo) {
             :class="{ clicavel: temDestino(m.telaId) }"
             :style="estiloDisco(m.categoria)"
           >
-            <span class="metrica-disco"><v-icon :icon="m.icone" size="24" /></span>
+            <IconeDestaque :icone="m.icone" cor="var(--disco-cor, var(--cx-brand))" tamanho="lg" />
             <span class="metrica-rotulo">{{ m.rotulo }}</span>
             <span class="metrica-valor cx-num" :class="{ vazio: m.valor === null }">{{ escrever(m) }}</span>
             <!-- O nome acessivel diz DE QUE e o "ver mais". Sao nove links iguais na tela, e quem
@@ -174,13 +175,13 @@ function escrever(metrica: MetricaDemo) {
                 :aria-label="`${tela.titulo} — ${tela.motivo}`"
                 :style="estiloAtalho(tela.id)"
               >
-                <span class="atalho-disco"><v-icon :icon="tela.icone" size="18" /></span>
+                <IconeDestaque :icone="tela.icone" cor="var(--disco-cor, var(--cx-brand))" tamanho="sm" />
                 <span class="atalho-texto">{{ tela.titulo }}</span>
               </span>
             </template>
           </v-tooltip>
           <NuxtLink v-else class="atalho-pilula" :style="estiloAtalho(tela.id)" :to="rotaTela(tela.id)">
-            <span class="atalho-disco"><v-icon :icon="tela.icone" size="18" /></span>
+            <IconeDestaque :icone="tela.icone" cor="var(--disco-cor, var(--cx-brand))" tamanho="sm" />
             <span class="atalho-texto">{{ tela.titulo }}</span>
           </NuxtLink>
         </template>

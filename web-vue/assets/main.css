@@ -166,6 +166,39 @@
   --cx-scrim: rgb(15 23 42 / 0.32);
 }
 
+/* Linguagem unica para icones de acao: quem navega, confirma ou abre algo responde com o mesmo
+   micro-movimento. Icones informativos de campo, tabela e alerta ficam intactos. */
+.v-btn:not(.v-btn--disabled) .v-icon,
+.v-list-item:not(.v-list-item--disabled) .v-icon,
+a .v-icon {
+  transition: transform var(--cx-dur-1) var(--cx-ease-out);
+}
+.v-btn:not(.v-btn--disabled):hover .v-icon,
+.v-list-item:not(.v-list-item--disabled):hover .v-icon,
+a:hover .v-icon {
+  transform: translateY(-1px);
+}
+.v-btn:not(.v-btn--disabled):active .v-icon,
+.v-list-item:not(.v-list-item--disabled):active .v-icon,
+a:active .v-icon {
+  transform: scale(0.94);
+}
+@media (prefers-reduced-motion: reduce) {
+  .v-btn:not(.v-btn--disabled) .v-icon,
+  .v-list-item:not(.v-list-item--disabled) .v-icon,
+  a .v-icon {
+    transition: none;
+  }
+  .v-btn:not(.v-btn--disabled):hover .v-icon,
+  .v-list-item:not(.v-list-item--disabled):hover .v-icon,
+  a:hover .v-icon,
+  .v-btn:not(.v-btn--disabled):active .v-icon,
+  .v-list-item:not(.v-list-item--disabled):active .v-icon,
+  a:active .v-icon {
+    transform: none;
+  }
+}
+
 /* ---- MODO ESCURO: inversao na camada de tokens ----
    Redefine SO as primitivas; todo o resto (derivadas, aliases, componentes)
    herda. Sem !important: o inline de aplicarTema toca --empresa-*, nao --cx-*. */
@@ -3518,16 +3551,6 @@ body {
   border: 1px solid var(--cx-line-soft);
 }
 
-.metrica-disco {
-  display: grid;
-  width: 52px;
-  height: 52px;
-  margin-bottom: var(--cx-sp-2);
-  place-items: center;
-  border-radius: var(--cx-r-pill);
-  background: var(--disco-cor, var(--cx-ink-soft));
-  color: var(--cx-brand-on);
-}
 .metrica-rotulo {
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-body);
@@ -3586,15 +3609,6 @@ body {
 }
 .atalho-pilula:hover {
   box-shadow: var(--cx-e-2);
-}
-.atalho-disco {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: var(--cx-r-pill);
-  background: var(--disco-cor, var(--cx-ink-soft));
-  color: var(--cx-brand-on);
 }
 
 @media (width <= 900px) {
@@ -4084,12 +4098,6 @@ button.sidebar-logo-alvo {
   height: 28px;
 }
 
-/* 4 · o disco sem categoria no escuro */
-:root[data-theme="dark"] .metrica-card:not([style*="--disco-cor"]) .metrica-disco,
-:root[data-theme="dark"] .atalho-pilula:not([style*="--disco-cor"]) .atalho-disco {
-  background: var(--cx-surface-sunken);
-  color: var(--cx-ink);
-}
 /* ===================== FIM VIS-F16 ===================== */
 
 /* ===================== INICIO VIS-F18 — O VIDRO DA ENTRADA ABRE (29/08/2026) =====================

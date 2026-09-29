@@ -2,6 +2,7 @@
 import type { AuthSession } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
+import IconeDestaque from "~/components/comum/IconeDestaque.vue";
 
 type ResultadoPaginado = { total: number };
 type Fila = "testesAtivos" | "testesVencemHoje" | "testesVencidos" | "fichasEnviadas" | "processosPausados";
@@ -101,7 +102,7 @@ onMounted(() => void carregarResumo());
       <div class="grade-acoes">
         <v-card v-if="podeVerProcessos" class="acao-card acao-card--admissoes" variant="outlined">
           <v-card-text class="acao-card__conteudo">
-            <span class="acao-card__icone"><v-icon icon="mdi-clipboard-account-outline" /></span>
+            <IconeDestaque icone="mdi-clipboard-account-outline" cor="#7c48ed" />
             <div><h3>Admissão direta</h3><p>Pré-cadastro, ASO e efetivação preenchidos pelo DP.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
@@ -110,7 +111,7 @@ onMounted(() => void carregarResumo());
         </v-card>
         <v-card v-if="podeVerTestes" class="acao-card acao-card--testes" variant="outlined">
           <v-card-text class="acao-card__conteudo">
-            <span class="acao-card__icone"><v-icon icon="mdi-account-clock-outline" /></span>
+            <IconeDestaque icone="mdi-account-clock-outline" cor="#248fdf" />
             <div><h3>Período de teste</h3><p>Registre, acompanhe o prazo e efetive para admissão.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
@@ -119,12 +120,53 @@ onMounted(() => void carregarResumo());
         </v-card>
         <v-card v-if="podeVerColaboradores" class="acao-card acao-card--colaboradores" variant="outlined">
           <v-card-text class="acao-card__conteudo">
-            <span class="acao-card__icone"><v-icon icon="mdi-account-group-outline" /></span>
+            <IconeDestaque icone="mdi-account-group-outline" cor="#1fb970" />
             <div><h3>Colaboradores cadastrados</h3><p>Perfis, vínculos, matrícula e linha do tempo.</p></div>
           </v-card-text>
           <v-card-actions class="acao-card__acoes"
             ><v-btn to="/colaboradores" color="success" variant="flat" prepend-icon="mdi-account-group-outline">Abrir colaboradores</v-btn></v-card-actions
           >
+        </v-card>
+      </div>
+    </section>
+
+    <section class="bloco" aria-labelledby="dp-visao-geral">
+      <div class="titulo-bloco">
+        <div>
+          <h2 id="dp-visao-geral">Visão geral</h2>
+          <p>Próximas áreas do sistema. Elas ainda não abrem fluxo nem registram dados.</p>
+        </div>
+      </div>
+      <div class="grade-acoes grade-acoes--preparacao">
+        <v-card class="acao-card acao-card--folha acao-card--preparacao" variant="outlined">
+          <v-card-text class="acao-card__conteudo">
+            <IconeDestaque icone="mdi-cash-multiple" cor="#d27021" />
+            <div>
+              <h3>Folha de pagamento</h3>
+              <p>Salários, eventos e fechamento mensal.</p>
+              <span class="acao-card__status">Em preparação</span>
+            </div>
+          </v-card-text>
+        </v-card>
+        <v-card class="acao-card acao-card--ponto acao-card--preparacao" variant="outlined">
+          <v-card-text class="acao-card__conteudo">
+            <IconeDestaque icone="mdi-clock-check-outline" cor="#0c9dad" />
+            <div>
+              <h3>Ponto eletrônico</h3>
+              <p>Jornadas, horas extras e ocorrências.</p>
+              <span class="acao-card__status">Em preparação</span>
+            </div>
+          </v-card-text>
+        </v-card>
+        <v-card class="acao-card acao-card--ouvidoria acao-card--preparacao" variant="outlined">
+          <v-card-text class="acao-card__conteudo">
+            <IconeDestaque icone="mdi-message-question-outline" cor="#d35086" />
+            <div>
+              <h3>Ouvidoria</h3>
+              <p>Canal de dúvidas, sugestões e relatos.</p>
+              <span class="acao-card__status">Em preparação</span>
+            </div>
+          </v-card-text>
         </v-card>
       </div>
     </section>
@@ -139,31 +181,31 @@ onMounted(() => void carregarResumo());
       <div class="grade-filas">
         <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--ativos">
           <v-card-text class="fila-card__conteudo">
-            <span class="fila-card__icone"><v-icon icon="mdi-account-clock-outline" /></span>
+            <IconeDestaque icone="mdi-account-clock-outline" cor="rgb(var(--fila-cor))" tamanho="sm" />
             <span class="fila-card__texto"><span>Testes em andamento</span><strong>{{ formatarTotal(totais.testesAtivos) }}</strong></span>
           </v-card-text>
         </v-card>
         <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--hoje">
           <v-card-text class="fila-card__conteudo">
-            <span class="fila-card__icone"><v-icon icon="mdi-calendar-clock-outline" /></span>
+            <IconeDestaque icone="mdi-calendar-clock-outline" cor="rgb(var(--fila-cor))" tamanho="sm" />
             <span class="fila-card__texto"><span>Testes que vencem hoje</span><strong>{{ formatarTotal(totais.testesVencemHoje) }}</strong></span>
           </v-card-text>
         </v-card>
         <v-card v-if="podeVerTestes" to="/admissoes_testes" link class="fila-card fila-card--vencidos">
           <v-card-text class="fila-card__conteudo">
-            <span class="fila-card__icone"><v-icon icon="mdi-alert-circle-outline" /></span>
+            <IconeDestaque icone="mdi-alert-circle-outline" cor="rgb(var(--fila-cor))" tamanho="sm" />
             <span class="fila-card__texto"><span>Testes vencidos</span><strong>{{ formatarTotal(totais.testesVencidos) }}</strong></span>
           </v-card-text>
         </v-card>
         <v-card v-if="podeVerProcessos" to="/admissoes_processos" link class="fila-card fila-card--fichas">
           <v-card-text class="fila-card__conteudo">
-            <span class="fila-card__icone"><v-icon icon="mdi-file-document-check-outline" /></span>
+            <IconeDestaque icone="mdi-file-document-check-outline" cor="rgb(var(--fila-cor))" tamanho="sm" />
             <span class="fila-card__texto"><span>Fichas em revisão</span><strong>{{ formatarTotal(totais.fichasEnviadas) }}</strong></span>
           </v-card-text>
         </v-card>
         <v-card v-if="podeVerProcessos" to="/admissoes_processos" link class="fila-card fila-card--pausados">
           <v-card-text class="fila-card__conteudo">
-            <span class="fila-card__icone"><v-icon icon="mdi-pause-circle-outline" /></span>
+            <IconeDestaque icone="mdi-pause-circle-outline" cor="rgb(var(--fila-cor))" tamanho="sm" />
             <span class="fila-card__texto"><span>Processos pausados</span><strong>{{ formatarTotal(totais.processosPausados) }}</strong></span>
           </v-card-text>
         </v-card>
@@ -263,7 +305,7 @@ h1 {
   -webkit-backdrop-filter: blur(18px) saturate(1.12);
   transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.acao-card:hover {
+.acao-card:not(.acao-card--preparacao):hover {
   transform: translateY(-2px);
 }
 .acao-card::before {
@@ -279,18 +321,6 @@ h1 {
   align-items: flex-start;
   gap: 12px;
   padding: 18px 16px 8px;
-}
-.acao-card__icone {
-  display: grid;
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  border-radius: 13px;
-  color: rgb(255 255 255 / 0.94);
-  background: linear-gradient(135deg, var(--acao-inicio), var(--acao-fim));
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--acao-inicio) 36%, transparent);
 }
 .acao-card__conteudo h3 {
   margin: 0;
@@ -335,6 +365,37 @@ h1 {
   --acao-vidro: rgb(72 223 138 / 0.16);
   border-color: rgb(72 223 138 / 0.42);
 }
+.acao-card--folha {
+  --acao-inicio: #e49a35;
+  --acao-fim: #ad4d20;
+  --acao-vidro: rgb(228 154 53 / 0.14);
+  border-color: rgb(228 154 53 / 0.36);
+}
+.acao-card--ponto {
+  --acao-inicio: #18b5c8;
+  --acao-fim: #127d99;
+  --acao-vidro: rgb(24 181 200 / 0.14);
+  border-color: rgb(24 181 200 / 0.36);
+}
+.acao-card--ouvidoria {
+  --acao-inicio: #db6394;
+  --acao-fim: #9d3567;
+  --acao-vidro: rgb(219 99 148 / 0.14);
+  border-color: rgb(219 99 148 / 0.36);
+}
+.acao-card--preparacao {
+  min-height: 146px;
+}
+.acao-card__status {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 3px 8px;
+  border: 1px solid rgb(var(--v-theme-on-surface) / 0.16);
+  border-radius: var(--cx-r-pill);
+  color: rgb(var(--v-theme-on-surface) / 0.68);
+  font-size: 0.73rem;
+  font-weight: 700;
+}
 .fila-card {
   --fila-cor: 139 92 246;
   overflow: hidden;
@@ -362,17 +423,6 @@ h1 {
   gap: 11px;
   min-height: 84px;
   padding: 13px;
-}
-.fila-card__icone {
-  display: grid;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 0.16);
-  border-radius: 11px;
-  color: rgb(255 255 255 / 0.96);
-  background: rgb(var(--fila-cor) / 0.74);
 }
 .fila-card__texto {
   display: grid;
@@ -437,7 +487,7 @@ h1 {
   .fila-card {
     transition: none;
   }
-  .acao-card:hover,
+  .acao-card:not(.acao-card--preparacao):hover,
   .fila-card:hover,
   .fila-card:active,
   .acao-card__acoes .v-btn:active {

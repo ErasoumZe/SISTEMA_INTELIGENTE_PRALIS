@@ -3,6 +3,7 @@
 // rotulo pequeno + numero grande. Elevacao Material (Vuetify 1-2), sem sombra custom.
 // Componente-base REUTILIZAVEL (rodada de SHELL) — as telas de listagem o adotam no topo.
 import { dinheiro } from "~/utils/domain";
+import IconeDestaque from "~/components/comum/IconeDestaque.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -67,9 +68,7 @@ const corValor = computed(() => {
 
 <template>
   <v-card class="card-total" :elevation="elevacao" rounded="lg">
-    <span class="card-total-icone" :style="{ background: paleta.soft, color: paleta.base }">
-      <v-icon :icon="iconeResolvido" size="22" />
-    </span>
+    <IconeDestaque :icone="iconeResolvido" :cor="paleta.base" tamanho="md" />
     <span class="card-total-copy">
       <span class="card-total-rotulo">{{ rotulo }}</span>
       <span class="card-total-valor" :style="{ color: corValor }">{{ valorFormatado }}</span>
@@ -84,14 +83,6 @@ const corValor = computed(() => {
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
-}
-.card-total-icone {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
 }
 .card-total-copy {
   display: grid;
@@ -123,10 +114,6 @@ const corValor = computed(() => {
   .card-total {
     padding: 13px 14px;
     gap: 11px;
-  }
-  .card-total-icone {
-    width: 40px;
-    height: 40px;
   }
   .card-total-valor {
     font-size: 19px;
