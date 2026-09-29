@@ -19,18 +19,57 @@ const estilo = computed(() => ({ "--icone-destaque-cor": props.cor }));
 
 <style scoped>
 .icone-destaque {
+  position: relative;
   display: grid;
   flex: 0 0 auto;
+  isolation: isolate;
+  overflow: hidden;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 0.18);
   border-radius: 13px;
   color: #fff;
   background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--icone-destaque-cor) 72%, white),
-    var(--icone-destaque-cor)
+    142deg,
+    color-mix(in srgb, var(--icone-destaque-cor) 82%, white) 0%,
+    var(--icone-destaque-cor) 48%,
+    color-mix(in srgb, var(--icone-destaque-cor) 78%, black) 100%
   );
-  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--icone-destaque-cor) 84%, transparent);
+  box-shadow:
+    0 12px 26px -11px color-mix(in srgb, var(--icone-destaque-cor) 95%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms ease;
+}
+.icone-destaque::before {
+  position: absolute;
+  z-index: -1;
+  top: -58%;
+  left: -40%;
+  width: 120%;
+  height: 120%;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgb(255 255 255 / 0.52), transparent 62%);
+  content: "";
+  pointer-events: none;
+}
+.icone-destaque::after {
+  position: absolute;
+  z-index: -1;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(125deg, rgb(255 255 255 / 0.14), transparent 36%);
+  content: "";
+  pointer-events: none;
+}
+.icone-destaque :deep(.v-icon) {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.18));
+}
+.icone-destaque:hover {
+  transform: translateY(-1px) scale(1.025);
+  box-shadow:
+    0 16px 30px -11px color-mix(in srgb, var(--icone-destaque-cor) 100%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.32);
 }
 .icone-destaque--sm {
   width: 34px;
@@ -54,5 +93,13 @@ const estilo = computed(() => ({ "--icone-destaque-cor": props.cor }));
 }
 .icone-destaque--lg :deep(.v-icon) {
   font-size: 24px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .icone-destaque {
+    transition: none;
+  }
+  .icone-destaque:hover {
+    transform: none;
+  }
 }
 </style>

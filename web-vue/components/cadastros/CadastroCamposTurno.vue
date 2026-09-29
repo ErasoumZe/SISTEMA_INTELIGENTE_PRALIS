@@ -15,8 +15,19 @@ const formulario = defineModel<CadastroForm>({ required: true });
 
 const opcoesEtiqueta = etiquetasTurno.map((valor) => ({ valor, titulo: rotuloEtiquetaTurno[valor] }));
 const opcoesDia = diasSemana.map((valor) => ({ valor, titulo: rotuloDiaSemanaCurto(valor) }));
+const diasFimDeSemana = ["SABADO", "DOMINGO"] as const;
 
 const incompleto = computed(() => !formulario.value.etiquetaTurno || formulario.value.diasSemanaTurno.length === 0);
+const fimDeSemanaSelecionado = computed(() =>
+  diasFimDeSemana.every((dia) => formulario.value.diasSemanaTurno.includes(dia))
+);
+
+function alternarFimDeSemana() {
+  const selecionados = new Set(formulario.value.diasSemanaTurno);
+  if (fimDeSemanaSelecionado.value) diasFimDeSemana.forEach((dia) => selecionados.delete(dia));
+  else diasFimDeSemana.forEach((dia) => selecionados.add(dia));
+  formulario.value.diasSemanaTurno = diasSemana.filter((dia) => selecionados.has(dia));
+}
 </script>
 
 <template>
@@ -53,6 +64,18 @@ const incompleto = computed(() => !formulario.value.etiquetaTurno || formulario.
       chips
       closable-chips
     />
+    <div class="turno__atalhos">
+      <v-btn
+        size="small"
+        :color="fimDeSemanaSelecionado ? 'primary' : undefined"
+        :variant="fimDeSemanaSelecionado ? 'flat' : 'tonal'"
+        prepend-icon="mdi-calendar-weekend-outline"
+        @click="alternarFimDeSemana"
+      >
+        FDS · sábado e domingo
+      </v-btn>
+      <span>Atalho de dias trabalhados; não altera a etiqueta M, T ou I.</span>
+    </div>
   </v-col>
 
   <v-col v-if="incompleto" cols="12">
@@ -62,3 +85,17 @@ const incompleto = computed(() => !formulario.value.etiquetaTurno || formulario.
     </v-alert>
   </v-col>
 </template>
+
+<style scoped>
+.turno__atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: -8px;
+}
+.turno__atalhos span {
+  color: rgb(var(--v-theme-on-surface) / 0.64);
+  font-size: 0.78rem;
+}
+</style>

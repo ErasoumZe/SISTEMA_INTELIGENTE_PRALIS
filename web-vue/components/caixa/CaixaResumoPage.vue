@@ -909,7 +909,12 @@ function confirmarFechamento() {
               class="pagamento-card"
               :class="classeFormaPagamento(forma.titulo)"
             >
-              <IconeDestaque :icone="forma.icone" cor="var(--pagamento-cor)" tamanho="sm" class="pagamento-card__icone" />
+              <IconeDestaque
+                :icone="forma.icone"
+                cor="var(--pagamento-cor)"
+                tamanho="sm"
+                class="pagamento-card__icone"
+              />
               <span class="pagamento-card__titulo">{{ forma.titulo }}</span>
               <strong class="pagamento-card__valor">{{ dinheiro(forma.valor) }}</strong>
               <span class="pagamento-card__quantidade">
@@ -1374,10 +1379,35 @@ function confirmarFechamento() {
 .cat-card {
   position: relative;
   display: flex;
+  isolation: isolate;
   overflow: hidden;
-  border: 1px solid var(--cat);
+  border: 1px solid color-mix(in srgb, var(--cat) 76%, rgb(255 255 255 / 0.28));
   border-radius: 14px;
-  background: var(--cat-soft);
+  background:
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--cat) 30%, transparent), transparent 48%),
+    linear-gradient(135deg, color-mix(in srgb, var(--cat-soft) 92%, rgb(255 255 255 / 0.07)), rgb(15 20 29 / 0.78));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 14px 28px -24px color-mix(in srgb, var(--cat) 95%, transparent);
+  backdrop-filter: blur(14px) saturate(1.16);
+  -webkit-backdrop-filter: blur(14px) saturate(1.16);
+  transition:
+    transform 170ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 170ms ease,
+    box-shadow 170ms ease;
+}
+.cat-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(
+    118deg,
+    rgb(255 255 255 / 0.12),
+    transparent 32%,
+    color-mix(in srgb, var(--cat) 12%, transparent)
+  );
+  content: "";
+  pointer-events: none;
 }
 
 .cat-card--clicavel {
@@ -1385,7 +1415,15 @@ function confirmarFechamento() {
 }
 
 .cat-card--clicavel:hover {
-  filter: brightness(1.08);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--cat) 88%, white);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 20px 34px -25px color-mix(in srgb, var(--cat) 100%, transparent);
+}
+
+.cat-card--clicavel:active {
+  transform: translateY(0) scale(0.985);
 }
 
 .cat-card--clicavel:focus-visible {
@@ -1410,7 +1448,8 @@ function confirmarFechamento() {
 
 .cat-bar {
   flex: 0 0 6px;
-  background: var(--cat);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cat) 72%, white), var(--cat));
+  box-shadow: 2px 0 14px -3px var(--cat);
 }
 
 .cat-body {
@@ -1540,15 +1579,39 @@ function confirmarFechamento() {
 }
 
 .pagamento-card {
+  position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
+  isolation: isolate;
+  overflow: hidden;
   align-items: center;
   gap: 4px 8px;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid var(--pagamento-cor);
+  border: 1px solid color-mix(in srgb, var(--pagamento-cor) 62%, rgb(255 255 255 / 0.18));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--pagamento-cor) 10%, transparent);
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--pagamento-cor) 26%, transparent), transparent 54%),
+    linear-gradient(135deg, color-mix(in srgb, var(--pagamento-cor) 14%, transparent), rgb(15 20 29 / 0.72));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.09);
+  backdrop-filter: blur(12px) saturate(1.12);
+  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 160ms ease;
+}
+.pagamento-card::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pagamento-cor) 70%, white), var(--pagamento-cor));
+  box-shadow: 2px 0 14px -4px var(--pagamento-cor);
+  content: "";
+}
+.pagamento-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pagamento-cor) 84%, white);
 }
 .pagamento-card__icone {
   grid-row: span 2;
@@ -1643,7 +1706,6 @@ function confirmarFechamento() {
     min-width: 0;
   }
 
-
   .cat-grid .cat-card:not(.cat-resultado) .cat-valor {
     flex: 0 0 auto;
     margin-top: 0;
@@ -1654,6 +1716,18 @@ function confirmarFechamento() {
   .cat-grid .cat-card:not(.cat-resultado) .cat-card__acao,
   .cat-grid .cat-card:not(.cat-resultado) :deep(.malote-abertura) {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cat-card,
+  .pagamento-card {
+    transition: none;
+  }
+  .cat-card--clicavel:hover,
+  .cat-card--clicavel:active,
+  .pagamento-card:hover {
+    transform: none;
   }
 }
 </style>
