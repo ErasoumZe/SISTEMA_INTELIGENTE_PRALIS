@@ -2,7 +2,11 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   colaboradores,
+  colaboradoresDadosBancarios,
+  colaboradoresDadosPessoais,
+  colaboradoresEnderecos,
   colaboradoresEventos,
+  colaboradoresOnboarding,
   colaboradoresVinculos,
   perfisUsuarios
 } from "@padaria/db/schema/cadastro";
@@ -63,6 +67,93 @@ export async function listarEventosDoColaboradorRepository(colaboradorId: string
     .orderBy(desc(colaboradoresEventos.ocorridoEm), desc(colaboradoresEventos.id));
 }
 
+export async function obterDadosCadastraisDoColaboradorRepository(colaboradorId: string, empresaId: string) {
+  const [dadosPessoais, enderecoContato, dadosBancarios] = await Promise.all([
+    banco
+      .select({
+        nomeSocial: colaboradoresDadosPessoais.nomeSocial,
+        nascimento: colaboradoresDadosPessoais.nascimento,
+        sexo: colaboradoresDadosPessoais.sexo,
+        estadoCivil: colaboradoresDadosPessoais.estadoCivil,
+        racaCor: colaboradoresDadosPessoais.racaCor,
+        grauInstrucao: colaboradoresDadosPessoais.grauInstrucao,
+        nacionalidade: colaboradoresDadosPessoais.nacionalidade,
+        naturalidade: colaboradoresDadosPessoais.naturalidade,
+        nomeMae: colaboradoresDadosPessoais.nomeMae,
+        nomePai: colaboradoresDadosPessoais.nomePai,
+        rgNumero: colaboradoresDadosPessoais.rgNumero,
+        rgOrgao: colaboradoresDadosPessoais.rgOrgao,
+        rgUf: colaboradoresDadosPessoais.rgUf,
+        rgEmissao: colaboradoresDadosPessoais.rgEmissao,
+        tituloEleitor: colaboradoresDadosPessoais.tituloEleitor,
+        tituloZona: colaboradoresDadosPessoais.tituloZona,
+        tituloSecao: colaboradoresDadosPessoais.tituloSecao
+      })
+      .from(colaboradoresDadosPessoais)
+      .where(
+        and(
+          eq(colaboradoresDadosPessoais.colaboradorId, colaboradorId),
+          eq(colaboradoresDadosPessoais.empresaId, empresaId)
+        )
+      )
+      .limit(1),
+    banco
+      .select({
+        cep: colaboradoresEnderecos.cep,
+        logradouro: colaboradoresEnderecos.logradouro,
+        numero: colaboradoresEnderecos.numero,
+        complemento: colaboradoresEnderecos.complemento,
+        bairro: colaboradoresEnderecos.bairro,
+        municipio: colaboradoresEnderecos.municipio,
+        uf: colaboradoresEnderecos.uf,
+        telefone: colaboradoresEnderecos.telefone,
+        email: colaboradoresEnderecos.email
+      })
+      .from(colaboradoresEnderecos)
+      .where(and(eq(colaboradoresEnderecos.colaboradorId, colaboradorId), eq(colaboradoresEnderecos.empresaId, empresaId)))
+      .limit(1),
+    banco
+      .select({
+        banco: colaboradoresDadosBancarios.banco,
+        agencia: colaboradoresDadosBancarios.agencia,
+        conta: colaboradoresDadosBancarios.conta,
+        contaDigito: colaboradoresDadosBancarios.contaDigito,
+        contaTipo: colaboradoresDadosBancarios.contaTipo
+      })
+      .from(colaboradoresDadosBancarios)
+      .where(
+        and(
+          eq(colaboradoresDadosBancarios.colaboradorId, colaboradorId),
+          eq(colaboradoresDadosBancarios.empresaId, empresaId)
+        )
+      )
+      .limit(1)
+  ]);
+  return {
+    dadosPessoais: dadosPessoais[0] ?? null,
+    enderecoContato: enderecoContato[0] ?? null,
+    dadosBancarios: dadosBancarios[0] ?? null
+  };
+}
+
+export async function obterOnboardingDoVinculoRepository(vinculoId: string, empresaId: string, db = banco) {
+  const [linha] = await db
+    .select({
+      etapa: colaboradoresOnboarding.etapa,
+      versao: colaboradoresOnboarding.versao,
+      cadastroCompletoEm: colaboradoresOnboarding.cadastroCompletoEm,
+      enviadoContabilidadeEm: colaboradoresOnboarding.enviadoContabilidadeEm,
+      retornoContabilidadeEm: colaboradoresOnboarding.retornoContabilidadeEm,
+      observacaoRetorno: colaboradoresOnboarding.observacaoRetorno,
+      configuradoEm: colaboradoresOnboarding.configuradoEm,
+      atualizadoEm: colaboradoresOnboarding.atualizadoEm
+    })
+    .from(colaboradoresOnboarding)
+    .where(and(eq(colaboradoresOnboarding.vinculoId, vinculoId), eq(colaboradoresOnboarding.empresaId, empresaId)))
+    .limit(1);
+  return linha ?? null;
+}
+
 export async function bloquearColaboradorPerfilRepository(id: string, empresaId: string, tx: TransacaoBanco) {
   const [linha] = await tx
     .select({
@@ -85,6 +176,56 @@ export async function atualizarNomePerfilRepository(id: string, empresaId: strin
     .where(and(eq(colaboradores.id, id), eq(colaboradores.empresaId, empresaId)))
     .returning({ id: colaboradores.id });
   return linha ?? null;
+}
+
+export async function salvarDadosPessoaisRepository(
+  input: { empresaId: string; colaboradorId: string; dados: Record<string, string | null | undefined> },
+  tx: TransacaoBanco
+) {
+  await tx
+    .insert(colaboradoresDadosPessoais)
+    .values({ empresaId: input.empresaId, colaboradorId: input.colaboradorId, ...input.dados })
+    .onConflictDoUpdate({
+      target: colaboradoresDadosPessoais.colaboradorId,
+      set: { ...input.dados, atualizadoEm: new Date() }
+    });
+}
+
+export async function salvarEnderecoContatoRepository(
+  input: { empresaId: string; colaboradorId: string; dados: Record<string, string | null | undefined> },
+  tx: TransacaoBanco
+) {
+  await tx
+    .insert(colaboradoresEnderecos)
+    .values({ empresaId: input.empresaId, colaboradorId: input.colaboradorId, ...input.dados })
+    .onConflictDoUpdate({
+      target: colaboradoresEnderecos.colaboradorId,
+      set: { ...input.dados, atualizadoEm: new Date() }
+    });
+}
+
+export async function salvarDadosBancariosRepository(
+  input: { empresaId: string; colaboradorId: string; dados: Record<string, string | null | undefined> },
+  tx: TransacaoBanco
+) {
+  await tx
+    .insert(colaboradoresDadosBancarios)
+    .values({ empresaId: input.empresaId, colaboradorId: input.colaboradorId, ...input.dados })
+    .onConflictDoUpdate({
+      target: colaboradoresDadosBancarios.colaboradorId,
+      set: { ...input.dados, atualizadoEm: new Date() }
+    });
+}
+
+/** Cria somente quando ha vinculo ativo. Cadastros legados sem vinculo seguem explicitamente em conciliacao. */
+export async function criarOnboardingDoVinculoRepository(
+  input: { empresaId: string; vinculoId: string },
+  tx: TransacaoBanco
+) {
+  await tx
+    .insert(colaboradoresOnboarding)
+    .values(input)
+    .onConflictDoNothing({ target: colaboradoresOnboarding.vinculoId });
 }
 
 export async function registrarEdicaoPerfilRepository(

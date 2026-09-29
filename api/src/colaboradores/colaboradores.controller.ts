@@ -40,7 +40,7 @@ import {
   salvarColaborador
 } from "./colaboradores.service.js";
 import { statusErroValidacao } from "../utils.js";
-import { editarNomeDoColaborador, obterPerfilColaborador } from "./perfil.service.js";
+import { obterPerfilColaborador, salvarPerfilCadastralDoColaborador } from "./perfil.service.js";
 
 async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   const query = empresaQuerySchema.parse(request.query);
@@ -182,7 +182,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const { id } = idParamsSchema.parse(request.params);
-        await editarNomeDoColaborador(id, request.body ?? {}, request.perfilUsuario);
+        await salvarPerfilCadastralDoColaborador(id, request.body ?? {}, request.perfilUsuario);
         return semConteudo(reply);
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);

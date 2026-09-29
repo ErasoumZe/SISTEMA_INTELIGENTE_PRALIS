@@ -8,6 +8,7 @@ import {
   registrarEventoProcessoRepository
 } from "./processos.repository.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
+import { criarOnboardingDoVinculoRepository } from "../colaboradores/perfil.repository.js";
 import {
   bloquearVinculoAtivoRepository,
   bloquearVinculoMaisRecenteRepository,
@@ -125,6 +126,10 @@ export async function efetivarProcesso(id: string, perfil?: PerfilUsuario) {
       },
       tx
     );
+    // O vinculo nasce ativo por regra trabalhista; o onboarding nasce em paralelo, em
+    // `em_cadastro`, para o DP preencher e encaminhar a contabilidade sem confundir os dois
+    // estados. Esta e a unica criacao automatica: nao ha segundo caminho no perfil.
+    await criarOnboardingDoVinculoRepository({ empresaId, vinculoId: criado.id }, tx);
 
     // A trilha do colaborador e a do processo nascem no mesmo commit. Se uma falhar, nao existe
     // vinculo “sem historia” e tampouco processo dito efetivado sem cadastro real.
