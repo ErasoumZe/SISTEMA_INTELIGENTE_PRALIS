@@ -144,9 +144,13 @@ Enviar uma guia, receber a confirmação de agendamento, avisar o colaborador e 
 serão trilhas auditadas próprias. `aso_apto` continua significando resultado do ASO conferido pelo DP —
 agendamento ou recebimento da guia não efetiva nem torna o candidato apto.
 
-Esta decisão ainda não cria tabelas, envio de e-mail/WhatsApp, credenciais, integração com sistema de
-clínica nem acesso ao ASO. Cada um depende de migration, canal contratado, política de privacidade e
-permissões específicas.
+**Implementação local em 29/09/2026:** a migration `0054_catalogo_clinicas_ocupacionais` criou o
+catálogo por empresa e suas unidades, sem conversão dos textos históricos das guias já existentes.
+O cadastro será administrado pelo DP com desativação, nunca exclusão física.
+
+Envio de e-mail/WhatsApp, credenciais, integração com sistema de clínica e acesso ao ASO continuam
+fora desta migration. Cada um depende de canal contratado, política de privacidade, permissões e
+auditoria específicas.
 
 ### D-6 · Situação derivada: três valores
 
