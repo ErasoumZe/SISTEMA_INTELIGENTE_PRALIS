@@ -18,6 +18,7 @@ import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import { rotaRevisaoDaFicha } from "~/utils/admissoes";
 import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
+import GuiaExameOcupacionalDialog from "~/components/admissoes/GuiaExameOcupacionalDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
 import ProcessosFiltros, { type FiltrosProcessos } from "~/components/admissoes/ProcessosFiltros.vue";
@@ -89,6 +90,7 @@ const empresaCnpj = computed(() => (empresaDoPerfil.value?.cnpj ? mascararCnpj(e
 
 const internosAberto = ref(false);
 const internosErro = ref("");
+const guiaAberta = ref(false);
 
 const detalheAberto = ref(false);
 const detalheCarregando = ref(false);
@@ -278,6 +280,11 @@ async function salvarInternos(dados: Record<string, unknown> | null, exame: Situ
   }
 }
 
+function abrirGuia() {
+  if (!processo.value) return;
+  guiaAberta.value = true;
+}
+
 /**
  * Fechar o detalhe APAGA o CPF revelado. Ele nao sobrevive ao modal — reabrir exige pedir de novo,
  * e pedir de novo grava outra linha na trilha, que e o comportamento certo: cada leitura do
@@ -453,6 +460,15 @@ onMounted(async () => {
     @salvar="salvarInternos"
   />
 
+  <GuiaExameOcupacionalDialog
+    :aberto="guiaAberta"
+    :processo="processo"
+    :cpf="cpfRevelado"
+    :empresa-nome="empresaDoPerfil?.nome ?? ''"
+    :empresa-cnpj="empresaDoPerfil?.cnpj ?? ''"
+    @fechar="guiaAberta = false"
+  />
+
   <!--
     UM caminho de detalhe: o modal central. O painel lateral foi removido, nao escondido.
 
@@ -485,6 +501,7 @@ onMounted(async () => {
     @fechar="fecharDetalhe"
     @cancelar="cancelarProcesso"
     @revelar-cpf="revelarCpf"
+    @gerar-guia="abrirGuia"
     @editar-internos="
       () => {
         internosErro = '';

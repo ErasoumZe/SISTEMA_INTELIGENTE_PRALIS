@@ -3123,6 +3123,17 @@ export const admissoesProcessosInternos = pgTable(
     ctpsSerie: text("ctps_serie"),
     ctpsUf: text("ctps_uf"),
     pisPasepNit: text("pis_pasep_nit"),
+    // Retrato da GUIA ocupacional deste processo. Nao substitui cadastro de clinica ou setor: a
+    // guia precisa permanecer reproduzivel mesmo se aqueles catalogos mudarem depois.
+    exameTipo: text("exame_tipo").$type<
+      "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd"
+    >(),
+    exameClinica: text("exame_clinica"),
+    exameUnidade: text("exame_unidade").$type<"centro" | "benfica">(),
+    exameComplementares: text("exame_complementares").$type<"sim" | "nao" | "nao_sabe">(),
+    exameAgendadoPara: timestamp("exame_agendado_para", { withTimezone: true }),
+    exameResponsavelNome: text("exame_responsavel_nome"),
+    exameResponsavelTelefone: text("exame_responsavel_telefone"),
     // Os CINCO valores confirmados pelo DP. O ALERTA enquanto nao for 'realizado' e DERIVADO em
     // `shared`, nunca gravado — nao existe coluna, indice nem filtro paralelo de pendencia.
     // ADM-003 V1B: `realizado` SAI — virou ambiguo quando o desfecho ganhou dois lados, porque nao
@@ -3154,6 +3165,22 @@ export const admissoesProcessosInternos = pgTable(
     check(
       "admissoes_processos_internos_pis_check",
       sql`${table.pisPasepNit} is null or ${table.pisPasepNit} ~ '^[0-9]{11}$'`
+    ),
+    check(
+      "admissoes_processos_internos_exame_tipo_check",
+      sql`${table.exameTipo} is null or ${table.exameTipo} in ('admissional', 'periodico', 'mudanca_funcao', 'retorno_trabalho', 'demissional', 'pcd')`
+    ),
+    check(
+      "admissoes_processos_internos_exame_unidade_check",
+      sql`${table.exameUnidade} is null or ${table.exameUnidade} in ('centro', 'benfica')`
+    ),
+    check(
+      "admissoes_processos_internos_exame_complementares_check",
+      sql`${table.exameComplementares} is null or ${table.exameComplementares} in ('sim', 'nao', 'nao_sabe')`
+    ),
+    check(
+      "admissoes_processos_internos_exame_responsavel_telefone_check",
+      sql`${table.exameResponsavelTelefone} is null or ${table.exameResponsavelTelefone} ~ '^[0-9]{10,11}$'`
     ),
     index("admissoes_processos_internos_exame_idx").on(table.empresaId, table.exameSituacao)
   ]

@@ -64,6 +64,13 @@ export type ProcessoLinha = {
   ctpsSerie: string | null;
   ctpsUf: string | null;
   pisPasepNit: string | null;
+  exameTipo: "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd" | null;
+  exameClinica: string | null;
+  exameUnidade: "centro" | "benfica" | null;
+  exameComplementares: "sim" | "nao" | "nao_sabe" | null;
+  exameAgendadoPara: Date | null;
+  exameResponsavelNome: string | null;
+  exameResponsavelTelefone: string | null;
   observacoesRh: string | null;
   exameSituacao: SituacaoExame;
   exameAtualizadoPorNome: string | null;
@@ -294,6 +301,13 @@ export async function atualizarInternosRepository(
     ctpsSerie: string | null;
     ctpsUf: string | null;
     pisPasepNit: string | null;
+    exameTipo: "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd" | null;
+    exameClinica: string | null;
+    exameUnidade: "centro" | "benfica" | null;
+    exameComplementares: "sim" | "nao" | "nao_sabe" | null;
+    exameAgendadoPara: string | null;
+    exameResponsavelNome: string | null;
+    exameResponsavelTelefone: string | null;
     observacoesRh: string | null;
   },
   db: TransacaoBanco
@@ -306,6 +320,13 @@ export async function atualizarInternosRepository(
       ctpsSerie: input.ctpsSerie,
       ctpsUf: input.ctpsUf,
       pisPasepNit: input.pisPasepNit,
+      exameTipo: input.exameTipo,
+      exameClinica: input.exameClinica,
+      exameUnidade: input.exameUnidade,
+      exameComplementares: input.exameComplementares,
+      exameAgendadoPara: input.exameAgendadoPara ? new Date(input.exameAgendadoPara) : null,
+      exameResponsavelNome: input.exameResponsavelNome,
+      exameResponsavelTelefone: input.exameResponsavelTelefone,
       observacoesRh: input.observacoesRh,
       versao: input.versaoAtual + 1
     })
@@ -467,6 +488,13 @@ function selecaoProcesso() {
     ctpsSerie: admissoesProcessosInternos.ctpsSerie,
     ctpsUf: admissoesProcessosInternos.ctpsUf,
     pisPasepNit: admissoesProcessosInternos.pisPasepNit,
+    exameTipo: admissoesProcessosInternos.exameTipo,
+    exameClinica: admissoesProcessosInternos.exameClinica,
+    exameUnidade: admissoesProcessosInternos.exameUnidade,
+    exameComplementares: admissoesProcessosInternos.exameComplementares,
+    exameAgendadoPara: admissoesProcessosInternos.exameAgendadoPara,
+    exameResponsavelNome: admissoesProcessosInternos.exameResponsavelNome,
+    exameResponsavelTelefone: admissoesProcessosInternos.exameResponsavelTelefone,
     observacoesRh: admissoesProcessosInternos.observacoesRh,
     exameSituacao: admissoesProcessosInternos.exameSituacao,
     exameAtualizadoPorNome: perfilExame.nome,

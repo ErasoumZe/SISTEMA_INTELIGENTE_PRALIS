@@ -3,7 +3,13 @@
 // ao lado ja faz: sem isto o componente nao monta fora do runtime do Nuxt, e portanto nao tem
 // como ser testado — foi por isso que o defeito do select passou batido ate o teste em navegador.
 import { computed, reactive, watch } from "vue";
-import type { DadosInternosDto, SituacaoExame } from "@padaria/shared";
+import type {
+  DadosInternosDto,
+  RespostaExamesComplementares,
+  SituacaoExame,
+  TipoExameOcupacional,
+  UnidadeExameOcupacional
+} from "@padaria/shared";
 import { situacoesExame } from "@padaria/shared";
 import { rotuloSituacaoExame } from "~/utils/admissoes";
 
@@ -42,6 +48,13 @@ const emit = defineEmits<{
       ctpsSerie: string | null;
       ctpsUf: string | null;
       pisPasepNit: string | null;
+      exameTipo: TipoExameOcupacional | null;
+      exameClinica: string | null;
+      exameUnidade: UnidadeExameOcupacional | null;
+      exameComplementares: RespostaExamesComplementares | null;
+      exameAgendadoPara: string | null;
+      exameResponsavelNome: string | null;
+      exameResponsavelTelefone: string | null;
       observacoesRh: string | null;
     } | null,
     exame: SituacaoExame | null
@@ -54,6 +67,13 @@ const formulario = reactive({
   ctpsSerie: "",
   ctpsUf: "",
   pisPasepNit: "",
+  exameTipo: null as TipoExameOcupacional | null,
+  exameClinica: "",
+  exameUnidade: null as UnidadeExameOcupacional | null,
+  exameComplementares: null as RespostaExamesComplementares | null,
+  exameAgendadoPara: "",
+  exameResponsavelNome: "",
+  exameResponsavelTelefone: "",
   observacoesRh: "",
   exameSituacao: "pendente" as SituacaoExame
 });
@@ -67,6 +87,13 @@ watch(
     formulario.ctpsSerie = internos.ctpsSerie ?? "";
     formulario.ctpsUf = internos.ctpsUf ?? "";
     formulario.pisPasepNit = internos.pisPasepNit ?? "";
+    formulario.exameTipo = internos.exameTipo;
+    formulario.exameClinica = internos.exameClinica ?? "";
+    formulario.exameUnidade = internos.exameUnidade;
+    formulario.exameComplementares = internos.exameComplementares;
+    formulario.exameAgendadoPara = paraHorarioLocal(internos.exameAgendadoPara);
+    formulario.exameResponsavelNome = internos.exameResponsavelNome ?? "";
+    formulario.exameResponsavelTelefone = internos.exameResponsavelTelefone ?? "";
     formulario.observacoesRh = internos.observacoesRh ?? "";
     formulario.exameSituacao = internos.exameSituacao;
   },
@@ -79,7 +106,23 @@ const ufErro = computed(() =>
 const pisErro = computed(() =>
   !formulario.pisPasepNit || /^[0-9]{11}$/.test(formulario.pisPasepNit) ? "" : "PIS/PASEP/NIT deve ter 11 dígitos"
 );
-const invalido = computed(() => Boolean(ufErro.value || pisErro.value));
+const telefoneErro = computed(() =>
+  !formulario.exameResponsavelTelefone || /^[0-9]{10,11}$/.test(formulario.exameResponsavelTelefone)
+    ? ""
+    : "Telefone deve ter DDD e 10 ou 11 digitos"
+);
+const invalido = computed(() => Boolean(ufErro.value || pisErro.value || telefoneErro.value));
+
+function paraHorarioLocal(valor: string | null) {
+  if (!valor) return "";
+  const data = new Date(valor);
+  const ajuste = data.getTimezoneOffset() * 60_000;
+  return new Date(data.getTime() - ajuste).toISOString().slice(0, 16);
+}
+
+function paraIso(valor: string) {
+  return valor ? new Date(valor).toISOString() : null;
+}
 
 /**
  * O `v-select` precisa de `item-title` E `item-value`, e por isso as opcoes vem como objeto.
@@ -96,6 +139,23 @@ const invalido = computed(() => Boolean(ufErro.value || pisErro.value));
  * Este e o formato usado pelos outros selects de enum do projeto (ver `CadastroCamposTurno.vue`).
  */
 const opcoesExame = situacoesExame.map((valor) => ({ valor, titulo: rotuloSituacaoExame[valor] }));
+const opcoesTipoExame = [
+  { valor: "admissional", titulo: "Admissional" },
+  { valor: "periodico", titulo: "Periodico" },
+  { valor: "mudanca_funcao", titulo: "Mudanca de funcao" },
+  { valor: "retorno_trabalho", titulo: "Retorno ao trabalho" },
+  { valor: "demissional", titulo: "Demissional" },
+  { valor: "pcd", titulo: "Pessoa com deficiencia" }
+] as const;
+const opcoesUnidade = [
+  { valor: "centro", titulo: "Centro" },
+  { valor: "benfica", titulo: "Benfica" }
+] as const;
+const opcoesComplementares = [
+  { valor: "sim", titulo: "Sim" },
+  { valor: "nao", titulo: "Nao" },
+  { valor: "nao_sabe", titulo: "Nao sabe" }
+] as const;
 
 const exameMudou = computed(() => formulario.exameSituacao !== props.internos?.exameSituacao);
 
@@ -120,6 +180,13 @@ const internosMudaram = computed(() => {
     (formulario.ctpsSerie || null) !== (atual.ctpsSerie ?? null) ||
     (formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null) !== (atual.ctpsUf ?? null) ||
     (formulario.pisPasepNit || null) !== (atual.pisPasepNit ?? null) ||
+    formulario.exameTipo !== atual.exameTipo ||
+    (formulario.exameClinica || null) !== (atual.exameClinica ?? null) ||
+    formulario.exameUnidade !== atual.exameUnidade ||
+    formulario.exameComplementares !== atual.exameComplementares ||
+    paraIso(formulario.exameAgendadoPara) !== atual.exameAgendadoPara ||
+    (formulario.exameResponsavelNome || null) !== (atual.exameResponsavelNome ?? null) ||
+    (formulario.exameResponsavelTelefone || null) !== (atual.exameResponsavelTelefone ?? null) ||
     (formulario.observacoesRh || null) !== (atual.observacoesRh ?? null)
   );
 });
@@ -134,6 +201,13 @@ function salvar() {
         ctpsSerie: formulario.ctpsSerie || null,
         ctpsUf: formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null,
         pisPasepNit: formulario.pisPasepNit || null,
+        exameTipo: formulario.exameTipo,
+        exameClinica: formulario.exameClinica || null,
+        exameUnidade: formulario.exameUnidade,
+        exameComplementares: formulario.exameComplementares,
+        exameAgendadoPara: paraIso(formulario.exameAgendadoPara),
+        exameResponsavelNome: formulario.exameResponsavelNome || null,
+        exameResponsavelTelefone: formulario.exameResponsavelTelefone || null,
         observacoesRh: formulario.observacoesRh || null
       }
     : null;
@@ -199,6 +273,57 @@ function salvar() {
             class="campo-largo"
             :error-messages="pisErro"
           />
+          <div class="secao-guia campo-largo">
+            <h3>Guia de encaminhamento</h3>
+            <p>Dados que acompanham o colaborador para a clinica. A previa A4 fica no detalhe do processo.</p>
+          </div>
+          <v-select
+            v-model="formulario.exameTipo"
+            :items="opcoesTipoExame"
+            item-title="titulo"
+            item-value="valor"
+            label="Tipo de exame"
+            clearable
+            density="comfortable"
+          />
+          <v-text-field v-model="formulario.exameClinica" label="Clinica" density="comfortable" />
+          <v-select
+            v-model="formulario.exameUnidade"
+            :items="opcoesUnidade"
+            item-title="titulo"
+            item-value="valor"
+            label="Unidade"
+            clearable
+            density="comfortable"
+          />
+          <v-select
+            v-model="formulario.exameComplementares"
+            :items="opcoesComplementares"
+            item-title="titulo"
+            item-value="valor"
+            label="Exames complementares?"
+            clearable
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="formulario.exameAgendadoPara"
+            label="Agendado para"
+            type="datetime-local"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="formulario.exameResponsavelNome"
+            label="Responsavel pela autorizacao"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="formulario.exameResponsavelTelefone"
+            label="Telefone do responsavel"
+            inputmode="numeric"
+            density="comfortable"
+            class="campo-largo"
+            :error-messages="telefoneErro"
+          />
           <v-textarea
             v-model="formulario.observacoesRh"
             label="Observações do RH"
@@ -228,6 +353,20 @@ function salvar() {
 }
 .campo-largo {
   grid-column: 1 / -1;
+}
+.secao-guia {
+  border-top: 1px solid rgb(var(--v-border-color), 0.25);
+  margin-top: 8px;
+  padding-top: 16px;
+}
+.secao-guia h3 {
+  font-size: 0.92rem;
+  margin: 0;
+}
+.secao-guia p {
+  font-size: 0.8rem;
+  margin: 4px 0 0;
+  opacity: 0.72;
 }
 .nota {
   font-size: 0.8rem;

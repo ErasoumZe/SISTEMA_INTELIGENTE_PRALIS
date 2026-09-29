@@ -20,7 +20,10 @@ defineProps<{
   editavel: boolean;
 }>();
 
-const emit = defineEmits<{ (event: "editar"): void }>();
+const emit = defineEmits<{
+  (event: "editar"): void;
+  (event: "gerarGuia"): void;
+}>();
 
 function dataExibida(data: string | null) {
   return data ? data.split("-").reverse().join("/") : "—";
@@ -31,9 +34,20 @@ function dataExibida(data: string | null) {
   <section class="bloco-internos">
     <header class="bloco-cabecalho">
       <h3>Dados internos do DP</h3>
-      <v-btn v-if="podeEditar && editavel" variant="text" size="small" :disabled="processando" @click="emit('editar')">
-        Editar
-      </v-btn>
+      <div class="acoes-cabecalho">
+        <v-btn v-if="podeEditar" variant="text" size="small" :disabled="processando" @click="emit('gerarGuia')">
+          Guia A4
+        </v-btn>
+        <v-btn
+          v-if="podeEditar && editavel"
+          variant="text"
+          size="small"
+          :disabled="processando"
+          @click="emit('editar')"
+        >
+          Editar
+        </v-btn>
+      </div>
     </header>
 
     <!-- `exameExigeAtencao` vem DERIVADO do servidor: a tela não reimplementa a regra. -->
@@ -71,13 +85,24 @@ function dataExibida(data: string | null) {
       </dd>
       <dt>PIS / PASEP / NIT</dt>
       <dd>{{ internos.pisPasepNit ?? "—" }}</dd>
+      <dt>Guia de exame</dt>
+      <dd>
+        {{ internos.exameTipo ?? "—" }} <template v-if="internos.exameClinica">/ {{ internos.exameClinica }}</template>
+      </dd>
+      <dt>Unidade / agendamento</dt>
+      <dd>
+        {{ internos.exameUnidade ?? "—" }}
+        <template v-if="internos.exameAgendadoPara">/ {{ formatarDataHora(internos.exameAgendadoPara) }}</template>
+      </dd>
+      <dt>Exames complementares</dt>
+      <dd>{{ internos.exameComplementares ?? "—" }}</dd>
       <dt>Observações do RH</dt>
       <dd>{{ internos.observacoesRh ?? "—" }}</dd>
     </dl>
 
     <p class="bloco-nota">
-      A guia do exame é física e preenchida à mão — o sistema só registra que foi entregue. Área, setor, CBO, salário,
-      dados bancários e documentos não fazem parte desta etapa.
+      Guia digital: use “Guia A4” para conferir, imprimir ou salvar como PDF. Nascimento, RG, setor e CBO só entram
+      quando estiverem conferidos na ficha/cadastro; o sistema não preenche lacunas com dados inventados.
     </p>
   </section>
 </template>
@@ -98,6 +123,11 @@ function dataExibida(data: string | null) {
 .bloco-cabecalho h3 {
   font-size: 0.95rem;
   font-weight: 600;
+}
+.acoes-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .exame {
   display: flex;

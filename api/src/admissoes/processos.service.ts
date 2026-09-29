@@ -87,6 +87,13 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
       ctpsSerie: linha.ctpsSerie,
       ctpsUf: linha.ctpsUf,
       pisPasepNit: linha.pisPasepNit,
+      exameTipo: linha.exameTipo,
+      exameClinica: linha.exameClinica,
+      exameUnidade: linha.exameUnidade,
+      exameComplementares: linha.exameComplementares,
+      exameAgendadoPara: linha.exameAgendadoPara?.toISOString() ?? null,
+      exameResponsavelNome: linha.exameResponsavelNome,
+      exameResponsavelTelefone: linha.exameResponsavelTelefone,
       observacoesRh: linha.observacoesRh,
       exameSituacao: linha.exameSituacao,
       // Derivado aqui, como a situacao. A tela nao reimplementa a regra, e o banco nao a guarda.
@@ -364,6 +371,13 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
         ctpsSerie: dados.ctpsSerie ?? null,
         ctpsUf: dados.ctpsUf ?? null,
         pisPasepNit: dados.pisPasepNit ?? null,
+        exameTipo: dados.exameTipo,
+        exameClinica: dados.exameClinica,
+        exameUnidade: dados.exameUnidade,
+        exameComplementares: dados.exameComplementares,
+        exameAgendadoPara: dados.exameAgendadoPara,
+        exameResponsavelNome: dados.exameResponsavelNome,
+        exameResponsavelTelefone: dados.exameResponsavelTelefone,
         observacoesRh: dados.observacoesRh ?? null
       },
       tx
@@ -390,7 +404,21 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
         versao: evento.versao,
         acao: "internos_alterados",
         atorUsuarioId: ator,
-        camposAlterados: ["dataAdmissao", "ctpsNumero", "ctpsSerie", "ctpsUf", "pisPasepNit", "observacoesRh"]
+        camposAlterados: [
+          "dataAdmissao",
+          "ctpsNumero",
+          "ctpsSerie",
+          "ctpsUf",
+          "pisPasepNit",
+          "exameTipo",
+          "exameClinica",
+          "exameUnidade",
+          "exameComplementares",
+          "exameAgendadoPara",
+          "exameResponsavelNome",
+          "exameResponsavelTelefone",
+          "observacoesRh"
+        ]
       },
       tx
     );

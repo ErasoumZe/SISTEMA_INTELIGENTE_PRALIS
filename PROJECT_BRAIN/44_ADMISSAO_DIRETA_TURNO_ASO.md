@@ -102,7 +102,22 @@ Cinco situações viraram seis: `pendente` · `guia_entregue` · `agendado` · *
 `realizado` **saiu**: virou ambíguo quando o desfecho ganhou dois lados — não dizia se a pessoa podia
 ser admitida. `exige_acao` ficou, para a clínica pedir exame complementar.
 
-A guia é **física e preenchida à mão**; o sistema só registra que foi entregue. Nenhum anexo.
+### D-5.1 · Guia ocupacional digital e ASO privado
+
+**Decisão operacional de Marco em 29/09/2026:** a guia de encaminhamento deixa de ser apenas
+física. O DP preenche no sistema a guia da clínica, usando os dados já conhecidos do processo,
+faz a prévia A4 e pode imprimir ou salvar em PDF para encaminhar à clínica. O sistema não
+inventa os dados que ainda não existem: nascimento, RG, setor e CBO só entram quando vierem da
+ficha revisada ou do cadastro operacional correspondente.
+
+O **ASO é documento médico privado**. Depois do retorno da clínica, o DP o anexa em armazenamento
+privado, marca o resultado e o acesso ao arquivo fica separado da leitura comum do processo. A
+situação `aso_apto` continua sendo a única que libera a efetivação; o anexo e a conferência da guia
+entram como requisitos do gate em vertical própria, com testes de permissão e auditoria.
+
+O envio real por e-mail/WhatsApp depende da definição do canal, credenciais e texto aprovado; a
+primeira entrega gera a guia, preserva os dados e a deixa pronta para impressão/PDF, sem fingir que
+uma mensagem foi enviada.
 
 | Registro                       | Efeito                     | Trilha                        |
 | ------------------------------ | -------------------------- | ----------------------------- |
@@ -218,6 +233,9 @@ O Caixa não é afetado: `colaboradores.turno_padrao_id` e `fechamentos_caixa.tu
 
 Convite, link público, formulário do candidato, documentos, anexos, dependentes, upload do ASO,
 storage · área, setor, CBO digitado, salário, dados bancários · vínculo com `colaboradores`.
+
+> A ressalva acima foi substituída pela D-5.1 para a guia digital e o ASO privado. Os demais itens
+> continuam fora desta entrega até terem regra, armazenamento e permissão definidos.
 
 ---
 

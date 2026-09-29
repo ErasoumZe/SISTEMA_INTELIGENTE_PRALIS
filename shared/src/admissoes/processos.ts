@@ -76,6 +76,26 @@ export const situacoesExame = [
 export const situacaoExameSchema = z.enum(situacoesExame);
 export type SituacaoExame = z.infer<typeof situacaoExameSchema>;
 
+/** Dados da guia da clinica. O tipo e as respostas seguem a ficha operacional enviada pelo DP. */
+export const tiposExameOcupacional = [
+  "admissional",
+  "periodico",
+  "mudanca_funcao",
+  "retorno_trabalho",
+  "demissional",
+  "pcd"
+] as const;
+export const tipoExameOcupacionalSchema = z.enum(tiposExameOcupacional);
+export type TipoExameOcupacional = z.infer<typeof tipoExameOcupacionalSchema>;
+
+export const respostasExamesComplementares = ["sim", "nao", "nao_sabe"] as const;
+export const respostaExamesComplementaresSchema = z.enum(respostasExamesComplementares);
+export type RespostaExamesComplementares = z.infer<typeof respostaExamesComplementaresSchema>;
+
+export const unidadesExameOcupacional = ["centro", "benfica"] as const;
+export const unidadeExameOcupacionalSchema = z.enum(unidadesExameOcupacional);
+export type UnidadeExameOcupacional = z.infer<typeof unidadeExameOcupacionalSchema>;
+
 /**
  * O alerta e DERIVADO, como a situacao Ativo/Inativo. Nao existe coluna, indice nem filtro paralelo
  * de "pendencia de exame", e nao pode passar a existir: seria a segunda fonte da mesma verdade.
@@ -182,6 +202,45 @@ export const dadosInternosPayloadSchema = z.object({
     .nullable()
     .optional()
     .transform((valor) => (valor === undefined || valor === "" ? null : valor)),
+  exameTipo: tipoExameOcupacionalSchema
+    .nullable()
+    .optional()
+    .transform((valor) => valor ?? null),
+  exameClinica: z
+    .string()
+    .trim()
+    .max(120)
+    .nullable()
+    .optional()
+    .transform((valor) => valor || null),
+  exameUnidade: unidadeExameOcupacionalSchema
+    .nullable()
+    .optional()
+    .transform((valor) => valor ?? null),
+  exameComplementares: respostaExamesComplementaresSchema
+    .nullable()
+    .optional()
+    .transform((valor) => valor ?? null),
+  exameAgendadoPara: z
+    .string()
+    .datetime({ offset: true })
+    .nullable()
+    .optional()
+    .transform((valor) => valor ?? null),
+  exameResponsavelNome: z
+    .string()
+    .trim()
+    .max(120)
+    .nullable()
+    .optional()
+    .transform((valor) => valor || null),
+  exameResponsavelTelefone: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{10,11}$/, "Telefone deve ter DDD e 10 ou 11 digitos")
+    .nullable()
+    .optional()
+    .transform((valor) => valor || null),
   observacoesRh: z
     .string()
     .trim()
@@ -283,6 +342,13 @@ export const dadosInternosDtoSchema = z.object({
   ctpsSerie: z.string().nullable(),
   ctpsUf: z.string().nullable(),
   pisPasepNit: z.string().nullable(),
+  exameTipo: tipoExameOcupacionalSchema.nullable(),
+  exameClinica: z.string().nullable(),
+  exameUnidade: unidadeExameOcupacionalSchema.nullable(),
+  exameComplementares: respostaExamesComplementaresSchema.nullable(),
+  exameAgendadoPara: z.string().nullable(),
+  exameResponsavelNome: z.string().nullable(),
+  exameResponsavelTelefone: z.string().nullable(),
   observacoesRh: z.string().nullable(),
   exameSituacao: situacaoExameSchema,
   // Derivado por `exameExigeAtencao`. Viaja para a tela nao reimplementar a regra — nao para gravar.

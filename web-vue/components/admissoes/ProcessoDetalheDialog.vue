@@ -95,6 +95,7 @@ const emit = defineEmits<{
   (event: "verTeste"): void;
   // UM evento. A edicao dos internos e do exame virou um modal so, aberto pela pagina.
   (event: "editarInternos"): void;
+  (event: "gerarGuia"): void;
   (event: "revelarCpf"): void;
   (event: "emitirConvite"): void;
   (event: "revogarConvite"): void;
@@ -363,6 +364,7 @@ function confirmarCancelar() {
             :processando="processando"
             :editavel="processo.status !== 'cancelado'"
             @editar="emit('editarInternos')"
+            @gerar-guia="emit('gerarGuia')"
           />
 
           <!-- O convite existe, mas quem decide se pode emitir e o SERVIDOR: a tela mostra a situacao e o
