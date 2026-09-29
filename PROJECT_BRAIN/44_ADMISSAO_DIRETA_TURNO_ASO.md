@@ -178,15 +178,15 @@ carrega CTPS, PIS/NIT e o ASO. A Gerência recebe **403**, e há teste provando.
 - a tela de **Testes** deixou de editar o processo: abre em **leitura**, e só. Editar é na página
   "Processos de admissão", que é a dona e já tem **entrada de menu própria**.
 
-> **O detalhe não é mais painel lateral: é um workspace em modal de tela cheia.** Atualizado em 29/09/2026.
+> **O detalhe não é mais painel lateral nem popup: é uma página própria do processo.** Atualizado em 29/09/2026.
 >
 > Ele era um `v-navigation-drawer` de 460px. Num celular de 390px isso é mais largo que a viewport,
 > e o que sobrava sumia atrás do `overflow-x: hidden` global — sem barra, sem sinal, sem alcance. A
 > gaveta também não prende o foco do teclado.
 >
-> O workspace preserva **um detalhe só**, sem `persistent`: X, Escape e clique fora fecham, e o foco
-> volta para quem abriu. A tela inteira é usada para separar dados do processo, exame/guia, ficha e
-> histórico; nenhum campo, estado, permissão ou ação mudou.
+> A página preserva **um detalhe só**, com retorno explícito à lista de processos. Ela usa a área do
+> sistema para separar dados do processo, exame/guia, ficha e histórico; nenhum campo, estado,
+> permissão ou ação muda por causa da navegação.
 >
 > A gaveta era montada por **duas** telas, e na de Testes só pela tag, sem `import`: o auto-import
 > do Nuxt registra `AdmissoesProcessoDetalhePainel`, não o nome curto, então ela nunca resolvia e o

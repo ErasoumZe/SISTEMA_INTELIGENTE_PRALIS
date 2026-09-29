@@ -17,7 +17,6 @@ import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import { rotaRevisaoDaFicha } from "~/utils/admissoes";
-import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import GuiaExameOcupacionalDialog from "~/components/admissoes/GuiaExameOcupacionalDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
@@ -186,30 +185,8 @@ function trocarPagina(nova: number) {
   void carregar();
 }
 
-async function abrirDetalhe(id: string) {
-  // Esta funcao tambem e o caminho de RECARGA (depois de revelar, salvar ou cancelar). Trocar de
-  // processo apaga o CPF revelado; reler o MESMO processo o mantem, senao revelar se desfaria
-  // sozinho no refetch que ele proprio dispara.
-  if (processo.value?.id !== id) cpfRevelado.value = null;
-
-  detalheAberto.value = true;
-  detalheCarregando.value = true;
-  processo.value = null;
-  historico.value = [];
-  try {
-    processo.value = await apiGet<ProcessoDetalheDto>(`/api/admissoes/processos/${id}`);
-    const eventos = await apiGetPaginado<HistoricoProcessoDto>(
-      `/api/admissoes/processos/${id}/historico?page=1&pageSize=50`
-    );
-    historico.value = eventos.itens;
-    // A ficha é interna ao DP. Não carregamos nem oferecemos convite ao candidato neste fluxo.
-    convite.value = null;
-  } catch (error) {
-    detalheAberto.value = false;
-    tratarErro(error);
-  } finally {
-    detalheCarregando.value = false;
-  }
+function abrirDetalhe(id: string) {
+  void router.push(`/admissoes_processos/${id}`);
 }
 
 function abrirEfetivacao() {
@@ -467,47 +444,6 @@ onMounted(async () => {
     :empresa-nome="empresaDoPerfil?.nome ?? ''"
     :empresa-cnpj="empresaDoPerfil?.cnpj ?? ''"
     @fechar="guiaAberta = false"
-  />
-
-  <!--
-    UM caminho de detalhe: o modal central. O painel lateral foi removido, nao escondido.
-
-    `pode-ver-teste` e FALSO aqui: esta tela nao abre teste. Nao ha rota de processo para um teste
-    especifico, e mandar para a lista de Testes seria inventar navegacao. Sem esta linha o botao
-    "Ver o teste" renderizava e emitia para o vazio.
-  -->
-  <ProcessoDetalheDialog
-    :aberto="detalheAberto"
-    :processo="processo"
-    :historico="historico"
-    :carregando="detalheCarregando"
-    :pode-cancelar="podeCancelar"
-    :pode-efetivar="podeEfetivar"
-    :pode-editar-internos="podeEditarInternos"
-    :processando="processando"
-    :pode-ver-teste="false"
-    :pode-ver-cpf="podeVerCpf"
-    :cpf-revelado="cpfRevelado"
-    :revelando-cpf="revelandoCpf"
-    :convite="convite"
-    :pode-convidar="podeConvidar"
-    :token-emitido="tokenEmitido"
-    :convite-pendente="convitePendente"
-    :pode-revisar-ficha="podeRevisarFicha"
-    @emitir-convite="emitirConvite"
-    @revogar-convite="revogarConvite"
-    @revisar-ficha="revisarFicha"
-    @efetivar="abrirEfetivacao"
-    @fechar="fecharDetalhe"
-    @cancelar="cancelarProcesso"
-    @revelar-cpf="revelarCpf"
-    @gerar-guia="abrirGuia"
-    @editar-internos="
-      () => {
-        internosErro = '';
-        internosAberto = true;
-      }
-    "
   />
 
   <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>

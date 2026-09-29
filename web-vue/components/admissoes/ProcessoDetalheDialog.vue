@@ -252,17 +252,17 @@ function confirmarCancelar() {
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" fullscreen scrollable @update:model-value="(valor) => !valor && emit('fechar')">
-    <v-card class="processo-workspace" role="dialog" aria-labelledby="titulo-processo-detalhe">
-      <v-card-title id="titulo-processo-detalhe" class="d-flex align-center justify-space-between ga-3">
+  <article v-if="aberto" class="processo-workspace" aria-labelledby="titulo-processo-detalhe">
+    <div class="processo-workspace__conteudo">
+      <header id="titulo-processo-detalhe" class="processo-workspace__cabecalho d-flex align-center justify-space-between ga-3">
         <div>
           <span>Processo de admissão</span>
           <p class="processo-workspace__subtitulo">Dados, exame, ficha e decisões em uma única tela.</p>
         </div>
         <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="emit('fechar')" />
-      </v-card-title>
+      </header>
 
-      <v-card-text class="processo-workspace__corpo">
+      <div class="processo-workspace__corpo">
         <div v-if="carregandoDetalhe" class="detalhe-carregando" role="status">
           <v-progress-circular indeterminate size="28" width="3" />
           <span>Carregando o processo…</span>
@@ -533,11 +533,11 @@ function confirmarCancelar() {
             </ul>
           </section>
         </div>
-      </v-card-text>
+      </div>
 
       <!-- Rodape so quando ha o que fazer. Fechar mora no X, e um segundo botao para o mesmo ato
            seria a duplicidade que o AGENTS.md proibe. -->
-      <v-card-actions v-if="processo && ((cancelavel && podeCancelar) || efetivavel)" class="processo-workspace__acoes">
+      <footer v-if="processo && ((cancelavel && podeCancelar) || efetivavel)" class="processo-workspace__acoes">
         <v-btn
           v-if="cancelavel && podeCancelar"
           color="error"
@@ -551,9 +551,9 @@ function confirmarCancelar() {
         <v-btn v-if="efetivavel" color="success" variant="flat" :disabled="processando" @click="emit('efetivar')">
           Efetivar colaborador
         </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+      </footer>
+    </div>
+  </article>
 
   <!-- Irmao, nao filho: o dialogo de confirmacao empilha por cima e um Escape fecha so o de cima. -->
   <v-dialog v-model="dialogCancelar" max-width="460">

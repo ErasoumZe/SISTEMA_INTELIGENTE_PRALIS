@@ -27,6 +27,7 @@ import TestesFiltros, { type FiltrosTestes } from "~/components/admissoes/Testes
 // partir do perfil autorizado. O seletor global do shell fica escondido nesta tela (AppWorkspace
 // estreita a lista de empresas), para o operador nao achar que trocar de empresa muda algo.
 const { apiGet, apiGetPaginado, apiPost, apiPut } = useApi();
+const router = useRouter();
 
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
@@ -240,6 +241,8 @@ const processoProcessando = ref(false);
 const processoCarregando = ref(false);
 
 async function abrirProcesso(id: string) {
+  void router.push(`/admissoes_processos/${id}`);
+  return;
   processoAberto.value = true;
   processoCarregando.value = true;
   // Zera ANTES do fetch. Sem isto, o modal abria mostrando o processo lido por ultimo — o dado de
