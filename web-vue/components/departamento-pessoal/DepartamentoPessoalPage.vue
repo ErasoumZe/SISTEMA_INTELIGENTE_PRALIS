@@ -17,6 +17,7 @@ const podeVerColaboradores = computed(() => temPermissao(permissoes.value, "cada
 const podeVerFuncoes = computed(() => temPermissao(permissoes.value, "cadastro_funcoes_visualizar"));
 const podeVerAreas = computed(() => temPermissao(permissoes.value, "cadastro_areas_setores_visualizar"));
 const podeVerTurnos = computed(() => temPermissao(permissoes.value, "cadastro_turnos_visualizar"));
+const podeVerClinicas = computed(() => temPermissao(permissoes.value, "admissoes_clinicas_ocupacionais_visualizar"));
 
 const totais = reactive<Record<Fila, number | null>>({
   testesAtivos: null,
@@ -212,7 +213,7 @@ onMounted(() => void carregarResumo());
       </div>
     </section>
 
-    <section v-if="podeVerFuncoes || podeVerAreas || podeVerTurnos" class="bloco" aria-labelledby="dp-cadastros">
+    <section v-if="podeVerFuncoes || podeVerAreas || podeVerTurnos || podeVerClinicas" class="bloco" aria-labelledby="dp-cadastros">
       <div class="titulo-bloco">
         <div>
           <h2 id="dp-cadastros">Cadastros base</h2>
@@ -227,6 +228,7 @@ onMounted(() => void carregarResumo());
           >Áreas e setores</v-btn
         >
         <v-btn v-if="podeVerTurnos" to="/turnos" prepend-icon="mdi-clock-outline" variant="outlined">Turnos</v-btn>
+        <v-btn v-if="podeVerClinicas" to="/clinicas_ocupacionais" prepend-icon="mdi-hospital-building" variant="outlined">Clínicas ocupacionais</v-btn>
       </div>
     </section>
 
