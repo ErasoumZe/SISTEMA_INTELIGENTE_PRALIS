@@ -27,7 +27,8 @@ receberá estados administrativos como “aguardando contabilidade”.
 O andamento acima pertence a um onboarding 1:1 do vínculo, com estados próprios e auditáveis:
 
 ```text
-cadastro_completo
+em_cadastro
+→ cadastro_completo
 → aguardando_contabilidade
 → retorno_contabilidade
 → pendente_configuracao
@@ -41,6 +42,7 @@ duplicar pacote, matrícula ou evento.
 
 | Etapa | Fato real que a libera | Resultado |
 | --- | --- | --- |
+| Em cadastro | A efetivação criou pessoa, matrícula e vínculo com os dados mínimos já conferidos. | Abre a ficha única para completar os dados cadastrais. |
 | Cadastro completo | Identidade, dados pessoais, endereço/contato, dados do vínculo, função/CBO, setor, jornada e dados bancários exigidos pela operação foram conferidos. | Gera uma prévia de cadastro, sem escrever em serviços externos. |
 | Aguardando contabilidade | O DP confirmou a prévia e registrou o envio para conferência. | Pacote contábil identificável e rastreável. |
 | Retorno da contabilidade | O DP registrou o retorno, com observação e pendências quando houver. | Não altera dados de folha automaticamente. |
