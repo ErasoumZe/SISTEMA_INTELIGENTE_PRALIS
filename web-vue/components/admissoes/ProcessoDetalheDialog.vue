@@ -252,14 +252,17 @@ function confirmarCancelar() {
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" max-width="720" scrollable @update:model-value="(valor) => !valor && emit('fechar')">
-    <v-card role="dialog" aria-labelledby="titulo-processo-detalhe">
+  <v-dialog :model-value="aberto" fullscreen scrollable @update:model-value="(valor) => !valor && emit('fechar')">
+    <v-card class="processo-workspace" role="dialog" aria-labelledby="titulo-processo-detalhe">
       <v-card-title id="titulo-processo-detalhe" class="d-flex align-center justify-space-between ga-3">
-        <span>Processo de admissão</span>
+        <div>
+          <span>Processo de admissão</span>
+          <p class="processo-workspace__subtitulo">Dados, exame, ficha e decisões em uma única tela.</p>
+        </div>
         <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="emit('fechar')" />
       </v-card-title>
 
-      <v-card-text>
+      <v-card-text class="processo-workspace__corpo">
         <div v-if="carregandoDetalhe" class="detalhe-carregando" role="status">
           <v-progress-circular indeterminate size="28" width="3" />
           <span>Carregando o processo…</span>
@@ -268,6 +271,13 @@ function confirmarCancelar() {
         <div v-else-if="processo" class="detalhe">
           <!-- Mesmo padrão do painel do teste: cada estado com rótulo, e a frase que diz de onde a
                situação vem. Chip solto vira "campo" na cabeça de quem lê. -->
+          <section class="detalhe-secao detalhe-secao--processo" aria-labelledby="titulo-dados-processo">
+            <header class="detalhe-secao__cabecalho">
+              <div>
+                <p class="detalhe-secao__etapa">Etapa 1</p>
+                <h3 id="titulo-dados-processo">Dados do processo</h3>
+              </div>
+            </header>
           <div class="detalhe-estados">
             <div class="estado">
               <span class="estado-rotulo">Status do processo</span>
@@ -357,6 +367,7 @@ function confirmarCancelar() {
               </dd>
             </template>
           </dl>
+          </section>
 
           <ProcessoInternosBloco
             :internos="processo.internos"
@@ -370,7 +381,7 @@ function confirmarCancelar() {
           <!-- O convite existe, mas quem decide se pode emitir e o SERVIDOR: a tela mostra a situacao e o
                motivo que vieram de la. Botao escondido nao protege de quem chama a rota direto. -->
           <!-- Bloco legado: só monta se um convite histórico existir. A tela do DP não o carrega. -->
-          <section v-if="convite" class="detalhe-convite">
+          <section v-if="convite" class="detalhe-secao detalhe-convite">
             <h3>Convite ao candidato</h3>
 
             <v-alert v-if="convite.situacao === 'indisponivel'" type="info" variant="tonal" density="compact">
@@ -483,8 +494,11 @@ function confirmarCancelar() {
             ficha, nenhum dependente, nenhum aprovar/devolver. Um segundo lugar para o mesmo ato e o
             que a regra-mae proibe, e o modal ja passa de 600 linhas.
           -->
-          <section v-if="podeRevisarFicha" class="detalhe-ficha">
-            <h3>Ficha do DP</h3>
+          <section v-if="podeRevisarFicha" class="detalhe-secao detalhe-ficha">
+            <div>
+              <p class="detalhe-secao__etapa">Etapa 3</p>
+              <h3>Ficha do DP</h3>
+            </div>
             <p class="detalhe-derivacao">Preencha e mantenha os dados de admissão nesta tela.</p>
             <v-btn
               variant="tonal"
@@ -497,7 +511,7 @@ function confirmarCancelar() {
             </v-btn>
           </section>
 
-          <p class="detalhe-autoria">
+          <p class="detalhe-autoria detalhe-secao">
             Iniciado por {{ processo.criadoPorNome ?? "—" }} · {{ formatarDataHora(processo.criadoEm) }}<br />
             Alterado por {{ processo.atualizadoPorNome ?? "—" }} · {{ formatarDataHora(processo.atualizadoEm) }}
             <template v-if="processo.canceladoEm">
@@ -506,8 +520,11 @@ function confirmarCancelar() {
             </template>
           </p>
 
-          <section v-if="historico.length" class="detalhe-trilha">
-            <h3 class="trilha-titulo">Histórico</h3>
+          <section v-if="historico.length" class="detalhe-secao detalhe-trilha">
+            <div>
+              <p class="detalhe-secao__etapa">Linha do tempo</p>
+              <h3 class="trilha-titulo">Histórico</h3>
+            </div>
             <ul class="trilha-lista">
               <li v-for="evento in historico" :key="evento.id">
                 <strong>{{ rotuloAcaoHistoricoProcesso[evento.acao] }}</strong>
@@ -520,7 +537,7 @@ function confirmarCancelar() {
 
       <!-- Rodape so quando ha o que fazer. Fechar mora no X, e um segundo botao para o mesmo ato
            seria a duplicidade que o AGENTS.md proibe. -->
-      <v-card-actions v-if="processo && ((cancelavel && podeCancelar) || efetivavel)">
+      <v-card-actions v-if="processo && ((cancelavel && podeCancelar) || efetivavel)" class="processo-workspace__acoes">
         <v-btn
           v-if="cancelavel && podeCancelar"
           color="error"
@@ -561,10 +578,64 @@ function confirmarCancelar() {
 </template>
 
 <style scoped>
+.processo-workspace {
+  min-height: 100dvh;
+  border-radius: 0;
+}
+
+.processo-workspace__subtitulo {
+  margin: 2px 0 0;
+  font-size: var(--cx-fs-caption);
+  font-weight: 400;
+  color: var(--cx-ink-soft);
+}
+
+.processo-workspace__corpo {
+  padding: var(--cx-sp-5);
+}
+
+.processo-workspace__acoes {
+  position: sticky;
+  bottom: 0;
+  padding: var(--cx-sp-3) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line);
+  background: var(--cx-surface-raised);
+}
+
 .detalhe {
   display: flex;
   flex-direction: column;
   gap: var(--cx-sp-4);
+  width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+.detalhe-secao {
+  padding: var(--cx-sp-5);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-raised);
+}
+
+.detalhe-secao--processo {
+  background: var(--cx-surface);
+}
+
+.detalhe-secao__cabecalho {
+  margin-bottom: var(--cx-sp-4);
+}
+
+.detalhe-secao__etapa {
+  margin: 0 0 2px;
+  color: var(--cx-brand-text);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+
+.detalhe-secao h3 {
+  font-size: var(--cx-fs-lead);
 }
 
 .detalhe-carregando {
@@ -695,6 +766,18 @@ function confirmarCancelar() {
 /* Duas colunas de rotulo nao cabem num celular. O corte segue os breakpoints do projeto
    (PROJECT_BRAIN/67 §13): 768 e o ponto em que o card ja vira coluna com acoes fixas. */
 @media (max-width: 768px) {
+  .processo-workspace__corpo {
+    padding: var(--cx-sp-3);
+  }
+
+  .processo-workspace__acoes {
+    padding: var(--cx-sp-3);
+  }
+
+  .detalhe-secao {
+    padding: var(--cx-sp-4);
+  }
+
   .detalhe-campos {
     grid-template-columns: minmax(0, 1fr);
     gap: 2px var(--cx-sp-2);

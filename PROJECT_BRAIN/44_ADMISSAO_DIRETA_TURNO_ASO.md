@@ -134,6 +134,20 @@ registrar apto, como iniciar o processo é consequência de efetivar o teste.
 
 Cancelar vale de `iniciado` **ou** `pausado`; `cancelado` continua terminal.
 
+### D-5.2 · Clínica e comunicação ficam em vertical própria
+
+**Decisão operacional de Marco em 29/09/2026:** a clínica ocupacional terá cadastro próprio por empresa;
+ela não reutiliza fornecedor nem cliente, pois esses catálogos pertencem aos fluxos financeiro e comercial.
+O cadastro futuro concentra nome, documento, contatos, endereço, unidades e instruções para encaminhamento.
+
+Enviar uma guia, receber a confirmação de agendamento, avisar o colaborador e receber retorno da clínica
+serão trilhas auditadas próprias. `aso_apto` continua significando resultado do ASO conferido pelo DP —
+agendamento ou recebimento da guia não efetiva nem torna o candidato apto.
+
+Esta decisão ainda não cria tabelas, envio de e-mail/WhatsApp, credenciais, integração com sistema de
+clínica nem acesso ao ASO. Cada um depende de migration, canal contratado, política de privacidade e
+permissões específicas.
+
 ### D-6 · Situação derivada: três valores
 
 | Status      | Situação    |
@@ -164,16 +178,15 @@ carrega CTPS, PIS/NIT e o ASO. A Gerência recebe **403**, e há teste provando.
 - a tela de **Testes** deixou de editar o processo: abre em **leitura**, e só. Editar é na página
   "Processos de admissão", que é a dona e já tem **entrada de menu própria**.
 
-> **O detalhe não é mais painel lateral: é modal central de leitura.** Atualizado em 31/08/2026.
+> **O detalhe não é mais painel lateral: é um workspace em modal de tela cheia.** Atualizado em 29/09/2026.
 >
 > Ele era um `v-navigation-drawer` de 460px. Num celular de 390px isso é mais largo que a viewport,
 > e o que sobrava sumia atrás do `overflow-x: hidden` global — sem barra, sem sinal, sem alcance. A
 > gaveta também não prende o foco do teclado.
 >
-> O modal segue o desenho que o módulo já tinha (`ProcessoNovoDialog`, `ProcessoInternosDialog`), e
-> **sem `persistent`**: os dois seguram formulário com dado não salvo, e leitura não tem o que
-> segurar — X, Escape e clique fora fecham, e o foco volta para quem abriu. Nenhum campo, estado,
-> permissão ou ação mudou.
+> O workspace preserva **um detalhe só**, sem `persistent`: X, Escape e clique fora fecham, e o foco
+> volta para quem abriu. A tela inteira é usada para separar dados do processo, exame/guia, ficha e
+> histórico; nenhum campo, estado, permissão ou ação mudou.
 >
 > A gaveta era montada por **duas** telas, e na de Testes só pela tag, sem `import`: o auto-import
 > do Nuxt registra `AdmissoesProcessoDetalhePainel`, não o nome curto, então ela nunca resolvia e o

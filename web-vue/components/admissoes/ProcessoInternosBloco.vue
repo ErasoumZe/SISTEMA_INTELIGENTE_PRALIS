@@ -33,15 +33,28 @@ function dataExibida(data: string | null) {
 <template>
   <section class="bloco-internos">
     <header class="bloco-cabecalho">
-      <h3>Dados internos do DP</h3>
+      <div>
+        <p class="bloco-etapa">Etapa 2</p>
+        <h3>Exame, guia e dados do DP</h3>
+      </div>
       <div class="acoes-cabecalho">
-        <v-btn v-if="podeEditar" variant="text" size="small" :disabled="processando" @click="emit('gerarGuia')">
+        <v-btn
+          v-if="podeEditar"
+          color="primary"
+          variant="outlined"
+          size="small"
+          prepend-icon="mdi-file-pdf-box"
+          :disabled="processando"
+          @click="emit('gerarGuia')"
+        >
           Guia A4
         </v-btn>
         <v-btn
           v-if="podeEditar && editavel"
-          variant="text"
+          color="primary"
+          variant="flat"
           size="small"
+          prepend-icon="mdi-pencil"
           :disabled="processando"
           @click="emit('editar')"
         >
@@ -109,9 +122,10 @@ function dataExibida(data: string | null) {
 
 <style scoped>
 .bloco-internos {
-  border-top: 1px solid rgb(var(--v-border-color), 0.2);
-  padding-top: 16px;
-  margin-top: 16px;
+  padding: var(--cx-sp-5);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-raised);
 }
 .bloco-cabecalho {
   display: flex;
@@ -121,8 +135,16 @@ function dataExibida(data: string | null) {
   margin-bottom: 12px;
 }
 .bloco-cabecalho h3 {
-  font-size: 0.95rem;
+  font-size: var(--cx-fs-lead);
   font-weight: 600;
+}
+.bloco-etapa {
+  margin: 0 0 2px;
+  color: var(--cx-brand-text);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
 }
 .acoes-cabecalho {
   display: flex;
@@ -162,6 +184,15 @@ function dataExibida(data: string | null) {
   margin-top: 12px;
 }
 @media (max-width: 768px) {
+  .bloco-internos {
+    padding: var(--cx-sp-4);
+  }
+
+  .bloco-cabecalho {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .bloco-campos {
     grid-template-columns: 1fr;
   }
