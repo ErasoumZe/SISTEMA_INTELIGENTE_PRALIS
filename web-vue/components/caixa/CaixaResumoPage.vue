@@ -1384,10 +1384,10 @@ function confirmarFechamento() {
   border: 1px solid color-mix(in srgb, var(--cat) 76%, rgb(255 255 255 / 0.28));
   border-radius: 14px;
   background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--cat) 12%, transparent), transparent 52%),
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--cat) 16%, transparent), transparent 52%),
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--cat) 8%, rgb(var(--v-theme-surface))),
+      color-mix(in srgb, var(--cat) 13%, rgb(var(--v-theme-surface))),
       rgb(var(--v-theme-surface) / 0.94)
     );
   box-shadow:
