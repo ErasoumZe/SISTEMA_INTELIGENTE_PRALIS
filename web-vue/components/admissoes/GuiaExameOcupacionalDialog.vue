@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProcessoDetalheDto } from "@padaria/shared";
+import type { ProcessoDetalheDto, RespostaExamesComplementares, TipoExameOcupacional } from "@padaria/shared";
 import { computed } from "vue";
 import { formatarDataHora } from "~/utils/formatacao";
 
@@ -13,23 +13,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (event: "fechar"): void }>();
 
+const rotulosTipoExame: Record<TipoExameOcupacional, string> = {
+  admissional: "Admissional",
+  periodico: "Periódico",
+  mudanca_funcao: "Mudança de função",
+  retorno_trabalho: "Retorno ao trabalho",
+  demissional: "Demissional",
+  pcd: "Pessoa com deficiência"
+};
+
+const rotulosComplementares: Record<RespostaExamesComplementares, string> = {
+  sim: "Sim",
+  nao: "Não",
+  nao_sabe: "Não sabe"
+};
+
 const tipoExame = computed(() => {
   const tipo = props.processo?.internos.exameTipo;
-  return (
-    {
-      admissional: "Admissional",
-      periodico: "Periódico",
-      mudanca_funcao: "Mudança de função",
-      retorno_trabalho: "Retorno ao trabalho",
-      demissional: "Demissional",
-      pcd: "Pessoa com deficiência"
-    }[tipo ?? ""] ?? "Não informado"
-  );
+  return tipo ? rotulosTipoExame[tipo] : "Não informado";
 });
 
 const complementares = computed(() => {
   const resposta = props.processo?.internos.exameComplementares;
-  return { sim: "Sim", nao: "Não", nao_sabe: "Não sabe" }[resposta ?? ""] ?? "Não informado";
+  return resposta ? rotulosComplementares[resposta] : "Não informado";
 });
 
 function data(valor: string | null | undefined) {
@@ -54,7 +60,7 @@ function imprimir() {
   const janela = window.open("", "_blank");
   if (!janela) return;
   janela.opener = null;
-  const linhas = [
+  const linhas: Array<[string, string]> = [
     ["Empresa", valor(props.empresaNome)],
     ["CNPJ", valor(props.empresaCnpj)],
     ["Clínica", valor(processo.internos.exameClinica)],
