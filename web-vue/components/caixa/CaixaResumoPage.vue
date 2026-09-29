@@ -1384,11 +1384,15 @@ function confirmarFechamento() {
   border: 1px solid color-mix(in srgb, var(--cat) 76%, rgb(255 255 255 / 0.28));
   border-radius: 14px;
   background:
-    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--cat) 30%, transparent), transparent 48%),
-    linear-gradient(135deg, color-mix(in srgb, var(--cat-soft) 92%, rgb(255 255 255 / 0.07)), rgb(15 20 29 / 0.78));
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--cat) 12%, transparent), transparent 52%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--cat) 8%, rgb(var(--v-theme-surface))),
+      rgb(var(--v-theme-surface) / 0.94)
+    );
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.1),
-    0 14px 28px -24px color-mix(in srgb, var(--cat) 95%, transparent);
+    0 12px 24px -24px color-mix(in srgb, var(--cat) 64%, transparent);
   backdrop-filter: blur(14px) saturate(1.16);
   -webkit-backdrop-filter: blur(14px) saturate(1.16);
   transition:
@@ -1402,9 +1406,9 @@ function confirmarFechamento() {
   inset: 0;
   background: linear-gradient(
     118deg,
-    rgb(255 255 255 / 0.12),
-    transparent 32%,
-    color-mix(in srgb, var(--cat) 12%, transparent)
+    rgb(255 255 255 / 0.07),
+    transparent 36%,
+    color-mix(in srgb, var(--cat) 6%, transparent)
   );
   content: "";
   pointer-events: none;
