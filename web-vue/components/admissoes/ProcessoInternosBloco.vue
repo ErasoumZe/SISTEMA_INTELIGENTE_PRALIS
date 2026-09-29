@@ -47,7 +47,7 @@ function dataExibida(data: string | null) {
           :disabled="processando"
           @click="emit('gerarGuia')"
         >
-          Guia A4
+          Guia de exame admissional
         </v-btn>
         <v-btn
           v-if="podeEditar && editavel"
@@ -114,7 +114,7 @@ function dataExibida(data: string | null) {
     </dl>
 
     <p class="bloco-nota">
-      Guia digital: use “Guia A4” para conferir, imprimir ou salvar como PDF. Nascimento, RG, setor e CBO só entram
+      Guia digital: use “Guia de exame admissional” para conferir, imprimir ou salvar como PDF. Nascimento, RG, setor e CBO só entram
       quando estiverem conferidos na ficha/cadastro; o sistema não preenche lacunas com dados inventados.
     </p>
   </section>
