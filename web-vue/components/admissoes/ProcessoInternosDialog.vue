@@ -229,9 +229,10 @@ const internosMudaram = computed(() => {
 
 function salvar() {
   if (!props.internos || invalido.value) return;
+  const atual = props.internos;
   const dados = internosMudaram.value
     ? {
-        versao: props.internos.versao,
+        versao: atual.versao,
         dataAdmissao: formulario.dataAdmissao || null,
         ctpsNumero: formulario.ctpsNumero || null,
         ctpsSerie: formulario.ctpsSerie || null,
