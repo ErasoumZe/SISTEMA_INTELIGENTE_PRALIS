@@ -48,6 +48,6 @@ ALTER TABLE "clinicas_ocupacionais_unidades" ADD CONSTRAINT "clinicas_ocupaciona
 CREATE INDEX "clinicas_ocupacionais_empresa_ativo_nome_idx" ON "clinicas_ocupacionais" USING btree ("empresa_id","ativo","nome");--> statement-breakpoint
 CREATE INDEX "clinicas_ocupacionais_unidades_clinica_ativo_nome_idx" ON "clinicas_ocupacionais_unidades" USING btree ("empresa_id","clinica_id","ativo","nome");
 --> statement-breakpoint
-CREATE TRIGGER clinicas_ocupacionais_set_atualizado_em BEFORE UPDATE ON clinicas_ocupacionais FOR EACH ROW EXECUTE FUNCTION set_atualizado_em();
+CREATE TRIGGER "clinicas_ocupacionais_set_atualizado_em" BEFORE UPDATE ON "clinicas_ocupacionais" FOR EACH ROW EXECUTE FUNCTION set_atualizado_em();
 --> statement-breakpoint
-CREATE TRIGGER clinicas_ocupacionais_unidades_set_atualizado_em BEFORE UPDATE ON clinicas_ocupacionais_unidades FOR EACH ROW EXECUTE FUNCTION set_atualizado_em();
+CREATE TRIGGER "clinicas_ocupacionais_unidades_set_atualizado_em" BEFORE UPDATE ON "clinicas_ocupacionais_unidades" FOR EACH ROW EXECUTE FUNCTION set_atualizado_em();

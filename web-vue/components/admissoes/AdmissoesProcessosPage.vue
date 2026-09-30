@@ -82,8 +82,6 @@ const empresaDoPerfil = computed(() => {
 const empresaNome = computed(() => empresaDoPerfil.value?.nome ?? "");
 const empresaCnpj = computed(() => (empresaDoPerfil.value?.cnpj ? mascararCnpj(empresaDoPerfil.value.cnpj) : ""));
 
-// O detalhe agora mora na rota propria. Estes estados permanecem temporariamente apenas para
-// preservar a tipagem do codigo legado enquanto a pagina nova concentra as acoes do processo.
 const internosAberto = ref(false);
 const internosErro = ref("");
 const guiaAberta = ref(false);
@@ -95,7 +93,6 @@ const convite = ref<PainelConviteDto | null>(null);
 const tokenEmitido = ref<string | null>(null);
 const convitePendente = ref(false);
 const revelandoCpf = ref(false);
-
 
 // O CPF revelado vive SO na memoria da tela, e so enquanto o detalhe estiver aberto. Nao vai para
 // URL, store, storage nem listagem — e some no fechamento, em `fecharDetalhe`.
@@ -182,13 +179,6 @@ function trocarPagina(nova: number) {
 
 function abrirDetalhe(id: string) {
   void router.push(`/admissoes_processos/${id}`);
-}
-
-function abrirEfetivacao() {
-  const id = processo.value?.id;
-  if (!id) return;
-  detalheAberto.value = false;
-  void router.push(`/admissoes_processos/${id}/efetivar`);
 }
 
 async function criarDireta(dados: {
