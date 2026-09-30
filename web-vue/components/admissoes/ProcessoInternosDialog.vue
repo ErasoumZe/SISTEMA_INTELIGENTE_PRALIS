@@ -2,13 +2,13 @@
 // Importado de `vue` em vez de contar com o auto-import do Nuxt, como o `ProcessoDetalheDialog`
 // ao lado ja faz: sem isto o componente nao monta fora do runtime do Nuxt, e portanto nao tem
 // como ser testado — foi por isso que o defeito do select passou batido ate o teste em navegador.
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import type {
+  ClinicaOcupacionalDto,
   DadosInternosDto,
   RespostaExamesComplementares,
   SituacaoExame,
-  TipoExameOcupacional,
-  UnidadeExameOcupacional
+  TipoExameOcupacional
 } from "@padaria/shared";
 import { situacoesExame } from "@padaria/shared";
 import { rotuloSituacaoExame } from "~/utils/admissoes";
@@ -25,6 +25,7 @@ import { rotuloSituacaoExame } from "~/utils/admissoes";
 const props = withDefaults(
   defineProps<{
     aberto: boolean;
+    empresaId: string;
     internos: DadosInternosDto | null;
     /** Processos ainda não efetivados mantêm o comportamento anterior. */
     efetivado?: boolean;
@@ -49,8 +50,7 @@ const emit = defineEmits<{
       ctpsUf: string | null;
       pisPasepNit: string | null;
       exameTipo: TipoExameOcupacional | null;
-      exameClinica: string | null;
-      exameUnidade: UnidadeExameOcupacional | null;
+      destinoClinica?: { clinicaId: string; unidadeId: string | null } | null;
       exameComplementares: RespostaExamesComplementares | null;
       exameAgendadoPara: string | null;
       exameResponsavelNome: string | null;
@@ -68,8 +68,8 @@ const formulario = reactive({
   ctpsUf: "",
   pisPasepNit: "",
   exameTipo: null as TipoExameOcupacional | null,
-  exameClinica: "",
-  exameUnidade: null as UnidadeExameOcupacional | null,
+  destinoClinicaId: null as string | null,
+  destinoUnidadeId: null as string | null,
   exameComplementares: null as RespostaExamesComplementares | null,
   exameAgendadoPara: "",
   exameResponsavelNome: "",
@@ -88,8 +88,8 @@ watch(
     formulario.ctpsUf = internos.ctpsUf ?? "";
     formulario.pisPasepNit = internos.pisPasepNit ?? "";
     formulario.exameTipo = internos.exameTipo;
-    formulario.exameClinica = internos.exameClinica ?? "";
-    formulario.exameUnidade = internos.exameUnidade;
+    formulario.destinoClinicaId = internos.exameClinicaId;
+    formulario.destinoUnidadeId = internos.exameUnidadeId;
     formulario.exameComplementares = internos.exameComplementares;
     formulario.exameAgendadoPara = paraHorarioLocal(internos.exameAgendadoPara);
     formulario.exameResponsavelNome = internos.exameResponsavelNome ?? "";
@@ -98,6 +98,46 @@ watch(
     formulario.exameSituacao = internos.exameSituacao;
   },
   { immediate: true }
+);
+
+const { apiGet } = useApi();
+const clinicas = ref<ClinicaOcupacionalDto[]>([]);
+const clinicasCarregando = ref(false);
+const clinicasErro = ref("");
+const clinicasAtivas = computed(() => clinicas.value.filter((clinica) => clinica.ativo));
+const unidadesAtivas = computed(
+  () =>
+    clinicasAtivas.value
+      .find((clinica) => clinica.id === formulario.destinoClinicaId)
+      ?.unidades.filter((unidade) => unidade.ativo) ?? []
+);
+
+watch(
+  () => [props.aberto, props.empresaId] as const,
+  async ([aberto, empresaId]) => {
+    if (!aberto || !empresaId) return;
+    clinicasCarregando.value = true;
+    clinicasErro.value = "";
+    try {
+      clinicas.value = await apiGet<ClinicaOcupacionalDto[]>(
+        `/api/clinicas-ocupacionais?empresaId=${encodeURIComponent(empresaId)}`
+      );
+    } catch {
+      clinicasErro.value = "Nao foi possivel carregar as clinicas ocupacionais.";
+    } finally {
+      clinicasCarregando.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => formulario.destinoClinicaId,
+  () => {
+    if (!unidadesAtivas.value.some((unidade) => unidade.id === formulario.destinoUnidadeId)) {
+      formulario.destinoUnidadeId = null;
+    }
+  }
 );
 
 const ufErro = computed(() =>
@@ -147,10 +187,6 @@ const opcoesTipoExame = [
   { valor: "demissional", titulo: "Demissional" },
   { valor: "pcd", titulo: "Pessoa com deficiencia" }
 ] as const;
-const opcoesUnidade = [
-  { valor: "centro", titulo: "Centro" },
-  { valor: "benfica", titulo: "Benfica" }
-] as const;
 const opcoesComplementares = [
   { valor: "sim", titulo: "Sim" },
   { valor: "nao", titulo: "Nao" },
@@ -181,8 +217,8 @@ const internosMudaram = computed(() => {
     (formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null) !== (atual.ctpsUf ?? null) ||
     (formulario.pisPasepNit || null) !== (atual.pisPasepNit ?? null) ||
     formulario.exameTipo !== atual.exameTipo ||
-    (formulario.exameClinica || null) !== (atual.exameClinica ?? null) ||
-    formulario.exameUnidade !== atual.exameUnidade ||
+    formulario.destinoClinicaId !== atual.exameClinicaId ||
+    formulario.destinoUnidadeId !== atual.exameUnidadeId ||
     formulario.exameComplementares !== atual.exameComplementares ||
     paraIso(formulario.exameAgendadoPara) !== atual.exameAgendadoPara ||
     (formulario.exameResponsavelNome || null) !== (atual.exameResponsavelNome ?? null) ||
@@ -202,8 +238,12 @@ function salvar() {
         ctpsUf: formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null,
         pisPasepNit: formulario.pisPasepNit || null,
         exameTipo: formulario.exameTipo,
-        exameClinica: formulario.exameClinica || null,
-        exameUnidade: formulario.exameUnidade,
+        destinoClinica:
+          formulario.destinoClinicaId === atual.exameClinicaId && formulario.destinoUnidadeId === atual.exameUnidadeId
+            ? undefined
+            : formulario.destinoClinicaId
+              ? { clinicaId: formulario.destinoClinicaId, unidadeId: formulario.destinoUnidadeId }
+              : null,
         exameComplementares: formulario.exameComplementares,
         exameAgendadoPara: paraIso(formulario.exameAgendadoPara),
         exameResponsavelNome: formulario.exameResponsavelNome || null,
@@ -286,16 +326,38 @@ function salvar() {
             clearable
             density="comfortable"
           />
-          <v-text-field v-model="formulario.exameClinica" label="Clinica" density="comfortable" />
           <v-select
-            v-model="formulario.exameUnidade"
-            :items="opcoesUnidade"
-            item-title="titulo"
-            item-value="valor"
-            label="Unidade"
+            v-model="formulario.destinoClinicaId"
+            :items="clinicasAtivas"
+            item-title="nome"
+            item-value="id"
+            label="Clinica ocupacional"
             clearable
             density="comfortable"
+            :loading="clinicasCarregando"
+            :disabled="clinicasCarregando || Boolean(clinicasErro)"
           />
+          <v-select
+            v-model="formulario.destinoUnidadeId"
+            :items="unidadesAtivas"
+            item-title="nome"
+            item-value="id"
+            label="Unidade da clinica"
+            clearable
+            density="comfortable"
+            :disabled="!formulario.destinoClinicaId || clinicasCarregando || Boolean(clinicasErro)"
+          />
+          <v-alert v-if="clinicasErro" type="warning" variant="tonal" class="campo-largo">{{ clinicasErro }}</v-alert>
+          <v-alert
+            v-else-if="internos.exameClinica && !internos.exameClinicaId"
+            type="info"
+            variant="tonal"
+            class="campo-largo"
+          >
+            Guia legada: {{ internos.exameClinica
+            }}<template v-if="internos.exameUnidade"> / {{ internos.exameUnidade }}</template
+            >. Selecione uma clínica cadastrada para atualizar o destino.
+          </v-alert>
           <v-select
             v-model="formulario.exameComplementares"
             :items="opcoesComplementares"

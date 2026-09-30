@@ -33,6 +33,8 @@ const processo: ProcessoDetalheDto = {
     ctpsUf: null,
     pisPasepNit: null,
     exameTipo: "admissional",
+    exameClinicaId: null,
+    exameUnidadeId: null,
     exameClinica: "AcessaMed+",
     exameUnidade: "centro",
     exameComplementares: "nao",

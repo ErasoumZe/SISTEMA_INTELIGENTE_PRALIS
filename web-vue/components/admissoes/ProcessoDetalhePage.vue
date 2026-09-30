@@ -188,6 +188,7 @@ onMounted(async () => {
 
     <ProcessoInternosDialog
       :aberto="internosAberto"
+      :empresa-id="empresaId"
       :internos="processo?.internos ?? null"
       :efetivado="processo?.efetivado ?? false"
       :salvando="processando"

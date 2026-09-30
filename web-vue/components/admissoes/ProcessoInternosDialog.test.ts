@@ -31,6 +31,8 @@ const INTERNOS: DadosInternosDto = {
   ctpsUf: null,
   pisPasepNit: null,
   exameTipo: null,
+  exameClinicaId: null,
+  exameUnidadeId: null,
   exameClinica: null,
   exameUnidade: null,
   exameComplementares: null,
@@ -70,6 +72,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  vi.stubGlobal("useApi", () => ({ apiGet: vi.fn().mockResolvedValue([]) }));
 });
 
 function montar(internos: DadosInternosDto = INTERNOS) {
@@ -77,7 +80,7 @@ function montar(internos: DadosInternosDto = INTERNOS) {
   return mount(ProcessoInternosDialog, {
     attachTo: document.body,
     global: { plugins: [vuetify], stubs: { transition: false } },
-    props: { aberto: true, internos, salvando: false, erro: "" }
+    props: { aberto: true, empresaId: "11111111-1111-4111-8111-111111111111", internos, salvando: false, erro: "" }
   });
 }
 

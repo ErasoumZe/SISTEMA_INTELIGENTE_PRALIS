@@ -92,9 +92,12 @@ export const respostasExamesComplementares = ["sim", "nao", "nao_sabe"] as const
 export const respostaExamesComplementaresSchema = z.enum(respostasExamesComplementares);
 export type RespostaExamesComplementares = z.infer<typeof respostaExamesComplementaresSchema>;
 
-export const unidadesExameOcupacional = ["centro", "benfica"] as const;
-export const unidadeExameOcupacionalSchema = z.enum(unidadesExameOcupacional);
-export type UnidadeExameOcupacional = z.infer<typeof unidadeExameOcupacionalSchema>;
+const destinoClinicaOcupacionalSchema = z
+  .object({
+    clinicaId: z.string().uuid("Clinica ocupacional invalida"),
+    unidadeId: z.string().uuid("Unidade da clinica invalida").nullable().optional()
+  })
+  .transform((valor) => ({ clinicaId: valor.clinicaId, unidadeId: valor.unidadeId ?? null }));
 
 /**
  * O alerta e DERIVADO, como a situacao Ativo/Inativo. Nao existe coluna, indice nem filtro paralelo
@@ -206,17 +209,8 @@ export const dadosInternosPayloadSchema = z.object({
     .nullable()
     .optional()
     .transform((valor) => valor ?? null),
-  exameClinica: z
-    .string()
-    .trim()
-    .max(120)
-    .nullable()
-    .optional()
-    .transform((valor) => valor || null),
-  exameUnidade: unidadeExameOcupacionalSchema
-    .nullable()
-    .optional()
-    .transform((valor) => valor ?? null),
+  // Ausente preserva o retrato atual; nulo limpa; objeto escolhe uma clinica/unidade ativa do catalogo.
+  destinoClinica: destinoClinicaOcupacionalSchema.nullable().optional(),
   exameComplementares: respostaExamesComplementaresSchema
     .nullable()
     .optional()
@@ -343,8 +337,10 @@ export const dadosInternosDtoSchema = z.object({
   ctpsUf: z.string().nullable(),
   pisPasepNit: z.string().nullable(),
   exameTipo: tipoExameOcupacionalSchema.nullable(),
+  exameClinicaId: z.string().uuid().nullable(),
+  exameUnidadeId: z.string().uuid().nullable(),
   exameClinica: z.string().nullable(),
-  exameUnidade: unidadeExameOcupacionalSchema.nullable(),
+  exameUnidade: z.string().nullable(),
   exameComplementares: respostaExamesComplementaresSchema.nullable(),
   exameAgendadoPara: z.string().nullable(),
   exameResponsavelNome: z.string().nullable(),

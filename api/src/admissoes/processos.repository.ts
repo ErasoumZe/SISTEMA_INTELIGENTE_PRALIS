@@ -8,6 +8,7 @@ import {
   admissoesTestes
 } from "@padaria/db/schema/admissoes";
 import { colaboradoresVinculos, funcoesOperacionais, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
+import { clinicasOcupacionais, clinicasOcupacionaisUnidades } from "@padaria/db/schema";
 import { sqlTravarAdmissaoDaPessoa } from "@padaria/db/sessao";
 import type {
   AcaoHistoricoProcesso,
@@ -65,8 +66,10 @@ export type ProcessoLinha = {
   ctpsUf: string | null;
   pisPasepNit: string | null;
   exameTipo: "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd" | null;
+  exameClinicaId: string | null;
+  exameUnidadeId: string | null;
   exameClinica: string | null;
-  exameUnidade: "centro" | "benfica" | null;
+  exameUnidade: string | null;
   exameComplementares: "sim" | "nao" | "nao_sabe" | null;
   exameAgendadoPara: Date | null;
   exameResponsavelNome: string | null;
@@ -269,7 +272,11 @@ export async function bloquearInternosRepository(processoId: string, empresaId: 
     .select({
       id: admissoesProcessosInternos.id,
       versao: admissoesProcessosInternos.versao,
-      exameSituacao: admissoesProcessosInternos.exameSituacao
+      exameSituacao: admissoesProcessosInternos.exameSituacao,
+      exameClinicaId: admissoesProcessosInternos.exameClinicaId,
+      exameUnidadeId: admissoesProcessosInternos.exameUnidadeId,
+      exameClinica: admissoesProcessosInternos.exameClinica,
+      exameUnidade: admissoesProcessosInternos.exameUnidade
     })
     .from(admissoesProcessosInternos)
     .where(
@@ -278,6 +285,41 @@ export async function bloquearInternosRepository(processoId: string, empresaId: 
     .limit(1)
     .for("no key update");
   return linha ?? null;
+}
+
+/** Resolve o destino somente entre cadastros ativos da mesma empresa. O nome retornado e o retrato da guia. */
+export async function obterDestinoClinicaAtivoRepository(
+  input: { empresaId: string; clinicaId: string; unidadeId: string | null },
+  db: TransacaoBanco
+) {
+  const [clinica] = await db
+    .select({ id: clinicasOcupacionais.id, nome: clinicasOcupacionais.nome })
+    .from(clinicasOcupacionais)
+    .where(
+      and(
+        eq(clinicasOcupacionais.id, input.clinicaId),
+        eq(clinicasOcupacionais.empresaId, input.empresaId),
+        eq(clinicasOcupacionais.ativo, true)
+      )
+    )
+    .limit(1);
+  if (!clinica) return null;
+  if (!input.unidadeId) return { clinicaId: clinica.id, clinicaNome: clinica.nome, unidadeId: null, unidadeNome: null };
+
+  const [unidade] = await db
+    .select({ id: clinicasOcupacionaisUnidades.id, nome: clinicasOcupacionaisUnidades.nome })
+    .from(clinicasOcupacionaisUnidades)
+    .where(
+      and(
+        eq(clinicasOcupacionaisUnidades.id, input.unidadeId),
+        eq(clinicasOcupacionaisUnidades.clinicaId, clinica.id),
+        eq(clinicasOcupacionaisUnidades.empresaId, input.empresaId),
+        eq(clinicasOcupacionaisUnidades.ativo, true)
+      )
+    )
+    .limit(1);
+  if (!unidade) return null;
+  return { clinicaId: clinica.id, clinicaNome: clinica.nome, unidadeId: unidade.id, unidadeNome: unidade.nome };
 }
 
 /** A linha do processo ja esta travada por quem chama; esta leitura decide se a data virou historico. */
@@ -302,8 +344,10 @@ export async function atualizarInternosRepository(
     ctpsUf: string | null;
     pisPasepNit: string | null;
     exameTipo: "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd" | null;
+    exameClinicaId: string | null;
+    exameUnidadeId: string | null;
     exameClinica: string | null;
-    exameUnidade: "centro" | "benfica" | null;
+    exameUnidade: string | null;
     exameComplementares: "sim" | "nao" | "nao_sabe" | null;
     exameAgendadoPara: string | null;
     exameResponsavelNome: string | null;
@@ -321,6 +365,8 @@ export async function atualizarInternosRepository(
       ctpsUf: input.ctpsUf,
       pisPasepNit: input.pisPasepNit,
       exameTipo: input.exameTipo,
+      exameClinicaId: input.exameClinicaId,
+      exameUnidadeId: input.exameUnidadeId,
       exameClinica: input.exameClinica,
       exameUnidade: input.exameUnidade,
       exameComplementares: input.exameComplementares,
@@ -489,6 +535,8 @@ function selecaoProcesso() {
     ctpsUf: admissoesProcessosInternos.ctpsUf,
     pisPasepNit: admissoesProcessosInternos.pisPasepNit,
     exameTipo: admissoesProcessosInternos.exameTipo,
+    exameClinicaId: admissoesProcessosInternos.exameClinicaId,
+    exameUnidadeId: admissoesProcessosInternos.exameUnidadeId,
     exameClinica: admissoesProcessosInternos.exameClinica,
     exameUnidade: admissoesProcessosInternos.exameUnidade,
     exameComplementares: admissoesProcessosInternos.exameComplementares,

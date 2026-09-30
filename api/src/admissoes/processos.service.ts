@@ -40,6 +40,7 @@ import {
   listarHistoricoProcessoRepository,
   listarProcessosRepository,
   listarTurnosDaEmpresaRepository,
+  obterDestinoClinicaAtivoRepository,
   obterFuncaoAtivaRepository,
   obterProcessoPorTesteRepository,
   obterProcessoRepository,
@@ -88,6 +89,8 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
       ctpsUf: linha.ctpsUf,
       pisPasepNit: linha.pisPasepNit,
       exameTipo: linha.exameTipo,
+      exameClinicaId: linha.exameClinicaId,
+      exameUnidadeId: linha.exameUnidadeId,
       exameClinica: linha.exameClinica,
       exameUnidade: linha.exameUnidade,
       exameComplementares: linha.exameComplementares,
@@ -361,6 +364,24 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
       );
     }
 
+    const destino =
+      dados.destinoClinica === undefined
+        ? {
+            clinicaId: internos.exameClinicaId,
+            clinicaNome: internos.exameClinica,
+            unidadeId: internos.exameUnidadeId,
+            unidadeNome: internos.exameUnidade
+          }
+        : dados.destinoClinica === null
+          ? { clinicaId: null, clinicaNome: null, unidadeId: null, unidadeNome: null }
+          : await obterDestinoClinicaAtivoRepository(
+              { empresaId, clinicaId: dados.destinoClinica.clinicaId, unidadeId: dados.destinoClinica.unidadeId },
+              tx
+            );
+    if (!destino) {
+      throw erroValidacao("Selecione uma clinica ativa e uma unidade pertencente a ela", "DESTINO_CLINICA_INVALIDO");
+    }
+
     const atualizado = await atualizarInternosRepository(
       {
         processoId: id,
@@ -372,8 +393,10 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
         ctpsUf: dados.ctpsUf ?? null,
         pisPasepNit: dados.pisPasepNit ?? null,
         exameTipo: dados.exameTipo,
-        exameClinica: dados.exameClinica,
-        exameUnidade: dados.exameUnidade,
+        exameClinicaId: destino.clinicaId,
+        exameUnidadeId: destino.unidadeId,
+        exameClinica: destino.clinicaNome,
+        exameUnidade: destino.unidadeNome,
         exameComplementares: dados.exameComplementares,
         exameAgendadoPara: dados.exameAgendadoPara,
         exameResponsavelNome: dados.exameResponsavelNome,
@@ -411,8 +434,7 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
           "ctpsUf",
           "pisPasepNit",
           "exameTipo",
-          "exameClinica",
-          "exameUnidade",
+          "destinoClinica",
           "exameComplementares",
           "exameAgendadoPara",
           "exameResponsavelNome",

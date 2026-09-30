@@ -3128,8 +3128,11 @@ export const admissoesProcessosInternos = pgTable(
     exameTipo: text("exame_tipo").$type<
       "admissional" | "periodico" | "mudanca_funcao" | "retorno_trabalho" | "demissional" | "pcd"
     >(),
+    // Referencias para o catalogo. O nome abaixo continua sendo o retrato historico impresso na guia.
+    exameClinicaId: uuid("exame_clinica_id"),
+    exameUnidadeId: uuid("exame_unidade_id"),
     exameClinica: text("exame_clinica"),
-    exameUnidade: text("exame_unidade").$type<"centro" | "benfica">(),
+    exameUnidade: text("exame_unidade"),
     exameComplementares: text("exame_complementares").$type<"sim" | "nao" | "nao_sabe">(),
     exameAgendadoPara: timestamp("exame_agendado_para", { withTimezone: true }),
     exameResponsavelNome: text("exame_responsavel_nome"),
@@ -3171,8 +3174,8 @@ export const admissoesProcessosInternos = pgTable(
       sql`${table.exameTipo} is null or ${table.exameTipo} in ('admissional', 'periodico', 'mudanca_funcao', 'retorno_trabalho', 'demissional', 'pcd')`
     ),
     check(
-      "admissoes_processos_internos_exame_unidade_check",
-      sql`${table.exameUnidade} is null or ${table.exameUnidade} in ('centro', 'benfica')`
+      "admissoes_processos_internos_exame_destino_check",
+      sql`${table.exameUnidadeId} is null or ${table.exameClinicaId} is not null`
     ),
     check(
       "admissoes_processos_internos_exame_complementares_check",
@@ -3219,7 +3222,10 @@ export const clinicasOcupacionais = pgTable(
     unique("clinicas_ocupacionais_empresa_nome_unico").on(table.empresaId, table.nome),
     check("clinicas_ocupacionais_nome_check", sql`length(btrim(${table.nome})) > 0`),
     check("clinicas_ocupacionais_cnpj_check", sql`${table.cnpj} is null or ${table.cnpj} ~ '^[0-9]{14}$'`),
-    check("clinicas_ocupacionais_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`),
+    check(
+      "clinicas_ocupacionais_whatsapp_check",
+      sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`
+    ),
     index("clinicas_ocupacionais_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
   ]
 );
@@ -3251,12 +3257,21 @@ export const clinicasOcupacionaisUnidades = pgTable(
       name: "clinicas_ocupacionais_unidades_clinica_empresa_fk"
     }).onDelete("restrict"),
     unique("clinicas_ocupacionais_unidades_id_empresa_unica").on(table.id, table.empresaId),
+    unique("clinicas_ocupacionais_unidades_id_clinica_empresa_unica").on(table.id, table.clinicaId, table.empresaId),
     unique("clinicas_ocupacionais_unidades_clinica_nome_unico").on(table.clinicaId, table.nome),
     check("clinicas_ocupacionais_unidades_nome_check", sql`length(btrim(${table.nome})) > 0`),
-    check("clinicas_ocupacionais_unidades_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`),
+    check(
+      "clinicas_ocupacionais_unidades_whatsapp_check",
+      sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,13}$'`
+    ),
     check("clinicas_ocupacionais_unidades_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
     check("clinicas_ocupacionais_unidades_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
-    index("clinicas_ocupacionais_unidades_clinica_ativo_nome_idx").on(table.empresaId, table.clinicaId, table.ativo, table.nome)
+    index("clinicas_ocupacionais_unidades_clinica_ativo_nome_idx").on(
+      table.empresaId,
+      table.clinicaId,
+      table.ativo,
+      table.nome
+    )
   ]
 );
 
@@ -3680,16 +3695,37 @@ export const colaboradoresDadosPessoais = pgTable(
     id: idUuid,
     empresaId,
     colaboradorId: uuid("colaborador_id").notNull(),
-    nomeSocial: text("nome_social"), nascimento: date("nascimento"), sexo: text("sexo"), estadoCivil: text("estado_civil"),
-    racaCor: text("raca_cor"), grauInstrucao: text("grau_instrucao"), nacionalidade: text("nacionalidade"), naturalidade: text("naturalidade"),
-    nomeMae: text("nome_mae"), nomePai: text("nome_pai"), rgNumero: text("rg_numero"), rgOrgao: text("rg_orgao"),
-    rgUf: text("rg_uf"), rgEmissao: date("rg_emissao"), tituloEleitor: text("titulo_eleitor"), tituloZona: text("titulo_zona"), tituloSecao: text("titulo_secao"),
-    criadoEm, atualizadoEm
+    nomeSocial: text("nome_social"),
+    nascimento: date("nascimento"),
+    sexo: text("sexo"),
+    estadoCivil: text("estado_civil"),
+    racaCor: text("raca_cor"),
+    grauInstrucao: text("grau_instrucao"),
+    nacionalidade: text("nacionalidade"),
+    naturalidade: text("naturalidade"),
+    nomeMae: text("nome_mae"),
+    nomePai: text("nome_pai"),
+    rgNumero: text("rg_numero"),
+    rgOrgao: text("rg_orgao"),
+    rgUf: text("rg_uf"),
+    rgEmissao: date("rg_emissao"),
+    tituloEleitor: text("titulo_eleitor"),
+    tituloZona: text("titulo_zona"),
+    tituloSecao: text("titulo_secao"),
+    criadoEm,
+    atualizadoEm
   },
   (table) => [
-    foreignKey({ columns: [table.colaboradorId, table.empresaId], foreignColumns: [colaboradores.id, colaboradores.empresaId], name: "colaboradores_dados_pessoais_colaborador_empresa_fk" }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_dados_pessoais_colaborador_empresa_fk"
+    }).onDelete("restrict"),
     unique("colaboradores_dados_pessoais_colaborador_unico").on(table.colaboradorId),
-    check("colaboradores_dados_pessoais_sexo_check", sql`${table.sexo} is null or ${table.sexo} in ('Masculino', 'Feminino')`),
+    check(
+      "colaboradores_dados_pessoais_sexo_check",
+      sql`${table.sexo} is null or ${table.sexo} in ('Masculino', 'Feminino')`
+    ),
     check("colaboradores_dados_pessoais_rg_uf_check", sql`${table.rgUf} is null or ${table.rgUf} ~ '^[A-Z]{2}$'`)
   ]
 );
@@ -3697,24 +3733,57 @@ export const colaboradoresDadosPessoais = pgTable(
 export const colaboradoresEnderecos = pgTable(
   "colaboradores_enderecos",
   {
-    id: idUuid, empresaId, colaboradorId: uuid("colaborador_id").notNull(), cep: text("cep"), logradouro: text("logradouro"),
-    numero: text("numero"), complemento: text("complemento"), bairro: text("bairro"), municipio: text("municipio"), uf: text("uf"),
-    telefone: text("telefone"), email: text("email"), criadoEm, atualizadoEm
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    municipio: text("municipio"),
+    uf: text("uf"),
+    telefone: text("telefone"),
+    email: text("email"),
+    criadoEm,
+    atualizadoEm
   },
   (table) => [
-    foreignKey({ columns: [table.colaboradorId, table.empresaId], foreignColumns: [colaboradores.id, colaboradores.empresaId], name: "colaboradores_enderecos_colaborador_empresa_fk" }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_enderecos_colaborador_empresa_fk"
+    }).onDelete("restrict"),
     unique("colaboradores_enderecos_colaborador_unico").on(table.colaboradorId),
     check("colaboradores_enderecos_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
     check("colaboradores_enderecos_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
-    check("colaboradores_enderecos_telefone_check", sql`${table.telefone} is null or ${table.telefone} ~ '^[0-9]{10,11}$'`)
+    check(
+      "colaboradores_enderecos_telefone_check",
+      sql`${table.telefone} is null or ${table.telefone} ~ '^[0-9]{10,11}$'`
+    )
   ]
 );
 
 export const colaboradoresDadosBancarios = pgTable(
   "colaboradores_dados_bancarios",
-  { id: idUuid, empresaId, colaboradorId: uuid("colaborador_id").notNull(), banco: text("banco"), agencia: text("agencia"), conta: text("conta"), contaDigito: text("conta_digito"), contaTipo: text("conta_tipo"), criadoEm, atualizadoEm },
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    banco: text("banco"),
+    agencia: text("agencia"),
+    conta: text("conta"),
+    contaDigito: text("conta_digito"),
+    contaTipo: text("conta_tipo"),
+    criadoEm,
+    atualizadoEm
+  },
   (table) => [
-    foreignKey({ columns: [table.colaboradorId, table.empresaId], foreignColumns: [colaboradores.id, colaboradores.empresaId], name: "colaboradores_dados_bancarios_colaborador_empresa_fk" }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_dados_bancarios_colaborador_empresa_fk"
+    }).onDelete("restrict"),
     unique("colaboradores_dados_bancarios_colaborador_unico").on(table.colaboradorId)
   ]
 );
@@ -3722,15 +3791,46 @@ export const colaboradoresDadosBancarios = pgTable(
 export const colaboradoresOnboarding = pgTable(
   "colaboradores_onboarding",
   {
-    id: idUuid, empresaId, vinculoId: uuid("vinculo_id").notNull(), etapa: text("etapa").$type<"em_cadastro" | "cadastro_completo" | "aguardando_contabilidade" | "retorno_contabilidade" | "pendente_configuracao" | "configurado">().notNull().default("em_cadastro"),
-    versao: integer("versao").notNull().default(1), cadastroCompletoEm: timestamp("cadastro_completo_em", { withTimezone: true }), cadastroCompletoPor: text("cadastro_completo_por").references(() => perfisUsuarios.usuarioId),
-    enviadoContabilidadeEm: timestamp("enviado_contabilidade_em", { withTimezone: true }), enviadoContabilidadePor: text("enviado_contabilidade_por").references(() => perfisUsuarios.usuarioId),
-    retornoContabilidadeEm: timestamp("retorno_contabilidade_em", { withTimezone: true }), retornoContabilidadePor: text("retorno_contabilidade_por").references(() => perfisUsuarios.usuarioId), observacaoRetorno: text("observacao_retorno"),
-    configuradoEm: timestamp("configurado_em", { withTimezone: true }), configuradoPor: text("configurado_por").references(() => perfisUsuarios.usuarioId), criadoEm, atualizadoEm
+    id: idUuid,
+    empresaId,
+    vinculoId: uuid("vinculo_id").notNull(),
+    etapa: text("etapa")
+      .$type<
+        | "em_cadastro"
+        | "cadastro_completo"
+        | "aguardando_contabilidade"
+        | "retorno_contabilidade"
+        | "pendente_configuracao"
+        | "configurado"
+      >()
+      .notNull()
+      .default("em_cadastro"),
+    versao: integer("versao").notNull().default(1),
+    cadastroCompletoEm: timestamp("cadastro_completo_em", { withTimezone: true }),
+    cadastroCompletoPor: text("cadastro_completo_por").references(() => perfisUsuarios.usuarioId),
+    enviadoContabilidadeEm: timestamp("enviado_contabilidade_em", { withTimezone: true }),
+    enviadoContabilidadePor: text("enviado_contabilidade_por").references(() => perfisUsuarios.usuarioId),
+    retornoContabilidadeEm: timestamp("retorno_contabilidade_em", { withTimezone: true }),
+    retornoContabilidadePor: text("retorno_contabilidade_por").references(() => perfisUsuarios.usuarioId),
+    observacaoRetorno: text("observacao_retorno"),
+    configuradoEm: timestamp("configurado_em", { withTimezone: true }),
+    configuradoPor: text("configurado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm
   },
   (table) => [
-    foreignKey({ columns: [table.vinculoId, table.empresaId], foreignColumns: [colaboradoresVinculos.id, colaboradoresVinculos.empresaId], name: "colaboradores_onboarding_vinculo_empresa_fk" }).onDelete("restrict"),
-    unique("colaboradores_onboarding_vinculo_unico").on(table.vinculoId), check("colaboradores_onboarding_etapa_check", sql`${table.etapa} in ('em_cadastro','cadastro_completo','aguardando_contabilidade','retorno_contabilidade','pendente_configuracao','configurado')`), check("colaboradores_onboarding_versao_check", sql`${table.versao} > 0`), index("colaboradores_onboarding_empresa_etapa_idx").on(table.empresaId, table.etapa, table.atualizadoEm)
+    foreignKey({
+      columns: [table.vinculoId, table.empresaId],
+      foreignColumns: [colaboradoresVinculos.id, colaboradoresVinculos.empresaId],
+      name: "colaboradores_onboarding_vinculo_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_onboarding_vinculo_unico").on(table.vinculoId),
+    check(
+      "colaboradores_onboarding_etapa_check",
+      sql`${table.etapa} in ('em_cadastro','cadastro_completo','aguardando_contabilidade','retorno_contabilidade','pendente_configuracao','configurado')`
+    ),
+    check("colaboradores_onboarding_versao_check", sql`${table.versao} > 0`),
+    index("colaboradores_onboarding_empresa_etapa_idx").on(table.empresaId, table.etapa, table.atualizadoEm)
   ]
 );
 
@@ -3747,7 +3847,14 @@ export const colaboradoresEventos = pgTable(
     vinculoId: uuid("vinculo_id"),
     processoId: uuid("processo_id"),
     tipo: text("tipo")
-      .$type<"efetivado" | "recontratado" | "dados_cadastrais_atualizados" | "cadastro_concluido" | "enviado_contabilidade" | "vinculo_desligado">()
+      .$type<
+        | "efetivado"
+        | "recontratado"
+        | "dados_cadastrais_atualizados"
+        | "cadastro_concluido"
+        | "enviado_contabilidade"
+        | "vinculo_desligado"
+      >()
       .notNull(),
     camposAlterados: jsonb("campos_alterados")
       .$type<string[]>()

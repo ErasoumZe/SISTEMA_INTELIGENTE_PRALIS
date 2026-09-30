@@ -80,6 +80,8 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
       ctpsUf: "SP",
       pisPasepNit: "12345678901",
       exameTipo: "admissional",
+      exameClinicaId: null,
+      exameUnidadeId: null,
       exameClinica: "AcessaMed+",
       exameUnidade: "centro",
       exameComplementares: "nao",
