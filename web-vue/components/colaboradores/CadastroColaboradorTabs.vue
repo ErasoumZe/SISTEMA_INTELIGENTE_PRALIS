@@ -188,13 +188,13 @@ onMounted(carregar);
         <p class="cadastro__contexto">Departamento pessoal</p>
         <h2>Cadastro do colaborador</h2>
       </div>
-      <v-chip v-if="onboarding" :color="corEtapa[onboarding.etapa]" variant="tonal" size="small">
+      <v-chip v-if="onboarding" :color="corEtapa[onboarding.etapa]" variant="flat" size="small">
         {{ etapas[onboarding.etapa] }}
       </v-chip>
     </div>
 
-    <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
-    <v-alert v-if="salvo" type="success" variant="tonal" class="mb-4">{{ salvo }}</v-alert>
+    <v-alert v-if="erro" type="error" variant="flat" class="mb-4">{{ erro }}</v-alert>
+    <v-alert v-if="salvo" type="success" variant="flat" class="mb-4">{{ salvo }}</v-alert>
     <v-progress-linear v-if="carregando" indeterminate color="primary" class="mb-4" />
 
     <v-card v-if="!carregando" variant="outlined">
@@ -208,64 +208,80 @@ onMounted(carregar);
       <v-window v-model="aba">
         <v-window-item value="dados">
           <v-card-text class="cadastro__formulario">
-            <h3>Dados pessoais</h3>
-            <div class="cadastro__campos cadastro__campos--tres">
-              <v-text-field v-model="pessoais.nomeSocial" label="Nome social" :disabled="!podeEditar" />
-              <v-text-field
-                v-model="pessoais.nascimento"
-                type="date"
-                label="Data de nascimento"
-                :disabled="!podeEditar"
-              />
-              <v-select
-                v-model="pessoais.sexo"
-                label="Sexo"
-                :items="['Masculino', 'Feminino']"
-                :disabled="!podeEditar"
-              />
-              <v-text-field v-model="pessoais.estadoCivil" label="Estado civil" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.racaCor" label="Raça/cor" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.grauInstrucao" label="Grau de instrução" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.nacionalidade" label="Nacionalidade" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.naturalidade" label="Naturalidade" :disabled="!podeEditar" />
-            </div>
-            <div class="cadastro__campos cadastro__campos--dois">
-              <v-text-field v-model="pessoais.nomeMae" label="Nome da mãe" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.nomePai" label="Nome do pai" :disabled="!podeEditar" />
-            </div>
-            <h3>Identidade e título eleitoral</h3>
-            <div class="cadastro__campos cadastro__campos--quatro">
-              <v-text-field v-model="pessoais.rgNumero" label="RG" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.rgOrgao" label="Órgão emissor" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.rgUf" label="UF do RG" maxlength="2" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.rgEmissao" type="date" label="Emissão do RG" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.tituloEleitor" label="Título de eleitor" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.tituloZona" label="Zona" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.tituloSecao" label="Seção" :disabled="!podeEditar" />
-            </div>
-            <h3>Endereço e contato</h3>
-            <div class="cadastro__campos cadastro__campos--quatro">
-              <v-text-field v-model="endereco.cep" label="CEP" inputmode="numeric" :disabled="!podeEditar" />
-              <v-text-field
-                v-model="endereco.logradouro"
-                label="Logradouro"
-                class="cadastro__campo--duplo"
-                :disabled="!podeEditar"
-              />
-              <v-text-field v-model="endereco.numero" label="Número" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.complemento" label="Complemento" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.bairro" label="Bairro" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.municipio" label="Município" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.uf" label="UF" maxlength="2" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.telefone" label="Telefone" inputmode="tel" :disabled="!podeEditar" />
-              <v-text-field
-                v-model="endereco.email"
-                label="E-mail"
-                type="email"
-                class="cadastro__campo--duplo"
-                :disabled="!podeEditar"
-              />
-            </div>
+            <section class="cadastro__bloco">
+              <header class="cadastro__bloco-cabecalho">
+                <h3>Dados pessoais</h3>
+                <p>Identificação básica e informações usadas no cadastro do colaborador.</p>
+              </header>
+              <div class="cadastro__campos cadastro__campos--tres">
+                <v-text-field v-model="pessoais.nomeSocial" label="Nome social" :disabled="!podeEditar" />
+                <v-text-field
+                  v-model="pessoais.nascimento"
+                  type="date"
+                  label="Data de nascimento"
+                  :disabled="!podeEditar"
+                />
+                <v-select
+                  v-model="pessoais.sexo"
+                  label="Sexo"
+                  :items="['Masculino', 'Feminino']"
+                  :disabled="!podeEditar"
+                />
+                <v-text-field v-model="pessoais.estadoCivil" label="Estado civil" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.racaCor" label="Raça/cor" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.grauInstrucao" label="Grau de instrução" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.nacionalidade" label="Nacionalidade" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.naturalidade" label="Naturalidade" :disabled="!podeEditar" />
+              </div>
+              <div class="cadastro__campos cadastro__campos--dois">
+                <v-text-field v-model="pessoais.nomeMae" label="Nome da mãe" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.nomePai" label="Nome do pai" :disabled="!podeEditar" />
+              </div>
+            </section>
+            <section class="cadastro__bloco">
+              <header class="cadastro__bloco-cabecalho">
+                <h3>Documentos</h3>
+                <p>Registre os documentos conferidos pelo Departamento Pessoal.</p>
+              </header>
+              <h3 class="cadastro__subtitulo">Identidade e título eleitoral</h3>
+              <div class="cadastro__campos cadastro__campos--quatro">
+                <v-text-field v-model="pessoais.rgNumero" label="RG" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.rgOrgao" label="Órgão emissor" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.rgUf" label="UF do RG" maxlength="2" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.rgEmissao" type="date" label="Emissão do RG" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.tituloEleitor" label="Título de eleitor" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.tituloZona" label="Zona" :disabled="!podeEditar" />
+                <v-text-field v-model="pessoais.tituloSecao" label="Seção" :disabled="!podeEditar" />
+              </div>
+            </section>
+            <section class="cadastro__bloco">
+              <header class="cadastro__bloco-cabecalho">
+                <h3>Endereço e contato</h3>
+                <p>Use estes dados para comunicação e documentos do vínculo.</p>
+              </header>
+              <div class="cadastro__campos cadastro__campos--quatro">
+                <v-text-field v-model="endereco.cep" label="CEP" inputmode="numeric" :disabled="!podeEditar" />
+                <v-text-field
+                  v-model="endereco.logradouro"
+                  label="Logradouro"
+                  class="cadastro__campo--duplo"
+                  :disabled="!podeEditar"
+                />
+                <v-text-field v-model="endereco.numero" label="Número" :disabled="!podeEditar" />
+                <v-text-field v-model="endereco.complemento" label="Complemento" :disabled="!podeEditar" />
+                <v-text-field v-model="endereco.bairro" label="Bairro" :disabled="!podeEditar" />
+                <v-text-field v-model="endereco.municipio" label="Município" :disabled="!podeEditar" />
+                <v-text-field v-model="endereco.uf" label="UF" maxlength="2" :disabled="!podeEditar" />
+                <v-text-field v-model="endereco.telefone" label="Telefone" inputmode="tel" :disabled="!podeEditar" />
+                <v-text-field
+                  v-model="endereco.email"
+                  label="E-mail"
+                  type="email"
+                  class="cadastro__campo--duplo"
+                  :disabled="!podeEditar"
+                />
+              </div>
+            </section>
           </v-card-text>
         </v-window-item>
 
@@ -381,10 +397,33 @@ onMounted(carregar);
 }
 .cadastro__formulario {
   display: grid;
-  gap: 24px;
+  gap: 14px;
 }
-.cadastro__formulario h3 {
+.cadastro__bloco {
+  background: #171c22;
+  border: 1px solid #303943;
+  border-radius: 10px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+.cadastro__bloco-cabecalho {
+  display: grid;
+  gap: 4px;
+}
+.cadastro__bloco-cabecalho h3,
+.cadastro__subtitulo {
   font-size: 1rem;
+  margin: 0;
+}
+.cadastro__bloco-cabecalho p {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 0.84rem;
+  margin: 0;
+}
+.cadastro__subtitulo {
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  font-size: 0.9rem;
 }
 .cadastro__campos {
   display: grid;
@@ -405,6 +444,9 @@ onMounted(carregar);
   border-color: #303943;
   border-radius: 12px;
   box-shadow: none;
+}
+.cadastro :deep(.v-field) {
+  min-height: 48px;
 }
 .cadastro__acoes {
   background: #1b2128;
