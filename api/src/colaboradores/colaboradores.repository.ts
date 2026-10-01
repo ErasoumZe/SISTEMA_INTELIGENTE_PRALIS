@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { alias, type PgColumn } from "drizzle-orm/pg-core";
+import { type PgColumn } from "drizzle-orm/pg-core";
 import {
   cargos,
   colaboradores,
@@ -21,8 +21,6 @@ import {
 
 // Sem esta distinção, um cadastro anterior ao controle de vínculos apareceria como
 // "inativo" e induziria uma recontratação que ainda não é segura.
-const vinculoHistoricoColaborador = alias(colaboradoresVinculos, "vinculo_historico_colaborador");
-
 // O escopo virou WHERE em vez de `filtrarPorEmpresas` em memoria: antes esta consulta trazia a
 // tabela INTEIRA do banco e o recorte era do service. Com `inArray` o banco devolve so o permitido,
 // e escopo vazio vira `where false` em drizzle 0.45.2 (sql/expressions/conditions.js:75-77) — o
@@ -46,9 +44,9 @@ export async function listarColaboradoresRepository(escopoEmpresas: string[]) {
       vinculoAtivoId: colaboradoresVinculos.id,
       temVinculoHistorico: sql<boolean>`exists (
         select 1
-        from ${vinculoHistoricoColaborador}
-        where ${vinculoHistoricoColaborador.colaboradorId} = ${colaboradores.id}
-          and ${vinculoHistoricoColaborador.empresaId} = ${colaboradores.empresaId}
+        from ${colaboradoresVinculos}
+        where ${colaboradoresVinculos.colaboradorId} = ${colaboradores.id}
+          and ${colaboradoresVinculos.empresaId} = ${colaboradores.empresaId}
       )`,
       matricula: colaboradoresVinculos.matricula,
       funcaoNome: colaboradoresVinculos.funcaoNome,
