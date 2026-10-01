@@ -46,6 +46,7 @@ const erro = ref("");
 const editando = ref(false);
 const salvando = ref(false);
 const nomeEditado = ref("");
+const aba = ref("visao_geral");
 
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeEditar = computed(() => temPermissao(permissoes.value, "cadastro_colaboradores_editar"));
@@ -152,79 +153,100 @@ onMounted(async () => {
         >
       </v-card>
 
-      <template v-if="perfil">
-        <section class="perfil__grade">
-          <v-card variant="outlined">
-            <v-card-title>Resumo atual</v-card-title>
-            <v-card-text v-if="vinculoAtivo" class="perfil__resumo">
-              <strong>{{ vinculoAtivo.funcaoNome }}</strong>
-              <span>Matrícula {{ vinculoAtivo.matricula }}</span>
-              <span>Admitido em {{ formatarDataSomenteDia(vinculoAtivo.admitidoEm) }}</span>
-              <span v-if="vinculoAtivo.turnoRotulo"
-                >{{ vinculoAtivo.turnoRotulo }} · {{ vinculoAtivo.turnoHoraInicio?.slice(0, 5) }}–{{
-                  vinculoAtivo.turnoHoraFim?.slice(0, 5)
-                }}</span
-              >
-              <span v-else>{{ vinculoAtivo.jornadaHorario }}</span>
-            </v-card-text>
-            <v-card-text v-else-if="perfil.situacao === 'inativo'"
-              >Sem vínculo ativo. O cadastro permanece disponível para consulta e edição do nome. A recontratação só é
-              liberada depois do desligamento registrado.</v-card-text
-            >
-            <v-card-text v-else
-              >Este cadastro é anterior ao controle de vínculos. Concilie o histórico antes de registrar desligamento ou
-              recontratação.</v-card-text
-            >
-          </v-card>
+      <v-tabs v-model="aba" class="perfil__abas mb-5" color="primary" show-arrows>
+        <v-tab value="visao_geral">Visão geral</v-tab>
+        <v-tab value="cadastro">Cadastro</v-tab>
+        <v-tab value="vinculos">Vínculos</v-tab>
+        <v-tab value="historico">Histórico</v-tab>
+      </v-tabs>
 
-          <v-card variant="outlined">
-            <v-card-title>Fluxo de onboarding</v-card-title>
-            <v-card-text class="perfil__checklist">
-              <span v-if="vinculoAtivo"><v-icon color="success" icon="mdi-check-circle" /> Cadastro e vínculo registrados</span>
-              <span v-else-if="perfil.situacao === 'inativo'"
-                ><v-icon color="success" icon="mdi-check-circle" /> Vínculo encerrado e preservado no histórico</span
-              >
-              <span v-else
-                ><v-icon color="warning" icon="mdi-alert-circle" /> Histórico anterior a vínculos: conciliação pendente</span
-              >
-              <span><v-icon color="info" icon="mdi-information" /> Complete os dados pessoais, contato e dados bancários antes do envio à contabilidade.</span>
-            </v-card-text>
-          </v-card>
-        </section>
-
-        <CadastroColaboradorTabs :colaborador-id="colaboradorId" :pode-editar="podeEditar" />
-
-        <section class="perfil__secao">
-          <h2>Vínculos</h2>
-          <v-card v-for="vinculo in perfil.vinculos" :key="vinculo.id" variant="outlined" class="mb-3">
-            <v-card-text class="perfil__vinculo">
-              <div>
-                <strong>{{ vinculo.matricula }}</strong
-                ><span
-                  >{{ vinculo.funcaoNome
-                  }}<template v-if="vinculo.funcaoCbo"> · CBO {{ vinculo.funcaoCbo }}</template></span
+      <v-window v-if="perfil" v-model="aba">
+        <v-window-item value="visao_geral">
+          <section class="perfil__grade">
+            <v-card variant="outlined">
+              <v-card-title>Resumo atual</v-card-title>
+              <v-card-text v-if="vinculoAtivo" class="perfil__resumo">
+                <strong>{{ vinculoAtivo.funcaoNome }}</strong>
+                <span>Matrícula {{ vinculoAtivo.matricula }}</span>
+                <span>Admitido em {{ formatarDataSomenteDia(vinculoAtivo.admitidoEm) }}</span>
+                <span v-if="vinculoAtivo.turnoRotulo"
+                  >{{ vinculoAtivo.turnoRotulo }} · {{ vinculoAtivo.turnoHoraInicio?.slice(0, 5) }}–{{
+                    vinculoAtivo.turnoHoraFim?.slice(0, 5)
+                  }}</span
                 >
-              </div>
-              <v-chip :color="vinculo.status === 'ativo' ? 'success' : 'default'" size="small" variant="tonal">{{
-                vinculo.status === "ativo" ? "Ativo" : "Desligado"
-              }}</v-chip>
-              <span>Admissão: {{ formatarDataSomenteDia(vinculo.admitidoEm) }}</span>
-              <span v-if="vinculo.desligadoEm">Desligamento: {{ formatarDataHora(vinculo.desligadoEm) }}</span>
-            </v-card-text>
-          </v-card>
-        </section>
+                <span v-else>{{ vinculoAtivo.jornadaHorario }}</span>
+              </v-card-text>
+              <v-card-text v-else-if="perfil.situacao === 'inativo'"
+                >Sem vínculo ativo. O cadastro permanece disponível para consulta e edição do nome. A recontratação só é
+                liberada depois do desligamento registrado.</v-card-text
+              >
+              <v-card-text v-else
+                >Este cadastro é anterior ao controle de vínculos. Concilie o histórico antes de registrar desligamento
+                ou recontratação.</v-card-text
+              >
+            </v-card>
 
-        <section class="perfil__secao">
-          <h2>Linha do tempo</h2>
-          <ol class="perfil__linha">
-            <li v-for="evento in perfil.eventos" :key="evento.id">
-              <strong>{{ rotuloEvento[evento.tipo] ?? evento.tipo }}</strong
-              ><span>{{ evento.atorNome ?? "Sistema" }} · {{ formatarDataHora(evento.ocorridoEm) }}</span>
-            </li>
-          </ol>
-          <p v-if="!perfil.eventos.length" class="perfil__vazio">Ainda não há eventos neste cadastro.</p>
-        </section>
-      </template>
+            <v-card variant="outlined">
+              <v-card-title>Fluxo de onboarding</v-card-title>
+              <v-card-text class="perfil__checklist">
+                <span v-if="vinculoAtivo"
+                  ><v-icon color="success" icon="mdi-check-circle" /> Cadastro e vínculo registrados</span
+                >
+                <span v-else-if="perfil.situacao === 'inativo'"
+                  ><v-icon color="success" icon="mdi-check-circle" /> Vínculo encerrado e preservado no histórico</span
+                >
+                <span v-else
+                  ><v-icon color="warning" icon="mdi-alert-circle" /> Histórico anterior a vínculos: conciliação
+                  pendente</span
+                >
+                <span
+                  ><v-icon color="info" icon="mdi-information" /> Complete os dados pessoais, contato e dados bancários
+                  antes do envio à contabilidade.</span
+                >
+              </v-card-text>
+            </v-card>
+          </section>
+        </v-window-item>
+
+        <v-window-item value="cadastro">
+          <CadastroColaboradorTabs :colaborador-id="colaboradorId" :pode-editar="podeEditar" />
+        </v-window-item>
+
+        <v-window-item value="vinculos">
+          <section class="perfil__secao perfil__secao--primeira">
+            <h2>Vínculos</h2>
+            <v-card v-for="vinculo in perfil.vinculos" :key="vinculo.id" variant="outlined" class="mb-3">
+              <v-card-text class="perfil__vinculo">
+                <div>
+                  <strong>{{ vinculo.matricula }}</strong
+                  ><span
+                    >{{ vinculo.funcaoNome
+                    }}<template v-if="vinculo.funcaoCbo"> · CBO {{ vinculo.funcaoCbo }}</template></span
+                  >
+                </div>
+                <v-chip :color="vinculo.status === 'ativo' ? 'success' : 'default'" size="small" variant="tonal">{{
+                  vinculo.status === "ativo" ? "Ativo" : "Desligado"
+                }}</v-chip>
+                <span>Admissão: {{ formatarDataSomenteDia(vinculo.admitidoEm) }}</span>
+                <span v-if="vinculo.desligadoEm">Desligamento: {{ formatarDataHora(vinculo.desligadoEm) }}</span>
+              </v-card-text>
+            </v-card>
+          </section>
+        </v-window-item>
+
+        <v-window-item value="historico">
+          <section class="perfil__secao perfil__secao--primeira">
+            <h2>Linha do tempo</h2>
+            <ol class="perfil__linha">
+              <li v-for="evento in perfil.eventos" :key="evento.id">
+                <strong>{{ rotuloEvento[evento.tipo] ?? evento.tipo }}</strong
+                ><span>{{ evento.atorNome ?? "Sistema" }} · {{ formatarDataHora(evento.ocorridoEm) }}</span>
+              </li>
+            </ol>
+            <p v-if="!perfil.eventos.length" class="perfil__vazio">Ainda não há eventos neste cadastro.</p>
+          </section>
+        </v-window-item>
+      </v-window>
     </main>
   </AppShell>
 </template>
@@ -285,6 +307,14 @@ onMounted(async () => {
 }
 .perfil__secao {
   margin-top: 28px;
+}
+
+.perfil__secao--primeira {
+  margin-top: 0;
+}
+
+.perfil__abas {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
 }
 .perfil__secao h2 {
   font-size: 1.1rem;
