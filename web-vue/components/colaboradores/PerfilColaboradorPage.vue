@@ -27,6 +27,13 @@ type Vinculo = {
   jornadaHorario: string | null;
 };
 type Evento = { id: string; tipo: string; camposAlterados: string[]; atorNome: string | null; ocorridoEm: string };
+type Dependente = {
+  id: string;
+  nomeCompleto: string;
+  nascimento: string;
+  parentesco: string;
+  cpfInformado: boolean;
+};
 type Perfil = {
   id: string;
   nome: string;
@@ -36,6 +43,7 @@ type Perfil = {
   vinculoAtivoId: string | null;
   vinculos: Vinculo[];
   eventos: Evento[];
+  dependentes: Dependente[];
 };
 
 const router = useRouter();
@@ -168,6 +176,7 @@ onMounted(async () => {
         <v-tab value="visao_geral">Visão geral</v-tab>
         <v-tab value="cadastro">Cadastro</v-tab>
         <v-tab value="jornada" prepend-icon="mdi-clock-outline">Jornada e ponto</v-tab>
+        <v-tab value="dependentes" prepend-icon="mdi-account-child-outline">Dependentes</v-tab>
         <v-tab value="vinculos">Vínculos</v-tab>
         <v-tab value="historico">Histórico</v-tab>
       </v-tabs>
@@ -226,6 +235,28 @@ onMounted(async () => {
 
         <v-window-item value="jornada">
           <JornadaColaboradorPanel :colaborador-id="colaboradorId" :empresa-id="empresaId" :pode-editar="podeEditar" />
+        </v-window-item>
+
+        <v-window-item value="dependentes">
+          <section class="perfil__secao perfil__secao--primeira">
+            <h2>Dependentes declarados na admissão</h2>
+            <v-alert type="info" variant="tonal" class="mb-4">
+              Esta consulta preserva os dependentes informados na ficha de admissão. A edição no cadastro do colaborador
+              exige uma tabela própria de dependentes, que ainda não foi criada.
+            </v-alert>
+            <v-card v-if="perfil.dependentes.length" variant="outlined" class="perfil__card">
+              <v-list lines="two">
+                <v-list-item v-for="dependente in perfil.dependentes" :key="dependente.id">
+                  <v-list-item-title>{{ dependente.nomeCompleto }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    {{ dependente.parentesco }} · nascimento {{ formatarDataSomenteDia(dependente.nascimento) }} · CPF
+                    {{ dependente.cpfInformado ? "informado" : "não informado" }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </v-card>
+            <p v-else class="perfil__vazio">Nenhum dependente foi declarado na ficha de admissão.</p>
+          </section>
         </v-window-item>
 
         <v-window-item value="vinculos">

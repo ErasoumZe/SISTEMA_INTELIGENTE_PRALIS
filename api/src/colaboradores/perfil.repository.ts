@@ -1,5 +1,6 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { admissoesProcessosDependentes } from "@padaria/db/schema/admissoes";
 import {
   colaboradores,
   colaboradoresDadosBancarios,
@@ -33,6 +34,7 @@ export async function listarVinculosDoColaboradorRepository(colaboradorId: strin
   return banco
     .select({
       id: colaboradoresVinculos.id,
+      processoId: colaboradoresVinculos.processoId,
       matricula: colaboradoresVinculos.matricula,
       status: colaboradoresVinculos.status,
       admitidoEm: colaboradoresVinculos.admitidoEm,
@@ -50,6 +52,27 @@ export async function listarVinculosDoColaboradorRepository(colaboradorId: strin
     .from(colaboradoresVinculos)
     .where(and(eq(colaboradoresVinculos.colaboradorId, colaboradorId), eq(colaboradoresVinculos.empresaId, empresaId)))
     .orderBy(desc(colaboradoresVinculos.admitidoEm), desc(colaboradoresVinculos.criadoEm));
+}
+
+export async function listarDependentesDosVinculosRepository(processoIds: string[], empresaId: string) {
+  if (!processoIds.length) return [];
+  return banco
+    .select({
+      id: admissoesProcessosDependentes.id,
+      processoId: admissoesProcessosDependentes.processoId,
+      nomeCompleto: admissoesProcessosDependentes.nomeCompleto,
+      nascimento: admissoesProcessosDependentes.nascimento,
+      parentesco: admissoesProcessosDependentes.parentesco,
+      cpfInformado: admissoesProcessosDependentes.cpf
+    })
+    .from(admissoesProcessosDependentes)
+    .where(
+      and(
+        inArray(admissoesProcessosDependentes.processoId, processoIds),
+        eq(admissoesProcessosDependentes.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(admissoesProcessosDependentes.nomeCompleto));
 }
 
 export async function listarEventosDoColaboradorRepository(colaboradorId: string, empresaId: string) {
@@ -110,7 +133,9 @@ export async function obterDadosCadastraisDoColaboradorRepository(colaboradorId:
         email: colaboradoresEnderecos.email
       })
       .from(colaboradoresEnderecos)
-      .where(and(eq(colaboradoresEnderecos.colaboradorId, colaboradorId), eq(colaboradoresEnderecos.empresaId, empresaId)))
+      .where(
+        and(eq(colaboradoresEnderecos.colaboradorId, colaboradorId), eq(colaboradoresEnderecos.empresaId, empresaId))
+      )
       .limit(1),
     banco
       .select({

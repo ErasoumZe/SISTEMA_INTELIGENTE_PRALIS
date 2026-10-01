@@ -1,6 +1,9 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import type { PerfilUsuario } from "@padaria/shared";
-import { atualizarPerfilCadastralPayloadSchema, type AtualizarPerfilCadastralPayload } from "@padaria/shared/colaboradores";
+import {
+  atualizarPerfilCadastralPayloadSchema,
+  type AtualizarPerfilCadastralPayload
+} from "@padaria/shared/colaboradores";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { naoEncontrado } from "../erros.js";
 import { atorDoPerfil, empresaDoAtor } from "../admissoes/ator.js";
@@ -8,6 +11,7 @@ import {
   atualizarNomePerfilRepository,
   bloquearColaboradorPerfilRepository,
   criarOnboardingDoVinculoRepository,
+  listarDependentesDosVinculosRepository,
   obterDadosCadastraisDoColaboradorRepository,
   obterOnboardingDoVinculoRepository,
   listarEventosDoColaboradorRepository,
@@ -32,6 +36,10 @@ export async function obterPerfilColaborador(id: string, perfil?: PerfilUsuario)
     listarEventosDoColaboradorRepository(id, empresaId),
     obterDadosCadastraisDoColaboradorRepository(id, empresaId)
   ]);
+  const dependentes = await listarDependentesDosVinculosRepository(
+    vinculos.map((vinculo) => vinculo.processoId),
+    empresaId
+  );
   const vinculoAtivo = vinculos.find((vinculo) => vinculo.status === "ativo") ?? null;
   const onboarding = vinculoAtivo ? await obterOnboardingDoVinculoRepository(vinculoAtivo.id, empresaId) : null;
   return {
@@ -41,6 +49,10 @@ export async function obterPerfilColaborador(id: string, perfil?: PerfilUsuario)
     situacao: vinculoAtivo ? "ativo" : vinculos.length ? "inativo" : "conciliacao_pendente",
     vinculoAtivoId: vinculoAtivo?.id ?? null,
     ...dadosCadastrais,
+    dependentes: dependentes.map((dependente) => ({
+      ...dependente,
+      cpfInformado: Boolean(dependente.cpfInformado)
+    })),
     onboarding: onboarding
       ? {
           ...onboarding,
