@@ -13,6 +13,7 @@ import {
   processoCancelavel
 } from "~/utils/admissoes";
 import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
+import ProcessoEtapasStepper from "~/components/admissoes/ProcessoEtapasStepper.vue";
 import { formatarDataHora, mascararCpf } from "~/utils/formatacao";
 import { linkDoConvite } from "~/utils/convite-token";
 import { copiarTexto } from "~/utils/copiar-texto";
@@ -281,6 +282,8 @@ function confirmarCancelar() {
         </div>
 
         <div v-else-if="processo" class="detalhe">
+          <ProcessoEtapasStepper :processo="processo" :pode-revisar-ficha="podeRevisarFicha" :efetivavel="efetivavel" />
+
           <!-- Mesmo padrão do painel do teste: cada estado com rótulo, e a frase que diz de onde a
                situação vem. Chip solto vira "campo" na cabeça de quem lê. -->
           <section class="detalhe-secao detalhe-secao--processo" aria-labelledby="titulo-dados-processo">
