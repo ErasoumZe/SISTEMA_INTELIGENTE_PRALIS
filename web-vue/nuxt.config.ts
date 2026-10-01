@@ -1,5 +1,11 @@
 import { defineNuxtConfig } from "nuxt/config";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+// O workspace de desenvolvimento pode usar junctions para o node_modules compartilhado da máquina.
+// O Vite compara o caminho real dos CSS/componentes com a allowlist; sem este caminho, a página
+// carrega a casca mas falha ao importar páginas dinamicamente depois do primeiro hot reload.
+const dependenciasReais = realpathSync(fileURLToPath(new URL("../node_modules", import.meta.url)));
 
 export default defineNuxtConfig({
   ssr: false,
@@ -11,6 +17,7 @@ export default defineNuxtConfig({
     "@padaria/shared/": fileURLToPath(new URL("../shared/src/", import.meta.url))
   },
   vite: {
+    server: { fs: { allow: [dependenciasReais] } },
     optimizeDeps: {
       include: ["@vue/devtools-core", "@vue/devtools-kit", "zod"]
     }
