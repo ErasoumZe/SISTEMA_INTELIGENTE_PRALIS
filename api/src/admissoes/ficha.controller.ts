@@ -11,9 +11,11 @@ import {
   concluirFichaDp,
   devolverFicha,
   enviarFicha,
+  iniciarFichaDp,
   obterFichaParaDp,
   obterFichaParaRevisao,
   obterFichaPublica,
+  salvarFichaDp,
   salvarRascunhoFicha
 } from "./ficha.service.js";
 
@@ -78,6 +80,19 @@ export async function registrarRotasAdmissaoFicha(app: FastifyInstance): Promise
       try {
         const { id } = processoParamsSchema.parse(request.params);
         return ok(await obterFichaParaDp(id, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.post(
+    "/api/admissoes/processos/:id/ficha-dp/iniciar",
+    { preHandler: exigirPermissao("admissoes_processos_revisar_ficha") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        return ok(await iniciarFichaDp(id, request.perfilUsuario));
       } catch (error) {
         return responderErro(reply, error);
       }

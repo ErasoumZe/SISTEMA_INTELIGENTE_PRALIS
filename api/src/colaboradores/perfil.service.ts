@@ -12,6 +12,7 @@ import {
   bloquearColaboradorPerfilRepository,
   criarOnboardingDoVinculoRepository,
   listarDependentesDosVinculosRepository,
+  obterDadosAdmissionaisDoVinculoRepository,
   obterDadosCadastraisDoColaboradorRepository,
   obterOnboardingDoVinculoRepository,
   listarEventosDoColaboradorRepository,
@@ -41,6 +42,9 @@ export async function obterPerfilColaborador(id: string, perfil?: PerfilUsuario)
     empresaId
   );
   const vinculoAtivo = vinculos.find((vinculo) => vinculo.status === "ativo") ?? null;
+  const dadosAdmissionais = vinculoAtivo
+    ? await obterDadosAdmissionaisDoVinculoRepository(vinculoAtivo.processoId, empresaId)
+    : null;
   const onboarding = vinculoAtivo ? await obterOnboardingDoVinculoRepository(vinculoAtivo.id, empresaId) : null;
   return {
     ...colaborador,
@@ -53,6 +57,13 @@ export async function obterPerfilColaborador(id: string, perfil?: PerfilUsuario)
       ...dependente,
       cpfInformado: Boolean(dependente.cpfInformado)
     })),
+    dadosAdmissionais: dadosAdmissionais
+      ? {
+          ...dadosAdmissionais,
+          exameAgendadoPara: dadosAdmissionais.exameAgendadoPara?.toISOString() ?? null,
+          exameAtualizadoEm: dadosAdmissionais.exameAtualizadoEm?.toISOString() ?? null
+        }
+      : null,
     onboarding: onboarding
       ? {
           ...onboarding,

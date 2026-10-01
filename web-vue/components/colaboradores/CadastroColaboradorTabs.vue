@@ -41,6 +41,21 @@ type Bancarios = {
   contaDigito: TextoNulo;
   contaTipo: TextoNulo;
 };
+type DadosAdmissionais = {
+  dataAdmissao: string | null;
+  ctpsNumero: string | null;
+  ctpsSerie: string | null;
+  ctpsUf: string | null;
+  pisPasepNit: string | null;
+  exameTipo: string | null;
+  exameClinica: string | null;
+  exameUnidade: string | null;
+  exameComplementares: string | null;
+  exameAgendadoPara: string | null;
+  exameSituacao: string;
+  exameAtualizadoEm: string | null;
+  observacoesRh: string | null;
+};
 type Onboarding = {
   etapa:
     | "em_cadastro"
@@ -62,6 +77,7 @@ type DadosCadastrais = {
   dadosPessoais: DadosPessoais | null;
   enderecoContato: Endereco | null;
   dadosBancarios: Bancarios | null;
+  dadosAdmissionais: DadosAdmissionais | null;
   onboarding: Onboarding | null;
 };
 
@@ -113,6 +129,7 @@ const pessoais = ref<DadosPessoais>(vazioPessoais());
 const endereco = ref<Endereco>(vazioEndereco());
 const bancarios = ref<Bancarios>(vazioBancarios());
 const onboarding = ref<Onboarding | null>(null);
+const dadosAdmissionais = ref<DadosAdmissionais | null>(null);
 
 const etapas: Record<Onboarding["etapa"], string> = {
   em_cadastro: "Em cadastro",
@@ -150,6 +167,7 @@ async function carregar() {
     pessoais.value = hidratar(vazioPessoais(), dados.dadosPessoais);
     endereco.value = hidratar(vazioEndereco(), dados.enderecoContato);
     bancarios.value = hidratar(vazioBancarios(), dados.dadosBancarios);
+    dadosAdmissionais.value = dados.dadosAdmissionais;
     onboarding.value = dados.onboarding;
   } catch (error) {
     erro.value = mensagemErro(error);
@@ -200,6 +218,7 @@ onMounted(carregar);
     <v-card v-if="!carregando" variant="outlined">
       <v-tabs v-model="aba" class="cadastro__abas" color="primary">
         <v-tab value="dados" prepend-icon="mdi-account-card-outline">Dados</v-tab>
+        <v-tab value="admissao" prepend-icon="mdi-briefcase-account-outline">Admissão</v-tab>
         <v-tab value="bancarios" prepend-icon="mdi-bank-outline">Bancários</v-tab>
         <v-tab value="onboarding" prepend-icon="mdi-progress-check">Onboarding</v-tab>
       </v-tabs>
@@ -282,6 +301,61 @@ onMounted(carregar);
                 />
               </div>
             </section>
+          </v-card-text>
+        </v-window-item>
+
+        <v-window-item value="admissao">
+          <v-card-text class="cadastro__formulario">
+            <v-alert v-if="!dadosAdmissionais" type="info" variant="tonal">
+              Este vínculo ainda não possui dados admissionais projetados.
+            </v-alert>
+            <template v-else>
+              <section class="cadastro__bloco">
+                <header class="cadastro__bloco-cabecalho">
+                  <h3>Dados do vínculo</h3>
+                  <p>Informações mantidas na ficha interna da admissão e exibidas aqui sem duplicar o cadastro.</p>
+                </header>
+                <dl class="cadastro__resumo">
+                  <div>
+                    <dt>Data de admissão</dt>
+                    <dd>{{ dadosAdmissionais.dataAdmissao || "Não informada" }}</dd>
+                  </div>
+                  <div>
+                    <dt>CTPS</dt>
+                    <dd>
+                      {{ dadosAdmissionais.ctpsNumero || "Não informada"
+                      }}<template v-if="dadosAdmissionais.ctpsSerie">
+                        · série {{ dadosAdmissionais.ctpsSerie }}</template
+                      ><template v-if="dadosAdmissionais.ctpsUf"> · {{ dadosAdmissionais.ctpsUf }}</template>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>PIS/PASEP/NIT</dt>
+                    <dd>{{ dadosAdmissionais.pisPasepNit || "Não informado" }}</dd>
+                  </div>
+                  <div>
+                    <dt>Exame admissional</dt>
+                    <dd>{{ dadosAdmissionais.exameSituacao.replaceAll("_", " ") }}</dd>
+                  </div>
+                  <div>
+                    <dt>Clínica</dt>
+                    <dd>{{ dadosAdmissionais.exameClinica || "Não informada" }}</dd>
+                  </div>
+                  <div>
+                    <dt>Unidade/agendamento</dt>
+                    <dd>
+                      {{ dadosAdmissionais.exameUnidade || "Não informado"
+                      }}<template v-if="dadosAdmissionais.exameAgendadoPara">
+                        · {{ new Date(dadosAdmissionais.exameAgendadoPara).toLocaleString("pt-BR") }}</template
+                      >
+                    </dd>
+                  </div>
+                </dl>
+                <v-alert v-if="dadosAdmissionais.observacoesRh" type="info" variant="tonal" density="compact">
+                  Observações do RH: {{ dadosAdmissionais.observacoesRh }}
+                </v-alert>
+              </section>
+            </template>
           </v-card-text>
         </v-window-item>
 

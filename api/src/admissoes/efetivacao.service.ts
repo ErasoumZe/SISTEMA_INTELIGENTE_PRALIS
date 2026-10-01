@@ -1,4 +1,5 @@
 import type { PerfilUsuario } from "@padaria/shared";
+import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, naoEncontrado } from "../erros.js";
 import { sqlTravarAdmissaoDaPessoa, sqlTravarMatriculaDaEmpresa } from "@padaria/db/sessao";
@@ -117,10 +118,10 @@ export async function efetivarProcesso(id: string, perfil?: PerfilUsuario) {
         funcaoCbo: dados.funcaoCbo,
         turnoId: dados.turnoId,
         turnoRotulo: dados.turnoRotulo,
-        turnoEtiqueta: dados.turnoEtiqueta,
+        turnoEtiqueta: dados.turnoEtiqueta as EtiquetaTurno | null,
         turnoHoraInicio: dados.turnoHoraInicio,
         turnoHoraFim: dados.turnoHoraFim,
-        turnoDiasSemana: dados.turnoDiasSemana,
+        turnoDiasSemana: dados.turnoDiasSemana as DiaSemana[] | null,
         jornadaHorario: dados.jornadaHorario,
         criadoPor: ator
       },

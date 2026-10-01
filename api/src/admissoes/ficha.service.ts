@@ -4,6 +4,7 @@ import {
   avisoPorVersao,
   avisoVigenteDoAmbiente,
   devolverFichaPayloadSchema,
+  estadosCivis,
   fichaDpConcluirPayloadSchema,
   fichaEnviarPayloadSchema,
   fichaRascunhoPayloadSchema,
@@ -90,11 +91,15 @@ type LinhaDaFicha = NonNullable<Awaited<ReturnType<typeof obterFichaRepository>>
 /** Copia os campos da linha para o formato do contrato. Explicito de proposito: sem cast, o
  * compilador acusa campo novo que alguem esquecer de trazer. */
 function camposDaLinha(ficha: LinhaDaFicha): CamposDaFicha {
+  const sexo = ficha.sexo === "Masculino" || ficha.sexo === "Feminino" ? ficha.sexo : null;
+  const estadoCivil = estadosCivis.includes(ficha.estadoCivil as (typeof estadosCivis)[number])
+    ? (ficha.estadoCivil as (typeof estadosCivis)[number])
+    : null;
   return {
     nomeSocial: ficha.nomeSocial,
     nascimento: ficha.nascimento,
-    sexo: ficha.sexo,
-    estadoCivil: ficha.estadoCivil,
+    sexo,
+    estadoCivil,
     racaCor: ficha.racaCor,
     grauInstrucao: ficha.grauInstrucao,
     nacionalidade: ficha.nacionalidade,
@@ -399,12 +404,48 @@ export async function obterFichaParaRevisao(
  * Porta manual do DP. Um processo novo ganha rascunho interno na primeira abertura; uma ficha
  * historica enviada por link e preservada como evidencia e nao e convertida silenciosamente.
  */
-export async function obterFichaParaDp(processoId: string, perfil?: PerfilUsuario): Promise<FichaRevisaoDto> {
+/**
+ * Consulta a ficha interna sem criar dados.
+ *
+ * Ler uma ficha precisa ser leitura pura: abrir a rota com permissao de consulta nao pode criar
+ * um rascunho em nome do DP. A criacao foi movida para `iniciarFichaDp`, uma acao explicita com
+ * permissao de revisao.
+ */
+export async function obterFichaParaDp(processoId: string, perfil?: PerfilUsuario): Promise<FichaRevisaoDto | null> {
+  return obterFichaParaRevisao(processoId, perfil);
+}
+
+/** Cria o rascunho interno somente por acao explicita do DP e devolve a ficha criada. */
+export async function iniciarFichaDp(processoId: string, perfil?: PerfilUsuario): Promise<FichaRevisaoDto> {
   const empresaId = empresaDoAtor(perfil);
-  const processo = await obterProcessoRepository(processoId, empresaId);
-  if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
 
   return executarEmTransacao(async (tx) => {
+    const processo = await bloquearProcessoRepository(processoId, empresaId, tx);
+    if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
+    const fichaExistente = await obterFichaRepository(processoId, empresaId, tx);
+    if (fichaExistente) {
+      const dependentes = await listarDependentesParaRevisaoRepository(processoId, empresaId, tx);
+      return {
+        situacao: fichaExistente.situacao as FichaRevisaoDto["situacao"],
+        versao: fichaExistente.versao,
+        semDependentes: fichaExistente.semDependentes,
+        enviadoEm: fichaExistente.enviadoEm?.toISOString() ?? null,
+        revisadoEm: fichaExistente.revisadoEm?.toISOString() ?? null,
+        revisadoPorNome: fichaExistente.revisadoPorNome,
+        revisaoPendencias: fichaExistente.revisaoPendencias,
+        avisoPrivacidadeVersao: fichaExistente.avisoPrivacidadeVersao,
+        avisoAceitoEm: fichaExistente.avisoAceitoEm?.toISOString() ?? null,
+        campos: camposDaLinha(fichaExistente),
+        dependentes: dependentes.map((dependente) => ({
+          id: dependente.id,
+          nomeCompleto: dependente.nomeCompleto,
+          nascimento: dependente.nascimento,
+          parentesco: dependente.parentesco,
+          cpfInformado: dependente.cpfInformado,
+          finalidades: dependente.finalidades
+        }))
+      };
+    }
     await garantirFichaRepository({ processoId, empresaId, situacao: "rascunho_dp" }, tx);
     const ficha = await obterFichaRepository(processoId, empresaId, tx);
     if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
@@ -441,31 +482,38 @@ export async function salvarFichaDp(processoId: string, body: DadosExternos, per
     if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
     const ficha = await bloquearFichaRepository(processoId, empresaId, tx);
     if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
-    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada" && ficha.situacao !== "concluida_dp") {
+    if (ficha.situacao !== "rascunho_dp") {
       throw conflito("Esta ficha nao pertence ao preenchimento interno do DP.", "FICHA_DP_NAO_EDITAVEL");
     }
-    if (ficha.versao !== dados.versao) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    if (ficha.versao !== dados.versao)
+      throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
     if (dados.semDependentes === true) {
       const quantos = await contarDependentesRepository(processoId, empresaId, tx);
       if (quantos > 0) throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
     }
     const campos = camposDoPayload(dados);
-    const versao = await atualizarFichaRepository({
-      processoId,
-      empresaId,
-      versaoAtual: ficha.versao,
-      campos,
-      ...(dados.semDependentes === undefined ? {} : { semDependentes: dados.semDependentes })
-    }, tx);
+    const versao = await atualizarFichaRepository(
+      {
+        processoId,
+        empresaId,
+        versaoAtual: ficha.versao,
+        campos,
+        ...(dados.semDependentes === undefined ? {} : { semDependentes: dados.semDependentes })
+      },
+      tx
+    );
     if (versao === null) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
-    await registrarEventoProcessoRepository({
-      processoId,
-      empresaId,
-      versao: processo.versao,
-      acao: "ficha_dp_alterada",
-      atorUsuarioId: ator,
-      camposAlterados: [...Object.keys(campos), ...(dados.semDependentes === undefined ? [] : ["semDependentes"])]
-    }, tx);
+    await registrarEventoProcessoRepository(
+      {
+        processoId,
+        empresaId,
+        versao: processo.versao,
+        acao: "ficha_dp_alterada",
+        atorUsuarioId: ator,
+        camposAlterados: [...Object.keys(campos), ...(dados.semDependentes === undefined ? [] : ["semDependentes"])]
+      },
+      tx
+    );
   });
 }
 
@@ -478,36 +526,41 @@ export async function concluirFichaDp(processoId: string, body: DadosExternos, p
     if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
     const ficha = await bloquearFichaRepository(processoId, empresaId, tx);
     if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
-    if (ficha.situacao !== "rascunho_dp" && ficha.situacao !== "enviada") {
+    if (ficha.situacao !== "rascunho_dp") {
       throw conflito("Esta ficha ja foi concluida e nao pode ser alterada pelo DP.", "FICHA_DP_NAO_EDITAVEL");
     }
-    if (ficha.versao !== dados.versao) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
+    if (ficha.versao !== dados.versao)
+      throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
     const quantos = await contarDependentesRepository(processoId, empresaId, tx);
     if (dados.semDependentes && quantos > 0) throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
-    if (!dados.semDependentes && quantos === 0) throw conflito("Cadastre os dependentes antes de concluir a ficha.", "DEPENDENTES_INCOERENTES");
-    const versao = await atualizarFichaRepository({
-      processoId,
-      empresaId,
-      versaoAtual: ficha.versao,
-      campos: camposDoPayload(dados),
-      semDependentes: dados.semDependentes,
-      situacao: "concluida_dp",
-      revisadoEm: new Date(),
-      revisadoPor: ator,
-      revisaoPendencias: null,
-      enviadoEm: null,
-      avisoPrivacidadeVersao: null,
-      avisoAceitoEm: null
-    }, tx);
+    if (!dados.semDependentes && quantos === 0)
+      throw conflito("Cadastre os dependentes antes de concluir a ficha.", "DEPENDENTES_INCOERENTES");
+    const versao = await atualizarFichaRepository(
+      {
+        processoId,
+        empresaId,
+        versaoAtual: ficha.versao,
+        campos: camposDoPayload(dados),
+        semDependentes: dados.semDependentes,
+        situacao: "concluida_dp",
+        revisadoEm: new Date(),
+        revisadoPor: ator,
+        revisaoPendencias: null
+      },
+      tx
+    );
     if (versao === null) throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
-    await registrarEventoProcessoRepository({
-      processoId,
-      empresaId,
-      versao: processo.versao,
-      acao: "ficha_dp_concluida",
-      atorUsuarioId: ator,
-      camposAlterados: []
-    }, tx);
+    await registrarEventoProcessoRepository(
+      {
+        processoId,
+        empresaId,
+        versao: processo.versao,
+        acao: "ficha_dp_concluida",
+        atorUsuarioId: ator,
+        camposAlterados: []
+      },
+      tx
+    );
   });
 }
 

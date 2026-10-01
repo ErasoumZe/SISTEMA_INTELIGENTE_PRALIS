@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { admissoesProcessosDependentes } from "@padaria/db/schema/admissoes";
+import { admissoesProcessosDependentes, admissoesProcessosInternos } from "@padaria/db/schema/admissoes";
 import {
   colaboradores,
   colaboradoresDadosBancarios,
@@ -159,6 +159,32 @@ export async function obterDadosCadastraisDoColaboradorRepository(colaboradorId:
     enderecoContato: enderecoContato[0] ?? null,
     dadosBancarios: dadosBancarios[0] ?? null
   };
+}
+
+/** Dados admissionais pertencem ao processo de origem e sao projetados no perfil sem duplicacao. */
+export async function obterDadosAdmissionaisDoVinculoRepository(processoId: string, empresaId: string) {
+  const [linha] = await banco
+    .select({
+      dataAdmissao: admissoesProcessosInternos.dataAdmissao,
+      ctpsNumero: admissoesProcessosInternos.ctpsNumero,
+      ctpsSerie: admissoesProcessosInternos.ctpsSerie,
+      ctpsUf: admissoesProcessosInternos.ctpsUf,
+      pisPasepNit: admissoesProcessosInternos.pisPasepNit,
+      exameTipo: admissoesProcessosInternos.exameTipo,
+      exameClinica: admissoesProcessosInternos.exameClinica,
+      exameUnidade: admissoesProcessosInternos.exameUnidade,
+      exameComplementares: admissoesProcessosInternos.exameComplementares,
+      exameAgendadoPara: admissoesProcessosInternos.exameAgendadoPara,
+      exameSituacao: admissoesProcessosInternos.exameSituacao,
+      exameAtualizadoEm: admissoesProcessosInternos.exameAtualizadoEm,
+      observacoesRh: admissoesProcessosInternos.observacoesRh
+    })
+    .from(admissoesProcessosInternos)
+    .where(
+      and(eq(admissoesProcessosInternos.processoId, processoId), eq(admissoesProcessosInternos.empresaId, empresaId))
+    )
+    .limit(1);
+  return linha ?? null;
 }
 
 export async function obterOnboardingDoVinculoRepository(vinculoId: string, empresaId: string, db = banco) {
