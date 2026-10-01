@@ -176,6 +176,7 @@ onMounted(async () => {
         :token-emitido="null"
         :convite-pendente="false"
         :pode-revisar-ficha="podeRevisarFicha"
+        :mostrar-fechar="false"
         @fechar="router.push('/admissoes_processos')"
         @cancelar="cancelar"
         @efetivar="efetivar"

@@ -86,6 +86,8 @@ const props = defineProps<{
    * com a porta aberta para o vazio sem ninguem perceber.
    */
   podeRevisarFicha: boolean;
+  /** A rota dedicada usa o voltar da pagina e nao duplica um X no cabecalho. */
+  mostrarFechar?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -254,12 +256,22 @@ function confirmarCancelar() {
 <template>
   <article v-if="aberto" class="processo-workspace" aria-labelledby="titulo-processo-detalhe">
     <div class="processo-workspace__conteudo">
-      <header id="titulo-processo-detalhe" class="processo-workspace__cabecalho d-flex align-center justify-space-between ga-3">
+      <header
+        id="titulo-processo-detalhe"
+        class="processo-workspace__cabecalho d-flex align-center justify-space-between ga-3"
+      >
         <div>
           <span>Processo de admissão</span>
           <p class="processo-workspace__subtitulo">Dados, exame, ficha e decisões em uma única tela.</p>
         </div>
-        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="emit('fechar')" />
+        <v-btn
+          v-if="mostrarFechar !== false"
+          icon="mdi-close"
+          variant="text"
+          size="small"
+          aria-label="Fechar"
+          @click="emit('fechar')"
+        />
       </header>
 
       <div class="processo-workspace__corpo">
@@ -278,47 +290,47 @@ function confirmarCancelar() {
                 <h3 id="titulo-dados-processo">Dados do processo</h3>
               </div>
             </header>
-          <div class="detalhe-estados">
-            <div class="estado">
-              <span class="estado-rotulo">Status do processo</span>
-              <v-chip :color="corStatusProcesso(processo.status)" size="small" variant="tonal">
-                {{ rotuloStatusProcesso[processo.status] }}
-              </v-chip>
+            <div class="detalhe-estados">
+              <div class="estado">
+                <span class="estado-rotulo">Status do processo</span>
+                <v-chip :color="corStatusProcesso(processo.status)" size="small" variant="tonal">
+                  {{ rotuloStatusProcesso[processo.status] }}
+                </v-chip>
+              </div>
+              <div class="estado">
+                <span class="estado-rotulo">Situação</span>
+                <v-chip size="small" variant="outlined">{{ rotuloSituacaoProcesso[processo.situacao] }}</v-chip>
+              </div>
             </div>
-            <div class="estado">
-              <span class="estado-rotulo">Situação</span>
-              <v-chip size="small" variant="outlined">{{ rotuloSituacaoProcesso[processo.situacao] }}</v-chip>
-            </div>
-          </div>
-          <p class="detalhe-derivacao">{{ explicacaoSituacaoProcesso[processo.situacao] }}.</p>
+            <p class="detalhe-derivacao">{{ explicacaoSituacaoProcesso[processo.situacao] }}.</p>
 
-          <dl class="detalhe-campos">
-            <dt>Candidato</dt>
-            <dd>
-              <strong>{{ rotuloIdentidadeProcesso(processo.nomeCompleto) }}</strong>
-              <!-- Sem nome no processo direto ate o candidato responder. Dizer isso e mais honesto que
+            <dl class="detalhe-campos">
+              <dt>Candidato</dt>
+              <dd>
+                <strong>{{ rotuloIdentidadeProcesso(processo.nomeCompleto) }}</strong>
+                <!-- Sem nome no processo direto ate o candidato responder. Dizer isso e mais honesto que
                    um traco, e muito mais honesto que inventar identidade. -->
-              <span v-if="!processo.nomeCompleto" class="detalhe-derivacao">
-                O nome chega com a resposta do candidato.
-              </span>
-            </dd>
+                <span v-if="!processo.nomeCompleto" class="detalhe-derivacao">
+                  O nome chega com a resposta do candidato.
+                </span>
+              </dd>
 
-            <!-- ORIGEM: so leitura. Nao ha controle que a troque — ela se registra, nao se escolhe. -->
-            <dt>Origem</dt>
-            <dd>
-              {{ rotuloOrigemProcesso[processo.origem] }}
-              <!-- Duas condicoes, e as duas sao necessarias: o processo precisa TER teste, e a tela
+              <!-- ORIGEM: so leitura. Nao ha controle que a troque — ela se registra, nao se escolhe. -->
+              <dt>Origem</dt>
+              <dd>
+                {{ rotuloOrigemProcesso[processo.origem] }}
+                <!-- Duas condicoes, e as duas sao necessarias: o processo precisa TER teste, e a tela
                    precisa saber abri-lo. Botao que nao leva a lugar nenhum gasta a confianca do DP
                    mais rapido que botao ausente. -->
-              <template v-if="podeVerTeste && processo.testeId">
-                <br />
-                <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
-              </template>
-            </dd>
+                <template v-if="podeVerTeste && processo.testeId">
+                  <br />
+                  <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
+                </template>
+              </dd>
 
-            <dt>CPF</dt>
-            <dd>
-              <!--
+              <dt>CPF</dt>
+              <dd>
+                <!--
                 A mascara e o padrao, e continua ate alguem PEDIR o documento. Revelado, o CPF vive
                 so aqui dentro, enquanto o modal estiver aberto: nao vai para URL, query, titulo,
                 tooltip, aviso nem para a listagem.
@@ -326,47 +338,47 @@ function confirmarCancelar() {
                 O botao repete o tratamento do "Ver o teste" logo acima — `<br />` e `ps-0`, em
                 linha propria —, porque os dois moram na mesma celula deste `dl`.
               -->
-              <span class="cx-num">{{ cpfExibido }}</span>
-              <template v-if="podeRevelarCpf">
-                <br />
-                <v-btn
-                  variant="text"
-                  size="x-small"
-                  class="ps-0"
-                  :loading="revelando"
-                  :disabled="revelando"
-                  @click="pedirCpf"
-                >
-                  Ver CPF
-                </v-btn>
-              </template>
-              <!--
+                <span class="cx-num">{{ cpfExibido }}</span>
+                <template v-if="podeRevelarCpf">
+                  <br />
+                  <v-btn
+                    variant="text"
+                    size="x-small"
+                    class="ps-0"
+                    :loading="revelando"
+                    :disabled="revelando"
+                    @click="pedirCpf"
+                  >
+                    Ver CPF
+                  </v-btn>
+                </template>
+                <!--
                 Live region SEMPRE montada, e nao `v-if`: regiao que nasce junto com o texto
                 costuma nao ser anunciada por leitor de tela — e anunciar e justamente o ponto,
                 porque o valor muda depois de uma acao. Ela diz que a consulta foi registrada; o
                 documento em si nao entra aqui, para nao virar um segundo canal de saida do dado.
               -->
-              <span class="detalhe-derivacao" role="status">
-                {{ cpfRevelado ? "CPF revelado. Esta consulta ficou registrada no histórico." : "" }}
-              </span>
-            </dd>
-
-            <dt>Função operacional</dt>
-            <dd>{{ processo.funcaoNome ?? "—" }}</dd>
-
-            <dt>Turno</dt>
-            <dd>{{ rotuloTurnoDoProcesso(processo) ?? "—" }}</dd>
-
-            <!-- Só aparece quando existe: é registro anterior ao catálogo de turnos, e não foi convertido
-                 porque converter seria adivinhar qual turno da empresa aquele texto era. -->
-            <template v-if="processo.jornadaHorario">
-              <dt>Jornada (registro anterior)</dt>
-              <dd>
-                {{ processo.jornadaHorario }}
-                <span class="detalhe-derivacao">Cadastro feito antes do catálogo de turnos.</span>
+                <span class="detalhe-derivacao" role="status">
+                  {{ cpfRevelado ? "CPF revelado. Esta consulta ficou registrada no histórico." : "" }}
+                </span>
               </dd>
-            </template>
-          </dl>
+
+              <dt>Função operacional</dt>
+              <dd>{{ processo.funcaoNome ?? "—" }}</dd>
+
+              <dt>Turno</dt>
+              <dd>{{ rotuloTurnoDoProcesso(processo) ?? "—" }}</dd>
+
+              <!-- Só aparece quando existe: é registro anterior ao catálogo de turnos, e não foi convertido
+                 porque converter seria adivinhar qual turno da empresa aquele texto era. -->
+              <template v-if="processo.jornadaHorario">
+                <dt>Jornada (registro anterior)</dt>
+                <dd>
+                  {{ processo.jornadaHorario }}
+                  <span class="detalhe-derivacao">Cadastro feito antes do catálogo de turnos.</span>
+                </dd>
+              </template>
+            </dl>
           </section>
 
           <ProcessoInternosBloco
@@ -542,13 +554,21 @@ function confirmarCancelar() {
           v-if="cancelavel && podeCancelar"
           color="error"
           variant="text"
+          size="small"
           :disabled="processando"
           @click="dialogCancelar = true"
         >
           Cancelar e arquivar
         </v-btn>
         <v-spacer />
-        <v-btn v-if="efetivavel" color="success" variant="flat" :disabled="processando" @click="emit('efetivar')">
+        <v-btn
+          v-if="efetivavel"
+          color="success"
+          variant="flat"
+          size="small"
+          :disabled="processando"
+          @click="emit('efetivar')"
+        >
           Efetivar colaborador
         </v-btn>
       </footer>
@@ -583,6 +603,18 @@ function confirmarCancelar() {
   border-radius: 0;
 }
 
+.processo-workspace__conteudo {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.processo-workspace__cabecalho {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: var(--cx-sp-4) var(--cx-sp-5) 0;
+}
+
 .processo-workspace__subtitulo {
   margin: 2px 0 0;
   font-size: var(--cx-fs-caption);
@@ -591,15 +623,30 @@ function confirmarCancelar() {
 }
 
 .processo-workspace__corpo {
+  flex: 1;
   padding: var(--cx-sp-5);
 }
 
 .processo-workspace__acoes {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
   position: sticky;
   bottom: 0;
-  padding: var(--cx-sp-3) var(--cx-sp-5);
+  width: min(100%, 1080px);
+  box-sizing: border-box;
+  padding: 10px 14px;
   border-top: 1px solid var(--cx-line);
+  border-right: 1px solid var(--cx-line);
+  border-left: 1px solid var(--cx-line);
+  border-radius: var(--cx-r-lg) var(--cx-r-lg) 0 0;
   background: var(--cx-surface-raised);
+}
+
+.processo-workspace__acoes :deep(.v-btn) {
+  min-height: 38px;
+  text-transform: none;
 }
 
 .detalhe {
@@ -771,7 +818,8 @@ function confirmarCancelar() {
   }
 
   .processo-workspace__acoes {
-    padding: var(--cx-sp-3);
+    width: calc(100% - (2 * var(--cx-sp-3)));
+    padding: var(--cx-sp-2);
   }
 
   .detalhe-secao {
