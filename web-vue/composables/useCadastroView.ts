@@ -90,7 +90,7 @@ export function useCadastroView(params: {
         temVinculoHistorico: item.temVinculoHistorico ? "sim" : "",
         matricula: item.matricula ?? undefined,
         funcaoNome: item.funcaoNome ?? undefined,
-        situacao: item.vinculoAtivoId ? "Ativo" : item.temVinculoHistorico ? "Inativo" : "Histórico a conciliar",
+        situacao: item.vinculoAtivoId ? "Ativo" : item.temVinculoHistorico ? "Inativo" : "Sem vínculo cadastrado",
         cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
         cargoId: item.cargoIds?.[0] ?? item.cargoId ?? ""
       }));

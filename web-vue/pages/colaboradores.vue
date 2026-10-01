@@ -18,7 +18,7 @@ const colunas = [
 function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistorico?: string }) {
   if (item.vinculoAtivoId) return { texto: "Ativo", cor: "success" };
   if (item.temVinculoHistorico === "sim") return { texto: "Inativo", cor: "default" };
-  return { texto: "Histórico a conciliar", cor: "warning" };
+  return { texto: "Sem vínculo cadastrado", cor: "default" };
 }
 </script>
 
