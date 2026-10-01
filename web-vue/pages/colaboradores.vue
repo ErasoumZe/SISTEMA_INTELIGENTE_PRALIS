@@ -40,19 +40,33 @@ function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistor
           >
         </template>
       </v-alert>
-      <v-data-table :headers="colunas" :items="ctx.linhasCadastro" item-value="id" class="colaboradores-dp__tabela">
+      <v-data-table
+        :headers="colunas"
+        :items="ctx.linhasCadastro"
+        item-value="id"
+        class="colaboradores-dp__tabela"
+        density="comfortable"
+        hover
+      >
         <template #item.situacao="{ item }"
-          ><v-chip :color="situacaoDoColaborador(item).cor" size="small" variant="tonal">{{
+          ><v-chip :color="situacaoDoColaborador(item).cor" size="small" variant="flat">{{
             situacaoDoColaborador(item).texto
           }}</v-chip></template
         >
         <template #item.funcaoNome="{ item }">{{ item.funcaoNome || "Sem vínculo cadastrado" }}</template>
         <template #item.matricula="{ item }">{{ item.matricula || "—" }}</template>
         <template #item.acoes="{ item }"
-          ><v-btn size="small" variant="tonal" @click="router.push(`/colaboradores/${item.id}`)"
+          ><v-btn color="primary" size="small" variant="flat" @click="router.push(`/colaboradores/${item.id}`)"
             >Abrir perfil</v-btn
           ></template
         >
+        <template #no-data>
+          <div class="colaboradores-dp__vazio">
+            <v-icon icon="mdi-account-group-outline" size="32" />
+            <strong>Nenhum colaborador cadastrado</strong>
+            <span>Os colaboradores aparecem aqui após a efetivação de uma admissão.</span>
+          </div>
+        </template>
       </v-data-table>
     </section>
   </AppWorkspace>
@@ -60,16 +74,18 @@ function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistor
 
 <style scoped>
 .colaboradores-dp {
-  padding: 16px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
 }
 .colaboradores-dp__cabecalho {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .colaboradores-dp__cabecalho p {
-  color: rgb(var(--v-theme-primary));
-  font-size: 0.78rem;
+  color: #b7a3ff;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .colaboradores-dp__cabecalho h1 {
@@ -79,13 +95,57 @@ function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistor
   color: rgba(var(--v-theme-on-surface), 0.68);
 }
 .colaboradores-dp__tabela {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
+  background: #1b2128;
+  border: 1px solid #303943;
   border-radius: 12px;
+  box-shadow: none;
   overflow: hidden;
+}
+.colaboradores-dp__tabela :deep(.v-data-table__thead) {
+  background: #252c34;
+}
+.colaboradores-dp__tabela :deep(th) {
+  color: #f5f7fa !important;
+  font-size: 0.76rem;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.colaboradores-dp__tabela :deep(tbody tr) {
+  background: #1b2128;
+  border-bottom: 1px solid #303943;
+}
+.colaboradores-dp__tabela :deep(tbody tr:hover) {
+  background: #252c34 !important;
+}
+.colaboradores-dp__tabela :deep(.v-data-table-footer) {
+  background: #171c22;
+  border-top: 1px solid #303943;
+}
+.colaboradores-dp__tabela :deep(.v-chip) {
+  border-radius: 6px;
+  font-weight: 700;
+}
+.colaboradores-dp__vazio {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-height: 150px;
+  padding: 24px;
+  text-align: center;
+}
+.colaboradores-dp__vazio strong {
+  color: #f5f7fa;
+}
+.colaboradores-dp__vazio .v-icon {
+  color: #b7a3ff;
 }
 @media (max-width: 700px) {
   .colaboradores-dp {
-    padding: 12px;
+    padding: 16px 12px 32px;
   }
   .colaboradores-dp__tabela :deep(table) {
     min-width: 620px;
