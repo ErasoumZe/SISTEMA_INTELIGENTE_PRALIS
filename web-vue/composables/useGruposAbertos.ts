@@ -47,7 +47,7 @@ import { getCurrentInstance } from "vue";
 /** Cada superficie tem a SUA sanfona. Ver o comentario de escopo em `useGruposAbertos`. */
 export type EscopoSanfona = "menu" | "home";
 
-const CHAVE_BASE = "padaria.grupos-abertos";
+const CHAVE_BASE = "padaria.grupos-abertos.v2";
 
 export function useGruposAbertos(escopo: EscopoSanfona = "menu") {
   const CHAVE = `${CHAVE_BASE}.${escopo}`;

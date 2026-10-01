@@ -80,10 +80,10 @@ export function gruposIniciais<T extends ItemMenu>(
   atual: Record<string, boolean> = {}
 ): Record<string, boolean> {
   const proximo: Record<string, boolean> = { ...atual };
-  for (const grupo of grupos) {
-    if (proximo[grupo.titulo] === undefined) proximo[grupo.titulo] = true;
-  }
   const daTela = grupoDaTela(grupos, telaAtiva);
+  for (const grupo of grupos) {
+    if (proximo[grupo.titulo] === undefined) proximo[grupo.titulo] = grupo.titulo === daTela;
+  }
   if (daTela) proximo[daTela] = true;
   return proximo;
 }

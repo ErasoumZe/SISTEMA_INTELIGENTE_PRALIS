@@ -172,12 +172,18 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_colaboradores_visualizar",
     icone: "mdi-account-group"
   },
+  clinicas_ocupacionais: {
+    id: "clinicas_ocupacionais",
+    titulo: "Clínicas ocupacionais",
+    permissao: "admissoes_clinicas_ocupacionais_visualizar",
+    icone: "mdi-hospital-building"
+  },
   // Central do DP. Ela nao cria um novo fluxo: organiza os caminhos de admissao e os catalogos
   // que ja existem. Pode ser aberta por quem tenha AO MENOS uma das telas do departamento, sem
   // criar uma permissao administrativa paralela so para uma pagina de navegacao.
   departamento_pessoal: {
     id: "departamento_pessoal",
-    titulo: "Visao geral",
+    titulo: "Central do DP",
     permissao: "admissoes_processos_visualizar",
     permissoesAlternativas: [
       "admissoes_testes_visualizar",

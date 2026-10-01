@@ -79,7 +79,7 @@ describe("gruposIniciais", () => {
   // navegador, quem entra cai no Painel — que nao e tela de menu — e o menu inteiro nascia
   // recolhido, escondendo 33 itens de quem nunca pediu isso. A sanfona ACRESCENTA a possibilidade
   // de recolher; ela nao recolhe por conta propria.
-  it("no primeiro uso todos nascem abertos — igual ao menu de hoje", () => {
+  it("no primeiro uso somente o grupo da tela ativa nasce aberto", () => {
     const menu = menuDoPerfil([
       "entradas_visualizar",
       "transferencias_visualizar",
@@ -87,7 +87,9 @@ describe("gruposIniciais", () => {
     ]);
     const estado = gruposIniciais(menu, "entradas");
     expect(menu.length).toBeGreaterThan(1);
-    for (const grupo of menu) expect(estado[grupo.titulo], grupo.titulo).toBe(true);
+    expect(estado["Entradas"]).toBe(true);
+    expect(estado["Transferencias"]).toBe(false);
+    expect(estado["Departamento pessoal"]).toBe(false);
   });
 
   it("conhece todos os grupos do menu, nao so o da tela ativa", () => {
@@ -139,14 +141,14 @@ describe("gruposIniciais", () => {
     // So "Configuração" e conhecido, e o usuario o fechou. Os outros dois sao novos para o estado.
     const estado = gruposIniciais(menu, "entradas", { Configuração: false });
     expect(estado["Configuração"]).toBe(false); // conhecido e fechado: respeitado
-    expect(estado["Transferencias"]).toBe(true); // desconhecido: nasce aberto
+    expect(estado["Transferencias"]).toBe(false); // desconhecido: nasce fechado
     expect(estado["Entradas"]).toBe(true); // desconhecido E da tela ativa
   });
 
   it("nao quebra quando a tela ativa nao esta no menu (o caso do Painel)", () => {
     const menu = menuDoPerfil(["entradas_visualizar"]);
     const estado = gruposIniciais(menu, "tela_que_nao_existe");
-    expect(Object.values(estado).every((aberto) => aberto === true)).toBe(true);
+    expect(Object.values(estado).every((aberto) => aberto === false)).toBe(true);
   });
 
   // O caso extremo do prompt: dp@email.com ve pouca coisa.

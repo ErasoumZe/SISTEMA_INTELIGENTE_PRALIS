@@ -4,7 +4,7 @@ import ClinicasOcupacionaisPage from "~/components/clinicas/ClinicasOcupacionais
 </script>
 
 <template>
-  <AppWorkspace tela-inicial="departamento_pessoal" tipo-pagina="departamento_pessoal" v-slot="ctx">
+  <AppWorkspace tela-inicial="clinicas_ocupacionais" tipo-pagina="departamento_pessoal" v-slot="ctx">
     <ClinicasOcupacionaisPage :empresa-id="ctx.empresaId" />
   </AppWorkspace>
 </template>

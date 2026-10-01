@@ -209,9 +209,18 @@ describe("categoria Departamento pessoal no menu", () => {
     const menu = menuDoPerfil(permissoesDepartamentoPessoal);
     expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([
       "departamento_pessoal",
-      "admissoes_processos",
-      "admissoes_testes",
+      "admissoes",
       "colaboradores",
+      "cadastros_dp"
+    ]);
+    const secao = menu.find((grupo) => grupo.titulo === "Departamento pessoal");
+    const admissoes = secao?.itens.find((item) => item.id === "admissoes");
+    const cadastros = secao?.itens.find((item) => item.id === "cadastros_dp");
+    expect(admissoes?.tipo === "categoria" ? admissoes.itens.map((item) => item.id) : []).toEqual([
+      "admissoes_processos",
+      "admissoes_testes"
+    ]);
+    expect(cadastros?.tipo === "categoria" ? cadastros.itens.map((item) => item.id) : []).toEqual([
       "funcoes_operacionais",
       "areas_setores",
       "turnos"
@@ -222,7 +231,7 @@ describe("categoria Departamento pessoal no menu", () => {
   it("não replica telas em Configuração nem cria permissão nova", () => {
     const raiz = idsNaRaiz(menuDoPerfil(permissoesDepartamentoPessoal));
     expect(raiz).toContain("colaboradores");
-    expect(raiz).toContain("turnos");
+    expect(raiz).toContain("cadastros_dp");
     expect(idsDaSecao(menuDoPerfil(permissoesDepartamentoPessoal), "Configuração")).toEqual([]);
   });
 

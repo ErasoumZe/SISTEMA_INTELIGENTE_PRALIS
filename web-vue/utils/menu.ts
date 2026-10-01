@@ -17,7 +17,21 @@ export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   ids: ["despesas", "mercadorias", "retiradas"]
 };
 
-export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
+export const CATEGORIA_ADMISSOES: CategoriaMenu = {
+  id: "admissoes",
+  titulo: "Admissões",
+  icone: "mdi-clipboard-account-outline",
+  ids: ["admissoes_processos", "admissoes_testes"]
+};
+
+export const CATEGORIA_CADASTROS_DP: CategoriaMenu = {
+  id: "cadastros_dp",
+  titulo: "Cadastros do DP",
+  icone: "mdi-format-list-bulleted",
+  ids: ["funcoes_operacionais", "areas_setores", "turnos", "clinicas_ocupacionais"]
+};
+
+export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS, CATEGORIA_ADMISSOES, CATEGORIA_CADASTROS_DP];
 
 const categoriaPorId = new Map(CATEGORIAS_MENU.map((categoria) => [categoria.id, categoria] as const));
 
@@ -57,15 +71,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
     titulo: "Departamento pessoal",
-    ids: [
-      "departamento_pessoal",
-      "admissoes_processos",
-      "admissoes_testes",
-      "colaboradores",
-      "funcoes_operacionais",
-      "areas_setores",
-      "turnos"
-    ]
+    ids: ["departamento_pessoal", CATEGORIA_ADMISSOES.id, "colaboradores", CATEGORIA_CADASTROS_DP.id]
   },
   {
     // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).

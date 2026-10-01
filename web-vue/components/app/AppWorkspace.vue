@@ -451,10 +451,13 @@ const operacoesPaginadas = computed(() => operacoesDaTela.value);
 // dia do caixa em resolverEscopoEntradasDoDia); a tela mostra o campo desabilitado em vez de fingir
 // que funciona.
 const podeConsultarOutrosDiasEntradas = computed(() => podeConsultarOutrosDias(permissoesUsuario.value));
-// "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
-// caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
-// abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
-const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value));
+// "+ NOVO" pertence ao trabalho financeiro. Fora de Caixa/Lançamentos ele oferecia entradas,
+// transferências e saídas em telas de DP e cadastros, criando um atalho fora de contexto.
+// A permissão continua sendo a fonte de verdade; aqui apenas evitamos renderizar a ação global em
+// páginas que não podem executá-la como tarefa principal.
+const acoesNovo = computed(() =>
+  tipoPagina.value === "operacoes" || tipoPagina.value === "caixa" ? acoesNovoPermitidas(permissoesUsuario.value) : []
+);
 const {
   dadosCadastro,
   descricaoTela,
