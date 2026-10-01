@@ -4,6 +4,7 @@ import { temPermissao } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import CadastroColaboradorTabs from "~/components/colaboradores/CadastroColaboradorTabs.vue";
+import JornadaColaboradorPanel from "~/components/colaboradores/JornadaColaboradorPanel.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { formatarDataHora, formatarDataSomenteDia, mascararCpf } from "~/utils/formatacao";
 import { mensagemErro } from "~/utils/domain";
@@ -166,6 +167,7 @@ onMounted(async () => {
       <v-tabs v-model="aba" class="perfil__abas mb-5" color="primary" show-arrows>
         <v-tab value="visao_geral">Visão geral</v-tab>
         <v-tab value="cadastro">Cadastro</v-tab>
+        <v-tab value="jornada" prepend-icon="mdi-clock-outline">Jornada e ponto</v-tab>
         <v-tab value="vinculos">Vínculos</v-tab>
         <v-tab value="historico">Histórico</v-tab>
       </v-tabs>
@@ -220,6 +222,10 @@ onMounted(async () => {
 
         <v-window-item value="cadastro">
           <CadastroColaboradorTabs :colaborador-id="colaboradorId" :pode-editar="podeEditar" />
+        </v-window-item>
+
+        <v-window-item value="jornada">
+          <JornadaColaboradorPanel :colaborador-id="colaboradorId" :empresa-id="empresaId" :pode-editar="podeEditar" />
         </v-window-item>
 
         <v-window-item value="vinculos">
