@@ -125,22 +125,32 @@ onMounted(async () => {
     :carregando-empresa="false"
   >
     <main class="perfil">
-      <header class="perfil__cabecalho">
-        <v-btn icon="mdi-arrow-left" variant="text" aria-label="Voltar para colaboradores" @click="voltar" />
-        <div class="perfil__identidade">
-          <p class="perfil__contexto">Departamento pessoal</p>
-          <div class="perfil__titulo">
-            <h1>{{ perfil?.nome ?? "Colaborador" }}</h1>
-            <v-chip :color="corSituacao" size="small" variant="tonal">
-              {{ rotuloSituacao }}
-            </v-chip>
+      <section class="perfil__hero">
+        <header class="perfil__cabecalho">
+          <v-btn icon="mdi-arrow-left" variant="text" aria-label="Voltar para colaboradores" @click="voltar" />
+          <div class="perfil__avatar" aria-hidden="true">{{ (perfil?.nome ?? "C").slice(0, 1).toUpperCase() }}</div>
+          <div class="perfil__identidade">
+            <p class="perfil__contexto">Departamento pessoal / Colaborador</p>
+            <div class="perfil__titulo">
+              <h1>{{ perfil?.nome ?? "Colaborador" }}</h1>
+              <v-chip :color="corSituacao" size="small" variant="flat">
+                {{ rotuloSituacao }}
+              </v-chip>
+            </div>
+            <p>{{ perfil?.cpf ? mascararCpf(perfil.cpf) : "CPF não cadastrado" }}</p>
           </div>
-          <p>{{ perfil?.cpf ? mascararCpf(perfil.cpf) : "CPF não cadastrado" }}</p>
-        </div>
-        <v-btn v-if="podeEditar && !editando" variant="outlined" prepend-icon="mdi-pencil" @click="editando = true"
-          >Editar nome</v-btn
-        >
-      </header>
+          <div class="perfil__acoes">
+            <v-btn
+              v-if="podeEditar && !editando"
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-pencil"
+              @click="editando = true"
+              >Editar nome</v-btn
+            >
+          </div>
+        </header>
+      </section>
 
       <v-alert v-if="erro" type="error" variant="tonal" class="mb-5">{{ erro }}</v-alert>
 
@@ -163,7 +173,7 @@ onMounted(async () => {
       <v-window v-if="perfil" v-model="aba">
         <v-window-item value="visao_geral">
           <section class="perfil__grade">
-            <v-card variant="outlined">
+            <v-card class="perfil__card perfil__card--resumo" variant="outlined">
               <v-card-title>Resumo atual</v-card-title>
               <v-card-text v-if="vinculoAtivo" class="perfil__resumo">
                 <strong>{{ vinculoAtivo.funcaoNome }}</strong>
@@ -186,7 +196,7 @@ onMounted(async () => {
               >
             </v-card>
 
-            <v-card variant="outlined">
+            <v-card class="perfil__card perfil__card--onboarding" variant="outlined">
               <v-card-title>Fluxo de onboarding</v-card-title>
               <v-card-text class="perfil__checklist">
                 <span v-if="vinculoAtivo"
@@ -253,25 +263,46 @@ onMounted(async () => {
 
 <style scoped>
 .perfil {
-  max-width: 1120px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 20px 16px;
+  padding: 28px 24px 48px;
+}
+.perfil__hero {
+  background: #1b2128;
+  border: 1px solid #303943;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  padding: 18px 20px;
 }
 .perfil__cabecalho {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+}
+.perfil__cabecalho > .v-btn:first-child {
+  margin: 2px 0 0 -8px;
+}
+.perfil__avatar {
+  align-items: center;
+  background: #7c3aed;
+  border-radius: 10px;
+  color: #fff;
+  display: flex;
+  flex: 0 0 48px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  height: 48px;
+  justify-content: center;
 }
 .perfil__identidade {
   flex: 1 1 280px;
 }
 .perfil__contexto {
-  color: rgb(var(--v-theme-primary));
+  color: #b7a3ff;
   font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .perfil__titulo {
@@ -283,14 +314,40 @@ onMounted(async () => {
 .perfil__titulo h1 {
   font-size: clamp(1.45rem, 3vw, 2rem);
 }
+.perfil__titulo :deep(.v-chip) {
+  font-weight: 700;
+}
 .perfil__identidade > p:last-child {
   color: rgba(var(--v-theme-on-surface), 0.68);
   margin-top: 4px;
+}
+.perfil__acoes {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.perfil__acoes :deep(.v-btn),
+.perfil :deep(.v-btn--variant-flat) {
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: none;
 }
 .perfil__grade {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+.perfil__card {
+  background: #1b2128;
+  border-color: #303943;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.perfil__card :deep(.v-card-title) {
+  border-bottom: 1px solid #303943;
+  font-size: 0.95rem;
+  font-weight: 750;
+  padding-bottom: 12px;
 }
 .perfil__resumo,
 .perfil__checklist,
@@ -314,7 +371,20 @@ onMounted(async () => {
 }
 
 .perfil__abas {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: #171c22;
+  border: 1px solid #303943;
+  border-radius: 10px;
+  padding: 4px;
+}
+.perfil__abas :deep(.v-tab) {
+  border-radius: 7px;
+  min-height: 42px;
+  text-transform: none;
+  font-weight: 700;
+}
+.perfil__abas :deep(.v-tab--selected) {
+  background: #7c3aed;
+  color: #fff;
 }
 .perfil__secao h2 {
   font-size: 1.1rem;
@@ -354,12 +424,19 @@ onMounted(async () => {
 }
 @media (max-width: 700px) {
   .perfil {
-    padding: 16px 12px;
+    padding: 16px 12px 32px;
+  }
+  .perfil__hero {
+    padding: 14px;
   }
   .perfil__grade {
     grid-template-columns: 1fr;
   }
-  .perfil__cabecalho > .v-btn:last-child {
+  .perfil__acoes {
+    width: 100%;
+    margin-left: 0;
+  }
+  .perfil__acoes .v-btn {
     width: 100%;
     min-height: 44px;
   }

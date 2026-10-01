@@ -34,9 +34,21 @@ type Endereco = {
   telefone: TextoNulo;
   email: TextoNulo;
 };
-type Bancarios = { banco: TextoNulo; agencia: TextoNulo; conta: TextoNulo; contaDigito: TextoNulo; contaTipo: TextoNulo };
+type Bancarios = {
+  banco: TextoNulo;
+  agencia: TextoNulo;
+  conta: TextoNulo;
+  contaDigito: TextoNulo;
+  contaTipo: TextoNulo;
+};
 type Onboarding = {
-  etapa: "em_cadastro" | "cadastro_completo" | "aguardando_contabilidade" | "retorno_contabilidade" | "pendente_configuracao" | "configurado";
+  etapa:
+    | "em_cadastro"
+    | "cadastro_completo"
+    | "aguardando_contabilidade"
+    | "retorno_contabilidade"
+    | "pendente_configuracao"
+    | "configurado";
   versao: number;
   cadastroCompletoEm: string | null;
   enviadoContabilidadeEm: string | null;
@@ -54,15 +66,42 @@ type DadosCadastrais = {
 };
 
 const vazioPessoais = (): DadosPessoais => ({
-  nomeSocial: null, nascimento: null, sexo: null, estadoCivil: null, racaCor: null, grauInstrucao: null,
-  nacionalidade: null, naturalidade: null, nomeMae: null, nomePai: null, rgNumero: null, rgOrgao: null,
-  rgUf: null, rgEmissao: null, tituloEleitor: null, tituloZona: null, tituloSecao: null
+  nomeSocial: null,
+  nascimento: null,
+  sexo: null,
+  estadoCivil: null,
+  racaCor: null,
+  grauInstrucao: null,
+  nacionalidade: null,
+  naturalidade: null,
+  nomeMae: null,
+  nomePai: null,
+  rgNumero: null,
+  rgOrgao: null,
+  rgUf: null,
+  rgEmissao: null,
+  tituloEleitor: null,
+  tituloZona: null,
+  tituloSecao: null
 });
 const vazioEndereco = (): Endereco => ({
-  cep: null, logradouro: null, numero: null, complemento: null, bairro: null, municipio: null,
-  uf: null, telefone: null, email: null
+  cep: null,
+  logradouro: null,
+  numero: null,
+  complemento: null,
+  bairro: null,
+  municipio: null,
+  uf: null,
+  telefone: null,
+  email: null
 });
-const vazioBancarios = (): Bancarios => ({ banco: null, agencia: null, conta: null, contaDigito: null, contaTipo: null });
+const vazioBancarios = (): Bancarios => ({
+  banco: null,
+  agencia: null,
+  conta: null,
+  contaDigito: null,
+  contaTipo: null
+});
 
 const { apiGet, apiPut } = useApi();
 const aba = ref("dados");
@@ -84,8 +123,12 @@ const etapas: Record<Onboarding["etapa"], string> = {
   configurado: "Configurado"
 };
 const corEtapa: Record<Onboarding["etapa"], string> = {
-  em_cadastro: "primary", cadastro_completo: "info", aguardando_contabilidade: "warning",
-  retorno_contabilidade: "secondary", pendente_configuracao: "orange", configurado: "success"
+  em_cadastro: "primary",
+  cadastro_completo: "info",
+  aguardando_contabilidade: "warning",
+  retorno_contabilidade: "secondary",
+  pendente_configuracao: "orange",
+  configurado: "success"
 };
 
 function limparTexto(valor: TextoNulo) {
@@ -142,8 +185,8 @@ onMounted(carregar);
   <section class="cadastro" aria-label="Cadastro completo do colaborador">
     <div class="cadastro__titulo">
       <div>
-        <p class="cadastro__contexto">Dossiê do colaborador</p>
-        <h2>Cadastro e onboarding</h2>
+        <p class="cadastro__contexto">Departamento pessoal</p>
+        <h2>Cadastro do colaborador</h2>
       </div>
       <v-chip v-if="onboarding" :color="corEtapa[onboarding.etapa]" variant="tonal" size="small">
         {{ etapas[onboarding.etapa] }}
@@ -155,7 +198,7 @@ onMounted(carregar);
     <v-progress-linear v-if="carregando" indeterminate color="primary" class="mb-4" />
 
     <v-card v-if="!carregando" variant="outlined">
-      <v-tabs v-model="aba" color="primary" grow>
+      <v-tabs v-model="aba" class="cadastro__abas" color="primary">
         <v-tab value="dados" prepend-icon="mdi-account-card-outline">Dados</v-tab>
         <v-tab value="bancarios" prepend-icon="mdi-bank-outline">Bancários</v-tab>
         <v-tab value="onboarding" prepend-icon="mdi-progress-check">Onboarding</v-tab>
@@ -168,8 +211,18 @@ onMounted(carregar);
             <h3>Dados pessoais</h3>
             <div class="cadastro__campos cadastro__campos--tres">
               <v-text-field v-model="pessoais.nomeSocial" label="Nome social" :disabled="!podeEditar" />
-              <v-text-field v-model="pessoais.nascimento" type="date" label="Data de nascimento" :disabled="!podeEditar" />
-              <v-select v-model="pessoais.sexo" label="Sexo" :items="['Masculino', 'Feminino']" :disabled="!podeEditar" />
+              <v-text-field
+                v-model="pessoais.nascimento"
+                type="date"
+                label="Data de nascimento"
+                :disabled="!podeEditar"
+              />
+              <v-select
+                v-model="pessoais.sexo"
+                label="Sexo"
+                :items="['Masculino', 'Feminino']"
+                :disabled="!podeEditar"
+              />
               <v-text-field v-model="pessoais.estadoCivil" label="Estado civil" :disabled="!podeEditar" />
               <v-text-field v-model="pessoais.racaCor" label="Raça/cor" :disabled="!podeEditar" />
               <v-text-field v-model="pessoais.grauInstrucao" label="Grau de instrução" :disabled="!podeEditar" />
@@ -193,25 +246,43 @@ onMounted(carregar);
             <h3>Endereço e contato</h3>
             <div class="cadastro__campos cadastro__campos--quatro">
               <v-text-field v-model="endereco.cep" label="CEP" inputmode="numeric" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.logradouro" label="Logradouro" class="cadastro__campo--duplo" :disabled="!podeEditar" />
+              <v-text-field
+                v-model="endereco.logradouro"
+                label="Logradouro"
+                class="cadastro__campo--duplo"
+                :disabled="!podeEditar"
+              />
               <v-text-field v-model="endereco.numero" label="Número" :disabled="!podeEditar" />
               <v-text-field v-model="endereco.complemento" label="Complemento" :disabled="!podeEditar" />
               <v-text-field v-model="endereco.bairro" label="Bairro" :disabled="!podeEditar" />
               <v-text-field v-model="endereco.municipio" label="Município" :disabled="!podeEditar" />
               <v-text-field v-model="endereco.uf" label="UF" maxlength="2" :disabled="!podeEditar" />
               <v-text-field v-model="endereco.telefone" label="Telefone" inputmode="tel" :disabled="!podeEditar" />
-              <v-text-field v-model="endereco.email" label="E-mail" type="email" class="cadastro__campo--duplo" :disabled="!podeEditar" />
+              <v-text-field
+                v-model="endereco.email"
+                label="E-mail"
+                type="email"
+                class="cadastro__campo--duplo"
+                :disabled="!podeEditar"
+              />
             </div>
           </v-card-text>
         </v-window-item>
 
         <v-window-item value="bancarios">
           <v-card-text class="cadastro__formulario">
-            <v-alert type="info" variant="tonal" class="mb-4">Dados bancários são privados e usados somente no fluxo de DP e folha.</v-alert>
+            <v-alert type="info" variant="tonal" class="mb-4"
+              >Dados bancários são privados e usados somente no fluxo de DP e folha.</v-alert
+            >
             <div class="cadastro__campos cadastro__campos--tres">
               <v-text-field v-model="bancarios.banco" label="Banco" :disabled="!podeEditar" />
               <v-text-field v-model="bancarios.agencia" label="Agência" :disabled="!podeEditar" />
-              <v-select v-model="bancarios.contaTipo" label="Tipo de conta" :items="['Corrente', 'Poupança', 'Salário']" :disabled="!podeEditar" />
+              <v-select
+                v-model="bancarios.contaTipo"
+                label="Tipo de conta"
+                :items="['Corrente', 'Poupança', 'Salário']"
+                :disabled="!podeEditar"
+              />
               <v-text-field v-model="bancarios.conta" label="Conta" :disabled="!podeEditar" />
               <v-text-field v-model="bancarios.contaDigito" label="Dígito" :disabled="!podeEditar" />
             </div>
@@ -222,51 +293,166 @@ onMounted(carregar);
           <v-card-text class="cadastro__formulario">
             <template v-if="onboarding">
               <v-alert type="info" variant="tonal" class="mb-4">
-                Esta etapa é controlada pelo fluxo. O envio para a contabilidade será liberado após a conferência do cadastro.
+                Esta etapa é controlada pelo fluxo. O envio para a contabilidade será liberado após a conferência do
+                cadastro.
               </v-alert>
               <dl class="cadastro__resumo">
-                <div><dt>Etapa atual</dt><dd>{{ etapas[onboarding.etapa] }}</dd></div>
-                <div><dt>Versão</dt><dd>{{ onboarding.versao }}</dd></div>
-                <div><dt>Cadastro completo em</dt><dd>{{ onboarding.cadastroCompletoEm ? new Date(onboarding.cadastroCompletoEm).toLocaleString('pt-BR') : 'Ainda não concluído' }}</dd></div>
-                <div><dt>Enviado à contabilidade</dt><dd>{{ onboarding.enviadoContabilidadeEm ? new Date(onboarding.enviadoContabilidadeEm).toLocaleString('pt-BR') : 'Ainda não enviado' }}</dd></div>
-                <div v-if="onboarding.observacaoRetorno"><dt>Retorno</dt><dd>{{ onboarding.observacaoRetorno }}</dd></div>
+                <div>
+                  <dt>Etapa atual</dt>
+                  <dd>{{ etapas[onboarding.etapa] }}</dd>
+                </div>
+                <div>
+                  <dt>Versão</dt>
+                  <dd>{{ onboarding.versao }}</dd>
+                </div>
+                <div>
+                  <dt>Cadastro completo em</dt>
+                  <dd>
+                    {{
+                      onboarding.cadastroCompletoEm
+                        ? new Date(onboarding.cadastroCompletoEm).toLocaleString("pt-BR")
+                        : "Ainda não concluído"
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Enviado à contabilidade</dt>
+                  <dd>
+                    {{
+                      onboarding.enviadoContabilidadeEm
+                        ? new Date(onboarding.enviadoContabilidadeEm).toLocaleString("pt-BR")
+                        : "Ainda não enviado"
+                    }}
+                  </dd>
+                </div>
+                <div v-if="onboarding.observacaoRetorno">
+                  <dt>Retorno</dt>
+                  <dd>{{ onboarding.observacaoRetorno }}</dd>
+                </div>
               </dl>
             </template>
-            <v-alert v-else type="warning" variant="tonal">Este vínculo ainda não possui onboarding. A criação será conciliada pela API nesta etapa.</v-alert>
+            <v-alert v-else type="warning" variant="tonal"
+              >Este vínculo ainda não possui onboarding. A criação será conciliada pela API nesta etapa.</v-alert
+            >
           </v-card-text>
         </v-window-item>
       </v-window>
 
       <v-card-actions v-if="podeEditar && aba !== 'onboarding'" class="cadastro__acoes">
         <v-spacer />
-        <v-btn color="primary" variant="flat" :loading="salvando" prepend-icon="mdi-content-save" @click="salvar">Salvar cadastro</v-btn>
+        <v-btn color="primary" variant="flat" :loading="salvando" prepend-icon="mdi-content-save" @click="salvar"
+          >Salvar cadastro</v-btn
+        >
       </v-card-actions>
     </v-card>
   </section>
 </template>
 
 <style scoped>
-.cadastro { margin-top: 28px; }
-.cadastro__titulo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.cadastro__titulo h2 { font-size: 1.1rem; }
-.cadastro__contexto { color: rgb(var(--v-theme-primary)); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.cadastro__formulario { display: grid; gap: 18px; }
-.cadastro__formulario h3 { font-size: 1rem; }
-.cadastro__campos { display: grid; gap: 12px; }
-.cadastro__campos--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.cadastro__campos--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.cadastro__campos--quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.cadastro__campo--duplo { grid-column: span 2; }
-.cadastro__acoes { padding: 16px 24px; }
-.cadastro__resumo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.cadastro__resumo div { display: grid; gap: 3px; }
-.cadastro__resumo dt { color: rgba(var(--v-theme-on-surface), .65); font-size: .82rem; }
-.cadastro__resumo dd { margin: 0; font-weight: 600; }
-@media (max-width: 800px) { .cadastro__campos--quatro, .cadastro__campos--tres { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cadastro {
+  margin-top: 0;
+}
+.cadastro__titulo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.cadastro__titulo h2 {
+  font-size: 1.1rem;
+}
+.cadastro__contexto {
+  color: #b7a3ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cadastro__abas {
+  border-bottom: 1px solid #303943;
+  padding: 0 8px;
+}
+.cadastro__abas :deep(.v-tab) {
+  min-height: 48px;
+  text-transform: none;
+  font-weight: 700;
+}
+.cadastro__formulario {
+  display: grid;
+  gap: 24px;
+}
+.cadastro__formulario h3 {
+  font-size: 1rem;
+}
+.cadastro__campos {
+  display: grid;
+  gap: 12px;
+}
+.cadastro__campos--dois {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cadastro__campos--tres,
+.cadastro__campos--quatro {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cadastro__campo--duplo {
+  grid-column: span 2;
+}
+.cadastro :deep(.v-card) {
+  background: #1b2128;
+  border-color: #303943;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.cadastro__acoes {
+  background: #1b2128;
+  border-top: 1px solid #303943;
+  padding: 16px 24px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+.cadastro__resumo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.cadastro__resumo div {
+  display: grid;
+  gap: 3px;
+}
+.cadastro__resumo dt {
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  font-size: 0.82rem;
+}
+.cadastro__resumo dd {
+  margin: 0;
+  font-weight: 600;
+}
+@media (max-width: 800px) {
+  .cadastro__campos--quatro,
+  .cadastro__campos--tres {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 560px) {
-  .cadastro__campos--quatro, .cadastro__campos--tres, .cadastro__campos--dois, .cadastro__resumo { grid-template-columns: 1fr; }
-  .cadastro__campo--duplo { grid-column: auto; }
-  .cadastro__acoes { padding: 12px 16px; }
-  .cadastro__acoes .v-btn { width: 100%; min-height: 44px; }
+  .cadastro__campos--quatro,
+  .cadastro__campos--tres,
+  .cadastro__campos--dois,
+  .cadastro__resumo {
+    grid-template-columns: 1fr;
+  }
+  .cadastro__campo--duplo {
+    grid-column: auto;
+  }
+  .cadastro__acoes {
+    padding: 12px 16px;
+  }
+  .cadastro__acoes .v-btn {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 </style>
