@@ -348,6 +348,9 @@ const {
   motivosTelasDesabilitadas
 } = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
+const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
+const podeEditarTransferencia = computed(() => temPermissao("transferencias_editar"));
+const podeOperarCaixa = computed(() => temPermissao("caixa_operar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
 const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
 const podeCancelarPlanejamentoRetorno = computed(() => {
@@ -430,10 +433,8 @@ const operacoesPaginadas = computed(() => operacoesDaTela.value);
 // dia do caixa em resolverEscopoEntradasDoDia); a tela mostra o campo desabilitado em vez de fingir
 // que funciona.
 const podeConsultarOutrosDiasEntradas = computed(() => podeConsultarOutrosDias(permissoesUsuario.value));
-// "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
-// caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
-// abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
-const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value));
+// +Novo tem dois atos: Saídas e Transferências. Retorno mantém seu gate de Caixa aberto.
+const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value, Boolean(caixaAberto.value)));
 const {
   dadosCadastro,
   descricaoTela,
@@ -1444,6 +1445,14 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
 }
 
 function executarAcaoNovo(acao: AcaoNovo) {
+  if (!acoesNovo.value.some((permitida) => permitida.id === acao.id)) return;
+  if (acao.id === "transferencias" && !podeCriarTransferencia.value) {
+    // Acesso apenas ao retorno manual: não carrega opções nem concede criação contábil.
+    entidadeNova.value = "transferencia";
+    operacaoEditandoId.value = "";
+    modalOperacaoAberto.value = true;
+    return;
+  }
   if (acao.telaDestino) {
     void router.push(rotaTela(acao.telaDestino));
     return;
@@ -2002,6 +2011,13 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 }
 
 provide(WORKSPACE_CONTEXT, {
+  caixaStatus,
+  caixaSalvando,
+  podeOperarCaixa,
+  podeCriarTransferencia,
+  podeEditarTransferencia,
+  carregarStatusCaixa,
+  retornarSaldoOperacional,
   opcoesEmpresa,
   empresaId,
   modalOperacaoAberto,
@@ -2216,7 +2232,6 @@ const pageContext = computed(() => ({
   notificar,
   atualizarDiaEntradas,
   abrirCaixaOperacional,
-  retornarSaldoOperacional,
   executarPlanejamentoRetorno,
   cancelarPlanejamentoRetorno,
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
@@ -2405,8 +2420,7 @@ onBeforeUnmount(() => {
             Novo
           </v-btn>
         </template>
-        <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
-             abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
+        <!-- Saídas mantém as três categorias; Transferências reúne comum e retorno manual. -->
         <v-list min-width="288" class="fab-novo-list">
           <v-list-item
             v-for="acao in acoesNovo"

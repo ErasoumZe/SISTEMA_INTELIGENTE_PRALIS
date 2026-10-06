@@ -11,7 +11,6 @@ import CaixaCategoriaResumoDialog from "~/components/caixa/CaixaCategoriaResumoD
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
-import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
 import CaixaSangriasDialog from "~/components/caixa/CaixaSangriasDialog.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
@@ -47,24 +46,6 @@ const emit = defineEmits<{
     }
   ): void;
   (event: "executarPlanejamento", payload: { caixaId: string; planejamentoId: string }): void;
-  // D5: lacre por movimento (opcional, R-026). D6: `lacreRetorno` e o do retorno final que o
-  // proprio fechamento cria quando ainda ha sobra. B2: `idempotenciaChave` identifica a INTENCAO;
-  // `aoConcluir` traz o desfecho de volta, porque `emit` nao devolve o retorno do handler.
-  (
-    event: "retornarSaldo",
-    payload: {
-      caixaId: string;
-      valor: number;
-      valorEspecie: number;
-      valorMoedas: number;
-      lacreId: string;
-      lacreNumero: string;
-      responsavelNome: string;
-      observacao: string | null;
-      idempotenciaChave: string;
-      aoConcluir: (sucesso: boolean) => void;
-    }
-  ): void;
   (
     event: "fecharCaixa",
     payload: {
@@ -119,20 +100,6 @@ const maloteDeclarado = ref<{
 const erroMalote = ref("");
 const carregandoMalote = ref(false);
 let consultaMaloteAtual = 0;
-// D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
-// devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
-// `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
-// misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
-// correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
-const entrega = reactive({
-  valor: "",
-  valorEspecie: "",
-  valorMoedas: "",
-  lacreId: "",
-  responsavelNome: "",
-  observacao: ""
-});
-const modalRetornoSangriaAberto = ref(false);
 const modalSangriasAberto = ref(false);
 const modalVendasCanceladasAberto = ref(false);
 const modalCategoriaResumoAberto = ref(false);
@@ -141,46 +108,6 @@ const vendasCanceladasQuantidade = ref(0);
 const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
-
-// B2 · a chave de idempotencia da tela.
-// Regra: uma chave por INTENCAO. Ela nasce no primeiro envio, sobrevive a erro e a cancelamento
-// (o retry precisa da MESMA chave, senao o servidor trata como entrega nova e duplica o dinheiro),
-// e so e trocada quando o ato termina bem ou quando o operador muda de fato o que quer entregar.
-const chaveEntrega = ref("");
-const intencaoDaChave = ref("");
-
-// `crypto.randomUUID` exige contexto seguro. Em https e em localhost existe; num acesso por IP da
-// rede da loja (http://192.168.x.x) o navegador nao o expoe, e sem o fallback a tela quebraria
-// justamente onde ela roda todo dia.
-function novoUuid(): string {
-  const aleatorio = globalThis.crypto;
-  if (typeof aleatorio?.randomUUID === "function") return aleatorio.randomUUID();
-  return "10000000-1000-4000-8000-100000000000".replace(/[018]/gu, (caractere) => {
-    const digito = Number(caractere);
-    return (digito ^ (Math.floor(Math.random() * 256) & (15 >> (digito / 4)))).toString(16);
-  });
-}
-
-// A "intencao" e o conjunto que o servidor compara para decidir entre retry e ato novo. Se ele
-// mudar, a chave TEM de mudar — senao o servidor devolve 409 e o operador fica travado sem
-// entender por que. Se nao mudar, a chave TEM de ficar — e o que impede a entrega dupla.
-function chaveParaIntencao(assinatura: string): string {
-  if (chaveEntrega.value && intencaoDaChave.value === assinatura) return chaveEntrega.value;
-  chaveEntrega.value = novoUuid();
-  intencaoDaChave.value = assinatura;
-  return chaveEntrega.value;
-}
-
-function limparEntrega() {
-  entrega.valor = "";
-  entrega.valorEspecie = "";
-  entrega.valorMoedas = "";
-  entrega.lacreId = "";
-  entrega.responsavelNome = "";
-  entrega.observacao = "";
-  chaveEntrega.value = "";
-  intencaoDaChave.value = "";
-}
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
@@ -254,7 +181,6 @@ const totalPlanejadoCentavos = computed(() =>
 const saldoLivre = computed(() =>
   deCentavos(Math.max(0, paraCentavos(saldoAtual.value) - totalPlanejadoCentavos.value))
 );
-const temSaldoLivre = computed(() => saldoLivre.value > 0);
 
 // A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
 // Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
@@ -467,82 +393,6 @@ function abrir() {
   });
 }
 
-// D1: entrega PARCIAL durante o turno. Sem valor digitado, envia a sobra inteira. O servidor
-// recalcula o teto sob trava — o numero que a tela viu nunca e prova de nada.
-const valorEntregaEfetivo = computed(() => {
-  const digitado = Number(entrega.valor || 0);
-  return digitado > 0 ? digitado : saldoLivre.value;
-});
-// D1 na TELA: o servidor continua sendo a autoridade (ele recalcula sob trava), mas deixar o
-// operador disparar um valor que ja se sabe impossivel so gera 400 e desconfianca. Aqui o aviso
-// e imediato e o botao nao dispara.
-const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > saldoLivre.value);
-const entregaComposicaoInvalida = computed(
-  () => Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
-);
-const lacreEntregaPendente = computed(() => !entrega.lacreId);
-const entregaBloqueada = computed(
-  () =>
-    Boolean(props.salvando) ||
-    valorEntregaEfetivo.value <= 0 ||
-    entregaAcimaDoSaldoLivre.value ||
-    entregaComposicaoInvalida.value ||
-    lacreEntregaPendente.value ||
-    !entrega.responsavelNome.trim()
-);
-
-const entregaIniciada = computed(
-  () =>
-    entrega.valor.trim().length > 0 ||
-    entrega.valorEspecie.trim().length > 0 ||
-    entrega.valorMoedas.trim().length > 0 ||
-    entrega.lacreId.length > 0 ||
-    entrega.observacao.trim().length > 0
-);
-
-const mensagemErroEntrega = computed(() => {
-  if (!entregaIniciada.value) return "";
-  if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value)}.`;
-  if (entregaComposicaoInvalida.value) return "Dinheiro físico + moedas deve ser igual ao valor entregue.";
-  if (lacreEntregaPendente.value) return "Informe o lacre do retorno / sangria.";
-  if (!entrega.responsavelNome.trim()) return "Informe o responsável pela sangria.";
-  if (valorEntregaEfetivo.value <= 0) return "Informe um valor para a transferência.";
-  return "";
-});
-
-function retornarSaldo(fecharModalAoSalvar = false) {
-  const caixa = caixaAberto.value;
-  // Guarda de duplo clique: enquanto `salvando` estiver ligado o ato nao repete. O botao tambem
-  // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
-  if (!caixa || entregaBloqueada.value) return;
-  const valor = valorEntregaEfetivo.value;
-  const lacreId = entrega.lacreId;
-  const lacreNumero = lacresRetornoDisponiveis.value.find((lacre) => lacre.id === lacreId)?.numero ?? "";
-  const observacao = entrega.observacao || null;
-  emit("retornarSaldo", {
-    caixaId: caixa.id,
-    valor,
-    valorEspecie: Number(entrega.valorEspecie || 0),
-    valorMoedas: Number(entrega.valorMoedas || 0),
-    lacreId,
-    lacreNumero,
-    responsavelNome: entrega.responsavelNome.trim(),
-    observacao,
-    idempotenciaChave: chaveParaIntencao(
-      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacreId}|${entrega.responsavelNome.trim()}|${observacao ?? ""}`
-    ),
-    // Limpa SO no sucesso confirmado. Em erro (ou confirmacao negada) valor, lacre, observacao e
-    // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
-    // chave — que e o que impede a segunda entrega do mesmo envelope.
-    aoConcluir: (sucesso: boolean) => {
-      if (!sucesso) return;
-      lacresRetornoDisponiveis.value = lacresRetornoDisponiveis.value.filter((lacre) => lacre.id !== lacreId);
-      limparEntrega();
-      if (fecharModalAoSalvar) modalRetornoSangriaAberto.value = false;
-    }
-  });
-}
-
 function categoriaTemUltimos(chave: string): chave is CategoriaComUltimos {
   return chave === "despesas" || chave === "mercadorias" || chave === "retiradas";
 }
@@ -567,20 +417,6 @@ function abrirUltimosLancamentos(chave: string, valor: number) {
 
 function atualizarDialogUltimosLancamentos(aberto: boolean) {
   if (!aberto) categoriaUltimosLancamentos.value = null;
-}
-
-async function abrirRetornoSangria() {
-  const caixa = caixaAberto.value;
-  if (!caixa) return;
-  entrega.responsavelNome = caixa.caixaResponsavelNomeAbertura || caixa.usuarioCaixaNome;
-  try {
-    lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
-      `/api/caixa/${encodeURIComponent(caixa.id)}/lacres-retorno`
-    );
-  } catch {
-    lacresRetornoDisponiveis.value = [];
-  }
-  modalRetornoSangriaAberto.value = true;
 }
 
 // D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
@@ -990,22 +826,6 @@ function confirmarFechamento() {
         </div>
 
         <v-row dense>
-          <v-col v-if="temSaldoLivre" cols="12" class="pt-0 pb-5">
-            <div class="retorno-sangria-faixa">
-              <v-btn
-                color="warning"
-                prepend-icon="mdi-bank-transfer-out"
-                class="botao-retorno-sangria"
-                data-teste="botao-entregar"
-                @click="abrirRetornoSangria"
-              >
-                <span class="botao-retorno-sangria__conteudo">
-                  <span>Transferência de retorno / sangria</span>
-                  <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
-                </span>
-              </v-btn>
-            </div>
-          </v-col>
           <v-col cols="12" class="fechamento-caixa">
             <v-alert v-if="temSobra" type="warning" variant="tonal" class="mb-4">
               <template v-if="planejamentosPendentes.length">
@@ -1162,29 +982,6 @@ function confirmarFechamento() {
           </v-col>
         </v-row>
 
-        <CaixaRetornoSangriaDialog
-          v-if="caixaAberto"
-          :aberto="modalRetornoSangriaAberto"
-          :saldo-livre="saldoLivre"
-          :valor="entrega.valor"
-          :valor-especie="entrega.valorEspecie"
-          :valor-moedas="entrega.valorMoedas"
-          :lacre-id="entrega.lacreId"
-          :lacres-disponiveis="lacresRetornoDisponiveis"
-          :observacao="entrega.observacao"
-          :responsavel-nome="entrega.responsavelNome"
-          :bloqueado="entregaBloqueada"
-          :mensagem-erro="mensagemErroEntrega"
-          :salvando="salvando ?? false"
-          @update:aberto="modalRetornoSangriaAberto = $event"
-          @update:valor="entrega.valor = $event"
-          @update:valor-especie="entrega.valorEspecie = $event"
-          @update:valor-moedas="entrega.valorMoedas = $event"
-          @update:lacre-id="entrega.lacreId = $event"
-          @update:responsavel-nome="entrega.responsavelNome = $event"
-          @update:observacao="entrega.observacao = $event"
-          @salvar="retornarSaldo($event)"
-        />
         <CaixaSangriasDialog
           v-if="caixaAberto"
           :aberto="modalSangriasAberto"
@@ -1239,68 +1036,6 @@ function confirmarFechamento() {
 .botao-travado {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.botao-retorno-sangria {
-  max-width: 100%;
-  min-height: 52px;
-  padding-block: 8px;
-}
-
-.botao-retorno-sangria :deep(.v-btn__content) {
-  min-width: 0;
-  white-space: normal;
-}
-
-.retorno-sangria-faixa {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(var(--v-theme-warning), 0.14);
-}
-
-.botao-retorno-sangria__conteudo {
-  display: grid;
-  min-width: 0;
-  text-align: left;
-}
-
-.botao-retorno-sangria__subtitulo {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-@media (max-width: 480px) {
-  .retorno-sangria-faixa {
-    padding: 8px;
-  }
-
-  .botao-retorno-sangria {
-    width: 100%;
-    height: auto !important;
-    min-height: 58px;
-    padding: 10px 12px;
-  }
-
-  .botao-retorno-sangria :deep(.v-btn__prepend) {
-    flex: 0 0 auto;
-    margin-top: 2px;
-    margin-right: 8px;
-  }
-
-  .botao-retorno-sangria__conteudo {
-    overflow-wrap: anywhere;
-    font-size: 0.8rem;
-    line-height: 1.25;
-  }
-
-  .botao-retorno-sangria__subtitulo {
-    font-size: 0.67rem;
-    line-height: 1.25;
-  }
 }
 
 .abertura-conferencia {

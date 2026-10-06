@@ -1131,6 +1131,8 @@ oficial.
 
 Retorno e sangria são o mesmo ato operacional e aparecem exclusivamente como **Transferência de retorno / sangria** dentro de um Caixa aberto. O modal genérico de transferências não cria novos retornos nem planejamentos. Linhas históricas já planejadas permanecem fatos auditáveis e podem somente ser executadas ou canceladas pelo fluxo existente até se encerrarem; não há apagamento, cancelamento silencioso ou reescrita histórica.
 
+**Localização visual supersedida por solicitação explícita do usuário em 02/10/2026:** o retorno manual passa a ser acessado exclusivamente em **+Novo → Transferências → Retorno / sangria**, no mesmo host da aba **Nova transferência**. Sai o CTA de retorno da tela Caixa. Apenas a localização muda: retorno exige Caixa aberto e `caixa_operar`, mantém a API `POST /api/caixa/:id/transferencia-cofre`, saldo livre, composição física, lacre, responsável e idempotência atuais. A aba comum mantém sua permissão própria. Não se reabre planejamento, não se altera fechamento nem regra financeira. **+Novo** oferece somente **Saídas** e **Transferências**; Entradas permanece como consulta no menu.
+
 ### R-205 — Composição e conferência física do malote na abertura (Rodrigo, 22/09/2026)
 
 Toda nova remessa Cofre → Caixa declara total, espécie e moedas, cuja soma precisa ser igual ao total. Ao abrir com lacre, o operador confere espécie e moedas. Se convergir, fica registrada a confirmação; se divergir, registra-se declarado, contado, diferença, relato obrigatório, operador e horário do servidor, notifica-se a Tesouraria e o Caixa abre com o total efetivamente contado. O valor declarado nunca é reescrito. A implementação deve definir e testar o efeito contábil antes da migration.

@@ -20,7 +20,6 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuário'"
       :salvando="ctx.caixaSalvando"
       @abrir-caixa="ctx.abrirCaixaOperacional"
-      @retornar-saldo="ctx.retornarSaldoOperacional"
       @executar-planejamento="ctx.executarPlanejamentoRetorno"
       @fechar-caixa="ctx.fecharCaixaOperacional"
       @recarregar="ctx.recarregarCaixa"

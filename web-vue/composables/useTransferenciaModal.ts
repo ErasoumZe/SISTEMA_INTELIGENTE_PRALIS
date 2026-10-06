@@ -20,11 +20,16 @@ export function useTransferenciaModal({ aberto, form, opcoesEmpresa }: Dependenc
   const tempoConfirmacaoAberto = ref(false);
   const erroDestino = ref("");
 
-  watch(aberto, (estaAberto) => {
-    if (!estaAberto) return;
-    multiploDestino.value = form.value.contasDestinoIds.length > 0;
-    tempoConfirmacaoAberto.value = !multiploDestino.value && Boolean(form.value.tempoConfirmacao);
-  });
+  watch(
+    aberto,
+    (estaAberto) => {
+      if (!estaAberto) return;
+      multiploDestino.value = form.value.contasDestinoIds.length > 0;
+      tempoConfirmacaoAberto.value = !multiploDestino.value && Boolean(form.value.tempoConfirmacao);
+    },
+    // O formulário pode montar já aberto dentro do host; edição deve refletir o registro.
+    { immediate: true }
+  );
 
   watch(multiploDestino, (ativo) => {
     erroDestino.value = "";

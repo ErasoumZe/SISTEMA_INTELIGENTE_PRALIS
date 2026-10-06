@@ -4,7 +4,7 @@ import { TELA_TEMA_RESUMO_CAIXA } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
-import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
+import TransferenciasHost from "~/components/operacoes/TransferenciasHost.vue";
 import EditorPermissoes from "~/components/permissoes/EditorPermissoes.vue";
 
 const workspace = useWorkspaceContext();
@@ -85,12 +85,12 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
 
   <!-- Lancamento (despesa/mercadoria/retirada) e Transferencia tem modais proprios fieis ao desenho
        do Rodrigo (FOTO 2 / FOTO 1). Eles LEEM `modalOperacaoAberto` do contexto e decidem sozinhos
-       se aparecem (ver OperacaoTransferenciaModal.vue:19 e useOperacaoLancamento.ts:52).
+       se aparecem (ver TransferenciasHost.vue:19 e useOperacaoLancamento.ts:52).
        NAO REMOVER: sem estas duas tags o "+ Novo > Transferencias/Saidas" abre o estado e nada
        renderiza — falha 100% silenciosa (import sem uso nao quebra lint, check nem teste).
        Perdidas por engano no 9c35fae, restauradas em 31/07. -->
   <OperacaoLancamentoModal />
-  <OperacaoTransferenciaModal />
+  <TransferenciasHost />
 
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable persistent no-click-animation>
     <v-card>

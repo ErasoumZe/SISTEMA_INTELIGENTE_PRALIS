@@ -431,30 +431,8 @@ export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], 
   return "Tela indisponivel para este perfil.";
 }
 
-// Menu curto do FAB "+ NOVO" (estilo Mobills) — PROJECT_BRAIN/17 §4: TRES itens, um por eixo.
-// Entradas NAVEGA para a tela (venda manual foi descontinuada: entrada so por integracao, D7);
-// Transferencias abre o modal de transferencia; Saidas abre o modal UNICO de lancamento, que ja
-// alterna Despesa/Mercadoria/Retirada nos 3 botoes do topo. Nao ha mais item por categoria aqui.
-// `cor` e a cor da categoria (token --cat-*), aplicada ao icone do item.
+// +Novo agrupa Saídas e Transferências. A consulta de Entradas continua no menu da tela.
 export const opcoesNovo: AcaoNovo[] = [
-  {
-    id: "entradas",
-    titulo: "Entradas",
-    subtitulo: "Vendas e faturamento",
-    permissoes: ["entradas_visualizar"],
-    icone: "mdi-arrow-down-left",
-    cor: "var(--cat-entradas-base)",
-    telaDestino: "entradas"
-  },
-  {
-    id: "transferencias",
-    titulo: "Transferências",
-    subtitulo: "Entre contas",
-    permissoes: ["transferencias_criar"],
-    icone: "mdi-swap-horizontal",
-    cor: "var(--cat-transferencias-base)",
-    entidade: "transferencia"
-  },
   {
     id: "saidas",
     titulo: "Saídas",
@@ -463,13 +441,26 @@ export const opcoesNovo: AcaoNovo[] = [
     icone: "mdi-arrow-up-right",
     cor: "var(--cat-despesas-base)",
     entidade: "despesa"
+  },
+  {
+    id: "transferencias",
+    titulo: "Transferências",
+    subtitulo: "Nova transferência ou retorno / sangria",
+    permissoes: ["transferencias_criar"],
+    icone: "mdi-swap-horizontal",
+    cor: "var(--cat-transferencias-base)",
+    entidade: "transferencia"
   }
 ];
 
 // Itens do "+ NOVO" que o perfil enxerga. Basta UMA das permissoes do eixo: quem so cria retirada
 // continua vendo "Saidas".
-export function acoesNovoPermitidas(permissoesUsuario: readonly Permissao[]) {
-  return opcoesNovo.filter((acao) => temAlgumaPermissao(permissoesUsuario, acao.permissoes));
+export function acoesNovoPermitidas(permissoesUsuario: readonly Permissao[], caixaAberto = false) {
+  return opcoesNovo.filter(
+    (acao) =>
+      temAlgumaPermissao(permissoesUsuario, acao.permissoes) ||
+      (acao.id === "transferencias" && caixaAberto && temPermissao(permissoesUsuario, "caixa_operar"))
+  );
 }
 
 // Categoria em que o modal de "Saidas" abre: a PRIMEIRA que o perfil pode criar — quem so cria
