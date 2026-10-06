@@ -60,6 +60,7 @@ const emit = defineEmits<{
 }>();
 
 const etapaAtual = ref(1);
+const cabecalhoMobileAberto = ref(false);
 const etapas = [
   { id: 1, titulo: "Resumo", icone: "mdi-clipboard-text-clock-outline", cor: "var(--cx-positive)", classe: "resumo" },
   { id: 2, titulo: "Vendas", icone: "mdi-receipt-text-outline", cor: "var(--cat-entradas-base)", classe: "vendas" },
@@ -92,7 +93,18 @@ function irPara(etapa: number) {
     aria-labelledby="fechamento-wizard-titulo"
     data-teste="etapa-fechamento"
   >
-    <header class="fechamento-wizard__cabecalho">
+    <button
+      type="button"
+      class="fechamento-wizard__resumo-mobile"
+      @click="cabecalhoMobileAberto = !cabecalhoMobileAberto"
+    >
+      <span>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</span>
+      <span>{{ cabecalhoMobileAberto ? "Ocultar detalhes" : "Ver etapas" }}</span>
+    </button>
+    <header
+      class="fechamento-wizard__cabecalho"
+      :class="{ 'fechamento-wizard__cabecalho--mobile-aberto': cabecalhoMobileAberto }"
+    >
       <div>
         <span class="fechamento-wizard__sobretitulo">Fechamento do caixa</span>
         <h2 id="fechamento-wizard-titulo">Conferência por etapas</h2>
@@ -108,7 +120,11 @@ function irPara(etapa: number) {
       </div>
     </header>
 
-    <nav class="fechamento-wizard__navegacao" aria-label="Etapas do fechamento">
+    <nav
+      class="fechamento-wizard__navegacao"
+      :class="{ 'fechamento-wizard__navegacao--mobile-aberta': cabecalhoMobileAberto }"
+      aria-label="Etapas do fechamento"
+    >
       <ol>
         <li
           v-for="etapa in etapas"
@@ -230,6 +246,11 @@ function irPara(etapa: number) {
         Ir para fechamento
       </v-btn>
     </footer>
+    <footer v-else class="fechamento-wizard__rodape fechamento-wizard__rodape--ultimo">
+      <v-btn color="secondary" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual = 4"
+        >Voltar ao relatório final</v-btn
+      >
+    </footer>
   </section>
 </template>
 
@@ -244,6 +265,9 @@ function irPara(etapa: number) {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 20px;
+}
+.fechamento-wizard__resumo-mobile {
+  display: none;
 }
 .fechamento-wizard__sobretitulo {
   color: var(--cx-brand-text);
@@ -314,6 +338,10 @@ function irPara(etapa: number) {
   border-color: var(--etapa-cor) !important;
   background: var(--etapa-cor) !important;
   color: var(--cx-brand-on) !important;
+}
+.fechamento-wizard__etapa--fechamento.fechamento-wizard__etapa--ativa,
+.fechamento-wizard__etapa--fechamento.fechamento-wizard__etapa--ativa :deep(.v-icon) {
+  color: var(--cx-canvas) !important;
 }
 .fechamento-wizard__etapa--vendas.fechamento-wizard__etapa--ativa {
   color: var(--cx-canvas) !important;
@@ -387,7 +415,31 @@ function irPara(etapa: number) {
   background: transparent;
 }
 @media (max-width: 720px) {
+  .fechamento-wizard__resumo-mobile {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--cx-line);
+    border-radius: 10px;
+    background: var(--cx-surface);
+    color: var(--cx-ink);
+    font-weight: 800;
+    text-align: left;
+  }
+  .fechamento-wizard__resumo-mobile span:last-child {
+    color: var(--cx-brand-text);
+    font-size: 0.78rem;
+  }
   .fechamento-wizard__cabecalho {
+    display: none;
+  }
+  .fechamento-wizard__cabecalho--mobile-aberto {
+    display: flex;
     flex-direction: column;
   }
   .fechamento-wizard__horarios {
@@ -401,6 +453,9 @@ function irPara(etapa: number) {
   }
   .fechamento-wizard__navegacao li:not(.fechamento-wizard__item--ativa) {
     display: none;
+  }
+  .fechamento-wizard__navegacao--mobile-aberta li:not(.fechamento-wizard__item--ativa) {
+    display: block;
   }
   .fechamento-wizard__navegacao button {
     width: 100%;
@@ -446,13 +501,19 @@ function irPara(etapa: number) {
 @media (max-width: 420px) {
   .fechamento-wizard__rodape {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
   .fechamento-wizard__rodape :deep(.v-spacer) {
     display: none;
   }
   .fechamento-wizard__rodape :deep(.v-btn:only-child) {
     grid-column: 1 / -1;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn),
+  .fechamento-wizard__rodape :deep(.v-btn__content) {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
   }
 }
 </style>

@@ -192,7 +192,7 @@
 
   .fechamento-etapas {
     gap: var(--cx-sp-3);
-    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+    padding-bottom: calc(142px + env(safe-area-inset-bottom));
   }
 
   .fechamento-etapas__situacao,
@@ -215,5 +215,9 @@
   .fechamento-etapas :deep([data-teste="botao-fechar"]) {
     width: 100%;
     min-height: 48px;
+  }
+  .fechamento-etapas__acao-final :deep(.v-btn__content) {
+    white-space: normal;
+    text-align: center;
   }
 }

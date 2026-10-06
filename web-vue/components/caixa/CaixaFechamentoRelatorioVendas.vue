@@ -165,16 +165,6 @@ watch(
         <h3 id="vendas-turno-titulo">Vendas do turno</h3>
         <p>Consolide os pagamentos e as vendas canceladas deste caixa.</p>
       </div>
-      <v-btn
-        class="relatorio-vendas__gerar"
-        color="primary"
-        prepend-icon="mdi-file-chart-outline"
-        :loading="carregando"
-        data-teste="gerar-relatorio-vendas"
-        @click="gerarRelatorio"
-      >
-        Gerar relatório de vendas
-      </v-btn>
     </div>
 
     <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
@@ -235,6 +225,17 @@ watch(
       }}
     </v-alert>
 
+    <v-btn
+      class="relatorio-vendas__gerar mt-4"
+      color="primary"
+      prepend-icon="mdi-file-chart-outline"
+      :loading="carregando"
+      :disabled="!anexoCreareEnviado || enviandoCreare"
+      data-teste="gerar-relatorio-vendas"
+      @click="gerarRelatorio"
+      >Gerar relatório de vendas</v-btn
+    >
+
     <template v-if="gerado && totais">
       <v-alert type="success" variant="tonal" density="comfortable" class="mt-4">
         <strong>Relatório atualizado.</strong>
@@ -259,7 +260,11 @@ watch(
         </article>
       </div>
 
-      <section class="relatorio-vendas__formas mt-4" aria-label="Totais por tipo de recebimento">
+      <details class="relatorio-vendas__formas mt-4" aria-label="Totais por tipo de recebimento">
+        <summary>
+          <strong>Pagamentos aprovados</strong>
+          <span>Toque para mostrar ou ocultar</span>
+        </summary>
         <div class="d-flex align-center justify-space-between ga-3 flex-wrap mb-3">
           <h4>Pagamentos aprovados</h4>
           <span class="text-caption text-medium-emphasis">Por forma de pagamento</span>
@@ -277,7 +282,7 @@ watch(
           </div>
         </div>
         <p v-else class="text-body-2 text-medium-emphasis mb-0">Nenhuma forma de pagamento foi informada.</p>
-      </section>
+      </details>
 
       <CaixaFechamentoRelatorioVendasDetalhes :canceladas="canceladas" />
     </template>
@@ -361,6 +366,20 @@ watch(
   border-radius: 12px;
   background: color-mix(in srgb, var(--cx-brand) 15%, var(--cx-surface));
 }
+.relatorio-vendas__formas summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.relatorio-vendas__formas summary::-webkit-details-marker {
+  display: none;
+}
+.relatorio-vendas__formas summary span {
+  color: var(--cx-ink-soft);
+  font-size: 0.78rem;
+}
 .relatorio-vendas__gerar {
   background: var(--cat-entradas-base) !important;
   color: var(--cx-canvas) !important;
@@ -438,6 +457,13 @@ watch(
   }
   .relatorio-vendas__leitura {
     grid-template-columns: 1fr;
+  }
+  .relatorio-vendas__formas-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .relatorio-vendas__forma {
+    padding: 10px;
   }
 }
 @media (max-width: 420px) {
