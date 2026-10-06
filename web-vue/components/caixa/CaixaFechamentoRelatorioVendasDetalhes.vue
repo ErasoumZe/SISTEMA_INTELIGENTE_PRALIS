@@ -5,7 +5,7 @@ import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 
 defineProps<{ canceladas: VendaCanceladaCaixa[] }>();
 
-const painelAberto = ref([0]);
+const painelAberto = ref<number[]>([]);
 
 function dataCancelamento(venda: VendaCanceladaCaixa) {
   return venda.dataHora ? formatarDataHora(venda.dataHora) : formatarDataSomenteDia(venda.data);

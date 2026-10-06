@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { salvarRelatorioMaquininhaFechamentoSchema } from "@padaria/shared/caixa";
+import { gerarRelatorioVendasFechamentoSchema, salvarRelatorioMaquininhaFechamentoSchema } from "@padaria/shared/caixa";
 
 const leitura = {
   documentoLegivel: true,
@@ -34,5 +34,31 @@ describe("contrato dos relatórios de manhã e tarde da maquininha", () => {
         leituraTarde: leitura
       }).success
     ).toBe(false);
+  });
+});
+
+describe("contrato da prova CREARE", () => {
+  const leituraCreare = {
+    documentoLegivel: true,
+    totalBruto: 100,
+    dinheiro: 100,
+    credito: 0,
+    debito: 0,
+    pix: 0,
+    voucher: 0,
+    despesasExcetoSangria: 0,
+    resultadoFinal: 100,
+    camposDuvidosos: [],
+    observacoes: []
+  };
+
+  it("exige foto e leitura revisada para gerar o relatório de vendas", () => {
+    expect(gerarRelatorioVendasFechamentoSchema.safeParse({}).success).toBe(false);
+    expect(
+      gerarRelatorioVendasFechamentoSchema.safeParse({
+        anexoId: "11111111-1111-4111-8111-111111111111",
+        leituraCreare
+      }).success
+    ).toBe(true);
   });
 });

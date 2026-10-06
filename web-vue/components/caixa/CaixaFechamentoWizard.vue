@@ -140,7 +140,8 @@ function irPara(etapa: number) {
             }"
             :style="{ '--etapa-cor': etapa.cor }"
             :aria-current="etapa.id === etapaAtual ? 'step' : undefined"
-            :aria-controls="`fechamento-painel-${etapa.id}`"
+            :aria-controls="etapa.id === 1 ? undefined : `fechamento-painel-${etapa.id}`"
+            :disabled="etapa.id > etapaAtual"
             @click="irPara(etapa.id)"
           >
             <span>{{ etapa.id }}</span
@@ -451,6 +452,9 @@ function irPara(etapa: number) {
   .fechamento-wizard__navegacao ol {
     min-width: 0;
   }
+  .fechamento-wizard__navegacao--mobile-aberta ol {
+    flex-direction: column;
+  }
   .fechamento-wizard__navegacao li:not(.fechamento-wizard__item--ativa) {
     display: none;
   }
@@ -492,9 +496,12 @@ function irPara(etapa: number) {
     min-height: 48px;
   }
   .fechamento-wizard__rodape {
-    padding: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
     border: 0;
-    background: transparent;
+    background: linear-gradient(to bottom, transparent, var(--cx-canvas) 30%);
     box-shadow: none;
   }
 }

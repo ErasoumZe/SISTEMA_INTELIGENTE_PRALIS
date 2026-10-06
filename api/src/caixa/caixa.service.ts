@@ -60,6 +60,7 @@ import {
   salvarRelatorioMaquininhaFechamentoRepository,
   salvarRelatorioVendasFechamentoRepository,
   invalidarRelatorioMaquininhaFechamentoRepository,
+  invalidarRelatorioVendasFechamentoRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
@@ -547,6 +548,9 @@ export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: stri
     // leitura salva apontando para uma foto que o operador acabou de substituir.
     if (existente.tipo === "comprovante_cartao") {
       await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+    }
+    if (existente.tipo === "relatorio_vendas_creare") {
+      await invalidarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx);
     }
     const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
     if (!anexo) throw new Error("Anexo nao encontrado");
@@ -1798,7 +1802,7 @@ export async function obterTransferenciasCaixa(
     else totalEntradaCentavos += valorCentavos;
     return {
       id: linha.id,
-      tipo: (linha.tipo === "sangria" ? "retorno" : linha.tipo) as "abertura" | "suprimento" | "retorno",
+      tipo: linha.tipo,
       ordem,
       valor: deCentavos(valorCentavos),
       valorEspecie: linha.valorEspecieDeclarado === null ? null : deCentavos(paraCentavos(linha.valorEspecieDeclarado)),
@@ -2065,16 +2069,9 @@ export async function gerarRelatorioVendasFechamento(
         "RELATORIO_FORA_DO_CORTE"
       );
     }
-    if (leituraCreare.anexoId) {
-      const anexo = await buscarAnexoFechamentoCaixaRepository(
-        travado.id,
-        leituraCreare.anexoId,
-        travado.empresaId,
-        tx
-      );
-      if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
-        throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
-      }
+    const anexo = await buscarAnexoFechamentoCaixaRepository(travado.id, leituraCreare.anexoId, travado.empresaId, tx);
+    if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
+      throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
     }
     const totaisOperacionais = await calcularTotaisCaixaCentavos(travado, tx);
     const saidasSemSangria = deCentavos(
@@ -2087,18 +2084,16 @@ export async function gerarRelatorioVendasFechamento(
       primeiraPagina.totais.porFormaPagamento
         .filter((item) => item.categoriaFechamentoCaixa === categoria)
         .reduce((soma, item) => soma + item.total, 0);
-    const comparacaoCreare = leitura
-      ? {
-          totalBruto: comparar(leitura.totalBruto, primeiraPagina.totais.totalGeral),
-          dinheiro: comparar(leitura.dinheiro, porCategoria("dinheiro")),
-          credito: comparar(leitura.credito, porCategoria("credito")),
-          debito: comparar(leitura.debito, porCategoria("debito")),
-          pix: comparar(leitura.pix, porCategoria("pix")),
-          voucher: comparar(leitura.voucher, porCategoria("voucher")),
-          despesasExcetoSangria: comparar(leitura.despesasExcetoSangria, saidasSemSangria),
-          resultadoFinal: comparar(leitura.resultadoFinal, primeiraPagina.totais.totalGeral - saidasSemSangria)
-        }
-      : null;
+    const comparacaoCreare = {
+      totalBruto: comparar(leitura.totalBruto, primeiraPagina.totais.totalGeral),
+      dinheiro: comparar(leitura.dinheiro, porCategoria("dinheiro")),
+      credito: comparar(leitura.credito, porCategoria("credito")),
+      debito: comparar(leitura.debito, porCategoria("debito")),
+      pix: comparar(leitura.pix, porCategoria("pix")),
+      voucher: comparar(leitura.voucher, porCategoria("voucher")),
+      despesasExcetoSangria: comparar(leitura.despesasExcetoSangria, saidasSemSangria),
+      resultadoFinal: comparar(leitura.resultadoFinal, primeiraPagina.totais.totalGeral - saidasSemSangria)
+    };
     return salvarRelatorioVendasFechamentoRepository(
       {
         fechamentoCaixaId: travado.id,
@@ -2113,9 +2108,7 @@ export async function gerarRelatorioVendasFechamento(
             porFormaPagamento: primeiraPagina.totais.porFormaPagamento
           },
           canceladas,
-          creare: leitura
-            ? { anexoId: leituraCreare.anexoId, leitura, comparacao: comparacaoCreare, saidasSemSangria }
-            : null
+          creare: { anexoId: leituraCreare.anexoId, leitura, comparacao: comparacaoCreare, saidasSemSangria }
         },
         geradoPor: perfil.usuarioId
       },

@@ -178,13 +178,10 @@ export const relatorioVendasCreareSchema = z.object({
   observacoes: z.array(z.string().trim().max(300)).max(20).default([])
 });
 export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
-export const gerarRelatorioVendasFechamentoSchema = z
-  .object({ anexoId: uuidSchema.optional(), leituraCreare: relatorioVendasCreareSchema.optional() })
-  .superRefine((dados, ctx) => {
-    if (Boolean(dados.anexoId) !== Boolean(dados.leituraCreare)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Anexo e leitura do CREARE devem ser informados juntos" });
-    }
-  });
+export const gerarRelatorioVendasFechamentoSchema = z.object({
+  anexoId: uuidSchema,
+  leituraCreare: relatorioVendasCreareSchema
+});
 export type GerarRelatorioVendasFechamento = z.infer<typeof gerarRelatorioVendasFechamentoSchema>;
 
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e

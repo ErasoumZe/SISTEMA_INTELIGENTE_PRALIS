@@ -450,7 +450,7 @@ watch(
     flex-direction: column;
   }
   .relatorio-vendas__indicadores {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .relatorio-vendas__anexo {
     grid-template-columns: 1fr;
@@ -464,6 +464,11 @@ watch(
   }
   .relatorio-vendas__forma {
     padding: 10px;
+  }
+}
+@media (max-width: 340px) {
+  .relatorio-vendas__indicadores {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 420px) {

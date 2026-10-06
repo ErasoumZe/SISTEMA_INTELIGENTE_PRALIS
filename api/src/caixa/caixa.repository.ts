@@ -2072,6 +2072,21 @@ export async function salvarRelatorioVendasFechamentoRepository(
   return relatorio;
 }
 
+export async function invalidarRelatorioVendasFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  await db
+    .delete(fechamentosCaixaRelatoriosVendas)
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosVendas.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosVendas.empresaId, empresaId)
+      )
+    );
+}
+
 // A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira
 // prova histórica e não pode ser retirado por esta rota.
 export async function removerAnexoFechamentoCaixaRepository(
