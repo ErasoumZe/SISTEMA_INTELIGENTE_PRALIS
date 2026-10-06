@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno, ResumoCaixa } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
+import CaixaFechamentoAjuda from "~/components/caixa/CaixaFechamentoAjuda.vue";
 import CaixaFechamentoEtapas from "~/components/caixa/CaixaFechamentoEtapas.vue";
 import CaixaFechamentoMaquininha from "~/components/caixa/CaixaFechamentoMaquininha.vue";
 import CaixaFechamentoMovimentacoes from "~/components/caixa/CaixaFechamentoMovimentacoes.vue";
@@ -62,17 +63,52 @@ const emit = defineEmits<{
 const etapaAtual = ref(1);
 const cabecalhoMobileAberto = ref(false);
 const etapas = [
-  { id: 1, titulo: "Resumo", icone: "mdi-clipboard-text-clock-outline", cor: "var(--cx-positive)", classe: "resumo" },
-  { id: 2, titulo: "Vendas", icone: "mdi-receipt-text-outline", cor: "var(--cat-entradas-base)", classe: "vendas" },
-  { id: 3, titulo: "Maquininha", icone: "mdi-credit-card-outline", cor: "var(--cx-brand)", classe: "maquininha" },
+  {
+    id: 1,
+    titulo: "Resumo",
+    resumo: "Confirme operador e supervisor.",
+    ajuda: "Informe quem operou o caixa e quem conferiu o fechamento.",
+    icone: "mdi-clipboard-text-clock-outline",
+    cor: "var(--cx-positive)",
+    classe: "resumo"
+  },
+  {
+    id: 2,
+    titulo: "Vendas",
+    resumo: "Envie a folha CREARE e confira.",
+    ajuda: "Envie a folha do CREARE, revise os valores e gere o relatório de vendas.",
+    icone: "mdi-receipt-text-outline",
+    cor: "var(--cat-entradas-base)",
+    classe: "vendas"
+  },
+  {
+    id: 3,
+    titulo: "Maquininha",
+    resumo: "Envie a leitura do turno.",
+    ajuda:
+      "Envie a leitura da maquininha. À tarde, o sistema desconta automaticamente a leitura da manhã do mesmo PDV.",
+    icone: "mdi-credit-card-outline",
+    cor: "var(--cx-brand)",
+    classe: "maquininha"
+  },
   {
     id: 4,
     titulo: "Relatório final",
+    resumo: "Revise vendas, saídas e lacres.",
+    ajuda: "Confira os recebimentos, sangrias, despesas, retiradas e lacres usados no turno.",
     icone: "mdi-swap-horizontal",
     cor: "var(--cat-retiradas-base)",
     classe: "movimentacoes"
   },
-  { id: 5, titulo: "Fechamento", icone: "mdi-cash-register", cor: "var(--cx-attention)", classe: "fechamento" }
+  {
+    id: 5,
+    titulo: "Fechamento",
+    resumo: "Conte o dinheiro e as moedas.",
+    ajuda: "Informe o total contado, registre o lacre e explique qualquer diferença antes de fechar.",
+    icone: "mdi-cash-register",
+    cor: "var(--cx-attention)",
+    classe: "fechamento"
+  }
 ] as const;
 const etapaAtualDefinicao = computed(() => etapas.find((etapa) => etapa.id === etapaAtual.value) ?? etapas[0]);
 const podeAvancarResumo = computed(() =>
@@ -93,15 +129,21 @@ function irPara(etapa: number) {
     aria-labelledby="fechamento-wizard-titulo"
     data-teste="etapa-fechamento"
   >
-    <button
-      type="button"
-      class="fechamento-wizard__resumo-mobile"
-      @click="cabecalhoMobileAberto = !cabecalhoMobileAberto"
-    >
-      <span>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</span>
-      <span>{{ cabecalhoMobileAberto ? "Ocultar detalhes" : "Ver etapas" }}</span>
-    </button>
+    <div class="fechamento-wizard__resumo-mobile">
+      <button
+        type="button"
+        class="fechamento-wizard__resumo-mobile-botao"
+        :aria-expanded="cabecalhoMobileAberto"
+        aria-controls="fechamento-cabecalho fechamento-navegacao"
+        @click="cabecalhoMobileAberto = !cabecalhoMobileAberto"
+      >
+        <span>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</span>
+        <span>{{ cabecalhoMobileAberto ? "Ocultar detalhes" : etapaAtualDefinicao.resumo }}</span>
+      </button>
+      <CaixaFechamentoAjuda :etapas="etapas" />
+    </div>
     <header
+      id="fechamento-cabecalho"
       class="fechamento-wizard__cabecalho"
       :class="{ 'fechamento-wizard__cabecalho--mobile-aberto': cabecalhoMobileAberto }"
     >
@@ -121,6 +163,7 @@ function irPara(etapa: number) {
     </header>
 
     <nav
+      id="fechamento-navegacao"
       class="fechamento-wizard__navegacao"
       :class="{ 'fechamento-wizard__navegacao--mobile-aberta': cabecalhoMobileAberto }"
       aria-label="Etapas do fechamento"
@@ -421,20 +464,34 @@ function irPara(etapa: number) {
     width: 100%;
     min-height: 48px;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     margin-bottom: 12px;
-    padding: 10px 12px;
     border: 1px solid var(--cx-line);
     border-radius: 10px;
     background: var(--cx-surface);
+  }
+  .fechamento-wizard__resumo-mobile-botao {
+    display: grid;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
+    padding: 10px 0 10px 12px;
+    border: 0;
+    background: transparent;
     color: var(--cx-ink);
     font-weight: 800;
     text-align: left;
   }
-  .fechamento-wizard__resumo-mobile span:last-child {
+  .fechamento-wizard__resumo-mobile-botao span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fechamento-wizard__resumo-mobile-botao span:last-child {
     color: var(--cx-brand-text);
     font-size: 0.78rem;
+    font-weight: 700;
+    white-space: normal;
   }
   .fechamento-wizard__cabecalho {
     display: none;
