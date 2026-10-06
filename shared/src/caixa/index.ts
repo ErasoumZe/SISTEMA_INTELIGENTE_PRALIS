@@ -158,10 +158,8 @@ export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 // O fechamento reproduz os dois relatórios da maquininha: leitura da manhã e leitura da tarde.
 // A maquininha continua sendo a escolhida na abertura; a foto apenas sugere valores revisáveis.
 export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
-  anexoManhaId: uuidSchema,
-  leituraManha: relatorioMaquininhaIaSchema,
-  anexoTardeId: uuidSchema,
-  leituraTarde: relatorioMaquininhaIaSchema
+  anexoId: uuidSchema,
+  leituraAcumulada: relatorioMaquininhaIaSchema
 });
 export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
 

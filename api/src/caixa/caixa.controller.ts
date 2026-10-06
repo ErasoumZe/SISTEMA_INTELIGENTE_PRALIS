@@ -298,11 +298,9 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
-      const { anexoId, tipoLeitura } = z
-        .object({ anexoId: z.string().uuid(), tipoLeitura: z.enum(["manha", "tarde"]) })
-        .parse(request.body);
+      const { anexoId } = z.object({ anexoId: z.string().uuid() }).parse(request.body);
       try {
-        return ok(await analisarRelatorioMaquininhaFechamento(caixaId, anexoId, tipoLeitura, request.perfilUsuario!));
+        return ok(await analisarRelatorioMaquininhaFechamento(caixaId, anexoId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

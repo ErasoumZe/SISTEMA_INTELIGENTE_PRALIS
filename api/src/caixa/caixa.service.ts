@@ -54,6 +54,7 @@ import {
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
   buscarRelatorioMaquininhaFechamentoRepository,
+  buscarRelatorioMaquininhaPrecedenteRepository,
   buscarRelatorioVendasFechamentoRepository,
   salvarRelatorioMaquininhaFechamentoRepository,
   salvarRelatorioVendasFechamentoRepository,
@@ -328,8 +329,28 @@ function normalizarNumeroMaquininha(numero: string) {
 export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
   const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
   const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
+  const precedente =
+    !caixa.maquininhaId
+      ? null
+      : await buscarRelatorioMaquininhaPrecedenteRepository({
+          empresaId: caixa.empresaId,
+          pdvId: caixa.pdvId,
+          maquininhaId: caixa.maquininhaId,
+          dataMovimento: caixa.dataMovimento,
+          fechamentoCaixaId: caixa.id
+        });
+  const dadosPrecedentes = precedente?.dadosRevisados as Record<string, unknown> | undefined;
   return {
     turnoNome: relatorio?.turnoNome ?? turnoDoRelatorio(caixa),
+    etapaDia: precedente ? "tarde" : "manha",
+    leituraReferencia: precedente
+      ? {
+          fechamentoCaixaId: precedente.fechamentoCaixaId,
+          anexoId: precedente.anexoFinalId,
+          leitura: dadosPrecedentes?.["leituraAcumulada"] ?? null,
+          fechadoEm: serializarData(precedente.fechadoEm)
+        }
+      : null,
     relatorio: relatorio
       ? {
           dadosRevisados: relatorio.dadosRevisados,
@@ -343,7 +364,6 @@ export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil
 export async function analisarRelatorioMaquininhaFechamento(
   caixaId: string,
   anexoId: string,
-  tipoLeitura: "manha" | "tarde",
   perfil: PerfilUsuario
 ) {
   const { caixa, anexos } = await contextoRelatorioMaquininha(caixaId, perfil);
@@ -356,8 +376,7 @@ export async function analisarRelatorioMaquininhaFechamento(
     const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
     return {
       turnoNome: turnoDoRelatorio(caixa),
-      tipoLeitura,
-      sugestao: leituraRelatorioMaquininhaSimulada(tipoLeitura, numeroVinculado),
+      sugestao: leituraRelatorioMaquininhaSimulada("tarde", numeroVinculado),
       anexoConsiderado: comprovante.id,
       numeroLidoDivergente: false,
       simulada: true
@@ -384,7 +403,6 @@ export async function analisarRelatorioMaquininhaFechamento(
   const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
   return {
     turnoNome: turnoDoRelatorio(caixa),
-    tipoLeitura,
     sugestao,
     anexoConsiderado: comprovante.id,
     numeroLidoDivergente:
@@ -406,18 +424,9 @@ export async function salvarRelatorioMaquininhaFechamento(
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
     const anexos = await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx);
-    const comprovanteManha = anexos.find(
-      (anexo) => anexo.tipo === "comprovante_cartao" && anexo.id === dados.anexoManhaId
-    );
-    const comprovanteTarde = anexos.find(
-      (anexo) => anexo.tipo === "comprovante_cartao" && anexo.id === dados.anexoTardeId
-    );
-    if (!comprovanteManha || !comprovanteTarde || dados.anexoManhaId === dados.anexoTardeId) {
-      throw new ErroDominio(
-        "Envie as fotos da manhã e da tarde da maquininha antes de salvar.",
-        409,
-        "RELATORIOS_DESATUALIZADOS"
-      );
+    const comprovante = anexos.find((anexo) => anexo.tipo === "comprovante_cartao" && anexo.id === dados.anexoId);
+    if (!comprovante) {
+      throw new ErroDominio("Envie a foto da maquininha antes de salvar.", 409, "RELATORIO_DESATUALIZADO");
     }
     const numeroMaquininha = caixa.maquininhaNumeroSerie?.trim();
     if (!numeroMaquininha) {
@@ -427,44 +436,65 @@ export async function salvarRelatorioMaquininhaFechamento(
         "MAQUININHA_NAO_VINCULADA"
       );
     }
-    if (!leituraCompleta(dados.leituraManha) || !leituraCompleta(dados.leituraTarde)) {
+    if (!leituraCompleta(dados.leituraAcumulada)) {
       throw new ErroDominio(
-        "Informe crédito, débito, Pix e voucher nos relatórios da manhã e da tarde.",
+        "Informe crédito, débito, Pix e voucher no relatório da maquininha.",
         422,
         "LEITURAS_MAQUININHA_INCOMPLETAS"
       );
     }
+    const maquininhaId = caixa.maquininhaId;
+    if (!maquininhaId) throw new ErroDominio("Caixa sem maquininha vinculada.", 409, "MAQUININHA_NAO_VINCULADA");
+    const precedente = await buscarRelatorioMaquininhaPrecedenteRepository(
+      {
+        empresaId: caixa.empresaId,
+        pdvId: caixa.pdvId,
+        maquininhaId,
+        dataMovimento: caixa.dataMovimento,
+        fechamentoCaixaId: caixa.id
+      },
+      tx
+    );
+    const dadosPrecedentes = precedente?.dadosRevisados as Record<string, unknown> | undefined;
+    if (dadosPrecedentes?.["etapaDia"] === "tarde") {
+      throw new ErroDominio("Este PDV já registrou manhã e tarde nesta maquininha hoje.", 409, "MAQUININHA_DIA_CONCLUIDO");
+    }
+    const leituraReferencia = dadosPrecedentes?.["leituraAcumulada"] as RelatorioMaquininhaIa | undefined;
+    if (leituraReferencia && !leituraCompleta(leituraReferencia)) throw new Error("Leitura de referência inválida");
+    for (const forma of formasRelatorioMaquininha) {
+      if (leituraReferencia && dados.leituraAcumulada[forma]! < leituraReferencia[forma]!) {
+        throw new ErroDominio("A leitura acumulada não pode ser menor que a leitura da manhã.", 422, "LEITURA_ACUMULADA_INVALIDA");
+      }
+    }
+    const liquidos = Object.fromEntries(
+      formasRelatorioMaquininha.map((forma) => [forma, dados.leituraAcumulada[forma]! - (leituraReferencia?.[forma] ?? 0)])
+    ) as Record<(typeof formasRelatorioMaquininha)[number], number>;
     const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
       {
         fechamentoCaixaId: caixa.id,
         empresaId: caixa.empresaId,
         turnoNome: turnoDoRelatorio(caixa),
-        versao: 5,
+        versao: 6,
         numeroMaquininha,
-        creditoInicial: dados.leituraManha.credito,
-        debitoInicial: dados.leituraManha.debito,
-        pixInicial: dados.leituraManha.pix,
-        voucherInicial: dados.leituraManha.voucher,
-        creditoFinal: dados.leituraTarde.credito,
-        debitoFinal: dados.leituraTarde.debito,
-        pixFinal: dados.leituraTarde.pix,
-        voucherFinal: dados.leituraTarde.voucher,
-        anexoInicialId: dados.anexoManhaId,
-        anexoFinalId: dados.anexoTardeId,
+        creditoInicial: leituraReferencia?.credito ?? null,
+        debitoInicial: leituraReferencia?.debito ?? null,
+        pixInicial: leituraReferencia?.pix ?? null,
+        voucherInicial: leituraReferencia?.voucher ?? null,
+        creditoFinal: dados.leituraAcumulada.credito,
+        debitoFinal: dados.leituraAcumulada.debito,
+        pixFinal: dados.leituraAcumulada.pix,
+        voucherFinal: dados.leituraAcumulada.voucher,
+        anexoInicialId: precedente?.anexoFinalId ?? null,
+        anexoFinalId: dados.anexoId,
+        leituraReferenciaRelatorioId: precedente?.id ?? null,
         dadosRevisados: {
-          versao: 5,
+          versao: 6,
           numeroMaquininha,
-          anexoManhaId: dados.anexoManhaId,
-          leituraManha: dados.leituraManha,
-          anexoTardeId: dados.anexoTardeId,
-          leituraTarde: dados.leituraTarde,
-          liquidos: {
-            manha: formasRelatorioMaquininha.reduce((total, forma) => total + dados.leituraManha[forma]!, 0),
-            credito: dados.leituraTarde.credito! - dados.leituraManha.credito!,
-            debito: dados.leituraTarde.debito! - dados.leituraManha.debito!,
-            pix: dados.leituraTarde.pix! - dados.leituraManha.pix!,
-            voucher: dados.leituraTarde.voucher! - dados.leituraManha.voucher!
-          }
+          etapaDia: precedente ? "tarde" : "manha",
+          anexoId: dados.anexoId,
+          leituraReferencia: leituraReferencia ?? null,
+          leituraAcumulada: dados.leituraAcumulada,
+          liquidos
         },
         criadoPor: perfil.usuarioId
       },

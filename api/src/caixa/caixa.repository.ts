@@ -1895,6 +1895,7 @@ export async function buscarRelatorioMaquininhaPrecedenteRepository(
       pixFinal: fechamentosCaixaRelatoriosMaquininha.pixFinal,
       voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
       anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
+      dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
       fechadoEm: fechamentosCaixa.fechadoEm
     })
     .from(fechamentosCaixaRelatoriosMaquininha)
