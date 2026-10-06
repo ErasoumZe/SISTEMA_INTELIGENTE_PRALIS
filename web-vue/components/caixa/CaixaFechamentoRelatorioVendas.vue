@@ -11,9 +11,12 @@ type RelatorioGerado = {
   dados: DadosRelatorioVendas;
   geradoEm: string;
 };
+type Anexo = { tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
 
 const props = defineProps<{ caixaId: string }>();
-const { apiGet, apiPost } = useApi();
+const { apiUrl, apiGet, apiPost } = useApi();
+const cameraCreare = useTemplateRef<HTMLInputElement>("cameraCreare");
+const galeriaCreare = useTemplateRef<HTMLInputElement>("galeriaCreare");
 
 const carregando = ref(false);
 const erro = ref("");
@@ -21,6 +24,8 @@ const gerado = ref(false);
 const totais = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const intervalo = ref<{ abertura: string; fechamento: string } | null>(null);
 const canceladas = ref<VendaCanceladaCaixa[]>([]);
+const anexoCreareEnviado = ref(false);
+const enviandoCreare = ref(false);
 let consultaAtual = 0;
 const totaisPorForma = computed(() => totais.value?.porFormaPagamento ?? []);
 
@@ -35,10 +40,13 @@ async function carregarRelatorioExistente() {
   if (!props.caixaId) return;
   const consulta = ++consultaAtual;
   try {
-    const relatorio = await apiGet<RelatorioGerado | null>(
-      `/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`
-    );
-    if (consulta !== consultaAtual || !relatorio) return;
+    const [relatorio, anexos] = await Promise.all([
+      apiGet<RelatorioGerado | null>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`),
+      apiGet<Anexo[]>(`/api/caixa/${encodeURIComponent(props.caixaId)}/anexos`)
+    ]);
+    if (consulta !== consultaAtual) return;
+    anexoCreareEnviado.value = anexos.some((anexo) => anexo.tipo === "relatorio_vendas_creare");
+    if (!relatorio) return;
     aplicarRelatorio(relatorio);
   } catch {
     // A leitura do rascunho salvo não pode bloquear a geração manual do relatório.
@@ -64,6 +72,32 @@ async function gerarRelatorio() {
     erro.value = mensagemErro(falha);
   } finally {
     carregando.value = false;
+  }
+}
+
+async function enviarRelatorioCreare(evento: Event) {
+  const input = evento.target as HTMLInputElement;
+  const arquivo = input.files?.[0];
+  input.value = "";
+  if (!arquivo || !props.caixaId) return;
+  enviandoCreare.value = true;
+  erro.value = "";
+  try {
+    const corpo = new FormData();
+    corpo.append("tipo", "relatorio_vendas_creare");
+    corpo.append("arquivo", arquivo);
+    const resposta = await fetch(`${apiUrl}/api/caixa/${encodeURIComponent(props.caixaId)}/anexos`, {
+      method: "POST",
+      credentials: "include",
+      body: corpo
+    });
+    const json = (await resposta.json()) as { detail?: string };
+    if (!resposta.ok) throw new Error(json.detail || "Não foi possível anexar o relatório do CREARE.");
+    anexoCreareEnviado.value = true;
+  } catch (falha) {
+    erro.value = mensagemErro(falha);
+  } finally {
+    enviandoCreare.value = false;
   }
 }
 
@@ -95,6 +129,33 @@ watch(
     </div>
 
     <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
+
+    <section class="relatorio-vendas__anexo mt-4" aria-label="Relatório de vendas do CREARE">
+      <div>
+        <strong>Relatório de vendas do CREARE</strong>
+        <p>Anexe a folha do turno. Ela é separada da folha de fechamento do malote.</p>
+      </div>
+      <div>
+        <v-btn prepend-icon="mdi-camera" :loading="enviandoCreare" @click="cameraCreare?.click()">Câmera</v-btn>
+        <v-btn prepend-icon="mdi-image" :loading="enviandoCreare" @click="galeriaCreare?.click()">Galeria</v-btn>
+      </div>
+      <input
+        ref="cameraCreare"
+        class="d-none"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        @change="enviarRelatorioCreare"
+      />
+      <input
+        ref="galeriaCreare"
+        class="d-none"
+        type="file"
+        accept="image/*,application/pdf"
+        @change="enviarRelatorioCreare"
+      />
+      <small v-if="anexoCreareEnviado" class="text-success">Folha do CREARE anexada.</small>
+    </section>
 
     <template v-if="gerado && totais">
       <v-alert type="success" variant="tonal" density="comfortable" class="mt-4">
@@ -226,6 +287,27 @@ watch(
   background: var(--cat-entradas-base) !important;
   color: var(--cx-canvas) !important;
 }
+.relatorio-vendas__anexo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface-sunken);
+}
+.relatorio-vendas__anexo p {
+  margin: 4px 0 0;
+}
+.relatorio-vendas__anexo > div:last-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.relatorio-vendas__anexo small {
+  grid-column: 1 / -1;
+}
 .relatorio-vendas__formas-lista {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
@@ -258,9 +340,16 @@ watch(
   .relatorio-vendas__indicadores {
     grid-template-columns: 1fr;
   }
+  .relatorio-vendas__anexo {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 420px) {
   .relatorio-vendas__cabecalho :deep(.v-btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+  .relatorio-vendas__anexo :deep(.v-btn) {
     width: 100%;
     min-height: 48px;
   }
