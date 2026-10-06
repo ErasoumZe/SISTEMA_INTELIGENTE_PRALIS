@@ -1953,6 +1953,7 @@ function filtrosDoHistorico(query: HistoricoCaixaQuery): FiltrosHistoricoCaixa {
 export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario): Promise<DetalheCaixaResponse> {
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
 
   const [edicoes, ajuste, lancamentos, alteracoesPosFechamento, vendasCanceladas] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),

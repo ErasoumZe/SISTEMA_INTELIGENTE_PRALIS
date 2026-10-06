@@ -401,7 +401,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
   // Detalhe de auditoria de um caixa: alteracoes de horario e acerto de saldo.
   app.get(
     "/api/caixa/:caixaId/detalhe",
-    { preHandler: exigirPermissao("caixas_gerenciar") },
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
     async (request, reply) => {
       const params = caixaParamsSchema.parse(request.params);
       try {

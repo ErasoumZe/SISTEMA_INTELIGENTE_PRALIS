@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DetalheCaixaResponse } from "@padaria/shared";
 import type { ResumoCaixa } from "~/types/padaria";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { dinheiro } from "~/utils/domain";
@@ -28,6 +29,7 @@ const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(nu
 const canceladas = ref<unknown[]>([]);
 const leituraMaquininha = ref<LeituraMaquininha>({});
 const transferencias = ref<Transferencia[]>([]);
+const lancamentos = ref<DetalheCaixaResponse["lancamentos"]>([]);
 const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
@@ -52,10 +54,11 @@ async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    const [relatorioVendas, relatorioMaquininha, movimentos] = await Promise.all([
+    const [relatorioVendas, relatorioMaquininha, movimentos, detalhe] = await Promise.all([
       apiGet<RelatorioVendas | null>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`),
       apiGet<RelatorioMaquininha>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-maquininha`),
-      apiGet<Transferencias>(`/api/caixa/${encodeURIComponent(props.caixaId)}/transferencias`)
+      apiGet<Transferencias>(`/api/caixa/${encodeURIComponent(props.caixaId)}/transferencias`),
+      apiGet<DetalheCaixaResponse>(`/api/caixa/${encodeURIComponent(props.caixaId)}/detalhe`)
     ]);
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
@@ -64,6 +67,9 @@ async function carregar() {
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
     leituraMaquininha.value = leitura(revisado.liquidos);
     transferencias.value = movimentos.itens.filter((item) => item.tipo === "sangria" || item.tipo === "retorno");
+    lancamentos.value = detalhe.lancamentos.filter((grupo) =>
+      ["despesas", "mercadorias", "retiradas"].includes(grupo.categoria)
+    );
   } catch {
     erro.value = "Não foi possível carregar o consolidado deste caixa.";
   } finally {
@@ -235,6 +241,32 @@ watch(
               <dd>{{ dinheiro(resumo.totalRetiradas) }}</dd>
             </div>
           </dl>
+        </details>
+      </section>
+
+      <section v-if="lancamentos.length" class="fechamento-movimentacoes__bloco" aria-label="Saídas do caixa">
+        <header>
+          <div>
+            <span>Saídas registradas</span>
+            <h4>Despesas, mercadorias e retiradas</h4>
+          </div>
+          <v-icon icon="mdi-receipt-text-clock-outline" size="22" />
+        </header>
+        <details class="fechamento-movimentacoes__detalhes">
+          <summary>Ver cada saída do turno</summary>
+          <div class="fechamento-movimentacoes__formas">
+            <article v-for="grupo in lancamentos" :key="grupo.categoria">
+              <span>{{ grupo.titulo }}</span>
+              <strong>{{ dinheiro(grupo.total) }}</strong>
+              <small>{{ grupo.itens.length }} registro{{ grupo.itens.length === 1 ? "" : "s" }}</small>
+              <ul class="fechamento-movimentacoes__lista">
+                <li v-for="item in grupo.itens" :key="item.id">
+                  <span>{{ item.descricao || "Sem descrição" }}</span>
+                  <strong>{{ dinheiro(item.valor) }}</strong>
+                </li>
+              </ul>
+            </article>
+          </div>
         </details>
       </section>
     </template>
@@ -428,6 +460,28 @@ watch(
 .fechamento-movimentacoes__vazio {
   margin: 12px 0 0;
   color: var(--cx-ink-soft);
+}
+.fechamento-movimentacoes__lista {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fechamento-movimentacoes__lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--cx-line);
+  font-size: 0.78rem;
+}
+.fechamento-movimentacoes__lista li span {
+  overflow-wrap: anywhere;
+}
+.fechamento-movimentacoes__lista li strong {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
 }
 .fechamento-movimentacoes__totais > div {
   min-width: 0;
