@@ -2,7 +2,6 @@
 import { computed, useTemplateRef } from "vue";
 import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
-import { deCentavos } from "@padaria/shared";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
@@ -22,7 +21,6 @@ const props = defineProps<{
   caixa: CaixaOperacional;
   fechamento: Fechamento;
   saldoAtual: number;
-  temSobra: boolean;
   temDeficit: boolean;
   diferencaFechamento: number;
   totalFechamentoContado: number;
@@ -36,8 +34,6 @@ const props = defineProps<{
   lacreFechamentoReservado: string | null;
   planejamentosPendentes: PlanejamentoRetorno[];
   entregasPendentes: EntregaCofrePendente[];
-  saldoLivre: number;
-  totalPlanejadoCentavos: number;
   fechamentoTravado: boolean;
   motivoTravado: string | null;
   folhaFechamentoEnviada: boolean;
@@ -125,18 +121,6 @@ function solicitarFechamento() {
           >; não há quebra positiva, mas a Tesouraria será notificada.
         </template>
         A observação é obrigatória e fica registrada com o responsável e o horário do servidor.
-      </v-alert>
-
-      <v-alert v-if="temSobra" type="warning" variant="tonal" class="fechamento-etapas__alerta-retorno">
-        <template v-if="planejamentosPendentes.length">
-          Há {{ dinheiro(saldoAtual) }} em espécie no caixa; {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão
-          reservados para as transferências de retorno programadas. Somente os {{ dinheiro(saldoLivre) }} livres podem
-          ser transferidos à parte.
-        </template>
-        <template v-else>
-          Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Ao fechar, o restante volta ao cofre automaticamente, no
-          mesmo ato.
-        </template>
       </v-alert>
     </section>
 

@@ -8,6 +8,13 @@ type RelatorioVendas = {
 };
 type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
 type RelatorioMaquininha = { relatorio: { dadosRevisados: unknown } | null };
+type Transferencia = {
+  id: string;
+  tipo: "abertura" | "suprimento" | "sangria" | "retorno";
+  valor: number;
+  lacre: string | null;
+};
+type Transferencias = { itens: Transferencia[] };
 
 const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string }>();
 const { apiGet } = useApi();
@@ -15,8 +22,8 @@ const carregando = ref(false);
 const erro = ref("");
 const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const canceladas = ref<unknown[]>([]);
-const leituraManha = ref<LeituraMaquininha>({});
-const leituraTarde = ref<LeituraMaquininha>({});
+const leituraMaquininha = ref<LeituraMaquininha>({});
+const transferencias = ref<Transferencia[]>([]);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
   { chave: "debito", titulo: "Débito" },
@@ -33,25 +40,24 @@ function leitura(valor: unknown): LeituraMaquininha {
   return Object.fromEntries(formasMaquininha.map(({ chave }) => [chave, numero(dados[chave])])) as LeituraMaquininha;
 }
 function liquidoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
-  const inicial = leituraManha.value[chave];
-  const final = leituraTarde.value[chave];
-  return typeof inicial === "number" && typeof final === "number" ? final - inicial : null;
+  return leituraMaquininha.value[chave] ?? null;
 }
 async function carregar() {
   if (!props.caixaId) return;
   carregando.value = true;
   erro.value = "";
   try {
-    const [relatorioVendas, relatorioMaquininha] = await Promise.all([
+    const [relatorioVendas, relatorioMaquininha, movimentos] = await Promise.all([
       apiGet<RelatorioVendas | null>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`),
-      apiGet<RelatorioMaquininha>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-maquininha`)
+      apiGet<RelatorioMaquininha>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-maquininha`),
+      apiGet<Transferencias>(`/api/caixa/${encodeURIComponent(props.caixaId)}/transferencias`)
     ]);
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
-    leituraManha.value = leitura(revisado.leituraManha);
-    leituraTarde.value = leitura(revisado.leituraTarde);
+    leituraMaquininha.value = leitura(revisado.liquidos);
+    transferencias.value = movimentos.itens.filter((item) => item.tipo === "sangria" || item.tipo === "retorno");
   } catch {
     erro.value = "Não foi possível carregar o consolidado deste caixa.";
   } finally {
@@ -74,7 +80,7 @@ watch(
     data-teste="fechamento-movimentacoes"
   >
     <span class="fechamento-movimentacoes__sobretitulo">Etapa 4 · movimentações</span>
-    <h3 id="movimentacoes-fechamento-titulo">Consolidado do turno</h3>
+    <h3 id="movimentacoes-fechamento-titulo">Relatório final do turno</h3>
     <p class="text-body-2 text-medium-emphasis">Vendas, maquininha e movimentos registrados neste caixa.</p>
 
     <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
@@ -95,12 +101,6 @@ watch(
           <span>Canceladas</span>
           <strong>{{ canceladas.length }}</strong>
           <small>Fora do total aprovado</small>
-        </article>
-        <article class="fechamento-movimentacoes__saldo" v-if="resumo">
-          <v-icon icon="mdi-calculator-variant-outline" size="22" />
-          <span>Saldo esperado</span>
-          <strong>{{ dinheiro(resumo.saldo) }}</strong>
-          <small>Para a conferência física</small>
         </article>
       </section>
 
@@ -147,6 +147,23 @@ watch(
               liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!)
             }}</strong>
             <small>Final menos inicial</small>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="transferencias.length" class="fechamento-movimentacoes__bloco" aria-label="Sangrias e lacres">
+        <header>
+          <div>
+            <span>Movimentos de cofre</span>
+            <h4>Sangrias e retornos</h4>
+          </div>
+          <v-icon icon="mdi-bag-personal-outline" size="22" />
+        </header>
+        <div class="fechamento-movimentacoes__formas">
+          <article v-for="item in transferencias" :key="item.id">
+            <span>{{ item.tipo === "sangria" ? "Sangria" : "Retorno" }}</span>
+            <strong>{{ dinheiro(item.valor) }}</strong>
+            <small>Lacre: {{ item.lacre || "não informado" }}</small>
           </article>
         </div>
       </section>

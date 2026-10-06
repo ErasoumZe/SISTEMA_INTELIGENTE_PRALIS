@@ -100,7 +100,7 @@ export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: st
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
     .limit(1)
-    .for("share");
+    .for("update");
   return pdv ?? null;
 }
 
@@ -1724,7 +1724,7 @@ export async function criarAnexoFechamentoCaixaRepository(
   input: {
     empresaId: string;
     fechamentoCaixaId: string;
-    tipo: "folha_fechamento" | "comprovante_cartao";
+    tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
     caminho: string;
     nomeOriginal: string;
     nomeArquivo: string;

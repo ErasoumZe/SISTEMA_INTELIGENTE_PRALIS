@@ -236,7 +236,7 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
 
 export async function salvarAnexoFechamentoCaixa(
   caixaId: string,
-  tipo: "folha_fechamento" | "comprovante_cartao",
+  tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare",
   arquivo: MultipartFile | undefined,
   perfil: PerfilUsuario
 ) {
@@ -330,7 +330,7 @@ export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil
   const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
   const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
   const precedente =
-    !caixa.maquininhaId
+    !caixa.maquininhaId || !caixa.pdvId || !caixa.dataMovimento
       ? null
       : await buscarRelatorioMaquininhaPrecedenteRepository({
           empresaId: caixa.empresaId,
@@ -361,22 +361,28 @@ export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil
   };
 }
 
-export async function analisarRelatorioMaquininhaFechamento(
-  caixaId: string,
-  anexoId: string,
-  perfil: PerfilUsuario
-) {
+export async function analisarRelatorioMaquininhaFechamento(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
   const { caixa, anexos } = await contextoRelatorioMaquininha(caixaId, perfil);
   if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
   const comprovante = anexos.find((anexo) => anexo.id === anexoId && anexo.tipo === "comprovante_cartao");
   if (!comprovante) throw new Error("Comprovante da maquininha nao encontrado");
   validarComprovantesParaIa([comprovante]);
+  const precedente =
+    caixa.maquininhaId && caixa.pdvId && caixa.dataMovimento
+      ? await buscarRelatorioMaquininhaPrecedenteRepository({
+          empresaId: caixa.empresaId,
+          pdvId: caixa.pdvId,
+          maquininhaId: caixa.maquininhaId,
+          dataMovimento: caixa.dataMovimento,
+          fechamentoCaixaId: caixa.id
+        })
+      : null;
   const simulada = env.NODE_ENV === "development" && env.GEMINI_MAQUININHA_SIMULADA;
   if (simulada) {
     const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
     return {
       turnoNome: turnoDoRelatorio(caixa),
-      sugestao: leituraRelatorioMaquininhaSimulada("tarde", numeroVinculado),
+      sugestao: leituraRelatorioMaquininhaSimulada(precedente ? "tarde" : "manha", numeroVinculado),
       anexoConsiderado: comprovante.id,
       numeroLidoDivergente: false,
       simulada: true
@@ -445,6 +451,12 @@ export async function salvarRelatorioMaquininhaFechamento(
     }
     const maquininhaId = caixa.maquininhaId;
     if (!maquininhaId) throw new ErroDominio("Caixa sem maquininha vinculada.", 409, "MAQUININHA_NAO_VINCULADA");
+    if (!caixa.pdvId || !caixa.dataMovimento) {
+      throw new ErroDominio("Caixa sem PDV ou data operacional vinculados.", 409, "CAIXA_SEM_REFERENCIA_OPERACIONAL");
+    }
+    if (!(await travarPdvDaAberturaRepository(caixa.pdvId, caixa.empresaId, tx))) {
+      throw new Error("PDV nao encontrado");
+    }
     const precedente = await buscarRelatorioMaquininhaPrecedenteRepository(
       {
         empresaId: caixa.empresaId,
@@ -457,17 +469,28 @@ export async function salvarRelatorioMaquininhaFechamento(
     );
     const dadosPrecedentes = precedente?.dadosRevisados as Record<string, unknown> | undefined;
     if (dadosPrecedentes?.["etapaDia"] === "tarde") {
-      throw new ErroDominio("Este PDV já registrou manhã e tarde nesta maquininha hoje.", 409, "MAQUININHA_DIA_CONCLUIDO");
+      throw new ErroDominio(
+        "Este PDV já registrou manhã e tarde nesta maquininha hoje.",
+        409,
+        "MAQUININHA_DIA_CONCLUIDO"
+      );
     }
     const leituraReferencia = dadosPrecedentes?.["leituraAcumulada"] as RelatorioMaquininhaIa | undefined;
     if (leituraReferencia && !leituraCompleta(leituraReferencia)) throw new Error("Leitura de referência inválida");
     for (const forma of formasRelatorioMaquininha) {
       if (leituraReferencia && dados.leituraAcumulada[forma]! < leituraReferencia[forma]!) {
-        throw new ErroDominio("A leitura acumulada não pode ser menor que a leitura da manhã.", 422, "LEITURA_ACUMULADA_INVALIDA");
+        throw new ErroDominio(
+          "A leitura acumulada não pode ser menor que a leitura da manhã.",
+          422,
+          "LEITURA_ACUMULADA_INVALIDA"
+        );
       }
     }
     const liquidos = Object.fromEntries(
-      formasRelatorioMaquininha.map((forma) => [forma, dados.leituraAcumulada[forma]! - (leituraReferencia?.[forma] ?? 0)])
+      formasRelatorioMaquininha.map((forma) => [
+        forma,
+        dados.leituraAcumulada[forma]! - (leituraReferencia?.[forma] ?? 0)
+      ])
     ) as Record<(typeof formasRelatorioMaquininha)[number], number>;
     const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
       {

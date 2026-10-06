@@ -90,6 +90,11 @@
 .maquininha__foto small {
   display: block;
 }
+.maquininha__botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .maquininha__foto span,
 .maquininha__foto small {
   margin-top: 4px;
@@ -145,6 +150,10 @@
   .maquininha > :deep(.v-btn) {
     width: 100%;
     min-height: 48px;
+  }
+  .maquininha__botoes {
+    display: grid;
+    grid-template-columns: 1fr;
   }
   .maquininha__cabecalho {
     align-items: center;

@@ -269,7 +269,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
       const campoTipo = arquivo?.fields["tipo"];
       const valorTipo = campoTipo && !Array.isArray(campoTipo) && "value" in campoTipo ? campoTipo.value : undefined;
-      const tipo = z.enum(["folha_fechamento", "comprovante_cartao"]).parse(valorTipo);
+      const tipo = z.enum(["folha_fechamento", "comprovante_cartao", "relatorio_vendas_creare"]).parse(valorTipo);
       return reply
         .status(201)
         .send(ok(await salvarAnexoFechamentoCaixa(caixaId, tipo, arquivo, request.perfilUsuario!)));

@@ -55,9 +55,8 @@ function dinheiroRelatorio(campo: string) {
         <v-sheet class="pa-3 mb-4" rounded border>
           <div class="text-overline">Conferência física</div>
           <v-row dense>
-            <v-col cols="12" sm="4"><strong>Esperado:</strong> {{ dinheiro(saldoEsperado) }}</v-col>
-            <v-col cols="12" sm="4"><strong>Total declarado:</strong> {{ dinheiro(totalContado) }}</v-col>
-            <v-col cols="12" sm="4" :class="diferenca ? 'text-error' : 'text-success'">
+            <v-col cols="12" sm="6"><strong>Total contado:</strong> {{ dinheiro(totalContado) }}</v-col>
+            <v-col cols="12" sm="6" :class="diferenca ? 'text-error' : 'text-success'">
               <strong>{{ diferenca ? "Diferença:" : "Conferência:" }}</strong>
               {{ diferenca ? dinheiro(Math.abs(diferenca)) : "bateu" }}
             </v-col>
