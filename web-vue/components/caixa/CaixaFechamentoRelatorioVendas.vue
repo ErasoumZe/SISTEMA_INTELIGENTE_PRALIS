@@ -4,14 +4,22 @@ import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/u
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 
-type DadosRelatorioVendas = { vendas: TotaisRelatorioVendas; canceladas: VendaCanceladaCaixa[] };
+type LeituraCreare = Record<
+  "totalBruto" | "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "despesasExcetoSangria" | "resultadoFinal",
+  string
+>;
+type DadosRelatorioVendas = {
+  vendas: TotaisRelatorioVendas;
+  canceladas: VendaCanceladaCaixa[];
+  creare?: { comparacao: Record<string, "ok" | "pendente" | "divergente"> } | null;
+};
 type RelatorioGerado = {
   periodoInicio: string;
   periodoFim: string;
   dados: DadosRelatorioVendas;
   geradoEm: string;
 };
-type Anexo = { tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
+type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
 
 const props = defineProps<{ caixaId: string }>();
 const { apiUrl, apiGet, apiPost } = useApi();
@@ -26,6 +34,28 @@ const intervalo = ref<{ abertura: string; fechamento: string } | null>(null);
 const canceladas = ref<VendaCanceladaCaixa[]>([]);
 const anexoCreareEnviado = ref(false);
 const enviandoCreare = ref(false);
+const anexoCreareId = ref("");
+const leituraCreare = ref<LeituraCreare>({
+  totalBruto: "",
+  dinheiro: "",
+  credito: "",
+  debito: "",
+  pix: "",
+  voucher: "",
+  despesasExcetoSangria: "",
+  resultadoFinal: ""
+});
+const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
+const camposCreare = [
+  { chave: "totalBruto", titulo: "Total bruto" },
+  { chave: "dinheiro", titulo: "Dinheiro" },
+  { chave: "credito", titulo: "Crédito" },
+  { chave: "debito", titulo: "Débito" },
+  { chave: "pix", titulo: "Pix" },
+  { chave: "voucher", titulo: "Voucher" },
+  { chave: "despesasExcetoSangria", titulo: "Despesas exceto sangria" },
+  { chave: "resultadoFinal", titulo: "Resultado final" }
+] as const;
 let consultaAtual = 0;
 const totaisPorForma = computed(() => totais.value?.porFormaPagamento ?? []);
 
@@ -33,6 +63,7 @@ function aplicarRelatorio(relatorio: RelatorioGerado) {
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
   canceladas.value = relatorio.dados.canceladas;
+  comparacaoCreare.value = relatorio.dados.creare?.comparacao ?? null;
   gerado.value = true;
 }
 
@@ -45,7 +76,9 @@ async function carregarRelatorioExistente() {
       apiGet<Anexo[]>(`/api/caixa/${encodeURIComponent(props.caixaId)}/anexos`)
     ]);
     if (consulta !== consultaAtual) return;
-    anexoCreareEnviado.value = anexos.some((anexo) => anexo.tipo === "relatorio_vendas_creare");
+    const anexoCreare = anexos.find((anexo) => anexo.tipo === "relatorio_vendas_creare");
+    anexoCreareEnviado.value = Boolean(anexoCreare);
+    anexoCreareId.value = anexoCreare?.id ?? "";
     if (!relatorio) return;
     aplicarRelatorio(relatorio);
   } catch {
@@ -61,7 +94,22 @@ async function gerarRelatorio() {
   try {
     const relatorio = await apiPost<RelatorioGerado>(
       `/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`,
-      {}
+      anexoCreareId.value
+        ? {
+            anexoId: anexoCreareId.value,
+            leituraCreare: {
+              documentoLegivel: true,
+              ...Object.fromEntries(
+                camposCreare.map(({ chave }) => [
+                  chave,
+                  leituraCreare.value[chave] ? Number(leituraCreare.value[chave].replace(",", ".")) : null
+                ])
+              ),
+              camposDuvidosos: [],
+              observacoes: []
+            }
+          }
+        : {}
     );
     aplicarRelatorio(relatorio);
   } catch (falha) {
@@ -91,9 +139,10 @@ async function enviarRelatorioCreare(evento: Event) {
       credentials: "include",
       body: corpo
     });
-    const json = (await resposta.json()) as { detail?: string };
+    const json = (await resposta.json()) as { data?: { id: string }; detail?: string };
     if (!resposta.ok) throw new Error(json.detail || "Não foi possível anexar o relatório do CREARE.");
     anexoCreareEnviado.value = true;
+    anexoCreareId.value = json.data?.id ?? "";
   } catch (falha) {
     erro.value = mensagemErro(falha);
   } finally {
@@ -156,6 +205,35 @@ watch(
       />
       <small v-if="anexoCreareEnviado" class="text-success">Folha do CREARE anexada.</small>
     </section>
+
+    <section v-if="anexoCreareEnviado" class="relatorio-vendas__leitura mt-4" aria-label="Valores conferidos do CREARE">
+      <div>
+        <strong>Valores da folha CREARE</strong>
+        <p>Confira a foto e informe apenas os valores visíveis antes de gerar.</p>
+      </div>
+      <v-text-field
+        v-for="campo in camposCreare"
+        :key="campo.chave"
+        v-model="leituraCreare[campo.chave]"
+        :label="campo.titulo"
+        prefix="R$"
+        inputmode="decimal"
+        density="comfortable"
+      />
+    </section>
+
+    <v-alert
+      v-if="comparacaoCreare"
+      :type="Object.values(comparacaoCreare).every((situacao) => situacao === 'ok') ? 'success' : 'warning'"
+      variant="tonal"
+      class="mt-4"
+    >
+      {{
+        Object.values(comparacaoCreare).every((situacao) => situacao === "ok")
+          ? "CREARE e Pralis conferem em todos os valores comparáveis."
+          : "Há valores pendentes ou divergentes no comparativo CREARE × Pralis. Revise a folha e os lançamentos."
+      }}
+    </v-alert>
 
     <template v-if="gerado && totais">
       <v-alert type="success" variant="tonal" density="comfortable" class="mt-4">
@@ -333,6 +411,21 @@ watch(
   border-color: color-mix(in srgb, var(--cx-attention) 46%, var(--cx-line)) !important;
   background: color-mix(in srgb, var(--cx-attention) 24%, var(--cx-surface-sunken)) !important;
 }
+.relatorio-vendas__leitura {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding: 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+}
+.relatorio-vendas__leitura > div {
+  grid-column: 1 / -1;
+}
+.relatorio-vendas__leitura p {
+  margin: 4px 0 8px;
+  color: var(--cx-ink-soft);
+}
 @media (max-width: 720px) {
   .relatorio-vendas__cabecalho {
     flex-direction: column;
@@ -341,6 +434,9 @@ watch(
     grid-template-columns: 1fr;
   }
   .relatorio-vendas__anexo {
+    grid-template-columns: 1fr;
+  }
+  .relatorio-vendas__leitura {
     grid-template-columns: 1fr;
   }
 }

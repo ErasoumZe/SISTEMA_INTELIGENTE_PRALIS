@@ -163,6 +163,30 @@ export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
 });
 export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
 
+const valorRelatorioCreareSchema = z.coerce.number().nonnegative().nullable();
+export const relatorioVendasCreareSchema = z.object({
+  documentoLegivel: z.boolean(),
+  totalBruto: valorRelatorioCreareSchema,
+  dinheiro: valorRelatorioCreareSchema,
+  credito: valorRelatorioCreareSchema,
+  debito: valorRelatorioCreareSchema,
+  pix: valorRelatorioCreareSchema,
+  voucher: valorRelatorioCreareSchema,
+  despesasExcetoSangria: valorRelatorioCreareSchema,
+  resultadoFinal: valorRelatorioCreareSchema,
+  camposDuvidosos: z.array(z.string().trim().max(120)).max(30).default([]),
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+});
+export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
+export const gerarRelatorioVendasFechamentoSchema = z
+  .object({ anexoId: uuidSchema.optional(), leituraCreare: relatorioVendasCreareSchema.optional() })
+  .superRefine((dados, ctx) => {
+    if (Boolean(dados.anexoId) !== Boolean(dados.leituraCreare)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Anexo e leitura do CREARE devem ser informados juntos" });
+    }
+  });
+export type GerarRelatorioVendasFechamento = z.infer<typeof gerarRelatorioVendasFechamentoSchema>;
+
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
 // aceito pela constraint do banco e existe no seed, mas NENHUM fluxo o escreve — o acerto de saldo
 // cria despesa/debito/ajuste e mantem o caixa aberto. Quem quer "houve acerto" usa temAjuste.

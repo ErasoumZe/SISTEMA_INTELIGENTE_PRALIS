@@ -10,6 +10,7 @@ import {
   planejamentoRetornoIdParamsSchema,
   planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
+  gerarRelatorioVendasFechamentoSchema,
   iniciarFechamentoCaixaPayloadSchema,
   registrarIndisponibilidadeCaixaPayloadSchema,
   historicoCaixaQuerySchema,
@@ -432,7 +433,13 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       try {
-        return ok(await gerarRelatorioVendasFechamento(caixaId, request.perfilUsuario!));
+        return ok(
+          await gerarRelatorioVendasFechamento(
+            caixaId,
+            gerarRelatorioVendasFechamentoSchema.parse(request.body),
+            request.perfilUsuario!
+          )
+        );
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

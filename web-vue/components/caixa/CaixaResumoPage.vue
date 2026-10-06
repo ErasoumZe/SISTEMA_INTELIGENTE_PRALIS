@@ -421,21 +421,15 @@ const aberturaBloqueada = computed(
 watch(
   () => caixaAberto.value?.id,
   (caixaId) => {
-    if (!caixaId) {
-      fechamento.observacao = "";
-      fechamento.lacreFechamento = "";
-      fechamento.valorTotal = "";
-      fechamento.valorEspecie = "";
-      fechamento.valorMoedas = "";
-      fechamento.caixaResponsavelNome = "";
-      fechamento.supervisorResponsavelNome = "";
-      return;
-    }
+    if (!caixaId) return;
 
     // A abertura identifica o operador de origem; o fechamento pode ser feito por outra pessoa.
     // Só sugere o nome se o operador ainda não preencheu um valor próprio.
     if (!fechamento.caixaResponsavelNome.trim()) {
       fechamento.caixaResponsavelNome = caixaAberto.value?.caixaResponsavelNomeAbertura ?? "";
+    }
+    if (!fechamento.supervisorResponsavelNome.trim()) {
+      fechamento.supervisorResponsavelNome = caixaAberto.value?.supervisorResponsavelNomeAbertura ?? "";
     }
   },
   { immediate: true }

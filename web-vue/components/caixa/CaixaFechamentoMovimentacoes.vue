@@ -4,7 +4,11 @@ import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/u
 import { dinheiro } from "~/utils/domain";
 
 type RelatorioVendas = {
-  dados: { vendas: TotaisRelatorioVendas; canceladas: unknown[] };
+  dados: {
+    vendas: TotaisRelatorioVendas;
+    canceladas: unknown[];
+    creare?: { comparacao: Record<string, "ok" | "pendente" | "divergente"> } | null;
+  };
 };
 type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
 type RelatorioMaquininha = { relatorio: { dadosRevisados: unknown } | null };
@@ -24,6 +28,7 @@ const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(nu
 const canceladas = ref<unknown[]>([]);
 const leituraMaquininha = ref<LeituraMaquininha>({});
 const transferencias = ref<Transferencia[]>([]);
+const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
   { chave: "debito", titulo: "Débito" },
@@ -54,6 +59,7 @@ async function carregar() {
     ]);
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
+    comparacaoCreare.value = relatorioVendas?.dados.creare?.comparacao ?? null;
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
     leituraMaquininha.value = leitura(revisado.liquidos);
@@ -89,6 +95,18 @@ watch(
     </v-alert>
 
     <template v-else>
+      <v-alert
+        v-if="comparacaoCreare"
+        :type="Object.values(comparacaoCreare).every((situacao) => situacao === 'ok') ? 'success' : 'warning'"
+        variant="tonal"
+        class="mt-4"
+      >
+        {{
+          Object.values(comparacaoCreare).every((situacao) => situacao === "ok")
+            ? "CREARE × Pralis: valores comparáveis conferem."
+            : "CREARE × Pralis: existem valores pendentes ou divergentes para revisar."
+        }}
+      </v-alert>
       <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
         <article class="fechamento-movimentacoes__vendas">
           <v-icon icon="mdi-receipt-text-check-outline" size="22" />

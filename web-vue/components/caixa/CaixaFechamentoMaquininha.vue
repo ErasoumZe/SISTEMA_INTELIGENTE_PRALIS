@@ -21,9 +21,14 @@ const campos = [
   { chave: "pix", titulo: "Pix" },
   { chave: "voucher", titulo: "Voucher" }
 ] as const;
+const paineis = [
+  { chave: "manha", titulo: "Relatório da manhã", subtitulo: "Leitura inicial", icone: "mdi-weather-sunny" },
+  { chave: "tarde", titulo: "Relatório da tarde", subtitulo: "Leitura final", icone: "mdi-weather-sunset" }
+] as const;
 const camera = useTemplateRef<HTMLInputElement>("camera");
 const galeria = useTemplateRef<HTMLInputElement>("galeria");
 const etapa = ref<"manha" | "tarde">("manha");
+const paineisAbertos = ref<string[]>(["manha"]);
 const anexoId = ref("");
 const base = ref<Editavel | null>(null);
 const leitura = ref<Editavel>(novaLeitura(null));
@@ -72,6 +77,9 @@ function liquido(chave: Forma) {
   const referencia = base.value ? valorMonetario(base.value[chave]) : 0;
   return atual === null || referencia === null ? null : atual - referencia;
 }
+function valorDaBase(chave: Forma) {
+  return base.value ? valorMonetario(base.value[chave]) : null;
+}
 async function carregar() {
   if (!props.caixa.id) return;
   try {
@@ -81,6 +89,7 @@ async function carregar() {
       relatorio: { dadosRevisados: Record<string, unknown> } | null;
     }>(`/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha`);
     etapa.value = resposta.etapaDia;
+    paineisAbertos.value = [etapa.value];
     base.value = resposta.leituraReferencia?.leitura ? novaLeitura(resposta.leituraReferencia.leitura) : null;
     const dados = resposta.relatorio?.dadosRevisados;
     if (dados?.anexoId && dados.leituraAcumulada) {
@@ -153,62 +162,96 @@ watch(
     <header class="maquininha__cabecalho">
       <div>
         <span>Etapa 3 · maquininha</span>
-        <h3 id="maquininha-titulo">Relatório da {{ etapa === "manha" ? "manhã" : "tarde" }}</h3>
-        <p>
-          {{
-            etapa === "manha"
-              ? "Registre o acumulado deste turno."
-              : "A manhã já foi conferida neste PDV; informe o acumulado e veja somente o resultado da tarde."
-          }}
-        </p>
+        <h3 id="maquininha-titulo">Relatórios da maquininha</h3>
+        <p>Abra o turno atual para registrar a foto. Os dois turnos ficam no mesmo lugar para conferência.</p>
       </div>
       <v-chip :color="salvo ? 'success' : 'warning'" size="small">{{ salvo ? "Revisado" : "Pendente" }}</v-chip>
     </header>
     <v-alert v-if="base" type="info" density="compact" variant="tonal" class="mb-4"
-      >Leitura da manhã vinculada ao mesmo PDV e à mesma maquininha. O sistema não mistura caixas ou dias.</v-alert
+      >A leitura da manhã pertence a este PDV e a esta máquina. A tarde sempre calcula acumulado menos manhã.</v-alert
     >
-    <section class="maquininha__foto" aria-label="Comprovante da maquininha">
-      <div>
-        <strong>Comprovante do turno</strong
-        ><span>Envie uma foto pela câmera ou escolha uma imagem/PDF da galeria.</span>
-      </div>
-      <div class="maquininha__botoes">
-        <v-btn prepend-icon="mdi-camera" :loading="enviando" @click="camera?.click()">Câmera</v-btn
-        ><v-btn prepend-icon="mdi-image" :loading="enviando" @click="galeria?.click()">Galeria</v-btn>
-      </div>
-    </section>
-    <input ref="camera" class="d-none" type="file" accept="image/*" capture="environment" @change="enviar" /><input
-      ref="galeria"
-      class="d-none"
-      type="file"
-      accept="image/*,application/pdf"
-      @change="enviar"
-    />
-    <div class="maquininha__campos">
-      <v-text-field
-        v-for="campo in campos"
-        :key="campo.chave"
-        v-model="leitura[campo.chave]"
-        :label="campo.titulo"
-        prefix="R$"
-        inputmode="decimal"
-      />
-    </div>
-    <section class="maquininha__liquidos" aria-label="Resultado calculado da maquininha">
-      <h4>{{ etapa === "manha" ? "Total da manhã" : "Líquido da tarde" }}</h4>
-      <div>
-        <article v-for="campo in campos" :key="campo.chave">
-          <span>{{ campo.titulo }}</span
-          ><strong>{{ moeda(liquido(campo.chave)) }}</strong
-          ><small>{{ etapa === "manha" ? "Acumulado do turno" : "Acumulado menos manhã" }}</small>
-        </article>
-      </div>
-    </section>
-    <v-alert v-if="aviso" type="info" density="compact" class="mt-4">{{ aviso }}</v-alert
-    ><v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert
-    ><v-btn color="success" class="mt-4" :loading="salvando" :disabled="!podeSalvar" @click="salvar"
-      >Salvar leitura da maquininha</v-btn
-    >
+    <v-expansion-panels v-model="paineisAbertos" multiple class="maquininha__paineis">
+      <v-expansion-panel
+        v-for="painel in paineis"
+        :key="painel.chave"
+        :value="painel.chave"
+        :class="`maquininha__painel maquininha__painel--${painel.chave}`"
+      >
+        <v-expansion-panel-title
+          ><v-icon :icon="painel.icone" /><span
+            ><strong>{{ painel.titulo }}</strong
+            ><small>{{
+              painel.chave === etapa
+                ? painel.subtitulo
+                : painel.chave === "manha" && base
+                  ? "Leitura já conferida"
+                  : "Disponível após o turno da manhã"
+            }}</small></span
+          ></v-expansion-panel-title
+        >
+        <v-expansion-panel-text>
+          <template v-if="painel.chave !== etapa && painel.chave === 'manha' && base"
+            ><div class="maquininha__referencia">
+              <article v-for="campo in campos" :key="campo.chave">
+                <span>{{ campo.titulo }}</span
+                ><strong>{{ moeda(valorDaBase(campo.chave)) }}</strong
+                ><small>Leitura acumulada da manhã</small>
+              </article>
+            </div></template
+          >
+          <template v-else-if="painel.chave !== etapa"
+            ><v-alert type="info" density="compact" variant="tonal"
+              >O turno da tarde será liberado automaticamente quando a manhã deste PDV estiver fechada.</v-alert
+            ></template
+          >
+          <template v-else>
+            <section class="maquininha__foto">
+              <div>
+                <strong>Comprovante do turno</strong
+                ><span>Envie uma foto pela câmera ou escolha uma imagem/PDF da galeria.</span>
+              </div>
+              <div class="maquininha__botoes">
+                <v-btn prepend-icon="mdi-camera" :loading="enviando" @click="camera?.click()">Câmera</v-btn
+                ><v-btn prepend-icon="mdi-image" :loading="enviando" @click="galeria?.click()">Galeria</v-btn>
+              </div>
+            </section>
+            <input
+              ref="camera"
+              class="d-none"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              @change="enviar"
+            /><input ref="galeria" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar" />
+            <div class="maquininha__campos">
+              <v-text-field
+                v-for="campo in campos"
+                :key="campo.chave"
+                v-model="leitura[campo.chave]"
+                :label="campo.titulo"
+                prefix="R$"
+                inputmode="decimal"
+              />
+            </div>
+            <section class="maquininha__liquidos">
+              <h4>{{ etapa === "manha" ? "Total da manhã" : "Líquido da tarde" }}</h4>
+              <div>
+                <article v-for="campo in campos" :key="campo.chave">
+                  <span>{{ campo.titulo }}</span
+                  ><strong>{{ moeda(liquido(campo.chave)) }}</strong
+                  ><small>{{ etapa === "manha" ? "Acumulado do turno" : "Acumulado menos manhã" }}</small>
+                </article>
+              </div>
+            </section>
+            <v-alert v-if="aviso" type="info" density="compact" class="mt-4">{{ aviso }}</v-alert
+            ><v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert
+            ><v-btn color="success" class="mt-4" :loading="salvando" :disabled="!podeSalvar" @click="salvar"
+              >Salvar leitura da maquininha</v-btn
+            >
+          </template>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
   </section>
 </template>
 

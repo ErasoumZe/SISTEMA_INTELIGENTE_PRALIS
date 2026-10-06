@@ -14,6 +14,7 @@ import type {
   EntregaCofrePendente,
   FecharCaixaPayload,
   HistoricoCaixaQuery,
+  GerarRelatorioVendasFechamento,
   LinhaHistoricoCaixa,
   PlanejamentoRetorno,
   RegistrarIndisponibilidadeCaixaPayload,
@@ -27,7 +28,7 @@ import type {
   VendaCanceladaCaixa,
   VendasDoCaixaQuery
 } from "@padaria/shared/caixa";
-import { montarResumoCaixa, saldoFisicoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
+import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
@@ -997,8 +998,8 @@ async function abrirCaixaEmTransacao(
       throw new Error("Maquininha nao encontrada ou inativa");
     }
 
-    // R-040/B1: o lacre identifica obrigatoriamente a transferência pendente que este caixa
-    // vai reivindicar; abertura sem malote não existe no fluxo vigente.
+    // R-040: o lacre e opcional (R-033 â€” sem lacre o caixa abre zerado e o fundo chega depois).
+    // Informado, ele identifica a transferencia pendente que este caixa vai reivindicar.
     const lacreInformado = dados.lacreAbertura.trim();
     const abertura = await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx);
 
@@ -1209,7 +1210,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    const valorFisicoEsperadoCentavos = saldoFisicoCaixaCentavos(totais);
+    const valorFisicoEsperadoCentavos = saldoCaixaCentavos(totais);
     const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
     const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
@@ -1247,7 +1248,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         tx
       );
       totais = await calcularTotaisCaixaCentavos(caixa, tx);
-      const saldoDepoisDoRetornoCentavos = saldoFisicoCaixaCentavos(totais);
+      const saldoDepoisDoRetornoCentavos = saldoCaixaCentavos(totais);
       if (saldoDepoisDoRetornoCentavos !== -diferencaFisicaCentavos)
         throw new Error("Retorno final nao conferiu com a contagem fisica");
     }
@@ -1332,7 +1333,6 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       caixaAberto: null,
       resumo: null,
       lacreFechamentoReservado: null,
-      indisponibilidadeAberta: null,
       entregasPendentes: [],
       planejamentosPendentes: []
     } satisfies CaixaStatus;
@@ -1629,7 +1629,7 @@ export async function criarTransferenciaCofreCaixa(
     // D1: Transferencia de retorno parcial e permitida, mas NUNCA acima do que existe em especie. Sem este
     // teto, dois cliques levavam o saldo a negativo e o fechamento gravava quebra falsa no nome do
     // operador. Recalculado aqui dentro, sob a trava â€” o saldo que a tela viu nao serve de prova.
-    const saldoDisponivelCentavos = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
+    const saldoDisponivelCentavos = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (saldoDisponivelCentavos <= 0) {
       throw new Error("Caixa sem saldo em especie para enviar ao cofre");
     }
@@ -1713,7 +1713,7 @@ export async function executarPlanejamentoRetorno(
       throw new ErroDominio("Planejamento cancelado nao pode ser executado", 409, "PLANEJAMENTO_CANCELADO");
     }
     if (planejamento.status !== "agendada") return statusDoCaixaAberto(caixa, tx);
-    const saldoDisponivel = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
+    const saldoDisponivel = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (planejamento.valorCentavos > saldoDisponivel) {
       throw new Error(
         `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
@@ -1863,7 +1863,6 @@ export async function listarHistoricoCaixa(
         ...caixaPublico,
         dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
         dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
-        fechamentoIniciadoEm: serializarData(caixa.fechamentoIniciadoEm),
         fechadoPor: caixa.fechadoPor,
         fechadoPorNome: caixa.fechadoPorNome,
         totalEntradas: aoVivo?.totalEntradas ?? numero(caixa.totalEntradas),
@@ -1920,7 +1919,7 @@ function totaisHistoricoAoVivo(totais: TotaisCaixaCentavos): TotaisHistoricoAoVi
     totalDespesas: deCentavos(totais.despesas),
     totalRetiradas: deCentavos(totais.retiradas),
     totalMercadorias: deCentavos(totais.mercadorias),
-    saldo: deCentavos(saldoFisicoCaixaCentavos(totais))
+    saldo: deCentavos(saldoCaixaCentavos(totais))
   };
 }
 
@@ -2033,7 +2032,11 @@ export async function obterRelatorioVendasFechamento(caixaId: string, perfil: Pe
   return relatorio ? serializarRelatorioVendasFechamento(relatorio) : null;
 }
 
-export async function gerarRelatorioVendasFechamento(caixaId: string, perfil: PerfilUsuario) {
+export async function gerarRelatorioVendasFechamento(
+  caixaId: string,
+  leituraCreare: GerarRelatorioVendasFechamento,
+  perfil: PerfilUsuario
+) {
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
@@ -2062,7 +2065,40 @@ export async function gerarRelatorioVendasFechamento(caixaId: string, perfil: Pe
         "RELATORIO_FORA_DO_CORTE"
       );
     }
-    if (!travado.dataHoraAbertura) throw new Error("Caixa sem horario de abertura");
+    if (leituraCreare.anexoId) {
+      const anexo = await buscarAnexoFechamentoCaixaRepository(
+        travado.id,
+        leituraCreare.anexoId,
+        travado.empresaId,
+        tx
+      );
+      if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
+        throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
+      }
+    }
+    const totaisOperacionais = await calcularTotaisCaixaCentavos(travado, tx);
+    const saidasSemSangria = deCentavos(
+      totaisOperacionais.despesas + totaisOperacionais.mercadorias + totaisOperacionais.retiradas
+    );
+    const leitura = leituraCreare.leituraCreare;
+    const comparar = (creare: number | null, pralis: number) =>
+      creare === null ? "pendente" : paraCentavos(creare) === paraCentavos(pralis) ? "ok" : "divergente";
+    const porCategoria = (categoria: string) =>
+      primeiraPagina.totais.porFormaPagamento
+        .filter((item) => item.categoriaFechamentoCaixa === categoria)
+        .reduce((soma, item) => soma + item.total, 0);
+    const comparacaoCreare = leitura
+      ? {
+          totalBruto: comparar(leitura.totalBruto, primeiraPagina.totais.totalGeral),
+          dinheiro: comparar(leitura.dinheiro, porCategoria("dinheiro")),
+          credito: comparar(leitura.credito, porCategoria("credito")),
+          debito: comparar(leitura.debito, porCategoria("debito")),
+          pix: comparar(leitura.pix, porCategoria("pix")),
+          voucher: comparar(leitura.voucher, porCategoria("voucher")),
+          despesasExcetoSangria: comparar(leitura.despesasExcetoSangria, saidasSemSangria),
+          resultadoFinal: comparar(leitura.resultadoFinal, primeiraPagina.totais.totalGeral - saidasSemSangria)
+        }
+      : null;
     return salvarRelatorioVendasFechamentoRepository(
       {
         fechamentoCaixaId: travado.id,
@@ -2070,13 +2106,16 @@ export async function gerarRelatorioVendasFechamento(caixaId: string, perfil: Pe
         periodoInicio: new Date(travado.dataHoraAbertura),
         periodoFim: new Date(travado.dataHoraFechamento ?? new Date()),
         dados: {
-          versao: 2,
+          versao: 3,
           vendas: {
             quantidade: primeiraPagina.totais.quantidade,
             totalGeral: primeiraPagina.totais.totalGeral,
             porFormaPagamento: primeiraPagina.totais.porFormaPagamento
           },
-          canceladas
+          canceladas,
+          creare: leitura
+            ? { anexoId: leituraCreare.anexoId, leitura, comparacao: comparacaoCreare, saidasSemSangria }
+            : null
         },
         geradoPor: perfil.usuarioId
       },
@@ -2101,7 +2140,6 @@ export async function listarVendasDoCaixaAberto(caixaId: string, filtros: Vendas
   if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") {
     throw new Error("Consulta disponivel apenas para caixa aberto ou em fechamento");
   }
-  if (!caixa.pdvId || !caixa.dataHoraAbertura) throw new Error("Caixa sem dados operacionais de abertura");
 
   // `caixa_id` ja e o vinculo operacional atomico. Assim vendas manuais sem `data_venda` continuam
   // visiveis sem filtro de horario. Quando o operador pede hora, elas ficam fora da busca porque

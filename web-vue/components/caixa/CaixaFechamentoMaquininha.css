@@ -117,6 +117,26 @@
   gap: 12px;
   margin-top: 12px;
 }
+.maquininha__referencia {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.maquininha__referencia article {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--cx-surface-sunken);
+}
+.maquininha__referencia span,
+.maquininha__referencia small {
+  display: block;
+  color: var(--cx-ink-soft);
+}
+.maquininha__referencia strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--cx-positive);
+}
 .maquininha__liquidos article {
   padding: 14px;
   border-radius: 10px;
@@ -143,6 +163,7 @@
 @media (max-width: 760px) {
   .maquininha__foto,
   .maquininha__campos,
+  .maquininha__referencia,
   .maquininha__liquidos > div:first-of-type {
     grid-template-columns: 1fr;
   }
