@@ -73,12 +73,29 @@ function mensagemErroApi(body: unknown) {
 }
 
 async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body?: unknown) {
-  const resposta = await fetch(`${apiUrl}${rota}`, {
+  const executar = () => fetch(`${apiUrl}${rota}`, {
     method,
     credentials: "include",
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
+  let resposta: Response;
+  try {
+    resposta = await executar();
+  } catch (falha) {
+    // No desenvolvimento a API reinicia ao recompilar o shared. Repetimos apenas leitura, pois
+    // reexecutar uma escrita poderia duplicar uma operação financeira.
+    if (method === "GET") {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        resposta = await executar();
+      } catch {
+        throw new Error("Não foi possível conectar ao servidor. Verifique se a API está em execução.");
+      }
+    } else {
+      throw falha;
+    }
+  }
 
   if (resposta.status === 204) return undefined;
   const payload = await lerJson(resposta);

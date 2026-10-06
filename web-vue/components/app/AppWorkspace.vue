@@ -9,6 +9,7 @@ import {
   somarCentavos,
   valorTotalCentavos,
   type AuthSession,
+  type EstruturaMenuEmpresa,
   type TemaAplicacao
 } from "@padaria/shared";
 import type {
@@ -152,6 +153,9 @@ const telaInicialNormalizada = computed(() =>
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao", () => null);
 const opcoes = useState<Opcoes>("padaria.workspace.opcoes", () => opcoesVazias());
 const empresas = useState<Opcao[]>("padaria.workspace.empresas", () => []);
+// Estado compartilhado com o editor de permissões: ao salvar uma nova organização,
+// a barra lateral se atualiza no mesmo instante, sem exigir recarregar a página.
+const estruturaMenuEmpresa = useState<EstruturaMenuEmpresa | null>("estrutura-menu-empresa", () => null);
 const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () => []);
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
@@ -330,6 +334,10 @@ const ehAdministradorDoPainel = computed(() =>
 const restringeDataPagamentoAoHoje = computed(() => {
   const perfil = sessao.value?.perfil;
   return Boolean(perfil && !ehAdministradorTotal(perfil) && !podeLancarSemCaixa(perfil));
+});
+const podeOperarTransferenciaSemCaixa = computed(() => {
+  const perfil = sessao.value?.perfil;
+  return Boolean(perfil && podeLancarSemCaixa(perfil));
 });
 
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
@@ -622,6 +630,23 @@ async function selecionarEmpresa(id: string) {
   await trocarEmpresa(id);
 }
 
+async function carregarMenuEmpresa(idEmpresa = empresaId.value) {
+  if (!idEmpresa) {
+    estruturaMenuEmpresa.value = null;
+    return;
+  }
+  try {
+    estruturaMenuEmpresa.value = await apiGet<EstruturaMenuEmpresa | null>(
+      `/api/menu-empresa?empresaId=${encodeURIComponent(idEmpresa)}`
+    );
+  } catch (error) {
+    // Ordem do menu nunca pode impedir a operação: sem configuração ou em falha transitória,
+    // a sidebar usa o padrão de fábrica e continua filtrando as permissões normalmente.
+    estruturaMenuEmpresa.value = null;
+    console.error("Falha ao carregar a estrutura do menu", error);
+  }
+}
+
 async function carregarEmpresas() {
   empresas.value = sessao.value?.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
   opcoes.value.empresas = empresas.value;
@@ -752,6 +777,7 @@ async function marcarTodasNotificacoesComoVistas() {
 }
 
 async function trocarEmpresa(idEmpresa = empresaId.value) {
+  await carregarMenuEmpresa(idEmpresa);
   if (paginaInicialNeutra.value) {
     await carregarStatusCaixa(idEmpresa);
     await carregarTemaTela("padrao");
@@ -1072,7 +1098,11 @@ async function carregarTudo() {
       erro.value = "Sem permissão para acessar esta página.";
       return;
     }
-    await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
+    await Promise.all([
+      carregarStatusCaixa(empresaId.value),
+      carregarNotificacoes(empresaId.value),
+      carregarMenuEmpresa(empresaId.value)
+    ]);
     if (!paginaInicialNeutra.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(paginaInicialNeutra.value ? "padrao" : telaAtiva.value);
     await carregarTemaResumoCaixa();
@@ -1545,8 +1575,11 @@ async function salvarDiscriminacao() {
   }
   const endpoint = endpointOperacaoPorEntidade[entidade];
   await apiPatch(`/api/${endpoint}/${operacaoEditandoId.value}/discriminar`, corpo);
-  const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value);
-  const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoEditandoId.value, "foto-nota", "fotoNotaUrl");
+  const podeAnexarFotos = entidade !== "retirada";
+  const fotoUrl = podeAnexarFotos ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value) : "";
+  const fotoNotaUrl = podeAnexarFotos
+    ? await fotoNota.enviar(apiUrl, endpoint, operacaoEditandoId.value, "foto-nota", "fotoNotaUrl")
+    : "";
   const indice = operacoes.value.findIndex((operacao) => operacao.id === operacaoEditandoId.value);
   const linha = operacoes.value[indice];
   if (indice >= 0 && linha) {
@@ -1583,8 +1616,11 @@ async function salvarOperacao(criarNova = false) {
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
-    const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
-    const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
+    const podeAnexarFotos = entidadeSalva !== "retirada";
+    const fotoUrl = podeAnexarFotos ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id) : "";
+    const fotoNotaUrl = podeAnexarFotos
+      ? await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl")
+      : "";
     const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
@@ -1677,14 +1713,10 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
 }
 
 const { abrirAcessosUsuario, iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
-  empresaId,
-  opcoes,
-  cadastroTela,
-  cadastroEditandoId,
-  formCadastro,
-  modalCadastroAberto,
-  apiGet,
-  notificar
+  notificar,
+  navegar: async (rota) => {
+    await router.push(rota);
+  }
 });
 
 // Trava do rebaixamento silencioso: a linha da listagem pode chegar sem `role`, e ai o formulario de
@@ -2019,6 +2051,7 @@ provide(WORKSPACE_CONTEXT, {
   caixaStatus,
   caixaSalvando,
   podeOperarCaixa,
+  podeOperarTransferenciaSemCaixa,
   podeCriarTransferencia,
   podeEditarTransferencia,
   carregarStatusCaixa,
@@ -2351,6 +2384,7 @@ onBeforeUnmount(() => {
     v-else-if="sessao"
     :sessao="sessao"
     :telas="telasShell"
+    :estrutura-menu="estruturaMenuEmpresa"
     :tela-ativa="telaAtiva"
     :empresas="empresasDoShell"
     :empresa-id="empresaSelecionadaId"

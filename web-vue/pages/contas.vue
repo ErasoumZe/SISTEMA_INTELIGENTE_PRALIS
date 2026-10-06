@@ -14,6 +14,7 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
       :linhas="ctx.linhasCadastro"
       :permissoes-filtro="[...permissoes]"
       :pode-excluir="false"
+      :pode-exportar="false"
       @acionar="ctx.abrirCadastroNovo"
       @importar="ctx.abrirImportacao"
       @exportar="ctx.abrirExportacao"

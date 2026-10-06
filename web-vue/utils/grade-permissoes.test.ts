@@ -72,7 +72,7 @@ describe("save da grade com permissões ocultas", () => {
       usuariosPermissoes: []
     };
     const regrasDaGrade = {
-      despesas_efetuar: true,
+      despesas_pagar: true,
       transferencias_conferir: false,
       mercadorias_aprovar: true,
       retiradas_visualizar_dpago: true,

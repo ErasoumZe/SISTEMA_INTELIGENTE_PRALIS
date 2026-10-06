@@ -28,6 +28,8 @@ export type WorkspaceContext = {
   caixaStatus: Ref<CaixaStatus | null>;
   caixaSalvando: Ref<boolean>;
   podeOperarCaixa: ComputedRef<boolean>;
+  /** Tesouraria/retaguarda pode registrar transferencia sem depender do caixa do PDV. */
+  podeOperarTransferenciaSemCaixa: ComputedRef<boolean>;
   podeCriarTransferencia: ComputedRef<boolean>;
   podeEditarTransferencia: ComputedRef<boolean>;
   carregarStatusCaixa: () => Promise<void>;

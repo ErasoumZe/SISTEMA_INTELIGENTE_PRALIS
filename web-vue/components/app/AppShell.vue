@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
+import type { EstruturaMenuEmpresa } from "@padaria/shared";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppSidebar from "~/components/app/AppSidebar.vue";
@@ -12,6 +13,7 @@ import { limitarNotificacoesDoSino } from "~/utils/notificacoes";
 const props = defineProps<{
   sessao: AuthSession;
   telas: ItemMenu[];
+  estruturaMenu?: EstruturaMenuEmpresa | null;
   telaAtiva: string;
   empresas: Opcao[];
   empresaId: string;
@@ -180,6 +182,7 @@ onMounted(() => {
          descompasso, e o 67 §13.1 documenta o preco disso. -->
     <AppSidebar
       :telas="telas"
+      :estrutura-menu="estruturaMenu"
       :tela-ativa="telaAtiva"
       :telas-desabilitadas="telasDesabilitadas"
       :motivos-telas-desabilitadas="motivosTelasDesabilitadas"

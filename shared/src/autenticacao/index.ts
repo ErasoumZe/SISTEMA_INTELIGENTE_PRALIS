@@ -9,22 +9,13 @@ export const permissoes = [
   "transferencias_criar",
   "transferencias_editar",
   "transferencias_excluir",
-  // Ciclo de vida R7/R10 (Fase 1). Transferencia nao tem dataPagamento (movimento imediato), entao
-  // pagar/*_dpago ficam so no catalogo/distribuicao; a acao enforcada aqui e futura (M3).
-  "transferencias_pagar",
-  "transferencias_efetuar",
   "transferencias_conferir",
-  "transferencias_visualizar_dpago",
-  "transferencias_editar_dpago",
-  "transferencias_excluir_dpago",
   "despesas_visualizar",
   "despesas_criar",
   "despesas_editar",
   "despesas_excluir",
   "despesas_discriminar",
   "despesas_pagar",
-  "despesas_efetuar",
-  "despesas_conferir",
   "despesas_visualizar_dpago",
   "despesas_editar_dpago",
   "despesas_excluir_dpago",
@@ -35,8 +26,6 @@ export const permissoes = [
   "mercadorias_discriminar",
   "mercadorias_aprovar",
   "mercadorias_pagar",
-  "mercadorias_efetuar",
-  "mercadorias_conferir",
   "mercadorias_visualizar_dpago",
   "mercadorias_editar_dpago",
   "mercadorias_excluir_dpago",
@@ -45,8 +34,6 @@ export const permissoes = [
   "retiradas_editar",
   "retiradas_excluir",
   "retiradas_pagar",
-  "retiradas_efetuar",
-  "retiradas_conferir",
   "retiradas_visualizar_dpago",
   "retiradas_editar_dpago",
   "retiradas_excluir_dpago",
@@ -325,6 +312,152 @@ export const permissoes = [
 export type Permissao = (typeof permissoes)[number];
 
 export type RegrasPermissoes = Partial<Record<Permissao, boolean>>;
+
+const nomesRecursosPermissao: Record<string, string> = {
+  entradas: "as entradas de venda",
+  transferencias: "as transferências entre caixa, cofre e contas",
+  despesas: "as despesas",
+  mercadorias: "as mercadorias",
+  retiradas: "as retiradas",
+  lancamentos_recorrencia: "as séries de lançamentos recorrentes",
+  caixa: "o caixa do PDV",
+  caixas: "a gestão e o histórico dos caixas",
+  fechamento_com_diferenca: "as divergências de fechamento",
+  relatorio_produtos: "o relatório de produtos mais vendidos",
+  relatorio_vendas: "o relatório de vendas",
+  relatorio_vendas_comprovantes: "os comprovantes de venda",
+  contas_pagar: "as contas a pagar",
+  cadastro_lacres: "os lacres de transferências",
+  cadastro_contas: "as contas financeiras",
+  cadastro_contas_usuarios: "os vínculos de pessoas às contas",
+  cadastro_grupos: "os grupos de lançamento",
+  cadastro_unidades_medida: "as unidades de medida",
+  cadastro_areas_setores: "as áreas e setores",
+  cadastro_empresas: "as empresas",
+  cadastro_usuarios: "os usuários",
+  cadastro_permissoes: "as permissões de usuários",
+  cadastro_clientes: "os clientes",
+  cadastro_fornecedores: "os fornecedores",
+  cadastro_socios_gestores: "os sócios e gestores",
+  cadastro_produtos: "os produtos",
+  cadastro_colaboradores: "os colaboradores",
+  cadastro_pdv: "os PDVs e maquininhas vinculadas",
+  cadastro_turnos: "os turnos",
+  cadastro_funcoes: "as funções operacionais",
+  cadastro_formas_pagamento: "as formas de pagamento",
+  cadastro_formas_pagamento_roteamento: "o destino financeiro das formas de pagamento",
+  aparencia: "a aparência do sistema",
+  integracoes: "as integrações externas",
+  mensagens_admin: "as mensagens administrativas para o PDV",
+  campanhas: "as campanhas",
+  promocoes: "as promoções",
+  relatorio_faltas: "o relatório de faltas e atestados",
+  relatorio_advertencias: "o relatório de advertências e suspensões",
+  pedidos: "os pedidos",
+  perdas_sobras: "os registros de perdas e sobras",
+  estoque_produtos: "o estoque de produtos",
+  relatorio_dre: "o relatório de DRE",
+  avaliacao_qualidade: "as avaliações de qualidade",
+  avaliacao_colaboradores: "as avaliações de colaboradores",
+  relatorio_fiscal: "os relatórios fiscais",
+  cadastro_fiscal_produtos: "os dados fiscais dos produtos",
+  cadastro_patrimonio: "o patrimônio",
+  cadastro_ficha_tecnica: "as fichas técnicas",
+  cadastro_ingredientes: "os ingredientes",
+  notas_fiscais: "as notas fiscais",
+  folha_ponto: "as folhas de ponto",
+  admissoes_testes: "os períodos de teste",
+  admissoes_processos: "os processos de admissão",
+  clientes: "os clientes",
+  fornecedores: "os fornecedores",
+  socios_gestores: "os sócios e gestores",
+  produtos: "os produtos",
+  colaboradores: "os colaboradores",
+  fiscal_produtos: "os dados fiscais dos produtos",
+  patrimonio: "o patrimônio",
+  ficha_tecnica: "as fichas técnicas",
+  ingredientes: "os ingredientes",
+  pdv: "os PDVs e maquininhas vinculadas",
+  formas_pagamento: "as formas de pagamento",
+  contas: "as contas financeiras",
+  empresas: "as empresas",
+  grupos: "os grupos de lançamento",
+  unidades: "as unidades de medida",
+  turnos: "os turnos",
+  funcoes_operacionais: "as funções operacionais",
+  areas_setores: "as áreas e setores",
+  usuarios: "os usuários",
+  permissoes: "as permissões de usuários",
+  fechamento: "as pendências operacionais",
+  historico_caixas: "o histórico dos caixas"
+};
+
+const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
+  caixa_operar: "Permite abrir, operar e encaminhar o fechamento do caixa do próprio PDV.",
+  caixa_alterar_horario: "Permite corrigir o horário registrado em uma operação de caixa.",
+  lancamentos_recorrencia_criar: "Permite criar séries recorrentes de despesas, mercadorias e retiradas.",
+  despesas_discriminar: "Permite detalhar os itens que compõem uma despesa já registrada.",
+  mercadorias_discriminar: "Permite detalhar os itens e documentos de uma mercadoria já registrada.",
+  mercadorias_aprovar: "Permite aprovar ou recusar mercadorias que aguardam conferência.",
+  cadastro_formas_pagamento_roteamento:
+    "Permite definir para qual conta financeira cada forma de pagamento será encaminhada.",
+  admissoes_processos_criar_direta: "Permite iniciar um processo de admissão sem período de teste.",
+  admissoes_processos_editar_internos:
+    "Permite preencher e alterar os dados internos e documentos do processo de admissão.",
+  admissoes_processos_convidar: "Permite emitir ou revogar o convite enviado ao candidato.",
+  admissoes_processos_ver_ficha: "Permite consultar a ficha preenchida pelo candidato.",
+  admissoes_processos_revisar_ficha: "Permite aprovar ou devolver a ficha do candidato para correção.",
+  admissoes_testes_encerrar: "Permite encerrar um período de teste com seu resultado final.",
+  admissoes_testes_cancelar: "Permite cancelar um período de teste antes do encerramento.",
+  relatorio_vendas_comprovantes_criar: "Permite gerar comprovantes para as vendas consultadas.",
+  transferencias_conferir:
+    "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento."
+};
+
+const acoesPermissao: ReadonlyArray<[string, (recurso: string) => string]> = [
+  ["visualizar_dpago", (recurso) => `Permite ver ${recurso} que já foram pagos.`],
+  ["editar_dpago", (recurso) => `Permite alterar ${recurso} que já foram pagos.`],
+  ["excluir_dpago", (recurso) => `Permite excluir ${recurso} que já foram pagos.`],
+  ["somente_caixa_aberto", (recurso) => `Restringe ${recurso} ao período em que o caixa estiver aberto.`],
+  ["desabilitado", (recurso) => `Mostra o item de ${recurso} no menu, mas mantém o acesso bloqueado.`],
+  ["mostrar", (recurso) => `Mostra o item de ${recurso} no menu; não concede acesso à tela por si só.`],
+  ["visualizar", (recurso) => `Permite consultar ${recurso}.`],
+  ["criar", (recurso) => `Permite criar registros em ${recurso}.`],
+  ["editar", (recurso) => `Permite alterar registros em ${recurso}.`],
+  ["excluir", (recurso) => `Permite excluir registros em ${recurso}.`],
+  ["pagar", (recurso) => `Permite registrar ou alterar o pagamento de ${recurso}.`],
+  ["aprovar", (recurso) => `Permite aprovar registros em ${recurso}.`],
+  ["cancelar", (recurso) => `Permite cancelar registros em ${recurso}.`],
+  ["importar", (recurso) => `Permite importar dados para ${recurso}.`],
+  ["gerenciar", (recurso) => `Permite gerenciar ${recurso}.`]
+];
+
+function nomeRecursoPermissao(codigo: string): string {
+  return nomesRecursosPermissao[codigo] ?? `a regra ${codigo.replaceAll("_", " ")}`;
+}
+
+/** Texto exibido sob cada switch do editor; toda permissão tem uma explicação humana. */
+export function descricaoPermissao(codigo: Permissao): string {
+  const especial = descricoesEspeciaisPermissao[codigo];
+  if (especial) return especial;
+
+  if (codigo.startsWith("menu_")) {
+    const semPrefixo = codigo.slice("menu_".length);
+    for (const [sufixo, descrever] of acoesPermissao) {
+      if (semPrefixo.endsWith(`_${sufixo}`)) {
+        return descrever(nomeRecursoPermissao(semPrefixo.slice(0, -sufixo.length - 1)));
+      }
+    }
+  }
+
+  for (const [sufixo, descrever] of acoesPermissao) {
+    if (codigo.endsWith(`_${sufixo}`)) {
+      return descrever(nomeRecursoPermissao(codigo.slice(0, -sufixo.length - 1)));
+    }
+  }
+
+  return `Permite usar ${nomeRecursoPermissao(codigo)} dentro do sistema.`;
+}
 
 // Permissoes que RESTRINGEM em vez de conceder: quem as tem fica preso ao caixa aberto — some do
 // menu e as listagens ficam presas ao proprio caixa (ver resolverEscopoListagemPorCaixa). Existem

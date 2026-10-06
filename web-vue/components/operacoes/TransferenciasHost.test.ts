@@ -66,6 +66,7 @@ function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
           podeCriarTransferencia: computed(() => criar),
           podeEditarTransferencia: computed(() => criar),
           podeOperarCaixa: computed(() => operar),
+          podeOperarTransferenciaSemCaixa: computed(() => !operar),
           caixaSalvando: ref(false),
           salvandoOperacao: ref(false),
           carregarStatusCaixa: vi.fn(async () => undefined),
@@ -75,17 +76,6 @@ function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
       renderStubDefaultSlot: true,
       stubs: {
         "v-dialog": { name: "VDialog", props: ["modelValue"], template: '<div v-if="modelValue"><slot /></div>' },
-        "v-card": { template: "<section><slot /></section>" },
-        "v-tabs": {
-          name: "VTabs",
-          props: ["modelValue"],
-          emits: ["update:modelValue"],
-          template: "<nav><slot /></nav>"
-        },
-        "v-tab": {
-          props: ["disabled", "value"],
-          template: '<button :disabled="disabled" :data-tab="value"><slot /></button>'
-        },
         "v-btn": { template: "<button><slot /></button>" },
         "v-alert": { template: "<aside><slot /></aside>" },
         "v-progress-linear": true
@@ -99,8 +89,8 @@ describe("host único +Novo / Transferências", () => {
   it("mantém a faixa de transferência e suas duas ações no mesmo modal", () => {
     const { wrapper } = montar(true, true, true);
     expect(wrapper.get("h2").text()).toBe("Nova transferência");
-    expect(wrapper.get('[data-tab="nova"]').text()).toBe("Nova transferência");
-    expect(wrapper.get('[data-tab="retorno"]').text()).toBe("Retorno / sangria");
+    expect(wrapper.get('[data-tab="nova"] span').text()).toBe("Nova transferência");
+    expect(wrapper.get('[data-tab="retorno"] span').text()).toBe("Retorno / sangria");
     wrapper.unmount();
   });
 
@@ -132,7 +122,7 @@ describe("host único +Novo / Transferências", () => {
 
   it("troca a aba no mesmo host e não mantém comum visível sobre retorno", async () => {
     const { wrapper, empresaId, modalOperacaoAberto } = montar(true, true, true);
-    await wrapper.getComponent({ name: "VTabs" }).setValue("retorno");
+    await wrapper.get('[data-tab="retorno"]').trigger("click");
     await flushPromises();
     expect(wrapper.get(".transferencias-host__comum").attributes("style")).toContain("display: none");
     expect(wrapper.findComponent({ name: "CaixaRetornoSangriaForm" }).exists()).toBe(true);
@@ -142,12 +132,11 @@ describe("host único +Novo / Transferências", () => {
     wrapper.unmount();
   });
 
-  it("não mostra nenhuma transferência do PDV quando o Caixa está em fechamento", async () => {
-    const { wrapper, caixaStatus } = montar(true, true, true);
+  it("mantém a transferência da retaguarda disponível quando o Caixa está em fechamento", async () => {
+    const { wrapper, caixaStatus } = montar(true, false, true);
     caixaStatus.value!.caixaAberto!.status = "em_fechamento";
     await flushPromises();
-    expect(wrapper.text()).toContain("Caixa em fechamento.");
-    expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(true);
     expect(wrapper.findComponent({ name: "CaixaRetornoSangriaForm" }).exists()).toBe(false);
     wrapper.unmount();
   });

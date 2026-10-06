@@ -119,11 +119,11 @@ describe("secoes de permissoes", () => {
     }
   });
 
-  it("nomeia a permissao legada de fechamento pela tela operacional que ela libera", () => {
-    const pendencias = secoesPermissoes.find((secao) => secao.titulo === "Pendências operacionais");
+  it("mantem a permissao legada de fechamento junto do caixa", () => {
+    const caixa = secoesPermissoes.find((secao) => secao.titulo === "Caixa e fechamento");
 
-    expect(pendencias).toBeDefined();
-    expect(permissaoPertenceASecao("fechamento_com_diferenca_visualizar", pendencias!)).toBe(true);
+    expect(caixa).toBeDefined();
+    expect(permissaoPertenceASecao("fechamento_com_diferenca_visualizar", caixa!)).toBe(true);
   });
 });
 

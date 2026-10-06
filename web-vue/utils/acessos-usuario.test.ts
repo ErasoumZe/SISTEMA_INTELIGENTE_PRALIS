@@ -1,130 +1,38 @@
-import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { criarAcoesAcessosUsuario, deveIniciarConfiguracaoUsuario } from "~/utils/acessos-usuario";
-import { formCadastroVazio, opcoesVazias } from "~/utils/domain";
 
-describe("acoes de acesso individual", () => {
-  it("inicia a configuracao guiada somente para usuario novo", () => {
+describe("acessos individuais", () => {
+  it("inicia a configuração guiada somente para usuário novo", () => {
     expect(deveIniciarConfiguracaoUsuario("usuarios", "")).toBe(true);
     expect(deveIniciarConfiguracaoUsuario("usuarios", "usuario-existente")).toBe(false);
     expect(deveIniciarConfiguracaoUsuario("contas", "")).toBe(false);
-    expect(deveIniciarConfiguracaoUsuario("pdv", "")).toBe(false);
   });
 
-  it("carrega regras e resumo efetivo antes de abrir o editor", async () => {
-    const opcoes = ref(opcoesVazias());
-    const cadastroTela = ref("");
-    const cadastroEditandoId = ref("");
-    const formCadastro = ref(formCadastroVazio());
-    const modalCadastroAberto = ref(false);
-    const apiGetMock = vi.fn(async (rota: string) => {
-      if (rota.includes("/efetivas")) {
-        return {
-          usuarioId: "user/textual",
-          nome: "Tesouraria",
-          email: "tesouraria@teste.local",
-          role: "usuario_comum",
-          permissoesHerdadas: ["transferencias_visualizar"],
-          permissoesEfetivas: ["transferencias_visualizar", "transferencias_conferir"]
-        };
-      }
-      return {
-        permissoes: [],
-        cargos: [],
-        cargosPermissoes: [],
-        setores: [],
-        setoresPermissoes: [],
-        usuarios: [{ id: "user/textual", nome: "Tesouraria" }],
-        usuariosPermissoes: [{ usuarioId: "user/textual", regras: { transferencias_conferir: true } }]
-      };
-    });
-    const apiGet = async <T>(rota: string): Promise<T> => (await apiGetMock(rota)) as T;
+  it("abre a única tela de permissões para a pessoa escolhida", async () => {
+    const navegar = vi.fn(async () => undefined);
+    const { abrirAcessosUsuario } = criarAcoesAcessosUsuario({ notificar: vi.fn(), navegar });
 
-    const { abrirAcessosUsuario } = criarAcoesAcessosUsuario({
-      empresaId: ref("empresa-1"),
-      opcoes,
-      cadastroTela,
-      cadastroEditandoId,
-      formCadastro,
-      modalCadastroAberto,
-      apiGet,
-      notificar: vi.fn()
-    });
-
-    await abrirAcessosUsuario({ id: "user/textual" });
-
-    expect(apiGetMock).toHaveBeenCalledTimes(2);
-    expect(cadastroTela.value).toBe("permissoes");
-    expect(cadastroEditandoId.value).toBe("usuario:user/textual");
-    expect(formCadastro.value.regras).toEqual({ transferencias_conferir: true });
-    expect(opcoes.value.usuarios[0]?.permissoesHerdadas).toEqual(["transferencias_visualizar"]);
-    expect(modalCadastroAberto.value).toBe(true);
+    await expect(abrirAcessosUsuario({ id: "user/textual" })).resolves.toBe(true);
+    expect(navegar).toHaveBeenCalledWith({ path: "/permissoes", query: { usuario: "user/textual" } });
   });
 
-  it("encadeia o usuario comum recem-criado no mesmo editor", async () => {
-    const opcoes = ref(opcoesVazias());
-    const cadastroTela = ref("");
-    const cadastroEditandoId = ref("");
-    const formCadastro = ref(formCadastroVazio());
-    const modalCadastroAberto = ref(false);
+  it("encadeia usuário comum recém-criado na mesma tela", async () => {
+    const navegar = vi.fn(async () => undefined);
     const notificar = vi.fn();
-    const apiGetMock = vi.fn(async (rota: string) =>
-      rota.includes("/efetivas")
-        ? {
-            usuarioId: "usuario-novo",
-            nome: "Usuario novo",
-            email: "novo@teste.local",
-            role: "usuario_comum",
-            permissoesHerdadas: [],
-            permissoesEfetivas: []
-          }
-        : {
-            permissoes: [],
-            cargos: [],
-            cargosPermissoes: [],
-            setores: [],
-            setoresPermissoes: [],
-            usuarios: [{ id: "usuario-novo", nome: "Usuario novo" }],
-            usuariosPermissoes: []
-          }
-    );
-    const apiGet = async <T>(rota: string): Promise<T> => (await apiGetMock(rota)) as T;
-
-    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
-      empresaId: ref("empresa-1"),
-      opcoes,
-      cadastroTela,
-      cadastroEditandoId,
-      formCadastro,
-      modalCadastroAberto,
-      apiGet,
-      notificar
-    });
+    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({ notificar, navegar });
 
     await expect(iniciarConfiguracaoDoUsuarioCriado("usuario-novo", "usuario_comum")).resolves.toBe(true);
     expect(notificar).toHaveBeenCalledWith("Usuário criado. Agora configure os acessos.");
-    expect(apiGetMock).toHaveBeenCalledTimes(2);
-    expect(cadastroTela.value).toBe("permissoes");
-    expect(cadastroEditandoId.value).toBe("usuario:usuario-novo");
-    expect(modalCadastroAberto.value).toBe(true);
+    expect(navegar).toHaveBeenCalledWith({ path: "/permissoes", query: { usuario: "usuario-novo" } });
   });
 
-  it("nao abre configuracao automatica para administrador total", async () => {
-    const apiGet = vi.fn();
+  it("não abre configuração automática para administrador total", async () => {
+    const navegar = vi.fn(async () => undefined);
     const notificar = vi.fn();
-    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
-      empresaId: ref("empresa-1"),
-      opcoes: ref(opcoesVazias()),
-      cadastroTela: ref("usuarios"),
-      cadastroEditandoId: ref(""),
-      formCadastro: ref(formCadastroVazio()),
-      modalCadastroAberto: ref(false),
-      apiGet,
-      notificar
-    });
+    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({ notificar, navegar });
 
     await expect(iniciarConfiguracaoDoUsuarioCriado("admin-novo", "usuario_admin")).resolves.toBeNull();
-    expect(apiGet).not.toHaveBeenCalled();
+    expect(navegar).not.toHaveBeenCalled();
     expect(notificar).not.toHaveBeenCalled();
   });
 });

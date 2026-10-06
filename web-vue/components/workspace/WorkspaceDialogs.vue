@@ -5,7 +5,6 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
 import TransferenciasHost from "~/components/operacoes/TransferenciasHost.vue";
-import EditorPermissoes from "~/components/permissoes/EditorPermissoes.vue";
 
 const workspace = useWorkspaceContext();
 
@@ -494,7 +493,6 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               }}</v-chip>
             </v-chip-group>
           </v-col>
-          <EditorPermissoes v-if="cadastroTela === 'permissoes'" />
         </v-row>
       </v-card-text>
       <v-card-actions>

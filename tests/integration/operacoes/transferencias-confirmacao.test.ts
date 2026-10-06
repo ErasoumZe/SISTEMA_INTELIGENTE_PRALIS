@@ -158,6 +158,15 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       confirmado.find((item) => item.id === destinoVencedor)!.saldoAtual -
         antes.find((item) => item.id === destinoVencedor)!.saldoAtual
     ).toBe(100);
+
+    const edicaoConferida = await request(
+      cookieAdmin,
+      "PUT",
+      `/api/transferencias/${transferenciaId}`,
+      payloadTransferencia("QA-DISPUTA-001", idsTeste.contaCofre, destinoVencedor, { tempoConfirmacao: null })
+    );
+    expect(edicaoConferida.statusCode, edicaoConferida.body).toBe(400);
+    expect(edicaoConferida.body).toMatch(/ja conferida nao pode ser editada/iu);
   });
 
   it("permite prazo apenas na transferencia direta e persiste ausencia de prazo como null", async () => {

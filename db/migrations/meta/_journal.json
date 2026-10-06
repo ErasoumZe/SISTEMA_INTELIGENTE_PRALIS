@@ -372,6 +372,13 @@
       "when": 1791054109520,
       "tag": "0052_petite_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791289193013,
+      "tag": "0053_empty_molten_man",
+      "breakpoints": true
     }
   ]
 }

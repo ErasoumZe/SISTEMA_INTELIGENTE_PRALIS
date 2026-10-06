@@ -29,6 +29,9 @@ const props = defineProps<{
   // e levaria 403 no salvar — a tela oferecendo o que a rota recusa. Default `true` para as demais
   // telas continuarem exatamente como estavam.
   podeEditar?: boolean;
+  // Algumas telas possuem importacao util, mas nao fazem sentido exportar uma copia local.
+  // Mantem `true` como padrao para nao alterar os demais cadastros.
+  podeExportar?: boolean;
   excluindoId?: string;
   // #152: so o Admin com a permissao dedicada (R-176) enxerga a acao de roteamento.
   podeConfigurarRoteamento?: boolean;
@@ -63,6 +66,7 @@ const podeEditarPorPermissao = computed(() =>
 // A permissao da sessao continua sendo a autoridade; a tela nunca consegue amplia-la.
 const podeEditar = computed(() => podeEditarPorPermissao.value && (props.podeEditar ?? true));
 const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
+const podeExportar = computed(() => podeCopia.value && (props.podeExportar ?? true));
 const acoesExtras = computed(() => {
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
   if (props.tela === "permissoes" && podeEditar.value)
@@ -101,7 +105,7 @@ const acoesExtras = computed(() => {
     :acao="acao"
     :pode-adicionar="podeAdicionar"
     :pode-editar="podeEditar"
-    :pode-exportar="podeCopia"
+    :pode-exportar="podeExportar"
     :pode-importar="podeCopia && podeAdicionar"
     :editar-carregando-id="editarCarregandoId"
     :modo-servidor="modoServidor"

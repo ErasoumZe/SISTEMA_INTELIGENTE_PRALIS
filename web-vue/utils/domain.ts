@@ -472,39 +472,15 @@ export function categoriaInicialSaida(permissoesUsuario: readonly Permissao[]): 
 }
 
 export const secoesPermissoes = [
-  // Secao PROPRIA, e nao dentro de "Colaboradores": a separacao entre admissao e cadastro
-  // operacional precisa aparecer para quem concede permissao, senao alguem marca a linha errada
-  // achando que e a mesma coisa. Sem esta entrada as sete permissoes cairiam em "Outras".
-  { titulo: "Admissões", prefixos: ["admissoes_", "menu_admissoes"] },
-  { titulo: "Áreas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
-  { titulo: "Caixa", prefixos: ["caixa_", "caixas_", "menu_caixa"] },
-  { titulo: "Clientes", prefixos: ["cadastro_clientes", "menu_clientes"] },
-  { titulo: "Colaboradores", prefixos: ["cadastro_colaboradores", "menu_colaboradores"] },
-  { titulo: "Contas", prefixos: ["cadastro_contas", "menu_contas"] },
-  { titulo: "Contas a pagar", prefixos: ["contas_pagar", "menu_contas_pagar"] },
-  { titulo: "Despesas", prefixos: ["despesas", "menu_despesas"] },
-  { titulo: "Empresas", prefixos: ["cadastro_empresas", "menu_empresas"] },
-  // O código é legado, mas a pessoa configura a tela de Pendências operacionais, não um
-  // "fechamento com diferença". O nome claro também torna o acesso localizável na busca.
-  { titulo: "Pendências operacionais", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
-  { titulo: "Formas de pagamento", prefixos: ["cadastro_formas_pagamento", "menu_formas_pagamento"] },
-  { titulo: "Fornecedores", prefixos: ["cadastro_fornecedores", "menu_fornecedores"] },
-  { titulo: "Grupos", prefixos: ["cadastro_grupos", "menu_grupos"] },
-  { titulo: "Integrações", prefixos: ["integracoes", "menu_integracoes"] },
-  { titulo: "Mercadorias", prefixos: ["mercadorias", "menu_mercadorias"] },
-  { titulo: "PDV", prefixos: ["cadastro_pdv", "menu_pdv"] },
-  { titulo: "Permissões", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
-  { titulo: "Produtos", prefixos: ["cadastro_produtos", "menu_produtos"] },
-  { titulo: "Produtos mais vendidos", prefixos: ["relatorio_produtos", "menu_relatorio_produtos"] },
-  { titulo: "Relatório de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
-  { titulo: "Retiradas", prefixos: ["retiradas", "menu_retiradas"] },
-  { titulo: "Sócios e Gestores", prefixos: ["cadastro_socios_gestores"] },
-  { titulo: "Tema e aparência", prefixos: ["aparencia", "menu_aparencia"] },
-  { titulo: "Transferências", prefixos: ["transferencias", "menu_transferencias"] },
-  { titulo: "Unidades de medida", prefixos: ["cadastro_unidades_medida", "menu_unidades"] },
-  { titulo: "Usuários", prefixos: ["cadastro_usuarios", "menu_usuarios"] },
-  { titulo: "Vendas", prefixos: ["entradas", "menu_entradas"] },
-  { titulo: "Outras", prefixos: [] }
+  { titulo: "Caixa e fechamento", prefixos: ["caixa_", "caixas_", "fechamento_com_diferenca", "menu_caixa", "menu_fechamento"] },
+  { titulo: "Transferências e cofre", prefixos: ["transferencias", "cadastro_lacres", "menu_transferencias"] },
+  { titulo: "Lançamentos e pagamentos", prefixos: ["despesas", "mercadorias", "retiradas", "lancamentos_recorrencia", "contas_pagar", "menu_despesas", "menu_mercadorias", "menu_retiradas", "menu_contas_pagar"] },
+  { titulo: "Vendas, clientes e pedidos", prefixos: ["entradas", "relatorio_vendas", "cadastro_clientes", "pedidos", "campanhas", "promocoes", "menu_entradas", "menu_relatorio_vendas", "menu_clientes", "menu_pedidos", "menu_promocoes"] },
+  { titulo: "Produtos, estoque e fornecedores", prefixos: ["cadastro_produtos", "estoque_produtos", "perdas_sobras", "cadastro_fornecedores", "cadastro_ficha_tecnica", "cadastro_ingredientes", "cadastro_unidades_medida", "relatorio_produtos", "menu_produtos", "menu_estoque_produtos", "menu_perdas_sobras", "menu_fornecedores", "menu_ficha_tecnica", "menu_ingredientes", "menu_unidades", "menu_relatorio_produtos"] },
+  { titulo: "Pessoas e departamento pessoal", prefixos: ["admissoes_", "cadastro_colaboradores", "cadastro_areas_setores", "cadastro_turnos", "cadastro_funcoes", "folha_ponto", "avaliacao_", "relatorio_faltas", "relatorio_advertencias", "menu_admissoes", "menu_colaboradores", "menu_areas_setores", "menu_turnos", "menu_funcoes_operacionais", "menu_folha_ponto", "menu_avaliacao_", "menu_relatorio_faltas", "menu_relatorio_advertencias"] },
+  { titulo: "Financeiro e fiscal", prefixos: ["cadastro_contas", "cadastro_formas_pagamento", "relatorio_dre", "relatorio_fiscal", "cadastro_fiscal_produtos", "notas_fiscais", "cadastro_patrimonio", "menu_contas", "menu_formas_pagamento", "menu_relatorio_dre", "menu_relatorio_fiscal", "menu_fiscal_produtos", "menu_notas_fiscais", "menu_patrimonio"] },
+  { titulo: "Administração do sistema", prefixos: ["cadastro_empresas", "cadastro_usuarios", "cadastro_permissoes", "cadastro_grupos", "cadastro_socios_gestores", "cadastro_pdv", "aparencia", "integracoes", "mensagens_admin", "menu_empresas", "menu_usuarios", "menu_permissoes", "menu_grupos", "menu_pdv", "menu_aparencia", "menu_integracoes"] },
+  { titulo: "Visibilidade de telas", prefixos: ["menu_"] }
 ];
 
 export type SecaoPermissao = (typeof secoesPermissoes)[number];

@@ -854,6 +854,9 @@ export async function atualizarTransferencia(
     }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    // Uma conferencia conclui o movimento financeiro. Depois disso o valor, as contas e o lacre
+    // sao historico auditavel: corrigir nao pode reabrir o dinheiro que ja foi recebido.
+    if (previa?.status === "recebido") throw new Error("Transferencia ja conferida nao pode ser editada");
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da transferencia.
     const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
     // R-165 · ORDEM GLOBAL: `contas` antes da linha. Aqui entram as QUATRO pontas possiveis —
@@ -870,9 +873,12 @@ export async function atualizarTransferencia(
       throw new Error("Registro nao encontrado");
     }
     // Retrato SOB a trava: confirmacao/abertura podem ter mudado o CAIXA da linha entre a leitura
-    // e o lock — a revalidacao compara empresa e caixa_id do retrato atual (status nao entra: o
-    // PUT sempre aceitou editar transferencia recebida/agendada, e mudar isso e outra decisao).
+    // e o lock — a revalidacao compara empresa e caixa_id do retrato atual e tambem preserva a
+    // imutabilidade de uma transferencia ja conferida.
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    // Revalida sob a trava: a conferencia pode ter vencido a corrida entre a leitura previa e o
+    // lock da transferencia. Sem esta segunda guarda o PUT alteraria uma linha ja recebida.
+    if (existente?.status === "recebido") throw new Error("Transferencia ja conferida nao pode ser editada");
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     if (existente) {
       if (existente.tempoConfirmacao !== dados.tempoConfirmacao) {

@@ -3,6 +3,7 @@
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
 const {
+  cat,
   fotoDocumentoPreview,
   fotoDocumentoExistente,
   onFotoDocumento,
@@ -13,8 +14,8 @@ const {
 </script>
 
 <template>
-  <!-- Duas fotos -->
-  <div class="lc-dois">
+  <!-- Retirada nao tem documento fiscal nem anexo interno. -->
+  <div v-if="cat !== 'retirada'" class="lc-dois">
     <label class="lc-foto">
       <span class="lc-campo-lbl">Foto (Recibo/Boleto/Nota)</span>
       <input

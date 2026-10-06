@@ -45,7 +45,12 @@ function iconeStatus(status: string): string {
 }
 
 function permiteEditar(op: OperacaoResumo): boolean {
-  return Boolean(props.podeEditar && !op.possuiPlanejamentoRetorno && !op.ehPlanejamentoRetorno);
+  return Boolean(
+    props.podeEditar &&
+      op.status !== "recebido" &&
+      !op.possuiPlanejamentoRetorno &&
+      !op.ehPlanejamentoRetorno
+  );
 }
 
 function permiteConferir(op: OperacaoResumo): boolean {
