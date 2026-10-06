@@ -85,7 +85,7 @@ watch(
     aria-labelledby="movimentacoes-fechamento-titulo"
     data-teste="fechamento-movimentacoes"
   >
-    <span class="fechamento-movimentacoes__sobretitulo">Etapa 4 · movimentações</span>
+    <span class="fechamento-movimentacoes__sobretitulo">Etapa 4 · relatório final</span>
     <h3 id="movimentacoes-fechamento-titulo">Relatório final do turno</h3>
     <p class="text-body-2 text-medium-emphasis">Vendas, maquininha e movimentos registrados neste caixa.</p>
 
@@ -133,18 +133,21 @@ watch(
           </div>
           <v-chip size="small" color="success" variant="tonal">{{ vendas?.quantidade ?? 0 }} vendas</v-chip>
         </header>
-        <div v-if="vendas?.porFormaPagamento.length" class="fechamento-movimentacoes__formas">
-          <article
-            v-for="forma in vendas.porFormaPagamento"
-            :key="forma.formaPagamento"
-            :class="`fechamento-movimentacoes__forma--${forma.categoriaFechamentoCaixa ?? 'outros'}`"
-          >
-            <span>{{ forma.formaPagamento }}</span>
-            <strong>{{ dinheiro(forma.total) }}</strong>
-            <small>{{ forma.quantidade }} venda{{ forma.quantidade === 1 ? "" : "s" }}</small>
-          </article>
-        </div>
-        <p v-else class="fechamento-movimentacoes__vazio">Gere o relatório de vendas na etapa anterior.</p>
+        <details class="fechamento-movimentacoes__detalhes">
+          <summary>Ver pagamentos por tipo</summary>
+          <div v-if="vendas?.porFormaPagamento.length" class="fechamento-movimentacoes__formas">
+            <article
+              v-for="forma in vendas.porFormaPagamento"
+              :key="forma.formaPagamento"
+              :class="`fechamento-movimentacoes__forma--${forma.categoriaFechamentoCaixa ?? 'outros'}`"
+            >
+              <span>{{ forma.formaPagamento }}</span>
+              <strong>{{ dinheiro(forma.total) }}</strong>
+              <small>{{ forma.quantidade }} venda{{ forma.quantidade === 1 ? "" : "s" }}</small>
+            </article>
+          </div>
+          <p v-else class="fechamento-movimentacoes__vazio">Gere o relatório de vendas na etapa anterior.</p>
+        </details>
       </section>
 
       <section
@@ -158,15 +161,18 @@ watch(
           </div>
           <v-icon icon="mdi-credit-card-chip-outline" size="22" />
         </header>
-        <div class="fechamento-movimentacoes__formas">
-          <article v-for="forma in formasMaquininha" :key="forma.chave">
-            <span>{{ forma.titulo }}</span>
-            <strong>{{
-              liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!)
-            }}</strong>
-            <small>Final menos inicial</small>
-          </article>
-        </div>
+        <details class="fechamento-movimentacoes__detalhes">
+          <summary>Ver valores por maquininha</summary>
+          <div class="fechamento-movimentacoes__formas">
+            <article v-for="forma in formasMaquininha" :key="forma.chave">
+              <span>{{ forma.titulo }}</span>
+              <strong>{{
+                liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!)
+              }}</strong>
+              <small>Final menos inicial</small>
+            </article>
+          </div>
+        </details>
       </section>
 
       <section v-if="transferencias.length" class="fechamento-movimentacoes__bloco" aria-label="Sangrias e lacres">
@@ -177,13 +183,16 @@ watch(
           </div>
           <v-icon icon="mdi-bag-personal-outline" size="22" />
         </header>
-        <div class="fechamento-movimentacoes__formas">
-          <article v-for="item in transferencias" :key="item.id">
-            <span>{{ item.tipo === "sangria" ? "Sangria" : "Retorno" }}</span>
-            <strong>{{ dinheiro(item.valor) }}</strong>
-            <small>Lacre: {{ item.lacre || "não informado" }}</small>
-          </article>
-        </div>
+        <details class="fechamento-movimentacoes__detalhes">
+          <summary>Ver sangrias, retornos e lacres</summary>
+          <div class="fechamento-movimentacoes__formas">
+            <article v-for="item in transferencias" :key="item.id">
+              <span>{{ item.tipo === "sangria" ? "Sangria" : "Retorno" }}</span>
+              <strong>{{ dinheiro(item.valor) }}</strong>
+              <small>Lacre: {{ item.lacre || "não informado" }}</small>
+            </article>
+          </div>
+        </details>
       </section>
 
       <section
@@ -198,32 +207,35 @@ watch(
           </div>
           <v-icon icon="mdi-swap-horizontal" size="22" />
         </header>
-        <dl class="fechamento-movimentacoes__totais">
-          <div class="fechamento-movimentacoes__total--entradas">
-            <dt>Entradas no PDV</dt>
-            <dd>{{ dinheiro(resumo.totalEntradas) }}</dd>
-          </div>
-          <div class="fechamento-movimentacoes__total--transferencias-entrada">
-            <dt>Transferências recebidas</dt>
-            <dd>{{ dinheiro(resumo.totalTransferenciasEntrada ?? 0) }}</dd>
-          </div>
-          <div class="fechamento-movimentacoes__total--transferencias-saida">
-            <dt>Transferências enviadas</dt>
-            <dd>{{ dinheiro(resumo.totalTransferenciasSaida ?? 0) }}</dd>
-          </div>
-          <div class="fechamento-movimentacoes__total--despesas">
-            <dt>Despesas</dt>
-            <dd>{{ dinheiro(resumo.totalDespesas) }}</dd>
-          </div>
-          <div class="fechamento-movimentacoes__total--mercadorias">
-            <dt>Mercadorias</dt>
-            <dd>{{ dinheiro(resumo.totalMercadorias ?? 0) }}</dd>
-          </div>
-          <div class="fechamento-movimentacoes__total--retiradas">
-            <dt>Retiradas</dt>
-            <dd>{{ dinheiro(resumo.totalRetiradas) }}</dd>
-          </div>
-        </dl>
+        <details class="fechamento-movimentacoes__detalhes">
+          <summary>Ver entradas e saídas detalhadas</summary>
+          <dl class="fechamento-movimentacoes__totais">
+            <div class="fechamento-movimentacoes__total--entradas">
+              <dt>Entradas no PDV</dt>
+              <dd>{{ dinheiro(resumo.totalEntradas) }}</dd>
+            </div>
+            <div class="fechamento-movimentacoes__total--transferencias-entrada">
+              <dt>Transferências recebidas</dt>
+              <dd>{{ dinheiro(resumo.totalTransferenciasEntrada ?? 0) }}</dd>
+            </div>
+            <div class="fechamento-movimentacoes__total--transferencias-saida">
+              <dt>Transferências enviadas</dt>
+              <dd>{{ dinheiro(resumo.totalTransferenciasSaida ?? 0) }}</dd>
+            </div>
+            <div class="fechamento-movimentacoes__total--despesas">
+              <dt>Despesas</dt>
+              <dd>{{ dinheiro(resumo.totalDespesas) }}</dd>
+            </div>
+            <div class="fechamento-movimentacoes__total--mercadorias">
+              <dt>Mercadorias</dt>
+              <dd>{{ dinheiro(resumo.totalMercadorias ?? 0) }}</dd>
+            </div>
+            <div class="fechamento-movimentacoes__total--retiradas">
+              <dt>Retiradas</dt>
+              <dd>{{ dinheiro(resumo.totalRetiradas) }}</dd>
+            </div>
+          </dl>
+        </details>
       </section>
     </template>
   </section>
@@ -346,6 +358,33 @@ watch(
   gap: 10px;
   margin-top: 12px;
 }
+.fechamento-movimentacoes__detalhes {
+  margin-top: 10px;
+}
+.fechamento-movimentacoes__detalhes summary {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  cursor: pointer;
+  color: var(--cx-brand-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  list-style: none;
+}
+.fechamento-movimentacoes__detalhes summary::-webkit-details-marker {
+  display: none;
+}
+.fechamento-movimentacoes__detalhes summary::after {
+  width: 18px;
+  margin-left: auto;
+  color: var(--cx-ink-soft);
+  content: "⌄";
+  font-size: 1.1rem;
+  text-align: center;
+}
+.fechamento-movimentacoes__detalhes[open] summary::after {
+  transform: rotate(180deg);
+}
 .fechamento-movimentacoes__formas article {
   display: grid;
   gap: 3px;
@@ -436,6 +475,20 @@ watch(
   }
 }
 @media (max-width: 420px) {
+  .fechamento-movimentacoes__visao,
+  .fechamento-movimentacoes__totais {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fechamento-movimentacoes__bloco {
+    padding: 12px;
+  }
+  .fechamento-movimentacoes__visao article,
+  .fechamento-movimentacoes__formas article,
+  .fechamento-movimentacoes__totais > div {
+    padding: 10px;
+  }
+}
+@media (max-width: 340px) {
   .fechamento-movimentacoes__visao,
   .fechamento-movimentacoes__totais {
     grid-template-columns: 1fr;
