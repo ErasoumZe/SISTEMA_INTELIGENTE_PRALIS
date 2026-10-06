@@ -1,0 +1,5 @@
+ALTER TABLE "fechamentos_caixa_anexos" DROP CONSTRAINT "fechamentos_caixa_anexos_tipo_check";--> statement-breakpoint
+ALTER TABLE "fechamentos_caixa_relatorios_maquininha" ADD COLUMN "leitura_referencia_relatorio_id" uuid;--> statement-breakpoint
+ALTER TABLE "fechamentos_caixa_relatorios_maquininha" ADD CONSTRAINT "fechamentos_caixa_relatorios_maquininha_leitura_referencia_relatorio_id_fechamentos_caixa_relatorios_maquininha_id_fk" FOREIGN KEY ("leitura_referencia_relatorio_id") REFERENCES "public"."fechamentos_caixa_relatorios_maquininha"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "fechamentos_caixa_relatorios_maquininha_referencia_idx" ON "fechamentos_caixa_relatorios_maquininha" USING btree ("leitura_referencia_relatorio_id");--> statement-breakpoint
+ALTER TABLE "fechamentos_caixa_anexos" ADD CONSTRAINT "fechamentos_caixa_anexos_tipo_check" CHECK ("fechamentos_caixa_anexos"."tipo" in ('folha_fechamento', 'comprovante_cartao', 'relatorio_vendas_creare'));

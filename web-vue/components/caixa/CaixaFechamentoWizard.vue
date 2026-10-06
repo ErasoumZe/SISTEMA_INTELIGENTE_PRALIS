@@ -66,7 +66,7 @@ const etapas = [
   { id: 3, titulo: "Maquininha", icone: "mdi-credit-card-outline", cor: "var(--cx-brand)", classe: "maquininha" },
   {
     id: 4,
-    titulo: "Movimentações",
+    titulo: "Relatório final",
     icone: "mdi-swap-horizontal",
     cor: "var(--cat-retiradas-base)",
     classe: "movimentacoes"
@@ -221,7 +221,7 @@ function irPara(etapa: number) {
         data-teste="avancar-maquininha-fechamento"
         @click="etapaAtual = 4"
       >
-        Ver movimentações
+        Ver relatório final
       </v-btn>
       <v-btn
         v-else

@@ -57,7 +57,6 @@ import {
 } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
-import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
@@ -1604,7 +1603,6 @@ export async function calcularTotaisCaixaOperacionalRepository(
   db: ExecutorBanco = banco
 ): Promise<TotaisCaixaCentavos> {
   const totais: TotaisCaixaCentavos = {
-    vendasDinheiro: 0,
     entradas: 0,
     transferencias: 0,
     transferenciasEntrada: 0,
@@ -1654,7 +1652,6 @@ export async function calcularTotaisCaixaOperacionalRepository(
         .select({
           formaPagamentoId: vendasPagamentos.formaPagamentoId,
           formaPagamento: formasPagamento.nome,
-          categoriaFechamentoCaixa: formasPagamento.categoriaFechamentoCaixa,
           formaPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
           totalPago: vendasPagamentos.totalPago,
           numeroVendas: vendasPagamentos.numeroVendas
@@ -1705,11 +1702,6 @@ export async function calcularTotaisCaixaOperacionalRepository(
   >();
   for (const pagamento of linhasPagamentos) {
     const formaPagamento = pagamento.formaPagamento?.trim() || pagamento.formaPagamentoAutomacao?.trim() || "Sem forma";
-    const categoria =
-      pagamento.categoriaFechamentoCaixa && pagamento.categoriaFechamentoCaixa !== "outros"
-        ? pagamento.categoriaFechamentoCaixa
-        : categoriaFechamentoPorNome(formaPagamento);
-    if (categoria === "dinheiro") totais.vendasDinheiro += paraCentavos(pagamento.totalPago);
     const chave = pagamento.formaPagamentoId ?? `automacao:${formaPagamento.toLocaleLowerCase("pt-BR")}`;
     const atual = porFormaPagamento.get(chave) ?? {
       formaPagamentoId: pagamento.formaPagamentoId ?? null,
@@ -1874,6 +1866,7 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
       voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
       anexoInicialId: fechamentosCaixaRelatoriosMaquininha.anexoInicialId,
       anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
+      leituraReferenciaRelatorioId: fechamentosCaixaRelatoriosMaquininha.leituraReferenciaRelatorioId,
       dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
       criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
       atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
@@ -1889,9 +1882,42 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   return relatorio ?? null;
 }
 
-// A leitura inicial de um turno é sempre a leitura final do último fechamento concluído da
-// mesma maquininha. Não usamos data do navegador, nem um relatório de outro equipamento: isso
-// evita fabricar um saldo-base e deixa a origem auditável no JSON revisado.
+export async function buscarRelatorioMaquininhaPrecedenteRepository(
+  input: { empresaId: string; pdvId: string; maquininhaId: string; dataMovimento: string; fechamentoCaixaId: string },
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .select({
+      id: fechamentosCaixaRelatoriosMaquininha.id,
+      fechamentoCaixaId: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
+      creditoFinal: fechamentosCaixaRelatoriosMaquininha.creditoFinal,
+      debitoFinal: fechamentosCaixaRelatoriosMaquininha.debitoFinal,
+      pixFinal: fechamentosCaixaRelatoriosMaquininha.pixFinal,
+      voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
+      anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
+      fechadoEm: fechamentosCaixa.fechadoEm
+    })
+    .from(fechamentosCaixaRelatoriosMaquininha)
+    .innerJoin(fechamentosCaixa, eq(fechamentosCaixa.id, fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId))
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosMaquininha.empresaId, input.empresaId),
+        eq(fechamentosCaixa.pdvId, input.pdvId),
+        eq(fechamentosCaixa.maquininhaId, input.maquininhaId),
+        eq(fechamentosCaixa.dataMovimento, input.dataMovimento),
+        eq(fechamentosCaixa.status, "fechado"),
+        ne(fechamentosCaixa.id, input.fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosMaquininha.versao, 6)
+      )
+    )
+    .orderBy(desc(fechamentosCaixa.fechadoEm))
+    .limit(1);
+  return relatorio ?? null;
+}
+
+// A leitura inicial de um turno Ã© sempre a leitura final do Ãºltimo fechamento concluÃ­do da
+// MESMA maquininha. NÃ£o usamos data do navegador, nem um relatÃ³rio de outro equipamento: isso
+// evita fabricar um saldo-base e deixa a origem auditÃ¡vel no JSON revisado.
 export async function salvarRelatorioMaquininhaFechamentoRepository(
   input: {
     fechamentoCaixaId: string;
@@ -1909,6 +1935,7 @@ export async function salvarRelatorioMaquininhaFechamentoRepository(
     voucherFinal: number | null;
     anexoInicialId: string | null;
     anexoFinalId: string | null;
+    leituraReferenciaRelatorioId: string | null;
     dadosRevisados: JsonValue;
     criadoPor: string;
   },
@@ -1943,6 +1970,7 @@ export async function salvarRelatorioMaquininhaFechamentoRepository(
         voucherFinal: input.voucherFinal === null ? null : String(input.voucherFinal),
         anexoInicialId: input.anexoInicialId,
         anexoFinalId: input.anexoFinalId,
+        leituraReferenciaRelatorioId: input.leituraReferenciaRelatorioId,
         dadosRevisados: input.dadosRevisados,
         criadoPor: input.criadoPor,
         atualizadoEm: new Date()
@@ -1962,6 +1990,7 @@ export async function salvarRelatorioMaquininhaFechamentoRepository(
       voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
       anexoInicialId: fechamentosCaixaRelatoriosMaquininha.anexoInicialId,
       anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
+      leituraReferenciaRelatorioId: fechamentosCaixaRelatoriosMaquininha.leituraReferenciaRelatorioId,
       dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
       criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
       atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
@@ -2162,7 +2191,6 @@ export async function listarHistoricoCaixaRepository(
       turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
-      fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,
       fechadoPor: fechamentosCaixa.fechadoPor,
       fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,

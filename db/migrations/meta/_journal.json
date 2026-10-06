@@ -379,6 +379,13 @@
       "when": 1791289193013,
       "tag": "0053_empty_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791315671982,
+      "tag": "0054_fechamento_creare_maquininha_v6",
+      "breakpoints": true
     }
   ]
 }

@@ -106,13 +106,6 @@ function solicitarFechamento() {
     </header>
 
     <section class="fechamento-etapas__situacao" aria-label="Situação do fechamento">
-      <div class="fechamento-etapas__saldo-esperado" data-teste="valor-esperado-fechamento">
-        <v-icon icon="mdi-calculator-variant-outline" size="24" />
-        <div>
-          <span>Valor físico esperado</span><strong>{{ dinheiro(saldoAtual) }}</strong>
-        </div>
-        <small>Dinheiro e moedas que devem seguir para a Tesouraria.</small>
-      </div>
       <v-alert
         v-if="fechamentoDivergente"
         :type="diferencaFechamento < 0 ? 'error' : 'warning'"
@@ -170,8 +163,6 @@ function solicitarFechamento() {
             v-model="fechamento.valorTotal"
             label="Total contado"
             icone="mdi-cash-multiple"
-            :hint="`Esperado: ${dinheiro(saldoAtual)}`"
-            persistent-hint
             :error="fechamentoComposicaoInvalida"
             :error-messages="fechamentoComposicaoInvalida ? 'Total deve ser igual a dinheiro físico mais moedas.' : ''"
           />

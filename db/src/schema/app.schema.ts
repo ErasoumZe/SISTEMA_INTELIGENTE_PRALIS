@@ -2077,7 +2077,7 @@ export const fechamentosCaixaAnexos = pgTable(
     id: idUuid,
     empresaId,
     fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
-    tipo: text("tipo").notNull().$type<"folha_fechamento" | "comprovante_cartao">(),
+    tipo: text("tipo").notNull().$type<"folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare">(),
     caminho: text("caminho").notNull(),
     nomeOriginal: text("nome_original").notNull(),
     nomeArquivo: text("nome_arquivo").notNull(),
@@ -2099,7 +2099,10 @@ export const fechamentosCaixaAnexos = pgTable(
       foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
       name: "fechamentos_caixa_anexos_fechamento_empresa_fk"
     }).onDelete("restrict"),
-    check("fechamentos_caixa_anexos_tipo_check", sql`${table.tipo} in ('folha_fechamento', 'comprovante_cartao')`),
+    check(
+      "fechamentos_caixa_anexos_tipo_check",
+      sql`${table.tipo} in ('folha_fechamento', 'comprovante_cartao', 'relatorio_vendas_creare')`
+    ),
     check("fechamentos_caixa_anexos_tamanho_check", sql`${table.tamanhoBytes} > 0`),
     check(
       "fechamentos_caixa_anexos_ia_status_check",
@@ -2134,6 +2137,12 @@ export const fechamentosCaixaRelatoriosMaquininha = pgTable(
     voucherFinal: valorMonetario("voucher_final"),
     anexoInicialId: uuid("anexo_inicial_id").references(() => fechamentosCaixaAnexos.id, { onDelete: "restrict" }),
     anexoFinalId: uuid("anexo_final_id").references(() => fechamentosCaixaAnexos.id, { onDelete: "restrict" }),
+    // V6: a leitura da tarde referencia explicitamente a leitura acumulada da manha do mesmo
+    // PDV/maquininha/dia operacional. A FK impede que a cadeia auditavel aponte para um relatorio removido.
+    leituraReferenciaRelatorioId: uuid("leitura_referencia_relatorio_id").references(
+      (): AnyPgColumn => fechamentosCaixaRelatoriosMaquininha.id,
+      { onDelete: "restrict" }
+    ),
     dadosRevisados: jsonb("dados_revisados").notNull(),
     criadoPor: text("criado_por")
       .notNull()
@@ -2148,7 +2157,8 @@ export const fechamentosCaixaRelatoriosMaquininha = pgTable(
       name: "fechamentos_caixa_relatorios_maquininha_fechamento_empresa_fk"
     }).onDelete("restrict"),
     unique("fechamentos_caixa_relatorios_maquininha_fechamento_unico").on(table.fechamentoCaixaId),
-    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm)
+    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm),
+    index("fechamentos_caixa_relatorios_maquininha_referencia_idx").on(table.leituraReferenciaRelatorioId)
   ]
 );
 
