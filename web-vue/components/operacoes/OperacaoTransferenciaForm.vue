@@ -21,6 +21,7 @@ const {
   lacresRetornoAtivos,
   confirmacaoAberta,
   contaOrigemSelecionada,
+  destinoSemPdv,
   preparandoMaloteParaCaixa,
   composicaoMaloteInformada,
   composicaoMaloteBate,
@@ -120,6 +121,10 @@ const {
         <span
           >Disponível em {{ contaOrigemSelecionada.nome }}: <strong>{{ dinheiro(saldoOrigem) }}</strong></span
         >
+      </div>
+      <div v-if="destinoSemPdv" class="tr-aviso-malote" role="status">
+        Esta conta não está vinculada a um PDV. Vincule-a a um PDV para informar composição do malote, lacres de
+        retorno/sangria e lacre de fechamento.
       </div>
 
       <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">

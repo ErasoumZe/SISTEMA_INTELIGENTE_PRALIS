@@ -1,0 +1,409 @@
+<script setup lang="ts">
+import type { ResumoCaixa } from "~/types/padaria";
+import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
+import { dinheiro } from "~/utils/domain";
+
+type RelatorioVendas = {
+  dados: { vendas: TotaisRelatorioVendas; canceladas: unknown[] };
+};
+type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
+type RelatorioMaquininha = { relatorio: { dadosRevisados: unknown } | null };
+
+const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string }>();
+const { apiGet } = useApi();
+const carregando = ref(false);
+const erro = ref("");
+const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
+const canceladas = ref<unknown[]>([]);
+const leituraManha = ref<LeituraMaquininha>({});
+const leituraTarde = ref<LeituraMaquininha>({});
+const formasMaquininha = [
+  { chave: "credito", titulo: "Crédito" },
+  { chave: "debito", titulo: "Débito" },
+  { chave: "pix", titulo: "Pix" },
+  { chave: "voucher", titulo: "Voucher" }
+] as const;
+
+function numero(valor: unknown) {
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : null;
+}
+function leitura(valor: unknown): LeituraMaquininha {
+  if (!valor || typeof valor !== "object") return {};
+  const dados = valor as Record<string, unknown>;
+  return Object.fromEntries(formasMaquininha.map(({ chave }) => [chave, numero(dados[chave])])) as LeituraMaquininha;
+}
+function liquidoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
+  const inicial = leituraManha.value[chave];
+  const final = leituraTarde.value[chave];
+  return typeof inicial === "number" && typeof final === "number" ? final - inicial : null;
+}
+async function carregar() {
+  if (!props.caixaId) return;
+  carregando.value = true;
+  erro.value = "";
+  try {
+    const [relatorioVendas, relatorioMaquininha] = await Promise.all([
+      apiGet<RelatorioVendas | null>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-vendas`),
+      apiGet<RelatorioMaquininha>(`/api/caixa/${encodeURIComponent(props.caixaId)}/relatorio-maquininha`)
+    ]);
+    vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
+    canceladas.value = relatorioVendas?.dados.canceladas ?? [];
+    const dados = relatorioMaquininha.relatorio?.dadosRevisados;
+    const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
+    leituraManha.value = leitura(revisado.leituraManha);
+    leituraTarde.value = leitura(revisado.leituraTarde);
+  } catch {
+    erro.value = "Não foi possível carregar o consolidado deste caixa.";
+  } finally {
+    carregando.value = false;
+  }
+}
+
+watch(
+  () => props.caixaId,
+  () => void carregar(),
+  { immediate: true }
+);
+</script>
+
+<template>
+  <section
+    id="fechamento-painel-4"
+    class="fechamento-movimentacoes"
+    aria-labelledby="movimentacoes-fechamento-titulo"
+    data-teste="fechamento-movimentacoes"
+  >
+    <span class="fechamento-movimentacoes__sobretitulo">Etapa 4 · movimentações</span>
+    <h3 id="movimentacoes-fechamento-titulo">Consolidado do turno</h3>
+    <p class="text-body-2 text-medium-emphasis">Vendas, maquininha e movimentos registrados neste caixa.</p>
+
+    <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
+    <v-alert v-else-if="carregando" type="info" variant="tonal" density="compact" class="mt-4">
+      Carregando o consolidado do turno.
+    </v-alert>
+
+    <template v-else>
+      <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
+        <article class="fechamento-movimentacoes__vendas">
+          <v-icon icon="mdi-receipt-text-check-outline" size="22" />
+          <span>Vendas aprovadas</span>
+          <strong>{{ vendas?.quantidade ?? 0 }}</strong>
+          <small>{{ dinheiro(vendas?.totalGeral ?? 0) }}</small>
+        </article>
+        <article class="fechamento-movimentacoes__canceladas">
+          <v-icon icon="mdi-receipt-text-remove-outline" size="22" />
+          <span>Canceladas</span>
+          <strong>{{ canceladas.length }}</strong>
+          <small>Fora do total aprovado</small>
+        </article>
+        <article class="fechamento-movimentacoes__saldo" v-if="resumo">
+          <v-icon icon="mdi-calculator-variant-outline" size="22" />
+          <span>Saldo esperado</span>
+          <strong>{{ dinheiro(resumo.saldo) }}</strong>
+          <small>Para a conferência física</small>
+        </article>
+      </section>
+
+      <section
+        class="fechamento-movimentacoes__bloco fechamento-movimentacoes__bloco--vendas"
+        aria-labelledby="formas-venda-titulo"
+      >
+        <header>
+          <div>
+            <span>Vendas</span>
+            <h4 id="formas-venda-titulo">Pagamentos por tipo</h4>
+          </div>
+          <v-chip size="small" color="success" variant="tonal">{{ vendas?.quantidade ?? 0 }} vendas</v-chip>
+        </header>
+        <div v-if="vendas?.porFormaPagamento.length" class="fechamento-movimentacoes__formas">
+          <article
+            v-for="forma in vendas.porFormaPagamento"
+            :key="forma.formaPagamento"
+            :class="`fechamento-movimentacoes__forma--${forma.categoriaFechamentoCaixa ?? 'outros'}`"
+          >
+            <span>{{ forma.formaPagamento }}</span>
+            <strong>{{ dinheiro(forma.total) }}</strong>
+            <small>{{ forma.quantidade }} venda{{ forma.quantidade === 1 ? "" : "s" }}</small>
+          </article>
+        </div>
+        <p v-else class="fechamento-movimentacoes__vazio">Gere o relatório de vendas na etapa anterior.</p>
+      </section>
+
+      <section
+        class="fechamento-movimentacoes__bloco fechamento-movimentacoes__bloco--maquininha"
+        aria-labelledby="maquininha-consolidada-titulo"
+      >
+        <header>
+          <div>
+            <span>Maquininha</span>
+            <h4 id="maquininha-consolidada-titulo">Líquido informado</h4>
+          </div>
+          <v-icon icon="mdi-credit-card-chip-outline" size="22" />
+        </header>
+        <div class="fechamento-movimentacoes__formas">
+          <article v-for="forma in formasMaquininha" :key="forma.chave">
+            <span>{{ forma.titulo }}</span>
+            <strong>{{
+              liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!)
+            }}</strong>
+            <small>Final menos inicial</small>
+          </article>
+        </div>
+      </section>
+
+      <section
+        v-if="resumo"
+        class="fechamento-movimentacoes__bloco fechamento-movimentacoes__bloco--caixa"
+        aria-labelledby="movimentos-caixa-titulo"
+      >
+        <header>
+          <div>
+            <span>Caixa</span>
+            <h4 id="movimentos-caixa-titulo">Entradas e saídas</h4>
+          </div>
+          <v-icon icon="mdi-swap-horizontal" size="22" />
+        </header>
+        <dl class="fechamento-movimentacoes__totais">
+          <div class="fechamento-movimentacoes__total--entradas">
+            <dt>Entradas no PDV</dt>
+            <dd>{{ dinheiro(resumo.totalEntradas) }}</dd>
+          </div>
+          <div class="fechamento-movimentacoes__total--transferencias-entrada">
+            <dt>Transferências recebidas</dt>
+            <dd>{{ dinheiro(resumo.totalTransferenciasEntrada ?? 0) }}</dd>
+          </div>
+          <div class="fechamento-movimentacoes__total--transferencias-saida">
+            <dt>Transferências enviadas</dt>
+            <dd>{{ dinheiro(resumo.totalTransferenciasSaida ?? 0) }}</dd>
+          </div>
+          <div class="fechamento-movimentacoes__total--despesas">
+            <dt>Despesas</dt>
+            <dd>{{ dinheiro(resumo.totalDespesas) }}</dd>
+          </div>
+          <div class="fechamento-movimentacoes__total--mercadorias">
+            <dt>Mercadorias</dt>
+            <dd>{{ dinheiro(resumo.totalMercadorias ?? 0) }}</dd>
+          </div>
+          <div class="fechamento-movimentacoes__total--retiradas">
+            <dt>Retiradas</dt>
+            <dd>{{ dinheiro(resumo.totalRetiradas) }}</dd>
+          </div>
+        </dl>
+      </section>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.fechamento-movimentacoes {
+  padding: clamp(16px, 3vw, 28px);
+  border: 1px solid var(--cx-line);
+  border-radius: 16px;
+  background: var(--cx-surface);
+}
+.fechamento-movimentacoes h3 {
+  margin: 0 0 4px;
+}
+.fechamento-movimentacoes__sobretitulo {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--cat-retiradas-tinta);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.fechamento-movimentacoes__totais {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.fechamento-movimentacoes__visao {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.fechamento-movimentacoes__visao article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface-sunken);
+}
+.fechamento-movimentacoes__visao :deep(.v-icon) {
+  grid-row: span 2;
+}
+.fechamento-movimentacoes__visao span,
+.fechamento-movimentacoes__visao small {
+  color: var(--cx-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.fechamento-movimentacoes__visao strong {
+  font-size: 1.15rem;
+}
+.fechamento-movimentacoes__visao small {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  font-weight: 500;
+}
+.fechamento-movimentacoes__vendas {
+  border-color: color-mix(in srgb, var(--cx-positive) 48%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cx-positive) 16%, var(--cx-surface-sunken)) !important;
+}
+.fechamento-movimentacoes__vendas :deep(.v-icon) {
+  color: var(--cx-positive);
+}
+.fechamento-movimentacoes__canceladas {
+  border-color: color-mix(in srgb, var(--cx-attention) 48%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cx-attention) 16%, var(--cx-surface-sunken)) !important;
+}
+.fechamento-movimentacoes__canceladas :deep(.v-icon) {
+  color: var(--cx-attention);
+}
+.fechamento-movimentacoes__bloco {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface-sunken);
+}
+.fechamento-movimentacoes__bloco--vendas {
+  border-color: color-mix(in srgb, var(--cx-positive) 42%, var(--cx-line));
+  background: color-mix(in srgb, var(--cx-positive) 14%, var(--cx-surface));
+}
+.fechamento-movimentacoes__bloco--maquininha {
+  border-color: color-mix(in srgb, var(--cx-brand) 48%, var(--cx-line));
+  background: color-mix(in srgb, var(--cx-brand) 14%, var(--cx-surface));
+}
+.fechamento-movimentacoes__bloco--caixa {
+  border-color: color-mix(in srgb, var(--cat-retiradas-base) 42%, var(--cx-line));
+  background: color-mix(in srgb, var(--cat-retiradas-base) 14%, var(--cx-surface));
+}
+.fechamento-movimentacoes__bloco header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fechamento-movimentacoes__bloco header span {
+  display: block;
+  color: var(--cx-brand-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.fechamento-movimentacoes__bloco h4 {
+  margin: 2px 0 0;
+}
+.fechamento-movimentacoes__bloco > header > :deep(.v-icon) {
+  color: var(--cx-brand-text);
+}
+.fechamento-movimentacoes__formas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.fechamento-movimentacoes__formas article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--cx-line);
+  border-radius: 10px;
+  background: var(--cx-surface);
+}
+.fechamento-movimentacoes__formas span,
+.fechamento-movimentacoes__formas small {
+  color: var(--cx-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.fechamento-movimentacoes__formas strong {
+  font-size: 1rem;
+}
+.fechamento-movimentacoes__forma--dinheiro {
+  border-color: color-mix(in srgb, var(--cx-positive) 45%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cx-positive) 24%, var(--cx-surface)) !important;
+}
+.fechamento-movimentacoes__forma--credito,
+.fechamento-movimentacoes__forma--voucher {
+  border-color: color-mix(in srgb, var(--cx-brand) 45%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cx-brand) 24%, var(--cx-surface)) !important;
+}
+.fechamento-movimentacoes__forma--debito {
+  border-color: color-mix(in srgb, var(--cat-retiradas-base) 45%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cat-retiradas-base) 24%, var(--cx-surface)) !important;
+}
+.fechamento-movimentacoes__forma--pix {
+  border-color: color-mix(in srgb, var(--cat-mercadorias-base) 45%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cat-mercadorias-base) 24%, var(--cx-surface)) !important;
+}
+.fechamento-movimentacoes__forma--crediario,
+.fechamento-movimentacoes__forma--outros {
+  border-color: color-mix(in srgb, var(--cx-attention) 45%, var(--cx-line)) !important;
+  background: color-mix(in srgb, var(--cx-attention) 24%, var(--cx-surface)) !important;
+}
+.fechamento-movimentacoes__vazio {
+  margin: 12px 0 0;
+  color: var(--cx-ink-soft);
+}
+.fechamento-movimentacoes__totais > div {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--cx-surface-sunken);
+}
+.fechamento-movimentacoes dt {
+  color: var(--cx-ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.fechamento-movimentacoes dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.fechamento-movimentacoes__saldo {
+  border: 1px solid var(--cat-resultado-base) !important;
+  background: var(--cat-resultado-soft) !important;
+}
+.fechamento-movimentacoes__total--entradas {
+  border-inline-start: 3px solid var(--cat-entradas-base);
+}
+.fechamento-movimentacoes__total--transferencias-entrada {
+  border-inline-start: 3px solid var(--cat-transferencias-base);
+}
+.fechamento-movimentacoes__total--transferencias-saida {
+  border-inline-start: 3px solid var(--cx-negative);
+}
+.fechamento-movimentacoes__total--despesas {
+  border-inline-start: 3px solid var(--cat-despesas-base);
+}
+.fechamento-movimentacoes__total--mercadorias {
+  border-inline-start: 3px solid var(--cat-mercadorias-base);
+}
+.fechamento-movimentacoes__total--retiradas {
+  border-inline-start: 3px solid var(--cat-retiradas-base);
+}
+@media (max-width: 720px) {
+  .fechamento-movimentacoes__visao,
+  .fechamento-movimentacoes__totais {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
+  .fechamento-movimentacoes__visao,
+  .fechamento-movimentacoes__totais {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

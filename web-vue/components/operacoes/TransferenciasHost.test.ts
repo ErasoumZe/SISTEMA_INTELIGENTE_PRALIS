@@ -9,17 +9,50 @@ vi.mock("~/composables/useApi", () => ({
   useApi: () => ({ apiGet: vi.fn(async () => [{ id: "lacre-1", numero: "S-001" }]) })
 }));
 
+function criarStatusCaixaAberto(): CaixaStatus {
+  return {
+    caixaAberto: {
+      id: "cx-1",
+      empresaId: "emp-1",
+      pdvId: "pdv-1",
+      pdvNome: "PDV 01",
+      pdvContaId: "conta-pdv-1",
+      usuarioId: "usuario-1",
+      usuarioCaixaId: "usuario-caixa-1",
+      usuarioCaixaNome: "Operadora",
+      colaboradorId: "colaborador-1",
+      dataMovimento: "2026-10-02",
+      dataHoraAbertura: "2026-10-02T08:00:00.000Z",
+      abertoEm: "2026-10-02T08:00:00.000Z",
+      dataHoraFechamento: null,
+      fechadoEm: null,
+      tokenEdicao: null,
+      turnoId: null,
+      turnoNome: null,
+      maquininhaId: null,
+      maquininhaApelido: null,
+      maquininhaNumeroSerie: null,
+      caixaResponsavelNomeAbertura: "Operadora",
+      supervisorResponsavelNomeAbertura: null,
+      observacao: null,
+      status: "aberto"
+    },
+    resumo: {
+      totalEntradas: 0,
+      totalTransferencias: 0,
+      totalDespesas: 0,
+      totalRetiradas: 0,
+      saldo: 100
+    },
+    lacreFechamentoReservado: null,
+    entregasPendentes: [],
+    planejamentosPendentes: []
+  };
+}
+
 function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
   const modalOperacaoAberto = ref(true);
-  const caixaStatus = ref<CaixaStatus | null>(
-    caixaAberto
-      ? ({
-          caixaAberto: { id: "cx-1", empresaId: "emp-1", caixaResponsavelNomeAbertura: "Operadora" },
-          resumo: { saldo: 100 },
-          planejamentosPendentes: []
-        } as CaixaStatus)
-      : null
-  );
+  const caixaStatus = ref<CaixaStatus | null>(caixaAberto ? criarStatusCaixaAberto() : null);
   const empresaId = ref("emp-1");
   const wrapper = shallowMount(TransferenciasHost, {
     global: {
@@ -63,6 +96,14 @@ function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
 }
 
 describe("host único +Novo / Transferências", () => {
+  it("mantém a faixa de transferência e suas duas ações no mesmo modal", () => {
+    const { wrapper } = montar(true, true, true);
+    expect(wrapper.get("h2").text()).toBe("Nova transferência");
+    expect(wrapper.get('[data-tab="nova"]').text()).toBe("Nova transferência");
+    expect(wrapper.get('[data-tab="retorno"]').text()).toBe("Retorno / sangria");
+    wrapper.unmount();
+  });
+
   it("operador com Caixa aberto entra no retorno, sem montar formulário contábil", async () => {
     const { wrapper } = montar(false, true, true);
     await flushPromises();
@@ -98,6 +139,16 @@ describe("host único +Novo / Transferências", () => {
     empresaId.value = "emp-2";
     await flushPromises();
     expect(modalOperacaoAberto.value).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("não mostra nenhuma transferência do PDV quando o Caixa está em fechamento", async () => {
+    const { wrapper, caixaStatus } = montar(true, true, true);
+    caixaStatus.value!.caixaAberto!.status = "em_fechamento";
+    await flushPromises();
+    expect(wrapper.text()).toContain("Caixa em fechamento.");
+    expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "CaixaRetornoSangriaForm" }).exists()).toBe(false);
     wrapper.unmount();
   });
 });

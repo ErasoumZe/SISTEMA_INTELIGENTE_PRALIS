@@ -234,8 +234,8 @@ describe("categoria Departamento pessoal no menu", () => {
 describe("+ NOVO por papel", () => {
   it("tem exatamente Saídas e Transferências — sem Entradas e sem duplicar categorias", () => {
     const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
-    expect(acoes.map((acao) => acao.id)).toEqual(["saidas", "transferencias"]);
-    expect(acoes.map((acao) => acao.titulo)).toEqual(["Saídas", "Transferências"]);
+    expect(acoes.map((acao) => acao.id)).toEqual(["transferencias", "saidas"]);
+    expect(acoes.map((acao) => acao.titulo)).toEqual(["Transferências", "Saídas"]);
   });
 
   it("remove Entradas do +Novo, preserva consulta no menu e mantém o modal de Saídas", () => {

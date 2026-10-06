@@ -4137,16 +4137,14 @@ button.sidebar-logo-alvo {
    para a faixa do meio, e nao remover do celular.
    ================================================================================================= */
 @media (width <= 768px) {
-  /* Duas linhas: a saudacao ocupa a primeira inteira, hora e data dividem a segunda. */
+  /* No telefone sobra somente o contexto operacional: hora e data curta em uma linha. */
   .shell-mobills .topbar-relogio {
-    flex-wrap: wrap;
-    gap: 0 var(--cx-sp-2);
-    row-gap: 0;
+    flex-wrap: nowrap;
+    gap: var(--cx-sp-2);
     line-height: 1.2;
   }
   .shell-mobills .topbar-saudacao {
-    display: block;
-    width: 100%;
+    display: none;
   }
   /* O nome cai. E a unica parte da composicao que a tela nao precisa dizer. */
   .shell-mobills .topbar-nome {

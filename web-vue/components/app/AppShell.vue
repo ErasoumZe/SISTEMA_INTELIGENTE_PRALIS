@@ -3,6 +3,7 @@ import type { AuthSession } from "@padaria/shared";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppSidebar from "~/components/app/AppSidebar.vue";
+import AppMobileBottomNav from "~/components/app/AppMobileBottomNav.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
@@ -19,6 +20,7 @@ const props = defineProps<{
   motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
   notificacoes?: Notificacao[];
+  acoesNovoIds?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -26,6 +28,8 @@ const emit = defineEmits<{
   (event: "abrirPendencias"): void;
   (event: "verificarNotificacao", id: string): void;
   (event: "verificarTodasNotificacoes"): void;
+  (event: "abrirSaidas"): void;
+  (event: "abrirTransferencias"): void;
 }>();
 
 const drawerRecolhido = ref(false);
@@ -190,7 +194,7 @@ onMounted(() => {
       <template #actions="{ rail: railAtual }"><slot name="actions" :rail="railAtual" /></template>
     </AppSidebar>
 
-    <v-main class="padaria-main">
+    <v-main class="padaria-main" :class="{ 'com-navegacao-mobile': viewportMobile }">
       <header class="padaria-topbar">
         <!-- ESQUERDA: no desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay)
              ainda e preciso um gatilho para abrir. -->
@@ -230,9 +234,9 @@ onMounted(() => {
 
                O AVISO DE CAIXA era um bloco no topo da sidebar ate hoje. Quem o preenche e o
                AppWorkspace, que e quem tem o status e a permissao — a casca so reserva o lugar. -->
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
+          <slot v-if="!viewportMobile" name="caixa" :caixa-aberto="caixaAberto" />
 
-          <v-menu v-if="empresas.length > 1" location="bottom end">
+          <v-menu v-if="!viewportMobile && empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">
               <button v-bind="menuProps" type="button" class="topbar-empresa" aria-label="Trocar de empresa">
                 <v-icon icon="mdi-domain" size="18" />
@@ -252,7 +256,7 @@ onMounted(() => {
               />
             </v-list>
           </v-menu>
-          <span v-else class="topbar-empresa estatica">
+          <span v-else-if="!viewportMobile" class="topbar-empresa estatica">
             <v-icon icon="mdi-domain" size="18" />
             <span>{{ nomeEmpresaCurto }}</span>
           </span>
@@ -269,6 +273,7 @@ onMounted(() => {
                sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
                `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
           <v-btn
+            v-if="!viewportMobile"
             to="/"
             variant="text"
             class="topbar-painel"
@@ -371,5 +376,15 @@ onMounted(() => {
         <slot />
       </div>
     </v-main>
+
+    <AppMobileBottomNav
+      v-if="viewportMobile"
+      :telas="telas"
+      :tela-ativa="telaAtiva"
+      :telas-desabilitadas="telasDesabilitadas"
+      :acoes-novo-ids="acoesNovoIds"
+      @abrir-saidas="emit('abrirSaidas')"
+      @abrir-transferencias="emit('abrirTransferencias')"
+    />
   </v-layout>
 </template>

@@ -39,6 +39,12 @@ const envSchema = z.object({
   GEMINI_API_KEY: envOpcionalNaoVazio,
   GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
   GEMINI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(90_000),
+  // Exclusivo para a fixture manual local do Caixa. Nunca substitui a leitura real e é recusado
+  // fora de development pelo gate abaixo.
+  GEMINI_MAQUININHA_SIMULADA: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
   // Groq roda exclusivamente no backend e transcreve a observação de fechamento. Sem chave,
   // apenas esse recurso informa indisponibilidade; o fechamento manual segue disponível.
   GROQ_API_KEY: envOpcionalNaoVazio,
@@ -93,4 +99,8 @@ if (env.NODE_ENV === "production") {
   if (!env.GROQ_API_KEY) {
     console.warn("[env] GROQ_API_KEY ausente: transcricao de observacao do fechamento desativada.");
   }
+}
+
+if (env.NODE_ENV !== "development" && env.GEMINI_MAQUININHA_SIMULADA) {
+  throw new Error("GEMINI_MAQUININHA_SIMULADA é permitida somente em desenvolvimento");
 }

@@ -351,6 +351,27 @@
       "when": 1790428631219,
       "tag": "0049_keen_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790971927399,
+      "tag": "0050_stiff_justin_hammer",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790973370788,
+      "tag": "0051_stormy_mach_iv",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791054109520,
+      "tag": "0052_petite_tarot",
+      "breakpoints": true
     }
   ]
 }

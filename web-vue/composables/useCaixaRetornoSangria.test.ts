@@ -12,6 +12,7 @@ function montar() {
     caixaAberto: {
       id: "cx-1",
       empresaId: "emp-1",
+      status: "aberto",
       caixaResponsavelNomeAbertura: "Operadora",
       usuarioCaixaNome: "Usuária"
     },
@@ -86,6 +87,17 @@ describe("retorno manual no host de Transferências", () => {
     if (gate === "permissao") m.permitido.value = false;
     if (gate === "caixa") m.status.value.caixaAberto = null;
     if (gate === "empresa") m.empresaId.value = "emp-outra";
+    await m.retorno.preparar();
+    await m.retorno.retornarSaldo();
+    expect(m.retorno.podeRetornar.value).toBe(false);
+    expect(m.carregarLacres).not.toHaveBeenCalled();
+    expect(m.retornarSaldo).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia retorno e sangria quando o Caixa entrou em fechamento", async () => {
+    const m = montar();
+    m.preencher();
+    m.status.value.caixaAberto!.status = "em_fechamento";
     await m.retorno.preparar();
     await m.retorno.retornarSaldo();
     expect(m.retorno.podeRetornar.value).toBe(false);

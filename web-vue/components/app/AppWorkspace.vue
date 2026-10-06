@@ -1463,6 +1463,11 @@ function executarAcaoNovo(acao: AcaoNovo) {
   void abrirOperacao(acao.id === "saidas" ? categoriaInicialSaida(permissoesUsuario.value) : acao.entidade);
 }
 
+function abrirAcaoNovaMobile(id: "saidas" | "transferencias") {
+  const acao = acoesNovo.value.find((item) => item.id === id);
+  if (acao) executarAcaoNovo(acao);
+}
+
 // Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 §4).
 // Mantem o que ja foi digitado (valor, datas, descricao) e limpa so o que e proprio da categoria
 // anterior: o grupo (cada categoria tem o seu) e o credor que a nova categoria nao aceita. Recarrega
@@ -2351,11 +2356,14 @@ onBeforeUnmount(() => {
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
     :notificacoes="notificacoes"
+    :acoes-novo-ids="acoesNovo.map((acao) => acao.id)"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="selecionarEmpresa"
     @abrir-pendencias="router.push('/pendencias')"
+    @abrir-saidas="abrirAcaoNovaMobile('saidas')"
+    @abrir-transferencias="abrirAcaoNovaMobile('transferencias')"
     @verificar-notificacao="marcarNotificacaoComoVista"
     @verificar-todas-notificacoes="marcarTodasNotificacoesComoVistas"
   >

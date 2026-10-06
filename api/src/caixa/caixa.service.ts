@@ -16,13 +16,16 @@ import type {
   HistoricoCaixaQuery,
   LinhaHistoricoCaixa,
   PlanejamentoRetorno,
+  RegistrarIndisponibilidadeCaixaPayload,
+  RelatorioMaquininhaFechamento,
   RelatorioMaquininhaIa,
   ResumoCaixa,
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
   TransferenciaCofrePayload,
   TransferenciasCaixaResponse,
-  VendaCanceladaCaixa
+  VendaCanceladaCaixa,
+  VendasDoCaixaQuery
 } from "@padaria/shared/caixa";
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
@@ -51,7 +54,9 @@ import {
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
   buscarRelatorioMaquininhaFechamentoRepository,
+  buscarRelatorioVendasFechamentoRepository,
   salvarRelatorioMaquininhaFechamentoRepository,
+  salvarRelatorioVendasFechamentoRepository,
   invalidarRelatorioMaquininhaFechamentoRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
@@ -90,6 +95,10 @@ import {
   buscarLacreRetornoDoCaixaRepository,
   buscarLacreFechamentoPlanejadoDoCaixaRepository,
   buscarLacreFechamentoPlanejadoDaTransferenciaRepository,
+  buscarIndisponibilidadeAbertaCaixaRepository,
+  criarIndisponibilidadeCaixaRepository,
+  iniciarFechamentoCaixaRepository,
+  registrarRetornoIndisponibilidadeCaixaRepository,
   consumirLacreRetornoRepository,
   consumirLacreFechamentoPlanejadoRepository,
   listarLacresRetornoDaDistribuicaoRepository,
@@ -110,8 +119,12 @@ import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 import { caminhoAbsolutoDocumento, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 import { env } from "../env.js";
-import { extrairRelatorioMaquininhaComGemini } from "./gemini-relatorio-maquininha.js";
+import {
+  extrairRelatorioMaquininhaComGemini,
+  leituraRelatorioMaquininhaSimulada
+} from "./gemini-relatorio-maquininha.js";
 import { transcreverObservacaoComGroq } from "./groq-transcricao-observacao.js";
+import { listarVendasPaginadas, totaisVendas } from "../vendas/vendas.service.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
@@ -197,6 +210,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     dataHoraAbertura: serializarData(caixa.dataHoraAbertura) ?? "",
     abertoEm: serializarData(caixa.abertoEm) ?? "",
     dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+    fechamentoIniciadoEm: serializarData(caixa.fechamentoIniciadoEm),
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
@@ -231,7 +245,7 @@ export async function salvarAnexoFechamentoCaixa(
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
 
     const salvo = await salvarFotoDocumento("fechamentos-caixa", `${caixa.empresaId}/${caixa.id}`, arquivo);
     const absoluto = caminhoAbsolutoDocumento(salvo.caminhoRelativo);
@@ -301,6 +315,16 @@ async function contextoRelatorioMaquininha(caixaId: string, perfil: PerfilUsuari
   });
 }
 
+const formasRelatorioMaquininha = ["credito", "debito", "pix", "voucher"] as const;
+
+function leituraCompleta(leitura: RelatorioMaquininhaIa) {
+  return formasRelatorioMaquininha.every((forma) => leitura[forma] !== null);
+}
+
+function normalizarNumeroMaquininha(numero: string) {
+  return numero.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
 export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
   const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
   const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
@@ -316,11 +340,29 @@ export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil
   };
 }
 
-export async function analisarRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
+export async function analisarRelatorioMaquininhaFechamento(
+  caixaId: string,
+  anexoId: string,
+  tipoLeitura: "manha" | "tarde",
+  perfil: PerfilUsuario
+) {
   const { caixa, anexos } = await contextoRelatorioMaquininha(caixaId, perfil);
-  if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-  const comprovantes = anexos.filter((anexo) => anexo.tipo === "comprovante_cartao");
-  validarComprovantesParaIa(comprovantes);
+  if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
+  const comprovante = anexos.find((anexo) => anexo.id === anexoId && anexo.tipo === "comprovante_cartao");
+  if (!comprovante) throw new Error("Comprovante da maquininha nao encontrado");
+  validarComprovantesParaIa([comprovante]);
+  const simulada = env.NODE_ENV === "development" && env.GEMINI_MAQUININHA_SIMULADA;
+  if (simulada) {
+    const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
+    return {
+      turnoNome: turnoDoRelatorio(caixa),
+      tipoLeitura,
+      sugestao: leituraRelatorioMaquininhaSimulada(tipoLeitura, numeroVinculado),
+      anexoConsiderado: comprovante.id,
+      numeroLidoDivergente: false,
+      simulada: true
+    };
+  }
   if (!env.GEMINI_API_KEY) {
     throw new ErroDominio(
       "A leitura por IA ainda não foi configurada. As fotos continuam válidas como prova.",
@@ -329,7 +371,7 @@ export async function analisarRelatorioMaquininhaFechamento(caixaId: string, per
     );
   }
   const arquivos = await Promise.all(
-    comprovantes.map(async (anexo) => ({
+    [comprovante].map(async (anexo) => ({
       dados: await readFile(caminhoAbsolutoDocumento(anexo.caminho)),
       mimeType: anexo.mimeType
     }))
@@ -339,13 +381,22 @@ export async function analisarRelatorioMaquininhaFechamento(caixaId: string, per
     modelo: env.GEMINI_MODEL,
     timeoutMs: env.GEMINI_TIMEOUT_MS
   });
-  return { turnoNome: turnoDoRelatorio(caixa), sugestao, anexosConsiderados: comprovantes.map((anexo) => anexo.id) };
+  const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
+  return {
+    turnoNome: turnoDoRelatorio(caixa),
+    tipoLeitura,
+    sugestao,
+    anexoConsiderado: comprovante.id,
+    numeroLidoDivergente:
+      Boolean(numeroVinculado && sugestao.numeroMaquininha) &&
+      normalizarNumeroMaquininha(numeroVinculado!) !== normalizarNumeroMaquininha(sugestao.numeroMaquininha!),
+    simulada: false
+  };
 }
 
 export async function salvarRelatorioMaquininhaFechamento(
   caixaId: string,
-  dados: RelatorioMaquininhaIa,
-  anexosConsiderados: string[],
+  dados: RelatorioMaquininhaFechamento,
   perfil: PerfilUsuario
 ) {
   return executarEmTransacao(async (tx) => {
@@ -353,18 +404,34 @@ export async function salvarRelatorioMaquininhaFechamento(
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const comprovantes = (await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx)).filter(
-      (anexo) => anexo.tipo === "comprovante_cartao"
+    if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
+    const anexos = await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx);
+    const comprovanteManha = anexos.find(
+      (anexo) => anexo.tipo === "comprovante_cartao" && anexo.id === dados.anexoManhaId
     );
-    validarComprovantesParaIa(comprovantes);
-    const atuais = comprovantes.map((anexo) => anexo.id).sort();
-    const informados = [...new Set(anexosConsiderados)].sort();
-    if (atuais.length !== informados.length || atuais.some((id, indice) => id !== informados[indice])) {
+    const comprovanteTarde = anexos.find(
+      (anexo) => anexo.tipo === "comprovante_cartao" && anexo.id === dados.anexoTardeId
+    );
+    if (!comprovanteManha || !comprovanteTarde || dados.anexoManhaId === dados.anexoTardeId) {
       throw new ErroDominio(
-        "As fotos da maquininha mudaram. Leia e revise novamente antes de salvar.",
+        "Envie as fotos da manhã e da tarde da maquininha antes de salvar.",
         409,
-        "RELATORIO_DESATUALIZADO"
+        "RELATORIOS_DESATUALIZADOS"
+      );
+    }
+    const numeroMaquininha = caixa.maquininhaNumeroSerie?.trim();
+    if (!numeroMaquininha) {
+      throw new ErroDominio(
+        "Este caixa foi aberto sem maquininha vinculada. O relatório só pode usar a maquininha escolhida na abertura.",
+        409,
+        "MAQUININHA_NAO_VINCULADA"
+      );
+    }
+    if (!leituraCompleta(dados.leituraManha) || !leituraCompleta(dados.leituraTarde)) {
+      throw new ErroDominio(
+        "Informe crédito, débito, Pix e voucher nos relatórios da manhã e da tarde.",
+        422,
+        "LEITURAS_MAQUININHA_INCOMPLETAS"
       );
     }
     const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
@@ -372,14 +439,40 @@ export async function salvarRelatorioMaquininhaFechamento(
         fechamentoCaixaId: caixa.id,
         empresaId: caixa.empresaId,
         turnoNome: turnoDoRelatorio(caixa),
-        dadosRevisados: dados,
+        versao: 5,
+        numeroMaquininha,
+        creditoInicial: dados.leituraManha.credito,
+        debitoInicial: dados.leituraManha.debito,
+        pixInicial: dados.leituraManha.pix,
+        voucherInicial: dados.leituraManha.voucher,
+        creditoFinal: dados.leituraTarde.credito,
+        debitoFinal: dados.leituraTarde.debito,
+        pixFinal: dados.leituraTarde.pix,
+        voucherFinal: dados.leituraTarde.voucher,
+        anexoInicialId: dados.anexoManhaId,
+        anexoFinalId: dados.anexoTardeId,
+        dadosRevisados: {
+          versao: 5,
+          numeroMaquininha,
+          anexoManhaId: dados.anexoManhaId,
+          leituraManha: dados.leituraManha,
+          anexoTardeId: dados.anexoTardeId,
+          leituraTarde: dados.leituraTarde,
+          liquidos: {
+            manha: formasRelatorioMaquininha.reduce((total, forma) => total + dados.leituraManha[forma]!, 0),
+            credito: dados.leituraTarde.credito! - dados.leituraManha.credito!,
+            debito: dados.leituraTarde.debito! - dados.leituraManha.debito!,
+            pix: dados.leituraTarde.pix! - dados.leituraManha.pix!,
+            voucher: dados.leituraTarde.voucher! - dados.leituraManha.voucher!
+          }
+        },
         criadoPor: perfil.usuarioId
       },
       tx
     );
     return {
       turnoNome: relatorio.turnoNome,
-      dadosRevisados: relatorio.dadosRevisados,
+      relatorio,
       criadoEm: serializarData(relatorio.criadoEm),
       atualizadoEm: serializarData(relatorio.atualizadoEm)
     };
@@ -392,12 +485,17 @@ export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: stri
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Anexos so podem ser removidos antes do fechamento");
-    const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
-    if (!anexo) throw new Error("Anexo nao encontrado");
-    if (anexo.tipo === "comprovante_cartao") {
+    if (caixa.status !== "aberto" && caixa.status !== "em_fechamento")
+      throw new Error("Anexos so podem ser removidos antes do fechamento");
+    const existente = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!existente) throw new Error("Anexo nao encontrado");
+    // O relatorio V2 referencia as duas provas. Invalida primeiro para a FK nunca permitir uma
+    // leitura salva apontando para uma foto que o operador acabou de substituir.
+    if (existente.tipo === "comprovante_cartao") {
       await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
     }
+    const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!anexo) throw new Error("Anexo nao encontrado");
     return anexo;
   });
 
@@ -465,8 +563,21 @@ async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promi
     caixaAberto: serializarCaixa(caixa),
     resumo: await calcularResumoCaixaOperacional(caixa, db),
     lacreFechamentoReservado: lacreFechamento?.rompido ? null : (lacreFechamento?.numero ?? null),
+    indisponibilidadeAberta: serializarIndisponibilidade(
+      await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, db)
+    ),
     entregasPendentes: await entregasPendentesDoCaixa(caixa.id, db),
     planejamentosPendentes: serializarPlanejamentos(await listarPlanejamentosRetornoRepository(caixa.id, db))
+  };
+}
+
+function serializarIndisponibilidade(linha: Awaited<ReturnType<typeof buscarIndisponibilidadeAbertaCaixaRepository>>) {
+  if (!linha) return null;
+  return {
+    id: linha.id,
+    motivos: linha.motivos as NonNullable<CaixaStatus["indisponibilidadeAberta"]>["motivos"],
+    motivoOutro: linha.motivoOutro,
+    iniciadoEm: linha.iniciadoEm.toISOString()
   };
 }
 
@@ -566,6 +677,7 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
         caixaAberto: null,
         resumo: null,
         lacreFechamentoReservado: null,
+        indisponibilidadeAberta: null,
         entregasPendentes: [],
         planejamentosPendentes: []
       };
@@ -577,6 +689,71 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
     return statusDoCaixaAberto(atualizado, tx);
+  });
+}
+
+export async function registrarIndisponibilidadeCaixa(
+  caixaId: string,
+  dados: RegistrarIndisponibilidadeCaixaPayload,
+  perfil: PerfilUsuario
+) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, tx)) {
+      throw new Error("Ja existe uma indisponibilidade em andamento neste caixa");
+    }
+    return serializarIndisponibilidade(
+      await criarIndisponibilidadeCaixaRepository(
+        {
+          empresaId: caixa.empresaId,
+          fechamentoCaixaId: caixa.id,
+          motivos: dados.motivos,
+          motivoOutro: dados.motivoOutro?.trim() || null,
+          registradoPor: perfil.usuarioId
+        },
+        tx
+      )
+    );
+  });
+}
+
+export async function registrarRetornoIndisponibilidadeCaixa(caixaId: string, perfil: PerfilUsuario) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const retorno = await registrarRetornoIndisponibilidadeCaixaRepository(
+      caixa.id,
+      caixa.empresaId,
+      perfil.usuarioId,
+      tx
+    );
+    if (!retorno) throw new Error("Nenhuma indisponibilidade em andamento neste caixa");
+    return { id: retorno.id, retornadoEm: retorno.retornadoEm?.toISOString() ?? new Date().toISOString() };
+  });
+}
+
+export async function iniciarFechamentoCaixa(caixaId: string, perfil: PerfilUsuario) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja esta em fechamento ou fechado");
+    if (await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, tx)) {
+      throw new Error("Registre o retorno do computador do PDV antes de encerrar as vendas");
+    }
+    const corte = new Date();
+    if (!(await iniciarFechamentoCaixaRepository(caixa.id, perfil.usuarioId, corte, tx))) {
+      throw new Error("Caixa ja esta em fechamento ou fechado");
+    }
+    return { dataHoraCorte: corte.toISOString() };
   });
 }
 
@@ -605,7 +782,7 @@ export async function resolverEscopoListagemPorCaixa(
   if (!exigeCaixaAberto) return { bloquear: false, caixaId: caixaIdSolicitado };
   if (!perfil || !empresaId) return { bloquear: true, caixaId: undefined };
   const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
-  if (!caixa) return { bloquear: true, caixaId: undefined };
+  if (!caixa || caixa.status !== "aberto") return { bloquear: true, caixaId: undefined };
   return { bloquear: false, caixaId: caixa.id };
 }
 
@@ -632,7 +809,7 @@ export async function resolverEscopoEntradasDoDia(
   if (!exigeCaixaAberto) return { bloquear: false, caixaId: caixaIdSolicitado };
   if (!perfil || !empresaId) return { bloquear: true, caixaId: undefined };
   const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
-  if (!caixa) return { bloquear: true, caixaId: undefined };
+  if (!caixa || caixa.status !== "aberto") return { bloquear: true, caixaId: undefined };
   // dataMovimento e o dia CONTABIL do caixa (nao "hoje"): num caixa que virou a meia-noite, o dia
   // do operador continua sendo o da abertura.
   return { bloquear: false, caixaId: undefined, dia: caixa.dataMovimento };
@@ -763,7 +940,7 @@ async function abrirCaixaEmTransacao(
     }
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
-    if (dados.maquininhaId && !(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {
+    if (!(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {
       throw new Error("Maquininha nao encontrada ou inativa");
     }
 
@@ -787,7 +964,7 @@ async function abrirCaixaEmTransacao(
         lacreAbertura: abertura.numeroLacre,
         caixaResponsavelNomeAbertura: dados.caixaResponsavelNome.trim(),
         supervisorResponsavelNomeAbertura: dados.supervisorResponsavelNome.trim(),
-        maquininhaId: dados.maquininhaId ?? null
+        maquininhaId: dados.maquininhaId
       },
       tx
     );
@@ -796,8 +973,17 @@ async function abrirCaixaEmTransacao(
     // (R-028), leva o dinheiro para ESTE caixa (R-036) e rompe o lacre (R-027). Perder a disputa
     // derruba a abertura inteira â€” nao existe caixa aberto com transferencia ainda pendente.
     {
-      const valorEspecieContadoCentavos = paraCentavos(dados.valorEspecieContado);
-      const valorMoedasContadoCentavos = paraCentavos(dados.valorMoedasContado);
+      // Sem contagem declarada pelo Caixa, o clique de confirmação aceita integralmente a
+      // composição registrada pela Tesouraria. Se houver divergência, os dois campos chegam juntos
+      // (validado no contrato) e substituem os valores declarados para a conferência/auditoria.
+      const valorEspecieContadoCentavos =
+        dados.valorEspecieContado === undefined
+          ? abertura.valorEspecieDeclaradoCentavos
+          : paraCentavos(dados.valorEspecieContado);
+      const valorMoedasContadoCentavos =
+        dados.valorMoedasContado === undefined
+          ? abertura.valorMoedasDeclaradoCentavos
+          : paraCentavos(dados.valorMoedasContado);
       const valorContadoCentavos = valorEspecieContadoCentavos + valorMoedasContadoCentavos;
       const convergente =
         abertura.valorEspecieDeclaradoCentavos === valorEspecieContadoCentavos &&
@@ -917,7 +1103,16 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (caixa.status !== "em_fechamento") {
+      throw new ErroDominio(
+        "Inicie o fechamento e conclua os relatorios antes de fechar o caixa.",
+        409,
+        "FECHAMENTO_NAO_INICIADO"
+      );
+    }
+    if (await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, tx)) {
+      throw new Error("Registre o retorno do computador do PDV antes de fechar o caixa");
+    }
     const lacreFechamentoReservado = await buscarLacreFechamentoPlanejadoDoCaixaRepository(
       caixa.id,
       caixa.empresaId,
@@ -929,7 +1124,22 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (!(await existeFolhaFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx))) {
       throw new Error("Anexe ao menos uma foto da folha de fechamento antes de fechar o caixa");
     }
-    const dataHoraFechamento = new Date();
+    if (!(await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx))) {
+      throw new ErroDominio(
+        "Gere o relatorio completo de vendas antes de fechar o caixa.",
+        409,
+        "RELATORIO_VENDAS_OBRIGATORIO"
+      );
+    }
+    const relatorioMaquininha = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+    if (!relatorioMaquininha || relatorioMaquininha.versao < 5) {
+      throw new ErroDominio(
+        "Salve a conferencia da maquininha antes de fechar o caixa.",
+        409,
+        "RELATORIO_MAQUININHA_OBRIGATORIO"
+      );
+    }
+    const dataHoraFechamento = caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : new Date();
     if (caixa.dataHoraAbertura && dataHoraFechamento <= new Date(caixa.dataHoraAbertura)) {
       throw new Error("Fechamento precisa ser posterior a abertura");
     }
@@ -1744,6 +1954,148 @@ export async function listarVendasCanceladasCaixa(
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   return serializarVendasCanceladas(await listarVendasCanceladasCaixaRepository(caixaId));
+}
+
+function serializarRelatorioVendasFechamento(relatorio: {
+  periodoInicio: Date;
+  periodoFim: Date;
+  dados: DadosExternos;
+  geradoEm: Date;
+}) {
+  return {
+    periodoInicio: relatorio.periodoInicio.toISOString(),
+    periodoFim: relatorio.periodoFim.toISOString(),
+    dados: relatorio.dados,
+    geradoEm: relatorio.geradoEm.toISOString()
+  };
+}
+
+export async function obterRelatorioVendasFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  const relatorio = await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId);
+  return relatorio ? serializarRelatorioVendasFechamento(relatorio) : null;
+}
+
+export async function gerarRelatorioVendasFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status !== "em_fechamento") {
+    throw new ErroDominio(
+      "Inicie o fechamento para gerar o relatorio do turno encerrado.",
+      409,
+      "RELATORIO_FORA_DO_CORTE"
+    );
+  }
+
+  // A hora limite e gravada pelo servidor antes desta etapa. Regerar atualiza somente o retrato
+  // de leitura; nenhuma venda posterior consegue entrar no periodo encerrado.
+  // O fechamento guarda o consolidado, e não replica potencialmente milhares de cupons no JSON.
+  // A consulta usa o corte gravado do Caixa; a linha desta página existe porque a função compartilhada
+  // também devolve uma página, enquanto `totais` cobre integralmente o período.
+  const primeiraPagina = await listarVendasDoCaixaAberto(caixa.id, { page: 1, pageSize: 1 }, perfil);
+  const canceladas = await listarVendasCanceladasCaixa(caixa.id, perfil);
+  const relatorio = await executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixa.id, tx))) throw new Error("Caixa nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!travado || travado.status !== "em_fechamento") {
+      throw new ErroDominio(
+        "O fechamento nao esta mais disponivel para gerar o relatorio.",
+        409,
+        "RELATORIO_FORA_DO_CORTE"
+      );
+    }
+    return salvarRelatorioVendasFechamentoRepository(
+      {
+        fechamentoCaixaId: travado.id,
+        empresaId: travado.empresaId,
+        periodoInicio: new Date(travado.dataHoraAbertura),
+        periodoFim: new Date(travado.dataHoraFechamento ?? new Date()),
+        dados: {
+          versao: 2,
+          vendas: {
+            quantidade: primeiraPagina.totais.quantidade,
+            totalGeral: primeiraPagina.totais.totalGeral,
+            porFormaPagamento: primeiraPagina.totais.porFormaPagamento
+          },
+          canceladas
+        },
+        geradoPor: perfil.usuarioId
+      },
+      tx
+    );
+  });
+  return serializarRelatorioVendasFechamento(relatorio);
+}
+
+/**
+ * Consulta de conferencia do proprio turno. Diferente do relatorio de vendas, ela nunca aceita
+ * escopo do navegador: caixa, empresa e PDV sao lidos do caixa do path. O operador ganha apenas
+ * a leitura do caixa que abriu; `caixas_gerenciar` conserva a mesma excecao de auditoria das
+ * demais rotas de Caixa. Durante `em_fechamento`, a mesma consulta vira o relatorio unico do
+ * periodo congelado: a ultima venda e limitada pelo corte gravado no servidor, nunca por agora
+ * nem por data informada pelo navegador.
+ */
+export async function listarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCaixaQuery, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") {
+    throw new Error("Consulta disponivel apenas para caixa aberto ou em fechamento");
+  }
+
+  // `caixa_id` ja e o vinculo operacional atomico. Assim vendas manuais sem `data_venda` continuam
+  // visiveis sem filtro de horario. Quando o operador pede hora, elas ficam fora da busca porque
+  // nao existe um instante real para comparar; o dialogo explica isso antes da lista.
+  const dataHoraAbertura = new Date(caixa.dataHoraAbertura);
+  const limiteOperacional = caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : new Date();
+  const inicioSolicitado = filtros.dataHoraInicio ? new Date(filtros.dataHoraInicio) : null;
+  const fimSolicitado = filtros.dataHoraFim ? new Date(filtros.dataHoraFim) : null;
+  const inicio = inicioSolicitado && inicioSolicitado > dataHoraAbertura ? inicioSolicitado : dataHoraAbertura;
+  const fim = fimSolicitado && fimSolicitado < limiteOperacional ? fimSolicitado : limiteOperacional;
+  const temFiltroHorario = Boolean(inicioSolicitado || fimSolicitado);
+
+  const query = {
+    page: filtros.page,
+    pageSize: filtros.pageSize,
+    produto: filtros.produto,
+    formaPagamentoId: filtros.formaPagamentoId,
+    caixaId: caixa.id,
+    empresaId: caixa.empresaId,
+    pdvId: caixa.pdvId,
+    // Canceladas ja tem a consulta de auditoria propria na tela do Caixa e nao compoem saldo.
+    status: "aprovado",
+    ordem: "asc" as const,
+    ...(temFiltroHorario && inicio <= fim
+      ? { dataHoraInicio: inicio.toISOString(), dataHoraFim: fim.toISOString() }
+      : {})
+  };
+
+  // Nao deixa um intervalo invertido escapar como consulta ampla (ex.: fim anterior a abertura).
+  if (temFiltroHorario && inicio > fim) {
+    return {
+      resultado: { itens: [], total: 0, page: filtros.page, pageSize: filtros.pageSize },
+      totais: { totalGeral: 0, quantidade: 0, porFormaPagamento: [] },
+      abertura: dataHoraAbertura.toISOString(),
+      limiteSuperior: limiteOperacional.toISOString(),
+      manuaisSemHorarioForaDoFiltro: true
+    };
+  }
+
+  const empresas = [caixa.empresaId];
+  const [resultado, totais] = await Promise.all([
+    listarVendasPaginadas(query, empresas),
+    totaisVendas(query, empresas)
+  ]);
+  return {
+    resultado,
+    totais,
+    abertura: dataHoraAbertura.toISOString(),
+    limiteSuperior: limiteOperacional.toISOString(),
+    manuaisSemHorarioForaDoFiltro: temFiltroHorario
+  };
 }
 
 function serializarVendasCanceladas(vendasCanceladas: VendaCanceladaCaixaLinha[]): VendaCanceladaCaixa[] {

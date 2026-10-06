@@ -113,7 +113,19 @@ export async function criarVenda(dados: VendaPayload, perfil: PerfilUsuario): Pr
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const venda = await criarVendaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+    // Toda venda manual criada pelo operador pertence ao PDV do caixa que a recebeu. Sem preencher
+    // esse vinculo, a venda tinha caixa_id correto mas pdv_id nulo; a consulta do turno filtra os
+    // dois e a etapa "Gerar relatorio de vendas" devolvia zero apesar de a venda existir.
+    if (normalizados.pdvId && normalizados.pdvId !== caixa.pdvId) {
+      throw new Error("Venda do operador precisa pertencer ao PDV do caixa aberto");
+    }
+    const venda = await criarVendaRepository(
+      { ...normalizados, pdvId: caixa.pdvId },
+      computar,
+      perfil.usuarioId,
+      caixa.id,
+      tx
+    );
     return { id: venda.id, computar };
   });
 }

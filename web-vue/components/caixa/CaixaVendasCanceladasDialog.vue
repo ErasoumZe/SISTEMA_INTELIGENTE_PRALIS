@@ -50,8 +50,8 @@ watch(
 
 <template>
   <v-dialog v-model="dialogAberto" max-width="820" persistent no-click-animation>
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between ga-2">
+    <v-card class="caixa-canceladas-dialog">
+      <v-card-title class="caixa-canceladas-dialog__titulo d-flex align-center justify-space-between ga-2">
         <span>Vendas canceladas</span>
         <v-btn icon="mdi-close" variant="text" aria-label="Fechar vendas canceladas" @click="dialogAberto = false" />
       </v-card-title>
@@ -98,9 +98,7 @@ watch(
                   {{ pagamento.formaPagamento }}: {{ dinheiro(pagamento.valor) }}
                 </v-chip>
               </div>
-              <p v-else class="text-body-2 text-medium-emphasis mb-4">
-                Forma de pagamento não informada pelo CREARE.
-              </p>
+              <p v-else class="text-body-2 text-medium-emphasis mb-4">Forma de pagamento não informada pelo CREARE.</p>
               <div class="text-subtitle-2 mb-2">Produtos da venda</div>
               <v-table v-if="venda.produtos.length" density="compact">
                 <thead>
@@ -130,8 +128,21 @@ watch(
       </v-card-text>
 
       <v-card-actions class="px-6 pb-5"
-        ><v-spacer /><v-btn color="primary" @click="dialogAberto = false">Fechar</v-btn></v-card-actions
+        ><v-spacer /><v-btn class="caixa-canceladas-dialog__acao" variant="text" @click="dialogAberto = false"
+          >Fechar</v-btn
+        ></v-card-actions
       >
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.caixa-canceladas-dialog {
+  --canceladas-cor: #424a55;
+  border-top: 4px solid var(--canceladas-cor);
+}
+.caixa-canceladas-dialog__titulo,
+.caixa-canceladas-dialog__acao {
+  color: var(--cx-ink);
+}
+</style>

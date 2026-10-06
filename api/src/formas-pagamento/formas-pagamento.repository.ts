@@ -5,6 +5,7 @@ import type {
   RegraRecebimentoPayload,
   RoteamentoDaForma
 } from "@padaria/shared/formas-pagamento";
+import type { CategoriaFechamentoCaixa } from "@padaria/shared/formas-pagamento";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 // Projecao CONDICIONAL (R-176 / doc 32 §13): as colunas de roteamento carregam id de CONTA, e a
@@ -15,7 +16,8 @@ export async function listarFormasPagamentoRepository(escopoEmpresas: string[], 
   const colunasBase = {
     id: formasPagamento.id,
     empresaId: formasPagamento.empresaId,
-    nome: formasPagamento.nome
+    nome: formasPagamento.nome,
+    categoriaFechamentoCaixa: formasPagamento.categoriaFechamentoCaixa
   };
   const colunas = incluirRoteamento
     ? {
@@ -191,6 +193,7 @@ export async function salvarFormaPagamentoRepository(
     id?: string;
     empresaId: string;
     nome: string;
+    categoriaFechamentoCaixa?: CategoriaFechamentoCaixa;
     // Ausente = o chamador NAO esta mexendo em roteamento. Nao e o mesmo que "limpar o roteamento":
     // um PUT sem a permissao dedicada preserva o que ja estava gravado, em vez de zerar o destino do
     // dinheiro em silencio.
@@ -215,13 +218,27 @@ export async function salvarFormaPagamentoRepository(
   if (input.id) {
     await db
       .update(formasPagamento)
-      .set({ nome: input.nome, atualizadoEm: new Date(), ...camposRoteamento })
+      .set({
+        nome: input.nome,
+        atualizadoEm: new Date(),
+        ...camposRoteamento,
+        ...(input.categoriaFechamentoCaixa === undefined
+          ? {}
+          : { categoriaFechamentoCaixa: input.categoriaFechamentoCaixa })
+      })
       .where(and(eq(formasPagamento.id, input.id), eq(formasPagamento.empresaId, input.empresaId)));
     return { id: input.id, empresaId: input.empresaId, nome: input.nome };
   }
   const [criada] = await db
     .insert(formasPagamento)
-    .values({ empresaId: input.empresaId, nome: input.nome, ...camposRoteamento })
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      ...camposRoteamento,
+      ...(input.categoriaFechamentoCaixa === undefined
+        ? {}
+        : { categoriaFechamentoCaixa: input.categoriaFechamentoCaixa })
+    })
     .returning({ id: formasPagamento.id });
   return criada;
 }

@@ -23,7 +23,10 @@ export function useCaixaRetornoSangria(deps: Dependencias) {
     const caixa = deps.status.value?.caixaAberto;
     return caixa?.empresaId === deps.empresaId.value ? caixa : null;
   });
-  const podeRetornar = computed(() => deps.permitido.value && Boolean(caixaAberto.value));
+  // Retorno/sangria altera o físico do PDV. A partir do corte, o Caixa já entrou na
+  // conferência e não aceita nenhum novo movimento, mesmo que o retrato ainda esteja
+  // disponível para a tela de fechamento.
+  const podeRetornar = computed(() => deps.permitido.value && caixaAberto.value?.status === "aberto");
   const processando = ref(false);
   const carregando = ref(false);
   const erroCarga = ref("");

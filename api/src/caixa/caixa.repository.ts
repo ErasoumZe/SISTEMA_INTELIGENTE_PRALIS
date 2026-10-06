@@ -34,10 +34,12 @@ import {
 import {
   alteracoesPosFechamentoCaixa,
   ajustesFechamentoCaixa,
+  caixaIndisponibilidades,
   debitosColaboradores,
   edicoesCaixa,
   fechamentosCaixaAnexos,
   fechamentosCaixaRelatoriosMaquininha,
+  fechamentosCaixaRelatoriosVendas,
   fechamentosCaixa,
   quebrasCaixa,
   transferenciasConferenciasFisicas
@@ -152,6 +154,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,
       fechadoEm: fechamentosCaixa.fechadoEm,
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
@@ -175,7 +178,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
         eq(fechamentosCaixa.usuarioCaixaId, usuarioCaixaId),
-        eq(fechamentosCaixa.status, "aberto")
+        inArray(fechamentosCaixa.status, ["aberto", "em_fechamento"])
       )
     )
     .orderBy(desc(fechamentosCaixa.criadoEm))
@@ -199,6 +202,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,
       fechadoEm: fechamentosCaixa.fechadoEm,
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
@@ -607,6 +611,89 @@ export async function travarCaixaRepository(
     .from(fechamentosCaixa)
     .where(eq(fechamentosCaixa.id, caixaId))
     .for("update");
+  return linha ?? null;
+}
+
+export async function iniciarFechamentoCaixaRepository(
+  caixaId: string,
+  iniciadoPor: string,
+  dataHoraCorte: Date,
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const linhas = await db
+    .update(fechamentosCaixa)
+    .set({
+      status: "em_fechamento",
+      dataHoraFechamento: dataHoraCorte,
+      fechamentoIniciadoEm: dataHoraCorte,
+      fechamentoIniciadoPor: iniciadoPor
+    })
+    .where(and(eq(fechamentosCaixa.id, caixaId), eq(fechamentosCaixa.status, "aberto")))
+    .returning({ id: fechamentosCaixa.id });
+  return linhas.length;
+}
+
+export async function buscarIndisponibilidadeAbertaCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .select({
+      id: caixaIndisponibilidades.id,
+      motivos: caixaIndisponibilidades.motivos,
+      motivoOutro: caixaIndisponibilidades.motivoOutro,
+      iniciadoEm: caixaIndisponibilidades.iniciadoEm
+    })
+    .from(caixaIndisponibilidades)
+    .where(
+      and(
+        eq(caixaIndisponibilidades.fechamentoCaixaId, fechamentoCaixaId),
+        eq(caixaIndisponibilidades.empresaId, empresaId),
+        isNull(caixaIndisponibilidades.retornadoEm)
+      )
+    )
+    .limit(1);
+  return linha ?? null;
+}
+
+export async function criarIndisponibilidadeCaixaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    motivos: string[];
+    motivoOutro: string | null;
+    registradoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db.insert(caixaIndisponibilidades).values(input).returning({
+    id: caixaIndisponibilidades.id,
+    motivos: caixaIndisponibilidades.motivos,
+    motivoOutro: caixaIndisponibilidades.motivoOutro,
+    iniciadoEm: caixaIndisponibilidades.iniciadoEm
+  });
+  if (!linha) throw new Error("Indisponibilidade nao registrada");
+  return linha;
+}
+
+export async function registrarRetornoIndisponibilidadeCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  retornadoPor: string,
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .update(caixaIndisponibilidades)
+    .set({ retornadoEm: new Date(), retornadoPor })
+    .where(
+      and(
+        eq(caixaIndisponibilidades.fechamentoCaixaId, fechamentoCaixaId),
+        eq(caixaIndisponibilidades.empresaId, empresaId),
+        isNull(caixaIndisponibilidades.retornadoEm)
+      )
+    )
+    .returning({ id: caixaIndisponibilidades.id, retornadoEm: caixaIndisponibilidades.retornadoEm });
   return linha ?? null;
 }
 
@@ -1767,6 +1854,18 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   const [relatorio] = await db
     .select({
       turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      versao: fechamentosCaixaRelatoriosMaquininha.versao,
+      numeroMaquininha: fechamentosCaixaRelatoriosMaquininha.numeroMaquininha,
+      creditoInicial: fechamentosCaixaRelatoriosMaquininha.creditoInicial,
+      debitoInicial: fechamentosCaixaRelatoriosMaquininha.debitoInicial,
+      pixInicial: fechamentosCaixaRelatoriosMaquininha.pixInicial,
+      voucherInicial: fechamentosCaixaRelatoriosMaquininha.voucherInicial,
+      creditoFinal: fechamentosCaixaRelatoriosMaquininha.creditoFinal,
+      debitoFinal: fechamentosCaixaRelatoriosMaquininha.debitoFinal,
+      pixFinal: fechamentosCaixaRelatoriosMaquininha.pixFinal,
+      voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
+      anexoInicialId: fechamentosCaixaRelatoriosMaquininha.anexoInicialId,
+      anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
       dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
       criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
       atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
@@ -1782,11 +1881,26 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   return relatorio ?? null;
 }
 
+// A leitura inicial de um turno Ã© sempre a leitura final do Ãºltimo fechamento concluÃ­do da
+// MESMA maquininha. NÃ£o usamos data do navegador, nem um relatÃ³rio de outro equipamento: isso
+// evita fabricar um saldo-base e deixa a origem auditÃ¡vel no JSON revisado.
 export async function salvarRelatorioMaquininhaFechamentoRepository(
   input: {
     fechamentoCaixaId: string;
     empresaId: string;
     turnoNome: string;
+    versao: number;
+    numeroMaquininha: string;
+    creditoInicial: number | null;
+    debitoInicial: number | null;
+    pixInicial: number | null;
+    voucherInicial: number | null;
+    creditoFinal: number | null;
+    debitoFinal: number | null;
+    pixFinal: number | null;
+    voucherFinal: number | null;
+    anexoInicialId: string | null;
+    anexoFinalId: string | null;
     dadosRevisados: JsonValue;
     criadoPor: string;
   },
@@ -1794,11 +1908,33 @@ export async function salvarRelatorioMaquininhaFechamentoRepository(
 ) {
   const [relatorio] = await db
     .insert(fechamentosCaixaRelatoriosMaquininha)
-    .values(input)
+    .values({
+      ...input,
+      creditoInicial: input.creditoInicial === null ? null : String(input.creditoInicial),
+      debitoInicial: input.debitoInicial === null ? null : String(input.debitoInicial),
+      pixInicial: input.pixInicial === null ? null : String(input.pixInicial),
+      voucherInicial: input.voucherInicial === null ? null : String(input.voucherInicial),
+      creditoFinal: input.creditoFinal === null ? null : String(input.creditoFinal),
+      debitoFinal: input.debitoFinal === null ? null : String(input.debitoFinal),
+      pixFinal: input.pixFinal === null ? null : String(input.pixFinal),
+      voucherFinal: input.voucherFinal === null ? null : String(input.voucherFinal)
+    })
     .onConflictDoUpdate({
       target: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
       set: {
         turnoNome: input.turnoNome,
+        versao: input.versao,
+        numeroMaquininha: input.numeroMaquininha,
+        creditoInicial: input.creditoInicial === null ? null : String(input.creditoInicial),
+        debitoInicial: input.debitoInicial === null ? null : String(input.debitoInicial),
+        pixInicial: input.pixInicial === null ? null : String(input.pixInicial),
+        voucherInicial: input.voucherInicial === null ? null : String(input.voucherInicial),
+        creditoFinal: input.creditoFinal === null ? null : String(input.creditoFinal),
+        debitoFinal: input.debitoFinal === null ? null : String(input.debitoFinal),
+        pixFinal: input.pixFinal === null ? null : String(input.pixFinal),
+        voucherFinal: input.voucherFinal === null ? null : String(input.voucherFinal),
+        anexoInicialId: input.anexoInicialId,
+        anexoFinalId: input.anexoFinalId,
         dadosRevisados: input.dadosRevisados,
         criadoPor: input.criadoPor,
         atualizadoEm: new Date()
@@ -1806,6 +1942,18 @@ export async function salvarRelatorioMaquininhaFechamentoRepository(
     })
     .returning({
       turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      versao: fechamentosCaixaRelatoriosMaquininha.versao,
+      numeroMaquininha: fechamentosCaixaRelatoriosMaquininha.numeroMaquininha,
+      creditoInicial: fechamentosCaixaRelatoriosMaquininha.creditoInicial,
+      debitoInicial: fechamentosCaixaRelatoriosMaquininha.debitoInicial,
+      pixInicial: fechamentosCaixaRelatoriosMaquininha.pixInicial,
+      voucherInicial: fechamentosCaixaRelatoriosMaquininha.voucherInicial,
+      creditoFinal: fechamentosCaixaRelatoriosMaquininha.creditoFinal,
+      debitoFinal: fechamentosCaixaRelatoriosMaquininha.debitoFinal,
+      pixFinal: fechamentosCaixaRelatoriosMaquininha.pixFinal,
+      voucherFinal: fechamentosCaixaRelatoriosMaquininha.voucherFinal,
+      anexoInicialId: fechamentosCaixaRelatoriosMaquininha.anexoInicialId,
+      anexoFinalId: fechamentosCaixaRelatoriosMaquininha.anexoFinalId,
       dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
       criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
       atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
@@ -1827,6 +1975,63 @@ export async function invalidarRelatorioMaquininhaFechamentoRepository(
         eq(fechamentosCaixaRelatoriosMaquininha.empresaId, empresaId)
       )
     );
+}
+
+export async function buscarRelatorioVendasFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .select({
+      periodoInicio: fechamentosCaixaRelatoriosVendas.periodoInicio,
+      periodoFim: fechamentosCaixaRelatoriosVendas.periodoFim,
+      dados: fechamentosCaixaRelatoriosVendas.dados,
+      geradoEm: fechamentosCaixaRelatoriosVendas.geradoEm
+    })
+    .from(fechamentosCaixaRelatoriosVendas)
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosVendas.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosVendas.empresaId, empresaId)
+      )
+    )
+    .limit(1);
+  return relatorio ?? null;
+}
+
+export async function salvarRelatorioVendasFechamentoRepository(
+  input: {
+    fechamentoCaixaId: string;
+    empresaId: string;
+    periodoInicio: Date;
+    periodoFim: Date;
+    dados: JsonValue;
+    geradoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .insert(fechamentosCaixaRelatoriosVendas)
+    .values(input)
+    .onConflictDoUpdate({
+      target: fechamentosCaixaRelatoriosVendas.fechamentoCaixaId,
+      set: {
+        periodoInicio: input.periodoInicio,
+        periodoFim: input.periodoFim,
+        dados: input.dados,
+        geradoPor: input.geradoPor,
+        geradoEm: new Date()
+      }
+    })
+    .returning({
+      periodoInicio: fechamentosCaixaRelatoriosVendas.periodoInicio,
+      periodoFim: fechamentosCaixaRelatoriosVendas.periodoFim,
+      dados: fechamentosCaixaRelatoriosVendas.dados,
+      geradoEm: fechamentosCaixaRelatoriosVendas.geradoEm
+    });
+  if (!relatorio) throw new Error("Relatorio de vendas nao salvo");
+  return relatorio;
 }
 
 // A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira
@@ -1895,7 +2100,7 @@ export async function atualizarFechamentoCaixaRepository(
     // B1: a guarda `status = 'aberto'` no proprio UPDATE e o que impede o segundo fechamento
     // concorrente de sobrescrever fechado_por, fechado_em e os sete totais do primeiro. Quem
     // chama confere o retorno vazio e traduz para erro de dominio — nunca 500 cru.
-    .where(and(eq(fechamentosCaixa.id, input.caixaId), eq(fechamentosCaixa.status, "aberto")))
+    .where(and(eq(fechamentosCaixa.id, input.caixaId), inArray(fechamentosCaixa.status, ["aberto", "em_fechamento"])))
     .returning({ id: fechamentosCaixa.id });
   return linhas.length;
 }

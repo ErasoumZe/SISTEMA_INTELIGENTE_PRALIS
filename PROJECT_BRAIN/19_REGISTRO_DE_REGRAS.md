@@ -1145,6 +1145,36 @@ No fechamento, o operador informa espécie e moedas físicas. Se o total contado
 
 O lacre é obrigatório para a Transferência de retorno / sangria manual. O campo separado **Lacre do retorno no fechamento** é removido: no fechamento automático, o único lacre solicitado é o lacre obrigatório de fechamento. O histórico anterior não é alterado.
 
+### R-208 — Consulta de vendas do turno nas Entradas do Caixa (Marco, 02/10/2026)
+
+Clicar em **Entradas** abre uma consulta **somente leitura** das vendas vinculadas ao **Caixa aberto atual**. O Saldo do caixa não abre esta consulta porque também compõe transferências e demais movimentos físicos. Ela não é o Relatório de Vendas: o servidor deriva empresa, PDV, Caixa e intervalo operacional da própria abertura; o navegador só pode refinar por produto, forma de pagamento e horário. Não existe seletor de outro PDV, outra empresa ou outro Caixa, nem ações de editar, cancelar, anexar ou criar.
+
+`caixa_operar` basta para o titular consultar o próprio Caixa aberto, mesmo sem `relatorio_vendas_visualizar`. `caixas_gerenciar` conserva a leitura administrativa permitida nas demais rotas de Caixa, sempre dentro da empresa autorizada. Vendas canceladas continuam na consulta de auditoria separada e não entram nesta lista nem no saldo. Venda manual vinculada ao Caixa aparece sem filtro de horário; quando o filtro de horário está ativo, ela fica fora porque não há instante real registrado para compará-la, e a tela deve avisar isso explicitamente.
+
+### R-209 — Relatório de fechamento usa o período operacional congelado (Rodrigo, 02/10/2026)
+
+O relatório do fechamento não consulta vendas por minuto nem deixa o operador escolher data, PDV ou intervalo. Ao confirmar a saída do Caixa, o servidor grava o corte; a etapa **Vendas do PDV** busca uma única vez as vendas e movimentações ocorridas entre a abertura já conferida e esse corte. Portanto, a primeira venda pertence ao Caixa somente depois de ele ter sido aberto no PDV, e a última pertence somente até o instante em que o operador inicia o fechamento.
+
+Totais, formas de pagamento, canceladas e movimentos são de leitura para conferência; o navegador não recalcula saldo nem altera os fatos financeiros. A consulta usa `caixaId`, `dataHoraAbertura` e `dataHoraFechamento` derivados pelo servidor. Não há atualização automática, segundo botão de busca que mude o período, nem entrada posterior ao corte.
+
+### R-210 — Relatório da maquininha é prova do turno, sem taxa financeira (Rodrigo, 02/10/2026)
+
+A etapa de maquininha reproduz o fluxo operacional da referência: foto do relatório, leitura assistida opcional, revisão humana, número de série, valores de crédito, débito, Pix e voucher, além dos valores de início/fim quando o turno usar contador acumulado. “Líquido” significa **valor apurado no turno**, não desconto de taxa nem recebível líquido: na Manhã, é o valor lido no próprio relatório; na Tarde, é o valor acumulado da Tarde menos o acumulado da Manhã, sempre por forma de pagamento.
+
+O relatório é evidência para conferência de cartões. Ele não compõe dinheiro físico, não credita o Cofre, não muda a fórmula canônica do Caixa e não autoriza inferir taxa, adquirente, liquidação ou disponibilidade bancária.
+
+### R-211 — Encerramento operacional envia malote pendente à Tesouraria (Rodrigo, 02/10/2026)
+
+Depois de informar físico, lacre, folha e eventuais divergências, o operador encerra as vendas e entrega o malote à Tesouraria. O retorno físico fica pendente de conferência: a Tesouraria recebe o dossiê e só confirma o valor contado no Cofre no seu próprio fluxo. O operador não volta ao Caixa aberto nem inclui vendas depois do corte.
+
+Falta ou sobra preserva a regra R-206: a divergência exige relato, autoria e horário do servidor; falta gera quebra auditada e notificação, e sobra não cria quebra positiva. O encerramento do operador não transforma cartão, Pix, voucher ou crediário em dinheiro físico.
+
+### R-212 — Cancelada é relato do CREARE, não uma segunda declaração no fechamento (Rodrigo, 02/10/2026)
+
+Toda venda cancelada já exige no CREARE login/autorização do gerente e motivo do cancelamento. O fechamento apenas consulta e apresenta esse fato no período operacional congelado: venda, horário, valor, gerente/autorizador e motivo/justificativa registrados no CREARE. O operador do Caixa não grava áudio, texto nem nova justificativa para a mesma venda no Pralis.
+
+O motivo aparece em modo somente leitura no relatório final e no dossiê da Tesouraria. Ausência de motivo no dado integrado é uma pendência de integração/auditoria visível, não uma oportunidade para reescrever o fato em outro sistema.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

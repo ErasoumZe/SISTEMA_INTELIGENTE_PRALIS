@@ -32,6 +32,8 @@ export type AberturaCaixaPayload = {
   valorMoedasContado?: number;
   observacaoDivergencia?: string | null;
   observacao: string | null;
+  /** A tela já exibiu a revisão detalhada; nunca segue para a API. */
+  confirmadoPeloResumo?: true;
 };
 export type FechamentoPayload = {
   caixaId: string;
@@ -77,7 +79,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function abrirCaixaOperacional(payload: AberturaCaixaPayload): Promise<boolean> {
-    if (
+    if (!payload.confirmadoPeloResumo &&
       !(await deps.confirmar("Confirma a abertura deste caixa para o turno informado?", "Abrir caixa", "Abrir caixa"))
     ) {
       return false;
@@ -85,9 +87,10 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     deps.setSalvando(true);
     try {
       // /abrir responde o id criado (nao CaixaStatus); re-busca o status canonico.
+      const { confirmadoPeloResumo: _confirmadoPeloResumo, ...dadosAbertura } = payload;
       await deps.api.post("/api/caixa/abrir", {
         empresaId: deps.empresaId(),
-        ...payload
+        ...dadosAbertura
       });
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();

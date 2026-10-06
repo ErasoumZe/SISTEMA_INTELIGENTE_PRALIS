@@ -4,6 +4,35 @@ export { empresaQuerySchema as formasPagamentoQuerySchema } from "../api/index.j
 
 const uuidSchema = z.string().uuid();
 
+// Classificacao usada SOMENTE para leitura/conferencia no fechamento do Caixa. Ela nao altera
+// roteamento, saldo nem liquidacao: diz ao relatorio em qual coluna operacional o recebimento
+// deve aparecer. Formas antigas podem ainda nao ter a classificacao gravada; nesse caso a
+// normalizacao pelo nome preserva o relatorio util ate que a forma seja revisada no cadastro.
+export const categoriasFechamentoCaixa = [
+  "dinheiro",
+  "credito",
+  "debito",
+  "pix",
+  "voucher",
+  "crediario",
+  "outros"
+] as const;
+export type CategoriaFechamentoCaixa = (typeof categoriasFechamentoCaixa)[number];
+
+export function categoriaFechamentoPorNome(nome: string): CategoriaFechamentoCaixa {
+  const normalizado = nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  if (/\bpix\b/u.test(normalizado)) return "pix";
+  if (/\bdinheiro\b|\bespecie\b|\bcash\b/u.test(normalizado)) return "dinheiro";
+  if (/\bcrediario\b/u.test(normalizado)) return "crediario";
+  if (/\bvoucher\b|\bvale\b/u.test(normalizado)) return "voucher";
+  if (/\bdebito\b/u.test(normalizado)) return "debito";
+  if (/\bcredito\b/u.test(normalizado)) return "credito";
+  return "outros";
+}
+
 // R-167/R-169 (#152): o roteamento financeiro da forma de pagamento — para onde vai o dinheiro
 // DESTA forma NESTA empresa, e quando ele fica gastavel.
 //
@@ -125,6 +154,7 @@ export const SEM_ROTEAMENTO: RoteamentoDaForma = {
 export const formaPagamentoPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
+  categoriaFechamentoCaixa: z.enum(categoriasFechamentoCaixa).optional(),
   adquirente: textoOpcional.optional(),
   usaContaDoPdv: z.boolean().optional(),
   contaRecebivelId: uuidSchema.nullable().optional(),

@@ -434,15 +434,6 @@ export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], 
 // +Novo agrupa Saídas e Transferências. A consulta de Entradas continua no menu da tela.
 export const opcoesNovo: AcaoNovo[] = [
   {
-    id: "saidas",
-    titulo: "Saídas",
-    subtitulo: "Despesa, mercadoria ou retirada",
-    permissoes: ["despesas_criar", "mercadorias_criar", "retiradas_criar"],
-    icone: "mdi-arrow-up-right",
-    cor: "var(--cat-despesas-base)",
-    entidade: "despesa"
-  },
-  {
     id: "transferencias",
     titulo: "Transferências",
     subtitulo: "Nova transferência ou retorno / sangria",
@@ -450,6 +441,15 @@ export const opcoesNovo: AcaoNovo[] = [
     icone: "mdi-swap-horizontal",
     cor: "var(--cat-transferencias-base)",
     entidade: "transferencia"
+  },
+  {
+    id: "saidas",
+    titulo: "Saídas",
+    subtitulo: "Despesa, mercadoria ou retirada",
+    permissoes: ["despesas_criar", "mercadorias_criar", "retiradas_criar"],
+    icone: "mdi-arrow-up-right",
+    cor: "var(--cat-despesas-base)",
+    entidade: "despesa"
   }
 ];
 

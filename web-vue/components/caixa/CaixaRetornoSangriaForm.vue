@@ -33,9 +33,10 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
 </script>
 
 <template>
-  <v-card class="retorno-dialog">
-    <v-card-text class="pt-5">
-      <p class="mb-4">Envie dinheiro físico do Caixa aberto para o cofre.</p>
+  <section class="retorno-dialog">
+    <div class="retorno-dialog__corpo">
+      <div class="retorno-dialog__secao">Retorno / sangria</div>
+      <p class="retorno-dialog__intro">Envie dinheiro físico do Caixa aberto para o cofre.</p>
       <div class="retorno-dialog__saldo">
         Disponível para retorno: <strong>{{ dinheiro(saldoLivre) }}</strong>
       </div>
@@ -50,7 +51,7 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
           ><small>Moedas</small><strong>{{ dinheiro(valorMoedas) }}</strong></span
         >
       </div>
-      <v-row class="mt-2">
+      <v-row class="mt-2 retorno-dialog__campos">
         <v-col cols="12" md="4">
           <CampoDinheiro
             :model-value="valor"
@@ -113,42 +114,61 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
         </v-col>
       </v-row>
       <div v-if="mensagemErro" class="retorno-dialog__erro" role="alert">{{ mensagemErro }}</div>
-    </v-card-text>
+    </div>
 
-    <v-card-actions class="retorno-dialog__acoes px-6 pb-5">
+    <div class="retorno-dialog__acoes">
       <v-btn variant="text" @click="emit('cancelar')">Cancelar</v-btn>
       <v-spacer />
       <v-btn
         variant="outlined"
-        color="warning"
+        class="retorno-dialog__continuar"
         :disabled="bloqueado"
         :loading="salvando"
         @click="emit('salvar', false)"
       >
         Salvar e continuar
       </v-btn>
-      <v-btn color="warning" :disabled="bloqueado" :loading="salvando" @click="emit('salvar', true)">
+      <v-btn class="retorno-dialog__salvar" :disabled="bloqueado" :loading="salvando" @click="emit('salvar', true)">
         Salvar e sair
       </v-btn>
-    </v-card-actions>
-  </v-card>
+    </div>
+  </section>
 </template>
 
 <style scoped>
 .retorno-dialog {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1 1 auto;
-  overflow-y: auto;
   color: rgb(var(--v-theme-on-surface));
   background: rgb(var(--v-theme-surface));
 }
+
+.retorno-dialog__corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 22px;
+}
+
+.retorno-dialog__secao {
+  margin: 2px 0 8px;
+  color: var(--cat-transferencias-tinta, #9c2f07);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.retorno-dialog__intro { margin: 0 0 14px; }
 
 .retorno-dialog__saldo {
   padding: 10px 12px;
   border-radius: 8px;
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-primary), 0.16);
-  border: 1px solid rgba(var(--v-theme-primary), 0.34);
+  background: var(--cat-transferencias-soft, #fff1eb);
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #fb4b0b) 38%, transparent);
 }
 
 .retorno-dialog__resumo {
@@ -161,7 +181,7 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
   display: grid;
   gap: 2px;
   padding: 10px 12px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #fb4b0b) 25%, transparent);
   border-radius: 8px;
 }
 
@@ -183,7 +203,20 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
 }
 
 .retorno-dialog__acoes {
+  display: flex;
+  align-items: center;
+  padding: 12px 22px;
+  border-top: 1px solid var(--cx-line, rgb(var(--v-theme-on-surface) / 18%));
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.retorno-dialog__continuar { color: var(--cat-transferencias-tinta, #9c2f07); }
+.retorno-dialog__salvar { color: #fff; background: var(--cat-transferencias-base, #fb4b0b); }
+.retorno-dialog__campos :deep(.v-field--focused .v-field__outline) { color: var(--cat-transferencias-base, #fb4b0b); }
+
+@media (max-width: 560px) {
+  .retorno-dialog__corpo { padding: 14px 16px; }
+  .retorno-dialog__acoes { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
 </style>

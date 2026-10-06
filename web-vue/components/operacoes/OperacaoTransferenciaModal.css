@@ -374,6 +374,16 @@
   font-size: 12px;
   text-align: center;
 }
+.tr-aviso-malote {
+  margin: -2px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #fb4b0b) 32%, transparent);
+  border-radius: 7px;
+  color: var(--cat-transferencias-tinta, #9c2f07);
+  background: var(--cat-transferencias-soft, #fff1eb);
+  font-size: 12px;
+  line-height: 1.35;
+}
 .tr-previsao-composicao {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

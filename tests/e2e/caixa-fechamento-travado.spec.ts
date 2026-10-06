@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, request, test, type APIRequestContext } from "@playwright/test";
+import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 import { encerrarCaixaDeTeste, entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 
 /**
@@ -18,6 +18,18 @@ const MARCA = `${PREFIXO}-101-${Date.now().toString(36)}`;
 
 // O atributo desta base e `data-teste`, nao `data-testid`: `getByTestId` nao acharia nada.
 const porTeste = (nome: string) => `[data-teste="${nome}"]`;
+
+async function avancarAteConferencia(page: Page) {
+  await page.locator(`${porTeste("responsavel-fechamento-wizard")} input`).fill("Operador E2E");
+  await page.locator(`${porTeste("supervisor-fechamento-wizard")} input`).fill("Supervisor E2E");
+  await page.locator(porTeste("avancar-resumo-fechamento")).click();
+  await page.locator(porTeste("gerar-relatorio-vendas")).click();
+  await expect(page.getByText("Relatório gerado.", { exact: true })).toBeVisible();
+  await page.locator(porTeste("avancar-vendas-fechamento")).click();
+  await page.locator(porTeste("avancar-maquininha-fechamento")).click();
+  await expect(page.locator(porTeste("fechamento-movimentacoes"))).toContainText("Transferências (líquido)");
+  await page.locator(porTeste("avancar-movimentacoes-fechamento")).click();
+}
 
 type Sessao = { usuarioId: string; empresaId: string };
 
@@ -65,13 +77,31 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
     const eu = await sessao(caixa);
 
     const contaId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} conta` });
+    const contaCofreId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} cofre`, saldoInicial: 300 });
     const pdvId = await criar(admin, "/api/pdvs", { empresaId, nome: `${MARCA} PDV`, contaId, ativo: true });
 
     const hoje = new Date().toISOString().slice(0, 10);
+    const lacreAbertura = `${MARCA}-ABERTURA`;
+    await criar(admin, "/api/transferencias", {
+      empresaId,
+      dataReferencia: hoje,
+      descricao: `${MARCA} fundo de troco`,
+      valorOriginal: 300,
+      valorEspecieDeclarado: 300,
+      valorMoedasDeclarado: 0,
+      contaOrigemId: contaCofreId,
+      contaDestinoId: contaId,
+      nLacreDoc: lacreAbertura
+    });
     caixaId = await criar(caixa, "/api/caixa/abrir", {
       empresaId,
       pdvId,
-      usuarioCaixaId: eu.usuarioId
+      usuarioCaixaId: eu.usuarioId,
+      lacreAbertura,
+      caixaResponsavelNome: "Caixa E2E",
+      supervisorResponsavelNome: "Supervisor E2E",
+      valorEspecieContado: 300,
+      valorMoedasContado: 0
     });
 
     // Dinheiro de verdade no caixa, lancado pelo proprio operador (o servidor resolve conta e PDV
@@ -98,8 +128,10 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
 
   test("o operador ve o motivo antes de clicar, e o botao de fechar para", async ({ page }) => {
     await entrar(page, USUARIOS.semProdutos);
-    await page.goto("/caixa");
+    await page.goto("/caixa?etapa=fechamento");
+    await avancarAteConferencia(page);
 
+    await expect(page.locator(porTeste("etapa-fechamento"))).toBeVisible();
     const bloco = page.locator(porTeste("entregas-aguardando-conferencia"));
     await expect(bloco).toBeVisible();
     await expect(bloco).toContainText(`${MARCA}-LACRE`);
@@ -123,7 +155,8 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
 
   test("o bloco nao cria rolagem horizontal em nenhuma das quatro larguras", async ({ page }) => {
     await entrar(page, USUARIOS.semProdutos);
-    await page.goto("/caixa");
+    await page.goto("/caixa?etapa=fechamento");
+    await avancarAteConferencia(page);
     await expect(page.locator(porTeste("entregas-aguardando-conferencia"))).toBeVisible();
 
     for (const largura of LARGURAS) {

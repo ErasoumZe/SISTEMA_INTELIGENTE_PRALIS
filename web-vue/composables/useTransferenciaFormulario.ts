@@ -53,6 +53,9 @@ export function useTransferenciaFormulario() {
   const preparandoMaloteParaCaixa = computed(() => {
     return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value?.ehContaPdv);
   });
+  const destinoSemPdv = computed(() => {
+    return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value && !contaDestinoSelecionada.value.ehContaPdv);
+  });
   const composicaoMaloteInformada = computed(
     () => form.value.valorEspecieDeclarado.trim() !== "" && form.value.valorMoedasDeclarado.trim() !== ""
   );
@@ -223,6 +226,7 @@ export function useTransferenciaFormulario() {
     lacresRetornoAtivos,
     confirmacaoAberta,
     contaOrigemSelecionada,
+    destinoSemPdv,
     preparandoMaloteParaCaixa,
     composicaoMaloteInformada,
     composicaoMaloteBate,

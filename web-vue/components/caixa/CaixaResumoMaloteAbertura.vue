@@ -13,10 +13,10 @@ type ConferenciaAbertura = {
   conferidoEm: string;
 };
 
-const props = defineProps<{ caixaId: string }>();
+const props = defineProps<{ caixaId: string; aberto: boolean }>();
+const emit = defineEmits<{ (event: "update:aberto", value: boolean): void }>();
 const { apiGet } = useApi();
 const conferencia = ref<ConferenciaAbertura | null>(null);
-const dialogAberto = ref(false);
 let consultaAtual = 0;
 
 const totalDeclarado = computed(() => {
@@ -48,28 +48,13 @@ watch(
 </script>
 
 <template>
-  <button
-    v-if="conferencia"
-    type="button"
-    class="malote-abertura"
-    :class="{ 'malote-abertura--divergente': divergiu }"
-    aria-label="Ver resumo do malote de abertura"
-    @click="dialogAberto = true"
+  <v-dialog
+    :model-value="aberto"
+    max-width="560"
+    persistent
+    no-click-animation
+    @update:model-value="emit('update:aberto', $event)"
   >
-    <template v-if="divergiu">
-      <span>Abertura com divergência — ver conferência</span>
-      <v-icon icon="mdi-alert-outline" size="14" aria-hidden="true" />
-    </template>
-    <template v-else>
-      <span
-        >Abertura: dinheiro {{ dinheiro(conferencia.valorEspecieContado) }} · moedas
-        {{ dinheiro(conferencia.valorMoedasContado) }}</span
-      >
-      <v-icon icon="mdi-information-outline" size="14" aria-hidden="true" />
-    </template>
-  </button>
-
-  <v-dialog v-model="dialogAberto" max-width="560" persistent no-click-animation>
     <v-card v-if="conferencia">
       <v-card-title>Resumo do malote de abertura</v-card-title>
       <v-card-text>
@@ -110,43 +95,13 @@ watch(
       </v-card-text>
       <v-card-actions class="px-6 pb-5">
         <v-spacer />
-        <v-btn color="primary" @click="dialogAberto = false">Fechar</v-btn>
+        <v-btn color="primary" @click="emit('update:aberto', false)">Fechar</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
 <style scoped>
-.malote-abertura {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 0.74rem;
-  line-height: 1.2;
-  text-align: left;
-  cursor: pointer;
-}
-
-.malote-abertura:hover,
-.malote-abertura:focus-visible {
-  text-decoration: underline;
-}
-
-.malote-abertura--divergente {
-  color: rgb(var(--v-theme-error));
-}
-
-.malote-abertura:focus-visible {
-  outline: 2px solid currentcolor;
-  outline-offset: 3px;
-}
-
 .malote-abertura__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

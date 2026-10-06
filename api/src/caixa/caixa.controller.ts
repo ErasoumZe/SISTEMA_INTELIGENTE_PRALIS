@@ -10,9 +10,12 @@ import {
   planejamentoRetornoIdParamsSchema,
   planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
+  iniciarFechamentoCaixaPayloadSchema,
+  registrarIndisponibilidadeCaixaPayloadSchema,
   historicoCaixaQuerySchema,
-  salvarRelatorioMaquininhaSchema,
-  transferenciaCofrePayloadSchema
+  salvarRelatorioMaquininhaFechamentoSchema,
+  transferenciaCofrePayloadSchema,
+  vendasDoCaixaQuerySchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
@@ -24,8 +27,12 @@ import {
   listarLacresRetornoDisponiveisCaixa,
   executarPlanejamentoRetorno,
   fecharCaixa,
+  iniciarFechamentoCaixa,
   listarHistoricoCaixa,
   listarVendasCanceladasCaixa,
+  listarVendasDoCaixaAberto,
+  obterRelatorioVendasFechamento,
+  gerarRelatorioVendasFechamento,
   listarPlanejamentosRetorno,
   obterDetalheCaixa,
   obterStatusCaixa,
@@ -38,7 +45,9 @@ import {
   analisarRelatorioMaquininhaFechamento,
   obterRelatorioMaquininhaFechamento,
   salvarRelatorioMaquininhaFechamento,
-  transcreverObservacaoFechamento
+  transcreverObservacaoFechamento,
+  registrarIndisponibilidadeCaixa,
+  registrarRetornoIndisponibilidadeCaixa
 } from "./caixa.service.js";
 
 function statusErro(mensagem: string) {
@@ -109,6 +118,50 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
+
+  app.post(
+    "/api/caixa/:caixaId/iniciar-fechamento",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      iniciarFechamentoCaixaPayloadSchema.parse(request.body);
+      try {
+        return ok(await iniciarFechamentoCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/caixa/:caixaId/indisponibilidades",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const body = registrarIndisponibilidadeCaixaPayloadSchema.parse(request.body);
+      try {
+        return ok(await registrarIndisponibilidadeCaixa(caixaId, body, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/caixa/:caixaId/indisponibilidades/retornar",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await registrarRetornoIndisponibilidadeCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 
   // R-187: Transferencia de retorno avulsa/final do Caixa para o Cofre.
   app.post(
@@ -245,8 +298,11 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
+      const { anexoId, tipoLeitura } = z
+        .object({ anexoId: z.string().uuid(), tipoLeitura: z.enum(["manha", "tarde"]) })
+        .parse(request.body);
       try {
-        return ok(await analisarRelatorioMaquininhaFechamento(caixaId, request.perfilUsuario!));
+        return ok(await analisarRelatorioMaquininhaFechamento(caixaId, anexoId, tipoLeitura, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
@@ -259,11 +315,9 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
-      const { anexosConsiderados, ...dados } = salvarRelatorioMaquininhaSchema.parse(request.body);
+      const dados = salvarRelatorioMaquininhaFechamentoSchema.parse(request.body);
       try {
-        return ok(
-          await salvarRelatorioMaquininhaFechamento(caixaId, dados, anexosConsiderados, request.perfilUsuario!)
-        );
+        return ok(await salvarRelatorioMaquininhaFechamento(caixaId, dados, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
@@ -361,12 +415,68 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
   );
 
   app.get(
+    "/api/caixa/:caixaId/relatorio-vendas",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await obterRelatorioVendasFechamento(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/caixa/:caixaId/relatorio-vendas",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await gerarRelatorioVendasFechamento(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
     "/api/caixa/:caixaId/vendas-canceladas",
     { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
     async (request, reply) => {
       const params = caixaParamsSchema.parse(request.params);
       try {
         return ok(await listarVendasCanceladasCaixa(params.caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  // Consulta de conferencia do turno em curso. Nao e uma segunda rota de relatorio: o servico
+  // prende empresa, PDV e caixa no servidor e entrega somente leitura para o operador titular.
+  app.get(
+    "/api/caixa/:caixaId/vendas",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const query = vendasDoCaixaQuerySchema.parse(request.query);
+      try {
+        const consulta = await listarVendasDoCaixaAberto(caixaId, query, request.perfilUsuario!);
+        const pagina = paginadoDeResultado(consulta.resultado);
+        return {
+          ...pagina,
+          meta: {
+            ...pagina.meta,
+            totais: consulta.totais,
+            abertura: consulta.abertura,
+            limiteSuperior: consulta.limiteSuperior,
+            manuaisSemHorarioForaDoFiltro: consulta.manuaisSemHorarioForaDoFiltro
+          }
+        };
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

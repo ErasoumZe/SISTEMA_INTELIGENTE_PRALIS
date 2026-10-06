@@ -56,6 +56,17 @@ describe("abrirCaixaOperacional", () => {
     expect(deps.setSalvando).not.toHaveBeenCalled();
   });
 
+  it("não abre o segundo diálogo genérico quando a revisão detalhada já confirmou a abertura", async () => {
+    const deps = montarDeps({ confirmar: vi.fn() });
+    await criarAcoesCaixa(deps).abrirCaixaOperacional({ ...payload, confirmadoPeloResumo: true });
+
+    expect(deps.confirmar).not.toHaveBeenCalled();
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/abrir", {
+      empresaId: "emp-1",
+      ...payload
+    });
+  });
+
   it("em erro notifica erro, retorna false e reseta salvando", async () => {
     const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("500")) } });
     const acoes = criarAcoesCaixa(deps);

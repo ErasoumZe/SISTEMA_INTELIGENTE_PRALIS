@@ -52,8 +52,8 @@ watch(
 
 <template>
   <v-dialog v-model="dialogAberto" max-width="680" persistent no-click-animation>
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
+    <v-card class="caixa-sangrias-dialog">
+      <v-card-title class="caixa-sangrias-dialog__titulo d-flex align-center justify-space-between">
         Sangrias deste caixa
         <v-btn
           icon="mdi-close"
@@ -82,8 +82,21 @@ watch(
         </v-list>
       </v-card-text>
       <v-card-actions class="px-6 pb-5"
-        ><v-spacer /><v-btn color="warning" @click="dialogAberto = false">Fechar</v-btn></v-card-actions
+        ><v-spacer /><v-btn class="caixa-sangrias-dialog__acao" variant="text" @click="dialogAberto = false"
+          >Fechar</v-btn
+        ></v-card-actions
       >
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.caixa-sangrias-dialog {
+  --sangria-cor: #9a5b00;
+  border-top: 4px solid var(--sangria-cor);
+}
+.caixa-sangrias-dialog__titulo,
+.caixa-sangrias-dialog__acao {
+  color: var(--sangria-cor);
+}
+</style>

@@ -4,19 +4,61 @@ import { ErroDominio } from "../erros.js";
 
 export type ConfigGeminiMaquininha = { chave: string; modelo: string; timeoutMs: number };
 
+/**
+ * Dados explicitamente artificiais para exercitar o fluxo local sem enviar documentos a um provedor.
+ * O chamador só pode usá-los em NODE_ENV=development, sob flag de ambiente dedicada.
+ */
+export function leituraRelatorioMaquininhaSimulada(
+  tipoLeitura: "manha" | "tarde",
+  numeroMaquininha: string | null
+): RelatorioMaquininhaIa {
+  const manha = tipoLeitura === "manha";
+  const valores = manha
+    ? { acumulador: 1850, credito: 1000, debito: 500, pix: 250, voucher: 100 }
+    : { acumulador: 1936, credito: 1031.5, debito: 518.5, pix: 272, voucher: 114 };
+  return {
+    documentoLegivel: true,
+    numeroMaquininha,
+    dataEmissao: new Date().toISOString().slice(0, 10),
+    ...valores,
+    detalhes: {
+      credito: [{ nome: manha ? "Saldo inicial simulado" : "Crédito simulado do turno", valor: valores.credito }],
+      debito: [{ nome: manha ? "Saldo inicial simulado" : "Débito simulado do turno", valor: valores.debito }],
+      pix: [{ nome: manha ? "Saldo inicial simulado" : "Pix simulado do turno", valor: valores.pix }],
+      voucher: [{ nome: manha ? "Saldo inicial simulado" : "Voucher simulado do turno", valor: valores.voucher }]
+    },
+    camposDuvidosos: [],
+    observacoes: ["SIMULAÇÃO LOCAL: valores artificiais; não são uma leitura de documento."]
+  };
+}
+
+const detalhe = {
+  type: "object",
+  properties: { nome: { type: "string" }, valor: { type: "number" } },
+  required: ["nome", "valor"]
+} as const;
+
 const schemaResposta = {
   type: "object",
   properties: {
     documentoLegivel: { type: "boolean" },
     numeroMaquininha: { type: ["string", "null"] },
     dataEmissao: { type: ["string", "null"] },
+    acumulador: { type: ["number", "null"] },
     credito: { type: ["number", "null"] },
     debito: { type: ["number", "null"] },
     pix: { type: ["number", "null"] },
     voucher: { type: ["number", "null"] },
-    total: { type: ["number", "null"] },
-    trocaInicial: { type: ["number", "null"] },
-    saldoFinalDinheiro: { type: ["number", "null"] },
+    detalhes: {
+      type: "object",
+      properties: {
+        credito: { type: "array", items: detalhe },
+        debito: { type: "array", items: detalhe },
+        pix: { type: "array", items: detalhe },
+        voucher: { type: "array", items: detalhe }
+      },
+      required: ["credito", "debito", "pix", "voucher"]
+    },
     camposDuvidosos: { type: "array", items: { type: "string" } },
     observacoes: { type: "array", items: { type: "string" } }
   },
@@ -24,25 +66,23 @@ const schemaResposta = {
     "documentoLegivel",
     "numeroMaquininha",
     "dataEmissao",
+    "acumulador",
     "credito",
     "debito",
     "pix",
     "voucher",
-    "total",
-    "trocaInicial",
-    "saldoFinalDinheiro",
+    "detalhes",
     "camposDuvidosos",
     "observacoes"
   ]
 } as const;
 
-const prompt = `Leia um relatório resumido de maquininha/cartão brasileiro para conferência de fechamento.
-Todas as fotos ou PDFs enviados pertencem ao MESMO relatório da mesma maquininha. Combine apenas dados que estejam visíveis entre eles; nunca some valores de fotos diferentes nem estime números apagados, cortados ou ilegíveis.
-Os campos são: número/série da maquininha, data de emissão, crédito, débito, Pix, voucher, total, troca inicial e saldo final em dinheiro.
-Use valores numéricos sem R$, ponto de milhar ou vírgula. Quando não estiver visível, use null.
-O período do turno é definido pela abertura do caixa e não deve ser extraído.
-Se não for um relatório de maquininha legível, documentoLegivel=false, todos os valores null e explique em observacoes.
-Liste em camposDuvidosos todos os campos ilegíveis ou ambíguos. Não escreva nada fora do JSON.`;
+const prompt = `Leia UMA foto ou PDF de relatorio resumido de maquininha brasileiro.
+Extraia somente dados explicitamente visiveis: numero ou serie, data, acumulador, credito, debito, Pix e voucher.
+Para cada forma, devolva as linhas discriminadas visiveis em detalhes, com nome e valor. Se nao houver linha discriminada, devolva lista vazia.
+Nao some, nao estime, nao complete numeros cortados e nao compare fotos diferentes. Valores usam numero puro, sem R$, ponto de milhar ou virgula; use null quando nao estiver visivel.
+O numero da maquininha e a hora do turno sao conferidos pelo sistema, nunca inventados pela IA. Se o documento nao for legivel, use documentoLegivel=false, valores null, listas vazias e explique em observacoes.
+Liste em camposDuvidosos todo campo ambiguo. Responda somente o JSON solicitado.`;
 
 type RespostaGemini = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
 
@@ -55,7 +95,7 @@ export async function extrairRelatorioMaquininhaComGemini(
   config: ConfigGeminiMaquininha,
   fetchImpl: typeof fetch = fetch
 ): Promise<RelatorioMaquininhaIa> {
-  if (!arquivos.length) return falha("Envie ao menos uma foto ou PDF do relatório da maquininha.", 400, "IA_SEM_ANEXO");
+  if (!arquivos.length) return falha("Envie ao menos uma foto ou PDF do relatorio da maquininha.", 400, "IA_SEM_ANEXO");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
@@ -84,17 +124,17 @@ export async function extrairRelatorioMaquininhaComGemini(
     if (!resposta.ok) {
       const mensagem =
         resposta.status === 401 || resposta.status === 403
-          ? "A configuração da leitura por IA precisa ser revisada."
+          ? "A configuracao da leitura por IA precisa ser revisada."
           : resposta.status === 429
             ? "O limite de leitura por IA foi atingido. Tente novamente mais tarde."
-            : "A leitura do comprovante está indisponível. A foto continua válida como prova.";
+            : "A leitura do comprovante esta indisponivel. A foto continua valida como prova.";
       return falha(mensagem, resposta.status === 429 ? 503 : 502);
     }
     const corpo = (await resposta.json()) as RespostaGemini;
     const texto = corpo.candidates?.[0]?.content?.parts?.find((parte) => parte.text)?.text;
     if (!texto)
       return falha(
-        "A IA não conseguiu ler este comprovante. A foto continua válida como prova.",
+        "A IA nao conseguiu ler este comprovante. A foto continua valida como prova.",
         422,
         "IA_RESPOSTA_INCOMPLETA"
       );
@@ -106,13 +146,13 @@ export async function extrairRelatorioMaquininhaComGemini(
     }
     const validado = relatorioMaquininhaIaSchema.safeParse(json);
     if (!validado.success)
-      return falha("A IA devolveu campos inválidos. Revise manualmente.", 422, "IA_RESPOSTA_INCOMPLETA");
+      return falha("A IA devolveu campos invalidos. Revise manualmente.", 422, "IA_RESPOSTA_INCOMPLETA");
     return validado.data;
   } catch (erro) {
     if (erro instanceof ErroDominio) throw erro;
     if (erro instanceof Error && erro.name === "AbortError")
       return falha("A leitura demorou demais. Tente novamente.", 504, "IA_TIMEOUT");
-    return falha("Sem conexão com a leitura por IA. A foto continua válida como prova.", 503);
+    return falha("Sem conexao com a leitura por IA. A foto continua valida como prova.", 503);
   } finally {
     clearTimeout(timeout);
   }

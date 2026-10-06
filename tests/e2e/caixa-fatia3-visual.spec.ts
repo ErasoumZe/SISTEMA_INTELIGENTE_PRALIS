@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, request, test, type APIRequestContext } from "@playwright/test";
+import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 import { encerrarCaixaDeTeste, entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 
 /**
@@ -19,6 +19,18 @@ const API = process.env["E2E_API_URL"] ?? "http://localhost:4100";
 const MARCA = `${PREFIXO}-F3-${Date.now().toString(36)}`;
 
 const porTeste = (nome: string) => `[data-teste="${nome}"]`;
+
+async function avancarAteConferencia(page: Page) {
+  await page.locator(`${porTeste("responsavel-fechamento-wizard")} input`).fill("Operador E2E");
+  await page.locator(`${porTeste("supervisor-fechamento-wizard")} input`).fill("Supervisor E2E");
+  await page.locator(porTeste("avancar-resumo-fechamento")).click();
+  await page.locator(porTeste("gerar-relatorio-vendas")).click();
+  await expect(page.getByText("Relatório gerado.", { exact: true })).toBeVisible();
+  await page.locator(porTeste("avancar-vendas-fechamento")).click();
+  await page.locator(porTeste("avancar-maquininha-fechamento")).click();
+  await expect(page.locator(porTeste("fechamento-movimentacoes"))).toContainText("Transferências (líquido)");
+  await page.locator(porTeste("avancar-movimentacoes-fechamento")).click();
+}
 
 type Sessao = { usuarioId: string; empresaId: string };
 
@@ -67,6 +79,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     const eu = await sessao(caixa);
 
     contaPdvId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} conta` });
+    const contaCofreId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} cofre`, saldoInicial: 300 });
     const pdvId = await criar(admin, "/api/pdvs", {
       empresaId,
       nome: `${MARCA} PDV`,
@@ -75,10 +88,27 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     });
 
     const hoje = new Date().toISOString().slice(0, 10);
+    const lacreAbertura = `${MARCA}-ABERTURA`;
+    await criar(admin, "/api/transferencias", {
+      empresaId,
+      dataReferencia: hoje,
+      descricao: `${MARCA} fundo de troco`,
+      valorOriginal: 300,
+      valorEspecieDeclarado: 300,
+      valorMoedasDeclarado: 0,
+      contaOrigemId: contaCofreId,
+      contaDestinoId: contaPdvId,
+      nLacreDoc: lacreAbertura
+    });
     caixaId = await criar(caixa, "/api/caixa/abrir", {
       empresaId,
       pdvId,
-      usuarioCaixaId: eu.usuarioId
+      usuarioCaixaId: eu.usuarioId,
+      lacreAbertura,
+      caixaResponsavelNome: "Caixa E2E",
+      supervisorResponsavelNome: "Supervisor E2E",
+      valorEspecieContado: 300,
+      valorMoedasContado: 0
     });
 
     // Dinheiro de verdade: sem saldo a tela do Caixa nao mostra os campos de entrega.
@@ -201,7 +231,8 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     expect(entrega.status(), await entrega.text()).toBe(200);
 
     await entrar(page, USUARIOS.semProdutos);
-    await page.goto("/caixa");
+    await page.goto("/caixa?etapa=fechamento");
+    await avancarAteConferencia(page);
 
     const bloco = page.locator(porTeste("entregas-aguardando-conferencia"));
     await expect(bloco).toBeVisible();

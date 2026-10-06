@@ -371,12 +371,16 @@ describe("caixa integration", () => {
         ]
       })
     );
-    expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(vendaId);
+    expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(
+      vendaId
+    );
     expect(
       json<{ data: Array<{ id: string; pagamentos: Array<{ formaPagamento: string; valor: number }> }> }>(
         canceladasOperacionais
       ).data
-    ).toContainEqual(expect.objectContaining({ id: vendaId, pagamentos: [{ formaPagamento: "Cartão de débito", valor: 120 }] }));
+    ).toContainEqual(
+      expect.objectContaining({ id: vendaId, pagamentos: [{ formaPagamento: "Cartão de débito", valor: 120 }] })
+    );
 
     await executarSql("delete from vendas where id = $1", [vendaId]);
   });
@@ -988,5 +992,90 @@ describe("caixa integration", () => {
     );
     expect(fechado?.status).toBe("fechado");
     expect(fechado?.saldo).toBe("0.00");
+  });
+
+  it("Deve_ConsultarSomenteAsVendasDoCaixaAbertoDoOperador", async () => {
+    const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
+    const vendaDoCaixa = randomUUID();
+    const vendaDeOutroCaixa = randomUUID();
+    const produtoVinculado = randomUUID();
+    const pagamentoVinculado = randomUUID();
+    const agora = new Date();
+    const inicio = new Date(agora.getTime() - 60_000).toISOString();
+    const fim = new Date(agora.getTime() + 60_000).toISOString();
+
+    await executarSql(
+      `insert into vendas (id, empresa_id, caixa_id, pdv_id, data_referencia, data_venda, descricao, valor_original, status, computar)
+       values ($1,$2,$3,$4,$5,$6,'Venda do turno consultado','37.00','aprovado',true),
+              ($7,$2,$8,$9,$5,$6,'Venda de outro caixa','91.00','aprovado',true)`,
+      [
+        vendaDoCaixa,
+        idsTeste.empresaA,
+        idsTeste.caixaAbertoEntradas,
+        idsTeste.pdvEntradas,
+        "2026-07-01",
+        agora.toISOString(),
+        vendaDeOutroCaixa,
+        idsTeste.caixaAberto,
+        idsTeste.pdvA
+      ]
+    );
+    await executarSql(
+      `insert into vendas_produtos (id, venda_id, descricao_produto, quantidade, valor_unitario, valor_total)
+       values ($1,$2,'Pao frances do turno','2','18.50','37.00')`,
+      [produtoVinculado, vendaDoCaixa]
+    );
+    await executarSql(
+      `insert into vendas_pagamentos (id, venda_id, forma_pagamento_id, total_pago)
+       values ($1,$2,$3,'37.00')`,
+      [pagamentoVinculado, vendaDoCaixa, idsTeste.formaPagamentoDinheiro]
+    );
+
+    const propria = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAbertoEntradas}/vendas?produto=Pao%20frances&formaPagamentoId=${idsTeste.formaPagamentoDinheiro}&dataHoraInicio=${encodeURIComponent(inicio)}&dataHoraFim=${encodeURIComponent(fim)}&pdvId=${idsTeste.pdvA}&status=cancelado`,
+      headers: { cookie: cookieOperadorEntradas }
+    });
+    assertOk(propria);
+    const corpo = json<{
+      data: Array<{ id: string; descricao: string }>;
+      meta: { totais: { totalGeral: number; quantidade: number }; manuaisSemHorarioForaDoFiltro: boolean };
+    }>(propria);
+    expect(corpo.data).toEqual([expect.objectContaining({ id: vendaDoCaixa, descricao: "Venda do turno consultado" })]);
+    expect(corpo.meta.totais).toMatchObject({ totalGeral: 37, quantidade: 1 });
+    expect(corpo.meta.manuaisSemHorarioForaDoFiltro).toBe(true);
+
+    // Ter caixa_operar nao torna o operador leitor do caixa de outra pessoa/PDV.
+    const alheia = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/vendas`,
+      headers: { cookie: cookieOperadorEntradas }
+    });
+    assertProblem(alheia, 403);
+
+    await executarSql("delete from vendas where id in ($1,$2)", [vendaDoCaixa, vendaDeOutroCaixa]);
+  });
+
+  it("Deve_ConsultarRelatorioDoCaixaEmFechamentoComOCorteDoServidor", async () => {
+    const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
+    const inicio = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${idsTeste.caixaAbertoEntradas}/iniciar-fechamento`,
+      headers: { cookie: cookieOperadorEntradas }
+    });
+
+    assertOk(inicio);
+    const corte = json<{ data: { dataHoraCorte: string } }>(inicio).data.dataHoraCorte;
+
+    const relatorio = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAbertoEntradas}/vendas`,
+      headers: { cookie: cookieOperadorEntradas }
+    });
+
+    assertOk(relatorio);
+    const corpo = json<{ data: unknown[]; meta: { abertura: string; limiteSuperior: string } }>(relatorio);
+    expect(corpo.meta.abertura).toBeTruthy();
+    expect(new Date(corpo.meta.limiteSuperior).getTime()).toBe(new Date(corte).getTime());
   });
 });

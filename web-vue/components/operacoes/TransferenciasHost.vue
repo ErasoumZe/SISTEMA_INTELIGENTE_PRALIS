@@ -29,7 +29,10 @@ const aberto = computed({
   }
 });
 const editando = computed(() => Boolean(operacaoEditandoId.value));
-const podeUsarComum = computed(() => (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value));
+const caixaEmFechamento = computed(() => caixaStatus.value?.caixaAberto?.status === "em_fechamento");
+const podeUsarComum = computed(
+  () => !caixaEmFechamento.value && (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value)
+);
 const {
   entrega,
   saldoLivre,
@@ -79,19 +82,32 @@ function fechar() {
 
 <template>
   <v-dialog v-model="aberto" max-width="720" persistent no-click-animation>
-    <v-card class="transferencias-host">
-      <div class="transferencias-host__cabecalho">
-        <h2>{{ editando ? "Editar transferência" : "Transferências" }}</h2>
-        <v-btn icon="mdi-close" variant="text" aria-label="Fechar transferências" :disabled="ocupado" @click="fechar" />
+    <v-card class="transferencias-host" elevation="0">
+      <div class="transferencias-host__faixa">
+        <div class="transferencias-host__cabecalho">
+          <span class="transferencias-host__icone"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
+          <h2>{{ editando ? "Editar transferência" : "Nova transferência" }}</h2>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            aria-label="Fechar transferências"
+            :disabled="ocupado"
+            @click="fechar"
+          />
+        </div>
+        <v-tabs v-if="!editando" v-model="aba" grow class="transferencias-host__abas">
+          <v-tab value="nova" :disabled="!podeUsarComum || ocupado">Nova transferência</v-tab>
+          <v-tab value="retorno" :disabled="!podeRetornar || ocupado">Retorno / sangria</v-tab>
+        </v-tabs>
       </div>
-      <v-tabs v-if="!editando" v-model="aba" grow color="primary" class="transferencias-host__abas">
-        <v-tab value="nova" :disabled="!podeUsarComum || ocupado">Nova transferência</v-tab>
-        <v-tab value="retorno" :disabled="!podeRetornar || ocupado">Retorno / sangria</v-tab>
-      </v-tabs>
-      <div v-if="podeUsarComum" v-show="aba === 'nova'" class="transferencias-host__comum">
+      <v-alert v-if="caixaEmFechamento" type="warning" variant="tonal" class="ma-4">
+        <strong>Caixa em fechamento.</strong> Transferências, saídas e sangrias do PDV estão bloqueadas até a
+        conferência final na Tesouraria.
+      </v-alert>
+      <div v-if="!caixaEmFechamento && podeUsarComum" v-show="aba === 'nova'" class="transferencias-host__comum">
         <OperacaoTransferenciaForm />
       </div>
-      <template v-if="aba === 'retorno' && !editando">
+      <template v-if="!caixaEmFechamento && aba === 'retorno' && !editando">
         <v-alert v-if="!podeRetornar" type="info" variant="tonal" class="ma-4">
           Retorno / sangria exige um Caixa aberto e permissão para operar Caixa.
         </v-alert>
@@ -129,19 +145,56 @@ function fechar() {
   overflow: hidden;
   color: rgb(var(--v-theme-on-surface));
   background: rgb(var(--v-theme-surface));
+  box-shadow: none !important;
+}
+.transferencias-host__faixa {
+  flex: 0 0 auto;
+  padding: var(--cx-sp-4) var(--cx-sp-5) 0;
+  color: #fff;
+  background: var(--cat-transferencias-faixa, #c13a08);
+  border-radius: 16px 16px 0 0;
 }
 .transferencias-host__cabecalho {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 20px;
+  padding-bottom: var(--cx-sp-3);
 }
 .transferencias-host__cabecalho h2 {
+  flex: 1;
   font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+.transferencias-host__icone {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 20%);
+}
+.transferencias-host__cabecalho :deep(.v-btn) {
+  color: #fff;
 }
 .transferencias-host__abas {
   flex: 0 0 auto;
+}
+.transferencias-host__abas :deep(.v-tab) {
+  min-height: 38px;
+  color: rgb(255 255 255 / 78%) !important;
+  opacity: 1 !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.transferencias-host__abas :deep(.v-tab--selected) {
+  color: #fff !important;
+}
+.transferencias-host__abas :deep(.v-tabs__slider) {
+  height: 3px;
+  color: #fff;
 }
 .transferencias-host__comum {
   display: flex;
@@ -161,7 +214,10 @@ function fechar() {
     max-height: 100dvh;
   }
   .transferencias-host__cabecalho {
-    padding: 8px 12px;
+    padding-bottom: 8px;
+  }
+  .transferencias-host__faixa {
+    padding: 10px 12px 0;
   }
   .transferencias-host__abas :deep(.v-tab) {
     min-width: 0;
