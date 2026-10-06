@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { temPermissao as possuiPermissao, type AuthSession } from "@padaria/shared";
+import { ehAdministradorTotal, temPermissao as possuiPermissao, type AuthSession } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import CadastroTable from "~/components/cadastros/CadastroTable.vue";
 import { podeExecutarAcaoCadastro } from "~/utils/domain";
@@ -56,11 +56,17 @@ const emit = defineEmits<{
 const acao = "Novo cadastro";
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+// A API sempre expande `usuario_admin` para todas as permissoes. Esta verificacao e o cinto de
+// seguranca da interface: se a lista em memoria ficou anterior a uma mudanca de perfil, o dono do
+// sistema ainda enxerga Editar e a API continua sendo a autoridade final da operacao.
+const ehAdminTotal = computed(() => Boolean(sessao.value?.perfil && ehAdministradorTotal(sessao.value.perfil)));
 const podeAdicionar = computed(() =>
-  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "criar") : false
+  ehAdminTotal.value ||
+  (props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "criar") : false)
 );
 const podeEditarPorPermissao = computed(() =>
-  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "editar") : false
+  ehAdminTotal.value ||
+  (props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "editar") : false)
 );
 // A prop e uma restricao adicional para telas cujo contrato permite criar, mas nao editar.
 // A permissao da sessao continua sendo a autoridade; a tela nunca consegue amplia-la.

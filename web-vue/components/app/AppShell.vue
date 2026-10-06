@@ -34,6 +34,38 @@ const emit = defineEmits<{
   (event: "abrirTransferencias"): void;
 }>();
 
+// `AppWorkspace` sempre entrega a estrutura, inclusive `null` quando a empresa ainda nao tem
+// personalizacao. Algumas paginas especializadas (Produtos, Pedidos e Integracoes) usam esta
+// casca diretamente. Sem esta carga local elas caiam silenciosamente no menu padrao ao navegar
+// para fora do Workspace, fazendo parecer que o sistema "voltou" para a configuracao antiga.
+// `undefined` significa que a pagina nao informou a estrutura; so nesse caso a casca a busca.
+// Assim nao duplicamos a requisicao nem sobrescrevemos o fallback controlado pelo Workspace.
+const { apiGet } = useApi();
+const estruturaMenuCarregada = ref<EstruturaMenuEmpresa | null>(null);
+const estruturaMenuResolvida = computed(() =>
+  props.estruturaMenu === undefined ? estruturaMenuCarregada.value : props.estruturaMenu
+);
+
+async function carregarEstruturaMenuDaEmpresa() {
+  if (props.estruturaMenu !== undefined || !props.empresaId) return;
+  try {
+    estruturaMenuCarregada.value = await apiGet<EstruturaMenuEmpresa | null>(
+      `/api/menu-empresa?empresaId=${encodeURIComponent(props.empresaId)}`
+    );
+  } catch (error) {
+    // Menu configuravel e uma melhoria de navegacao, nunca pode impedir a tela operacional.
+    // Sem estrutura a sidebar usa apenas o padrao filtrado pelas permissoes da sessao.
+    estruturaMenuCarregada.value = null;
+    console.error("Falha ao carregar a estrutura do menu", error);
+  }
+}
+
+onMounted(() => void carregarEstruturaMenuDaEmpresa());
+watch(
+  () => props.empresaId,
+  () => void carregarEstruturaMenuDaEmpresa()
+);
+
 const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
@@ -182,7 +214,7 @@ onMounted(() => {
          descompasso, e o 67 §13.1 documenta o preco disso. -->
     <AppSidebar
       :telas="telas"
-      :estrutura-menu="estruturaMenu"
+      :estrutura-menu="estruturaMenuResolvida"
       :tela-ativa="telaAtiva"
       :telas-desabilitadas="telasDesabilitadas"
       :motivos-telas-desabilitadas="motivosTelasDesabilitadas"

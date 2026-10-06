@@ -139,7 +139,10 @@ function moverItemParaGrupo(origemId: string, destinoId: string, itemId: IdMenuC
 
 function atualizarCorSecao(secaoId: string, valor: unknown) {
   const cor = typeof valor === "string" && coresMenuGrupo.includes(valor as CorMenuGrupo) ? valor as CorMenuGrupo : "neutro";
-  atualizarSecao(secaoId, (secao) => ({ ...secao, cor }));
+  // A paleta personalizada tem precedencia na sidebar. Sem remover o RGB anterior, escolher
+  // Amarelo/Laranja/etc. no seletor parecia funcionar no formulario, mas o menu mantinha a cor
+  // antiga. Uma escolha pronta troca efetivamente de modo: RGB personalizado -> paleta do sistema.
+  atualizarSecao(secaoId, ({ corRgb: _corRgb, ...secao }) => ({ ...secao, cor }));
 }
 
 function removerCorRgb(secaoId: string) {
@@ -327,7 +330,7 @@ watch(() => props.empresaId, () => void carregar(), { immediate: true });
               </v-btn>
             </template>
             <v-card class="pa-2" min-width="280">
-              <v-color-picker :model-value="hexDaCorRgb(secao.corRgb)" mode="hexa" hide-inputs show-swatches @update:model-value="atualizarCorSelecionada(secao.id, $event)" />
+              <v-color-picker :model-value="hexDaCorRgb(secao.corRgb)" mode="hex" hide-inputs show-swatches @update:model-value="atualizarCorSelecionada(secao.id, $event)" />
               <v-btn block variant="text" color="primary" :disabled="!secao.corRgb" @click="removerCorRgb(secao.id)">
                 Usar cor da paleta do sistema
               </v-btn>
