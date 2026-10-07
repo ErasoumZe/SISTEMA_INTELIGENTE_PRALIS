@@ -55,8 +55,10 @@ const statusOpcoes = [
   { title: "Todos os estados", value: "" },
   { title: "Aberto", value: "aberto" },
   { title: "Em fechamento", value: "em_fechamento" },
-  { title: "Fechado", value: "fechado" }
+  { title: "Fechado", value: "fechado" },
+  { title: "Ajustado", value: "ajustado" }
 ];
+const abaAtiva = ref<"conferir" | "historico">("conferir");
 const linhas = ref<LinhaRelatorio[]>([]);
 const carregando = ref(false);
 const erro = ref("");
@@ -66,6 +68,7 @@ const total = ref(0);
 const dossie = ref<Dossie | null>(null);
 const caixaSelecionado = ref<LinhaRelatorio | null>(null);
 const carregandoDossie = ref(false);
+const erroDossie = ref("");
 const dialogoAberto = ref(false);
 const dialogoConferencia = ref(false);
 const resultadoConferencia = ref<"conferido" | "divergente">("conferido");
@@ -73,6 +76,24 @@ const observacaoConferencia = ref("");
 const confirmandoConferencia = ref(false);
 const erroConferencia = ref("");
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
+const linhasParaConferir = computed(() =>
+  linhas.value.filter((linha) =>
+    ["aguardando_tesouraria", "fechado_sem_pendencias", "com_quebra"].includes(linha.situacaoTesouraria)
+  )
+);
+const linhasHistorico = computed(() =>
+  linhas.value.filter((linha) =>
+    ["conferido_tesouraria", "divergencia_confirmada_tesouraria"].includes(linha.situacaoTesouraria)
+  )
+);
+const caixasEmOperacao = computed(() =>
+  linhas.value.filter(
+    (linha) =>
+      !linhasParaConferir.value.some((pendente) => pendente.id === linha.id) &&
+      !linhasHistorico.value.some((historico) => historico.id === linha.id)
+  )
+);
+const linhasDaAba = computed(() => (abaAtiva.value === "conferir" ? linhasParaConferir.value : linhasHistorico.value));
 const periodoInvertido = computed(() =>
   Boolean(filtros.dataInicio && filtros.dataFim && filtros.dataInicio > filtros.dataFim)
 );
@@ -165,19 +186,32 @@ function limparFiltros() {
 async function abrirDossie(linha: LinhaRelatorio) {
   caixaSelecionado.value = linha;
   dossie.value = null;
+  erroDossie.value = "";
   dialogoAberto.value = true;
   await carregarDossie(linha.id);
 }
 
 async function carregarDossie(caixaId: string) {
   carregandoDossie.value = true;
+  erroDossie.value = "";
   try {
     dossie.value = await apiGet<Dossie>(`/api/relatorios/fechamentos/${caixaId}`);
   } catch (error) {
-    erro.value = mensagemErro(error);
+    erroDossie.value = mensagemErro(error);
   } finally {
     carregandoDossie.value = false;
   }
+}
+
+function fecharDossie() {
+  dialogoAberto.value = false;
+  dossie.value = null;
+  caixaSelecionado.value = null;
+  erroDossie.value = "";
+}
+
+function aoAlterarDossie(aberto: boolean) {
+  if (!aberto) fecharDossie();
 }
 
 function abrirConferencia(resultado: "conferido" | "divergente") {
@@ -230,6 +264,14 @@ function textoSituacao(situacao: Situacao) {
     conferido_tesouraria: "Conferido pela Tesouraria",
     divergencia_confirmada_tesouraria: "Divergência confirmada pela Tesouraria"
   }[situacao];
+}
+function corSituacaoSeguro(situacao: unknown) {
+  const valor = typeof situacao === "string" ? situacao : "";
+  return corSituacao(valor as Situacao) ?? "secondary";
+}
+function textoSituacaoSeguro(situacao: unknown) {
+  const valor = typeof situacao === "string" ? situacao : "";
+  return textoSituacao(valor as Situacao) ?? "Status não informado";
 }
 function numero(valor: unknown) {
   return typeof valor === "number" ? valor : Number(valor ?? 0);
@@ -346,55 +388,80 @@ watch(
       <v-alert v-if="erro" type="error" variant="tonal" class="mt-4">{{ erro }}</v-alert>
 
       <v-progress-linear v-if="carregando" indeterminate color="primary" class="mt-5" />
-      <v-row v-else class="mt-2" dense>
-        <v-col v-for="linha in linhas" :key="linha.id" cols="12" md="6" xl="4">
-          <v-card variant="outlined" class="h-100 cartao-caixa">
-            <v-card-text>
-              <div class="d-flex justify-space-between ga-2 align-start">
-                <div>
-                  <div class="text-overline">{{ formatarDataSomenteDia(linha.dataMovimento) }}</div>
-                  <div class="text-h6">{{ linha.pdvNome }}</div>
-                  <div class="text-body-2 text-medium-emphasis">
-                    {{ linha.turnoNome || "Turno não informado" }} ·
-                    {{ linha.colaboradorNome || linha.usuarioCaixaNome || "--" }}
+      <template v-else>
+        <v-tabs v-model="abaAtiva" color="primary" class="mt-4 abas-tesouraria" grow>
+          <v-tab value="conferir">Para conferir ({{ linhasParaConferir.length }})</v-tab>
+          <v-tab value="historico">Histórico ({{ linhasHistorico.length }})</v-tab>
+        </v-tabs>
+        <v-alert v-if="caixasEmOperacao.length" type="info" variant="tonal" density="compact" class="mt-3">
+          {{ caixasEmOperacao.length }} caixa(s) em abertura ou fechamento operacional não entram na fila da Tesouraria.
+        </v-alert>
+        <v-window v-model="abaAtiva" class="mt-3">
+          <v-window-item value="conferir">
+            <v-alert v-if="!linhasParaConferir.length" type="info" variant="tonal" density="compact">
+              Nenhum caixa aguardando conferência da Tesouraria nesta página.
+            </v-alert>
+          </v-window-item>
+          <v-window-item value="historico">
+            <v-alert v-if="!linhasHistorico.length" type="info" variant="tonal" density="compact">
+              Nenhum caixa já concluído pela Tesouraria nesta página.
+            </v-alert>
+          </v-window-item>
+        </v-window>
+        <v-row class="mt-2" dense>
+          <v-col v-for="linha in linhasDaAba" :key="linha.id" cols="12" md="6" xl="4">
+            <v-card variant="outlined" class="h-100 cartao-caixa">
+              <v-card-text>
+                <div class="d-flex justify-space-between ga-2 align-start">
+                  <div>
+                    <div class="text-overline">{{ formatarDataSomenteDia(linha.dataMovimento) }}</div>
+                    <div class="text-h6">{{ linha.pdvNome }}</div>
+                    <div class="text-body-2 text-medium-emphasis">
+                      {{ linha.turnoNome || "Turno não informado" }} ·
+                      {{ linha.colaboradorNome || linha.usuarioCaixaNome || "--" }}
+                    </div>
                   </div>
+                  <v-chip
+                    :color="corSituacaoSeguro(linha.situacaoTesouraria)"
+                    size="small"
+                    variant="tonal"
+                    class="status-caixa"
+                    >{{ textoSituacaoSeguro(linha.situacaoTesouraria) }}</v-chip
+                  >
                 </div>
-                <v-chip :color="corSituacao(linha.situacaoTesouraria)" size="small" variant="tonal">{{
-                  textoSituacao(linha.situacaoTesouraria)
-                }}</v-chip>
-              </div>
-              <v-divider class="my-3" />
-              <div class="d-flex justify-space-between">
-                <span class="text-medium-emphasis">Abertura</span
-                ><span>{{ linha.dataHoraAbertura ? formatarDataHora(linha.dataHoraAbertura) : "--" }}</span>
-              </div>
-              <div class="d-flex justify-space-between mt-1">
-                <span class="text-medium-emphasis">Fechamento</span
-                ><span>{{ linha.dataHoraFechamento ? formatarDataHora(linha.dataHoraFechamento) : "Em curso" }}</span>
-              </div>
-              <div class="d-flex justify-space-between mt-3 text-subtitle-1">
-                <span>Saldo físico</span><strong>{{ dinheiro(linha.saldo) }}</strong>
-              </div>
-              <v-chip v-if="linha.temAjuste" color="error" size="small" class="mt-3" variant="tonal"
-                >Ajuste / diferença registrado</v-chip
+                <v-divider class="my-3" />
+                <div class="d-flex justify-space-between">
+                  <span class="text-medium-emphasis">Abertura</span
+                  ><span>{{ linha.dataHoraAbertura ? formatarDataHora(linha.dataHoraAbertura) : "--" }}</span>
+                </div>
+                <div class="d-flex justify-space-between mt-1">
+                  <span class="text-medium-emphasis">Fechamento</span
+                  ><span>{{ linha.dataHoraFechamento ? formatarDataHora(linha.dataHoraFechamento) : "Em curso" }}</span>
+                </div>
+                <div class="d-flex justify-space-between mt-3 text-subtitle-1">
+                  <span>Saldo físico</span><strong>{{ dinheiro(linha.saldo) }}</strong>
+                </div>
+                <v-chip v-if="linha.temAjuste" color="error" size="small" class="mt-3" variant="tonal"
+                  >Ajuste / diferença registrado</v-chip
+                >
+              </v-card-text>
+              <v-card-actions
+                ><v-btn
+                  block
+                  color="primary"
+                  variant="flat"
+                  prepend-icon="mdi-clipboard-text-search-outline"
+                  @click="abrirDossie(linha)"
+                  >Conferir caixa</v-btn
+                ></v-card-actions
               >
-            </v-card-text>
-            <v-card-actions
-              ><v-btn
-                block
-                color="primary"
-                variant="flat"
-                prepend-icon="mdi-clipboard-text-search-outline"
-                @click="abrirDossie(linha)"
-                >Conferir caixa</v-btn
-              ></v-card-actions
-            >
-          </v-card>
-        </v-col>
-        <v-col v-if="!linhas.length" cols="12"
-          ><v-alert type="info" variant="tonal">Nenhum fechamento para os filtros informados.</v-alert></v-col
-        >
-      </v-row>
+            </v-card>
+          </v-col>
+          <v-col v-if="!linhas.length" cols="12"
+            ><v-alert type="info" variant="tonal">Nenhum fechamento para os filtros informados.</v-alert></v-col
+          >
+        </v-row>
+      </template>
       <v-pagination
         v-if="totalPaginas > 1"
         v-model="pagina"
@@ -405,18 +472,24 @@ watch(
     </v-card-text>
   </v-card>
 
-  <v-dialog v-model="dialogoAberto" max-width="1200" scrollable>
-    <v-card>
+  <v-dialog
+    v-model="dialogoAberto"
+    max-width="1200"
+    scrollable
+    class="dialogo-dossie"
+    @update:model-value="aoAlterarDossie"
+  >
+    <v-card class="dialogo-dossie__card">
       <v-toolbar color="primary" density="comfortable"
         ><v-toolbar-title>Folha digital do fechamento · {{ caixaSelecionado?.pdvNome }}</v-toolbar-title
-        ><v-btn icon="mdi-close" @click="dialogoAberto = false"
+        ><v-btn icon="mdi-close" aria-label="Fechar folha digital" title="Fechar" @click.stop="fecharDossie"
       /></v-toolbar>
       <v-card-text class="pa-4">
         <div v-if="carregandoDossie" class="py-10">
           <v-progress-circular indeterminate color="primary" /><span class="ml-3">Carregando dossiê auditável…</span>
         </div>
         <template v-else-if="dossie">
-          <v-alert :color="corSituacao(dossie.situacaoTesouraria)" variant="tonal" density="compact" class="mb-3"
+          <v-alert :color="corSituacaoSeguro(dossie.situacaoTesouraria)" variant="tonal" density="compact" class="mb-3"
             ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
             Tesouraria não recalcula valores nem altera lacres.</v-alert
           >
@@ -737,6 +810,15 @@ watch(
             >
           </v-expansion-panels>
         </template>
+        <v-alert v-else-if="erroDossie" type="error" variant="tonal">
+          {{ erroDossie }}
+          <template #append>
+            <v-btn size="small" variant="text" @click="caixaSelecionado && carregarDossie(caixaSelecionado.id)">
+              Tentar novamente
+            </v-btn>
+            <v-btn size="small" variant="text" @click="fecharDossie">Fechar</v-btn>
+          </template>
+        </v-alert>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -788,6 +870,13 @@ watch(
 .cartao-caixa {
   border-top: 3px solid rgb(var(--v-theme-primary));
 }
+.status-caixa {
+  max-width: 100%;
+  white-space: normal;
+}
+.dialogo-dossie__card {
+  min-width: 0;
+}
 .identificacao-fechamento {
   display: none;
 }
@@ -831,6 +920,13 @@ watch(
   white-space: nowrap;
 }
 @media (max-width: 599px) {
+  .dialogo-dossie :deep(.v-toolbar-title) {
+    min-width: 0;
+    font-size: 0.92rem;
+  }
+  .cartao-caixa :deep(.v-card-text > .d-flex:first-child) {
+    flex-wrap: wrap;
+  }
   .dossie-grid {
     grid-template-columns: 1fr;
     gap: 3px;
@@ -841,6 +937,10 @@ watch(
   .tabela-conferencia {
     overflow-x: auto;
     display: block;
+  }
+  .v-table {
+    display: block;
+    overflow-x: auto;
   }
 }
 </style>

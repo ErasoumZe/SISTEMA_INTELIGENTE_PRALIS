@@ -283,6 +283,8 @@ function rotuloPagamento(item: Registro) {
 }
 .linhas span {
   min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
 }
 .linhas small {
   color: rgb(var(--v-theme-on-surface-variant));
@@ -383,6 +385,8 @@ function rotuloPagamento(item: Registro) {
   }
   .linhas strong {
     white-space: nowrap;
+    flex: none;
+    text-align: right;
   }
   .relatorio-final__grade {
     grid-template-columns: repeat(2, minmax(0, 1fr));
