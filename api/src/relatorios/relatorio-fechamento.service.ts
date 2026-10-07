@@ -112,7 +112,8 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
           dataHoraFechamento: iso(resumo.dataHoraFechamento),
           fechadoEm: iso(resumo.fechadoEm),
           valorEspecieFechamento: numero(resumo.valorEspecieFechamento),
-          valorMoedasFechamento: numero(resumo.valorMoedasFechamento)
+          valorMoedasFechamento: numero(resumo.valorMoedasFechamento),
+          valorFisicoEsperadoFechamento: numero(resumo.valorFisicoEsperadoFechamento)
         }
       : null,
     situacaoTesouraria: situacaoDoFechamento({

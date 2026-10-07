@@ -254,6 +254,7 @@ export async function buscarResumoFechamentoCaixaRepository(
       supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
       valorEspecieFechamento: fechamentosCaixa.valorEspecieFechamento,
       valorMoedasFechamento: fechamentosCaixa.valorMoedasFechamento,
+      valorFisicoEsperadoFechamento: fechamentosCaixa.valorFisicoEsperadoFechamento,
       observacao: fechamentosCaixa.observacao
     })
     .from(fechamentosCaixa)
