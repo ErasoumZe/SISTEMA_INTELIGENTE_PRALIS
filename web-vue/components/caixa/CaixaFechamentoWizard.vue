@@ -197,15 +197,11 @@ function formatarHora(dataHora: string | null | undefined) {
     <section
       v-show="etapasNavegacaoVisiveis"
       id="fechamento-navegacao"
-      class="fechamento-wizard__resumos-etapas"
-      aria-label="Resumo das etapas do fechamento"
+      class="fechamento-wizard__resumo-etapa-atual"
+      aria-label="Resumo da etapa atual"
     >
-      <ol>
-        <li v-for="etapa in etapas" :key="etapa.id" :class="{ ativa: etapa.id === etapaAtual }">
-          <strong>Etapa {{ etapa.id }} · {{ etapa.titulo }}</strong>
-          <span>{{ etapa.resumo }}</span>
-        </li>
-      </ol>
+      <strong>O que fazer agora</strong>
+      <p>{{ etapaAtualDefinicao.resumo }}</p>
     </section>
     <div class="fechamento-wizard__progresso-mobile" aria-hidden="true">
       <span
@@ -347,36 +343,16 @@ function formatarHora(dataHora: string | null | undefined) {
   justify-content: flex-end;
   gap: 8px;
 }
-.fechamento-wizard__resumos-etapas {
+.fechamento-wizard__resumo-etapa-atual {
   margin-bottom: 18px;
 }
-.fechamento-wizard__resumos-etapas ol {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.fechamento-wizard__resumos-etapas li {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--cx-line);
-  border-radius: 10px;
-  background: var(--cx-surface-sunken);
-}
-.fechamento-wizard__resumos-etapas li.ativa {
-  border-color: var(--fechamento-etapa-cor);
-  background: color-mix(in srgb, var(--fechamento-etapa-cor) 14%, var(--cx-surface));
-}
-.fechamento-wizard__resumos-etapas strong {
+.fechamento-wizard__resumo-etapa-atual strong {
   color: var(--cx-ink);
   font-size: 0.82rem;
   font-weight: 800;
 }
-.fechamento-wizard__resumos-etapas span {
+.fechamento-wizard__resumo-etapa-atual p {
+  margin: 0;
   color: var(--cx-ink-soft);
   font-size: 0.76rem;
   line-height: 1.3;
@@ -461,9 +437,6 @@ function formatarHora(dataHora: string | null | undefined) {
   .fechamento-wizard__cabecalho {
     display: none;
   }
-  .fechamento-wizard__resumos-etapas ol {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .fechamento-wizard__progresso-mobile {
     display: flex;
     align-items: center;
@@ -535,9 +508,6 @@ function formatarHora(dataHora: string | null | undefined) {
   }
   .fechamento-wizard__rodape :deep(.v-spacer) {
     display: none;
-  }
-  .fechamento-wizard__resumos-etapas ol {
-    grid-template-columns: 1fr;
   }
   .fechamento-wizard__rodape :deep(.v-btn) {
     width: 100%;
