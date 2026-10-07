@@ -28,7 +28,7 @@ import type {
   VendaCanceladaCaixa,
   VendasDoCaixaQuery
 } from "@padaria/shared/caixa";
-import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
+import { montarResumoCaixa, saldoFisicoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
@@ -1214,7 +1214,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    const valorFisicoEsperadoCentavos = saldoCaixaCentavos(totais);
+    const valorFisicoEsperadoCentavos = saldoFisicoCaixaCentavos(totais);
     const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
     const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
@@ -1252,7 +1252,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         tx
       );
       totais = await calcularTotaisCaixaCentavos(caixa, tx);
-      const saldoDepoisDoRetornoCentavos = saldoCaixaCentavos(totais);
+      const saldoDepoisDoRetornoCentavos = saldoFisicoCaixaCentavos(totais);
       if (saldoDepoisDoRetornoCentavos !== -diferencaFisicaCentavos)
         throw new Error("Retorno final nao conferiu com a contagem fisica");
     }
@@ -1633,7 +1633,7 @@ export async function criarTransferenciaCofreCaixa(
     // D1: Transferencia de retorno parcial e permitida, mas NUNCA acima do que existe em especie. Sem este
     // teto, dois cliques levavam o saldo a negativo e o fechamento gravava quebra falsa no nome do
     // operador. Recalculado aqui dentro, sob a trava â€” o saldo que a tela viu nao serve de prova.
-    const saldoDisponivelCentavos = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
+    const saldoDisponivelCentavos = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (saldoDisponivelCentavos <= 0) {
       throw new Error("Caixa sem saldo em especie para enviar ao cofre");
     }
@@ -1717,7 +1717,7 @@ export async function executarPlanejamentoRetorno(
       throw new ErroDominio("Planejamento cancelado nao pode ser executado", 409, "PLANEJAMENTO_CANCELADO");
     }
     if (planejamento.status !== "agendada") return statusDoCaixaAberto(caixa, tx);
-    const saldoDisponivel = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
+    const saldoDisponivel = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (planejamento.valorCentavos > saldoDisponivel) {
       throw new Error(
         `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
@@ -1923,7 +1923,7 @@ function totaisHistoricoAoVivo(totais: TotaisCaixaCentavos): TotaisHistoricoAoVi
     totalDespesas: deCentavos(totais.despesas),
     totalRetiradas: deCentavos(totais.retiradas),
     totalMercadorias: deCentavos(totais.mercadorias),
-    saldo: deCentavos(saldoCaixaCentavos(totais))
+    saldo: deCentavos(saldoFisicoCaixaCentavos(totais))
   };
 }
 

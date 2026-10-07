@@ -8,7 +8,10 @@ type RelatorioVendas = {
   dados: {
     vendas: TotaisRelatorioVendas;
     canceladas: unknown[];
-    creare?: { comparacao: Record<string, "ok" | "pendente" | "divergente"> } | null;
+    creare?: {
+      comparacao: Record<string, "ok" | "pendente" | "divergente">;
+      leitura?: Partial<Record<"dinheiro" | "credito" | "debito" | "pix" | "voucher", number | null>>;
+    } | null;
   };
 };
 type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
@@ -27,6 +30,7 @@ const carregando = ref(false);
 const erro = ref("");
 const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const canceladas = ref<unknown[]>([]);
+const leituraCreare = ref<LeituraMaquininha>({});
 const leituraMaquininha = ref<LeituraMaquininha>({});
 const transferencias = ref<Transferencia[]>([]);
 const lancamentos = ref<DetalheCaixaResponse["lancamentos"]>([]);
@@ -49,6 +53,26 @@ function leitura(valor: unknown): LeituraMaquininha {
 function liquidoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
   return leituraMaquininha.value[chave] ?? null;
 }
+function valorPralis(chave: (typeof formasMaquininha)[number]["chave"]) {
+  return (
+    vendas.value?.porFormaPagamento
+      .filter((forma) => forma.categoriaFechamentoCaixa === chave)
+      .reduce((soma, forma) => soma + forma.total, 0) ?? 0
+  );
+}
+function valorCreare(chave: (typeof formasMaquininha)[number]["chave"]) {
+  return leituraCreare.value[chave] ?? null;
+}
+function diferencaMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
+  const maquininha = liquidoMaquininha(chave);
+  const referencia = valorCreare(chave) ?? valorPralis(chave);
+  return maquininha === null ? null : maquininha - referencia;
+}
+function situacaoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
+  const diferenca = diferencaMaquininha(chave);
+  if (diferenca === null) return "pendente";
+  return Math.abs(diferenca) < 0.005 ? "ok" : "divergente";
+}
 async function carregar() {
   if (!props.caixaId) return;
   carregando.value = true;
@@ -63,6 +87,7 @@ async function carregar() {
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
     comparacaoCreare.value = relatorioVendas?.dados.creare?.comparacao ?? null;
+    leituraCreare.value = leitura(relatorioVendas?.dados.creare?.leitura);
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
     leituraMaquininha.value = leitura(revisado.liquidos);
@@ -169,13 +194,45 @@ watch(
         </header>
         <details class="fechamento-movimentacoes__detalhes">
           <summary>Ver valores por maquininha</summary>
-          <div class="fechamento-movimentacoes__formas">
+          <p class="fechamento-movimentacoes__explicacao-maquininha">
+            A maquininha é a leitura efetiva. À tarde, o líquido já desconta automaticamente a leitura da manhã.
+          </p>
+          <div class="fechamento-movimentacoes__comparacao-maquininha">
             <article v-for="forma in formasMaquininha" :key="forma.chave">
-              <span>{{ forma.titulo }}</span>
-              <strong>{{
-                liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!)
-              }}</strong>
-              <small>Final menos inicial</small>
+              <header>
+                <strong>{{ forma.titulo }}</strong>
+                <span :class="`fechamento-movimentacoes__situacao--${situacaoMaquininha(forma.chave)}`">
+                  {{
+                    situacaoMaquininha(forma.chave) === "ok"
+                      ? "Confere"
+                      : situacaoMaquininha(forma.chave) === "pendente"
+                        ? "Pendente"
+                        : "Diferença"
+                  }}
+                </span>
+              </header>
+              <dl>
+                <div>
+                  <dt>CREARE</dt>
+                  <dd>{{ valorCreare(forma.chave) === null ? "—" : dinheiro(valorCreare(forma.chave)!) }}</dd>
+                </div>
+                <div>
+                  <dt>Pralis</dt>
+                  <dd>{{ dinheiro(valorPralis(forma.chave)) }}</dd>
+                </div>
+                <div>
+                  <dt>Maquininha</dt>
+                  <dd>
+                    {{ liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!) }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Diferença</dt>
+                  <dd>
+                    {{ diferencaMaquininha(forma.chave) === null ? "—" : dinheiro(diferencaMaquininha(forma.chave)!) }}
+                  </dd>
+                </div>
+              </dl>
             </article>
           </div>
         </details>
@@ -400,7 +457,9 @@ watch(
 .fechamento-movimentacoes__detalhes summary {
   display: flex;
   align-items: center;
+  gap: 8px;
   min-height: 38px;
+  min-width: 0;
   cursor: pointer;
   color: var(--cx-brand-text);
   font-size: 0.82rem;
@@ -411,11 +470,14 @@ watch(
   display: none;
 }
 .fechamento-movimentacoes__detalhes summary::after {
+  display: block;
+  flex: 0 0 18px;
   width: 18px;
   margin-left: auto;
   color: var(--cx-ink-soft);
-  content: "\\25BE";
+  content: "⌄";
   font-size: 1.1rem;
+  line-height: 1;
   text-align: center;
 }
 .fechamento-movimentacoes__detalhes[open] summary::after {
@@ -464,6 +526,71 @@ watch(
 .fechamento-movimentacoes__vazio {
   margin: 12px 0 0;
   color: var(--cx-ink-soft);
+}
+.fechamento-movimentacoes__explicacao-maquininha {
+  margin: 12px 0 0;
+  color: var(--cx-ink-soft);
+  font-size: 0.78rem;
+}
+.fechamento-movimentacoes__comparacao-maquininha {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.fechamento-movimentacoes__comparacao-maquininha article {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--cx-brand) 36%, var(--cx-line));
+  border-radius: 10px;
+  background: var(--cx-surface);
+}
+.fechamento-movimentacoes__comparacao-maquininha article > header {
+  align-items: center;
+}
+.fechamento-movimentacoes__comparacao-maquininha article > header > strong {
+  color: var(--cx-ink);
+  font-size: 0.92rem;
+}
+.fechamento-movimentacoes__comparacao-maquininha article > header > span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.fechamento-movimentacoes__situacao--ok {
+  background: color-mix(in srgb, var(--cx-positive) 18%, var(--cx-surface));
+  color: var(--cx-positive);
+}
+.fechamento-movimentacoes__situacao--pendente {
+  background: color-mix(in srgb, var(--cx-attention) 18%, var(--cx-surface));
+  color: var(--cx-attention);
+}
+.fechamento-movimentacoes__situacao--divergente {
+  background: color-mix(in srgb, var(--cx-negative) 18%, var(--cx-surface));
+  color: var(--cx-negative);
+}
+.fechamento-movimentacoes__comparacao-maquininha dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+.fechamento-movimentacoes__comparacao-maquininha dl > div {
+  min-width: 0;
+}
+.fechamento-movimentacoes__comparacao-maquininha dt {
+  color: var(--cx-ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.fechamento-movimentacoes__comparacao-maquininha dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--cx-ink);
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 .fechamento-movimentacoes__lista {
   display: grid;
@@ -542,8 +669,14 @@ watch(
   }
   .fechamento-movimentacoes__visao article,
   .fechamento-movimentacoes__formas article,
+  .fechamento-movimentacoes__comparacao-maquininha article,
   .fechamento-movimentacoes__totais > div {
     padding: 10px;
+  }
+}
+@media (max-width: 520px) {
+  .fechamento-movimentacoes__comparacao-maquininha {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 340px) {
