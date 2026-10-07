@@ -4,6 +4,7 @@ import type { LinhaHistoricoCaixa } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
+import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
 
 const props = defineProps<{ empresaId: string; pdvs: Opcao[]; turnos: Opcao[]; podeConferir: boolean }>();
 
