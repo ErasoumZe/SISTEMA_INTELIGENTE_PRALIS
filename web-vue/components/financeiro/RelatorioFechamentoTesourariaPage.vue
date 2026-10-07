@@ -240,6 +240,9 @@ function valorOpcional(valor: unknown) {
 function texto(valor: unknown) {
   return typeof valor === "string" && valor ? valor : "--";
 }
+function formatarDataHoraOuTraco(valor: unknown) {
+  return valor ? formatarDataHora(String(valor)) : "--";
+}
 function registro(valor: unknown): Record<string, unknown> {
   return valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {};
 }
@@ -460,7 +463,7 @@ watch(
             :dinheiro="dinheiro"
             :numero="numero"
             :texto="texto"
-            :data-hora="(valor) => (valor ? formatarDataHora(String(valor)) : '--')"
+            :data-hora="formatarDataHoraOuTraco"
           />
 
           <v-card class="conferencia-tesouraria mt-4" variant="outlined">
