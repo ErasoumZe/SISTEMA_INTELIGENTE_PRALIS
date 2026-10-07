@@ -166,7 +166,6 @@ export async function buscarCaixaAbertoUsuarioRepository(
       maquininhaNumeroSerie: maquininhas.numeroSerie,
       caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
       supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
-      lacreAbertura: fechamentosCaixa.lacreAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -250,6 +249,7 @@ export async function buscarResumoFechamentoCaixaRepository(
       usuarioCaixaNome: perfisUsuarios.nome,
       colaboradorNome: colaboradores.nome,
       lacreFechamento: fechamentosCaixa.lacreFechamento,
+      lacreAbertura: fechamentosCaixa.lacreAbertura,
       caixaResponsavelNomeFechamento: fechamentosCaixa.caixaResponsavelNomeFechamento,
       supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
       valorEspecieFechamento: fechamentosCaixa.valorEspecieFechamento,

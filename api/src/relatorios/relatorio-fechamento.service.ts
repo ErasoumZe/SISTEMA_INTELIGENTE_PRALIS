@@ -34,8 +34,9 @@ function situacaoDoFechamento(input: {
   return "conferido";
 }
 
-function iso(valor: Date | null | undefined) {
-  return valor ? valor.toISOString() : null;
+function iso(valor: Date | string | null | undefined) {
+  if (!valor) return null;
+  return typeof valor === "string" ? valor : valor.toISOString();
 }
 
 function numero(valor: string | number | null | undefined) {
