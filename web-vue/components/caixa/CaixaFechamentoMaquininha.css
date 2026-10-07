@@ -33,23 +33,25 @@
   border: 1px solid var(--cx-line);
 }
 .maquininha__painel--manha {
-  border-color: color-mix(in srgb, var(--cat-retiradas-base) 48%, var(--cx-line));
+  border-color: color-mix(in srgb, var(--cat-retiradas-base) 60%, var(--cx-line));
 }
 .maquininha__painel--tarde {
-  border-color: color-mix(in srgb, var(--cx-brand) 45%, var(--cx-line));
+  border-color: color-mix(in srgb, var(--cx-brand) 60%, var(--cx-line));
 }
 .maquininha__painel :deep(.v-expansion-panel-title) {
   min-height: 62px;
   gap: 10px;
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-title) {
-  background: color-mix(in srgb, var(--cat-retiradas-base) 22%, var(--cx-surface));
+  border-bottom: 3px solid var(--cat-retiradas-base);
+  background: color-mix(in srgb, var(--cat-retiradas-base) 44%, var(--cx-surface));
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-text__wrapper) {
   background: color-mix(in srgb, var(--cat-retiradas-base) 12%, var(--cx-surface));
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-title) {
-  background: color-mix(in srgb, var(--cx-brand) 22%, var(--cx-surface));
+  border-bottom: 3px solid var(--cx-brand);
+  background: color-mix(in srgb, var(--cx-brand) 44%, var(--cx-surface));
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-text__wrapper) {
   background: color-mix(in srgb, var(--cx-brand) 12%, var(--cx-surface));
@@ -58,10 +60,10 @@
   flex: 0 0 auto;
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-title > .v-icon) {
-  color: var(--cat-retiradas-tinta);
+  color: color-mix(in srgb, var(--cat-retiradas-base) 72%, white);
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-title > .v-icon) {
-  color: var(--cx-brand-text);
+  color: color-mix(in srgb, var(--cx-brand) 64%, white);
 }
 .maquininha__painel :deep(.v-expansion-panel-title span) {
   display: grid;
@@ -70,9 +72,17 @@
 .maquininha__painel :deep(.v-expansion-panel-title strong) {
   color: var(--cx-ink);
 }
+.maquininha__painel--manha :deep(.v-expansion-panel-title strong),
+.maquininha__painel--tarde :deep(.v-expansion-panel-title strong) {
+  color: white;
+}
 .maquininha__painel :deep(.v-expansion-panel-title small) {
   color: var(--cx-ink-soft);
   font-size: 0.78rem;
+}
+.maquininha__painel--manha :deep(.v-expansion-panel-title small),
+.maquininha__painel--tarde :deep(.v-expansion-panel-title small) {
+  color: rgb(255 255 255 / 0.82);
 }
 .maquininha__foto {
   display: grid;

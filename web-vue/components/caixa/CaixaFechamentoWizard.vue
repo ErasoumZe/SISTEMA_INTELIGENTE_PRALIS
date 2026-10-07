@@ -149,8 +149,11 @@ function irPara(etapa: number) {
     >
       <div>
         <span class="fechamento-wizard__sobretitulo">Fechamento do caixa</span>
-        <h2 id="fechamento-wizard-titulo">Conferência por etapas</h2>
-        <p>As vendas foram encerradas no horário do servidor. Revise cada etapa antes de enviar o malote.</p>
+        <div class="fechamento-wizard__titulo-com-ajuda">
+          <h2 id="fechamento-wizard-titulo">{{ etapaAtualDefinicao.titulo }}</h2>
+          <CaixaFechamentoAjuda :etapas="etapas" />
+        </div>
+        <p>{{ etapaAtualDefinicao.resumo }}</p>
       </div>
       <div class="fechamento-wizard__horarios" aria-label="Horários do caixa">
         <v-chip color="success" variant="tonal" prepend-icon="mdi-play-circle-outline">
@@ -323,6 +326,14 @@ function irPara(etapa: number) {
 .fechamento-wizard__cabecalho h2 {
   margin: 2px 0 4px;
   font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+}
+.fechamento-wizard__titulo-com-ajuda {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fechamento-wizard__titulo-com-ajuda h2 {
+  margin: 2px 0 4px;
 }
 .fechamento-wizard__cabecalho p {
   margin: 0;
