@@ -57,6 +57,7 @@ import {
 } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
@@ -1603,6 +1604,7 @@ export async function calcularTotaisCaixaOperacionalRepository(
   db: ExecutorBanco = banco
 ): Promise<TotaisCaixaCentavos> {
   const totais: TotaisCaixaCentavos = {
+    vendasDinheiro: 0,
     entradas: 0,
     transferencias: 0,
     transferenciasEntrada: 0,
@@ -1652,6 +1654,7 @@ export async function calcularTotaisCaixaOperacionalRepository(
         .select({
           formaPagamentoId: vendasPagamentos.formaPagamentoId,
           formaPagamento: formasPagamento.nome,
+          categoriaFechamentoCaixa: formasPagamento.categoriaFechamentoCaixa,
           formaPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
           totalPago: vendasPagamentos.totalPago,
           numeroVendas: vendasPagamentos.numeroVendas
@@ -1702,6 +1705,11 @@ export async function calcularTotaisCaixaOperacionalRepository(
   >();
   for (const pagamento of linhasPagamentos) {
     const formaPagamento = pagamento.formaPagamento?.trim() || pagamento.formaPagamentoAutomacao?.trim() || "Sem forma";
+    const categoria =
+      pagamento.categoriaFechamentoCaixa && pagamento.categoriaFechamentoCaixa !== "outros"
+        ? pagamento.categoriaFechamentoCaixa
+        : categoriaFechamentoPorNome(formaPagamento);
+    if (categoria === "dinheiro") totais.vendasDinheiro += paraCentavos(pagamento.totalPago);
     const chave = pagamento.formaPagamentoId ?? `automacao:${formaPagamento.toLocaleLowerCase("pt-BR")}`;
     const atual = porFormaPagamento.get(chave) ?? {
       formaPagamentoId: pagamento.formaPagamentoId ?? null,

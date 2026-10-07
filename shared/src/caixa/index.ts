@@ -2,7 +2,7 @@ import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { deCentavos, paraCentavos } from "../dinheiro/index.js";
 import {
-  saldoCaixaCentavos,
+  saldoFisicoCaixaCentavos,
   saldoProprioCentavos,
   type TotaisCaixaCentavos,
   type TotaisFormaPagamentoCentavos
@@ -557,6 +557,7 @@ export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 // Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
 // do fechamento (valor do malote da abertura; 0 sem malote) e alimenta o saldo proprio derivado.
 export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentavos = 0): ResumoCaixa {
+  const saldoFisicoCentavos = saldoFisicoCaixaCentavos(totais);
   const resumo: ResumoCaixa = {
     totalEntradas: deCentavos(totais.entradas),
     totalTransferencias: deCentavos(totais.transferencias),
@@ -567,8 +568,8 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
     totalMercadorias: deCentavos(totais.mercadorias),
     dividaCofre: deCentavos(dividaCofreCentavos),
     saldoProprio: deCentavos(saldoProprioCentavos(totais, dividaCofreCentavos)),
-    propostaRetorno: deCentavos(Math.max(0, saldoCaixaCentavos(totais))),
-    saldo: deCentavos(saldoCaixaCentavos(totais))
+    propostaRetorno: deCentavos(Math.max(0, saldoFisicoCentavos)),
+    saldo: deCentavos(saldoFisicoCentavos)
   };
   if (totais.porFormaPagamento) {
     resumo.porFormaPagamento = totais.porFormaPagamento.map((item: TotaisFormaPagamentoCentavos) => ({
