@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import type { LinhaHistoricoCaixa, TotaisHistoricoCaixa } from "@padaria/shared";
+import type { LinhaHistoricoCaixa } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
@@ -24,7 +24,6 @@ type Dossie = {
   vendasCanceladas: Array<Record<string, unknown>>;
   ajuste: Record<string, unknown> | null;
 };
-type Meta = { totais: TotaisHistoricoCaixa };
 type LinhaConferencia = { forma: string; creare: number | null; sistema: number | null };
 type LinhaMaquininha = { forma: string; inicial: number | null; acumulado: number | null; liquido: number | null };
 
@@ -37,7 +36,6 @@ const statusOpcoes = [
   { title: "Fechado", value: "fechado" }
 ];
 const linhas = ref<LinhaRelatorio[]>([]);
-const totais = ref<TotaisHistoricoCaixa | null>(null);
 const carregando = ref(false);
 const erro = ref("");
 const pagina = ref(1);
@@ -104,15 +102,13 @@ async function buscar() {
   carregando.value = true;
   erro.value = "";
   try {
-    const resultado = await apiGetPaginado<LinhaRelatorio, Meta>(`/api/relatorios/fechamentos?${parametros().toString()}`);
+    const resultado = await apiGetPaginado<LinhaRelatorio>(`/api/relatorios/fechamentos?${parametros().toString()}`);
     linhas.value = resultado.itens;
     total.value = resultado.total;
-    totais.value = resultado.meta?.totais ?? null;
   } catch (error) {
     erro.value = mensagemErro(error);
     linhas.value = [];
     total.value = 0;
-    totais.value = null;
   } finally {
     carregando.value = false;
   }
@@ -166,7 +162,7 @@ watch(() => props.empresaId, () => { pagina.value = 1; void buscar(); }, { immed
         <div>
           <div class="text-overline text-primary">TESOURARIA</div>
           <h2 class="text-h6">Relatório de fechamento</h2>
-          <p class="text-body-2 text-medium-emphasis mb-0">Consulte o dossiê completo de cada turno, sem alterar a operação do PDV.</p>
+          <p class="text-body-2 text-medium-emphasis mb-0">Consulte cada fechamento por PDV e turno.</p>
         </div>
         <v-chip color="primary" variant="tonal" prepend-icon="mdi-shield-check">Somente leitura</v-chip>
       </div>
@@ -184,15 +180,6 @@ watch(() => props.empresaId, () => { pagina.value = 1; void buscar(); }, { immed
       </div>
 
       <v-alert v-if="erro" type="error" variant="tonal" class="mt-4">{{ erro }}</v-alert>
-
-      <v-row v-if="totais" dense class="mt-2">
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--neutro"><div class="text-caption">Caixas</div><strong>{{ totais.caixas }}</strong></v-sheet></v-col>
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--entrada"><div class="text-caption">Entradas</div><strong>{{ dinheiro(totais.totalEntradas) }}</strong></v-sheet></v-col>
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--sangria"><div class="text-caption">Sangrias / saídas</div><strong>{{ dinheiro(totais.totalTransferenciasSaida) }}</strong></v-sheet></v-col>
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--despesa"><div class="text-caption">Despesas</div><strong>{{ dinheiro(totais.totalDespesas) }}</strong></v-sheet></v-col>
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--mercadoria"><div class="text-caption">Mercadorias</div><strong>{{ dinheiro(totais.totalMercadorias) }}</strong></v-sheet></v-col>
-        <v-col cols="6" sm="4" lg="2"><v-sheet class="pa-3 rounded-lg painel-total painel-total--saldo"><div class="text-caption">Saldo físico</div><strong>{{ dinheiro(totais.saldo) }}</strong></v-sheet></v-col>
-      </v-row>
 
       <v-progress-linear v-if="carregando" indeterminate color="primary" class="mt-5" />
       <v-row v-else class="mt-2" dense>
@@ -278,17 +265,6 @@ watch(() => props.empresaId, () => { pagina.value = 1; void buscar(); }, { immed
 </template>
 
 <style scoped>
-.painel-total {
-  min-height: 74px;
-  border: 1px solid rgb(var(--v-theme-outline-variant));
-  border-left: 4px solid #94a3b8;
-  background: rgba(148, 163, 184, .12);
-}
-.painel-total--entrada { border-left-color: #22c55e; background: rgba(34, 197, 94, .13); }
-.painel-total--sangria { border-left-color: #f97316; background: rgba(249, 115, 22, .14); }
-.painel-total--despesa { border-left-color: #ef4444; background: rgba(239, 68, 68, .13); }
-.painel-total--mercadoria { border-left-color: #3b82f6; background: rgba(59, 130, 246, .13); }
-.painel-total--saldo { border-left-color: #a855f7; background: rgba(168, 85, 247, .14); }
 .cartao-caixa { border-top: 3px solid rgb(var(--v-theme-primary)); }
 .dossie-grid { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(130px, 1.2fr); gap: 9px 16px; }
 .folha-conferencia { border-top: 4px solid #f59e0b; background: rgba(245, 158, 11, .055); }
