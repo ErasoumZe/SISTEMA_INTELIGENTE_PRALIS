@@ -54,21 +54,13 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
     assertProblem(resposta, 403);
   });
 
-  it("recusa administrador com todas as permissões quando não pertence à Tesouraria", async () => {
+  it("permite ao administrador total consultar a fila de fechamento", async () => {
     const lista = await contexto.app.inject({
       method: "GET",
-      url: "/api/relatorios/fechamentos?page=1&pageSize=10",
+      url: `/api/relatorios/fechamentos?empresaId=${idsTeste.empresaA}&page=1&pageSize=10`,
       headers: { cookie: cookieAdmin }
     });
-    assertProblem(lista, 403);
-
-    const decisao = await contexto.app.inject({
-      method: "POST",
-      url: `/api/relatorios/fechamentos/${idsTeste.caixaFechado}/conferir`,
-      headers: { cookie: cookieAdmin },
-      payload: { resultado: "conferido" }
-    });
-    assertProblem(decisao, 403);
+    expect(lista.statusCode, lista.body).toBe(200);
   });
 
   it("confirma um caixa fechado sem pendências, preserva os fatos e não duplica a decisão", async () => {

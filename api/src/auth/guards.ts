@@ -1,6 +1,12 @@
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ehTesouraria, temAlgumaPermissao, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared";
+import {
+  podeAcessarRelatorioFechamento,
+  temAlgumaPermissao,
+  temPermissao,
+  type PerfilUsuario,
+  type Permissao
+} from "@padaria/shared";
 import { erro } from "@padaria/shared/api";
 import { auth } from "./config.js";
 import { buscarPerfilUsuario } from "./perfil.service.js";
@@ -51,13 +57,13 @@ export function exigirPermissao(permissao: Permissao) {
   };
 }
 
-/** Regra de cargo além da permissão catalogada para atos exclusivos da Tesouraria. */
-export function exigirTesouraria() {
+/** Regra de cargo além da permissão para a folha de Tesouraria e Direção Geral. */
+export function exigirAcessoRelatorioFechamento() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const perfil = await exigirAutenticacao(request, reply);
     if (!perfil) return;
-    if (!ehTesouraria(perfil)) {
-      erro(reply, 403, "Acesso exclusivo da Tesouraria", "TREASURY_ONLY");
+    if (!podeAcessarRelatorioFechamento(perfil)) {
+      erro(reply, 403, "Acesso exclusivo da Tesouraria e Direção Geral", "CLOSING_REPORT_ACCESS_DENIED");
     }
   };
 }

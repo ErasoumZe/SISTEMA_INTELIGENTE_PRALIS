@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ehTesouraria, type AuthSession } from "@padaria/shared";
+import { podeAcessarRelatorioFechamento, type AuthSession } from "@padaria/shared";
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import RelatorioFechamentoTesourariaPage from "~/components/financeiro/RelatorioFechamentoTesourariaPage.vue";
 
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao", () => null);
-const podeVerRelatorio = computed(() => Boolean(sessao.value?.perfil && ehTesouraria(sessao.value.perfil)));
+const podeVerRelatorio = computed(() =>
+  Boolean(sessao.value?.perfil && podeAcessarRelatorioFechamento(sessao.value.perfil))
+);
 </script>
 
 <template>
@@ -20,7 +22,8 @@ const podeVerRelatorio = computed(() => Boolean(sessao.value?.perfil && ehTesour
       />
     </template>
     <v-alert v-else type="error" variant="tonal" class="ma-4">
-      Acesso exclusivo da Tesouraria. Caixa, Gerência e demais perfis não podem consultar nem decidir este fechamento.
+      Acesso exclusivo da Tesouraria e Direção Geral. Caixa, Gerência e demais perfis não podem consultar nem decidir
+      este fechamento.
     </v-alert>
   </AppWorkspace>
 </template>

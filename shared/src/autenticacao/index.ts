@@ -415,9 +415,9 @@ const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
   transferencias_conferir:
     "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento.",
   relatorio_fechamento_visualizar:
-    "Permite consultar a fila e a folha digital de fechamento. Esta permissão só é efetiva para o cargo Tesouraria.",
+    "Mostra no menu o Relatório de fechamento e permite consultar a fila e a folha digital. É efetiva para Tesouraria, Diretor Geral e Administrador Total.",
   fechamentos_caixa_conferir:
-    "Permite registrar a conferência final da Tesouraria em um fechamento de caixa já encerrado. Esta permissão só é efetiva para o cargo Tesouraria."
+    "Permite confirmar a conferência ou registrar divergência em um fechamento já encerrado. É efetiva para Tesouraria, Diretor Geral e Administrador Total."
 };
 
 const acoesPermissao: ReadonlyArray<[string, (recurso: string) => string]> = [
@@ -615,9 +615,18 @@ export function ehAdministradorTotal(perfil: Pick<PerfilUsuario, "role">): boole
   return perfil.role === "usuario_admin";
 }
 
-/** Regra de cargo para a conferência final, exclusiva da Tesouraria. */
+/** Regra de cargo usada pelos fluxos operacionais próprios da Tesouraria. */
 export function ehTesouraria(perfil: Pick<PerfilUsuario, "cargos">): boolean {
   return perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("tesouraria"));
+}
+
+/** A folha de fechamento é conferida pela Tesouraria e supervisionada pela Direção Geral. */
+export function podeAcessarRelatorioFechamento(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
+  return (
+    ehAdministradorTotal(perfil) ||
+    ehTesouraria(perfil) ||
+    perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("diretor geral"))
+  );
 }
 
 export function podeLancarSemCaixa(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
