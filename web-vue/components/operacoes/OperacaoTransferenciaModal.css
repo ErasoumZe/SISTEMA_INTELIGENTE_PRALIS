@@ -265,6 +265,7 @@
   font-weight: 500;
 }
 .tr-campo-lacre-principal {
+  margin-top: 10px;
   padding: 11px;
   border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 48%, transparent);
   border-radius: 10px;

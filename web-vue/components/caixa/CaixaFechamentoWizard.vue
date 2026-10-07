@@ -330,7 +330,12 @@ function formatarHora(dataHora: string | null | undefined) {
   margin: 0;
   font-size: clamp(1rem, 2.1vw, 1.35rem);
 }
-.fechamento-wizard__etapa-topo,
+.fechamento-wizard__etapa-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .fechamento-wizard__acoes-topo {
   display: flex;
   align-items: center;

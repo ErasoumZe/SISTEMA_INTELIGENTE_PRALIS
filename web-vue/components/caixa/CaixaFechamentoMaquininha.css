@@ -47,14 +47,14 @@
   background: color-mix(in srgb, var(--cat-retiradas-base) 44%, var(--cx-surface));
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-text__wrapper) {
-  background: color-mix(in srgb, var(--cat-retiradas-base) 12%, var(--cx-surface));
+  background: color-mix(in srgb, var(--cat-retiradas-base) 6%, var(--cx-surface));
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-title) {
   border-bottom: 3px solid var(--cx-brand);
   background: color-mix(in srgb, var(--cx-brand) 44%, var(--cx-surface));
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-text__wrapper) {
-  background: color-mix(in srgb, var(--cx-brand) 12%, var(--cx-surface));
+  background: color-mix(in srgb, var(--cx-brand) 6%, var(--cx-surface));
 }
 .maquininha__painel :deep(.v-expansion-panel-title > .v-icon) {
   flex: 0 0 auto;
