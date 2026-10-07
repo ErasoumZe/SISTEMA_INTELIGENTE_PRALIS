@@ -62,7 +62,16 @@ async function idExistente(sql: string, valores: string[]) {
 async function usuario(cookie: string, empresaId: string, email: string, nome: string) {
   const id = await idExistente("select usuario_id as id from perfis_usuarios where email = $1", [email]);
   if (id) return id;
-  return post("/api/usuarios", cookie, { empresaId, nome, email, role: "usuario_admin", senha });
+  const cargoId = await idExistente("select id from cargos where nome = $1 limit 1", ["Caixa"]);
+  if (!cargoId) throw new Error("O cargo Caixa nao existe no seed local.");
+  return post("/api/usuarios", cookie, {
+    empresaId,
+    nome,
+    email,
+    role: "usuario_admin",
+    senha,
+    novoColaborador: { empresaId, nome, cargoId }
+  });
 }
 
 function venda(sufixo: string, forma: string, valor: number) {
