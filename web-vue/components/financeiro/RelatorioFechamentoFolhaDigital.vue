@@ -45,7 +45,12 @@ const diferenca = computed(() => {
     props.numero(props.resumo?.valorEspecieFechamento) + props.numero(props.resumo?.valorMoedasFechamento);
   return contado - esperado;
 });
-const totalVendas = computed(() => props.numero(vendas.value.totalGeral));
+const totalVendas = computed(() => {
+  const totalDeclarado = vendas.value.totalGeral;
+  if (totalDeclarado !== null && totalDeclarado !== undefined && totalDeclarado !== "")
+    return props.numero(totalDeclarado);
+  return porPagamento.value.reduce((total, item) => total + props.numero(item.total), 0);
+});
 
 function registro(valor: unknown): Registro {
   return valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Registro) : {};
