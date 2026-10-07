@@ -51,6 +51,7 @@
     "fixture:caixa:local": "tsx --conditions=development scripts/fixture-caixa-local.ts",
     "fixture:caixa:fluxo-zero:local": "tsx --conditions=development scripts/fixture-caixa-fluxo-zero-local.ts",
     "fixture:caixa:fechamento:local": "tsx --conditions=development scripts/fixture-caixa-fechamento-local.ts",
+    "fixture:caixa:pdv1-turnos:local": "tsx --conditions=development scripts/fixture-caixa-pdv1-turnos-local.ts",
     "importar:catalogo-pralis:teste": "tsx --conditions=development scripts/importar-catalogo-pralis-teste.ts",
     "db:backup": "node scripts/backup-db.mjs",
     "db:restore": "node scripts/restore-db.mjs",
