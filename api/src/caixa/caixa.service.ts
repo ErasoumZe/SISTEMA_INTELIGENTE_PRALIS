@@ -20,6 +20,7 @@ import type {
   RegistrarIndisponibilidadeCaixaPayload,
   RelatorioMaquininhaFechamento,
   RelatorioMaquininhaIa,
+  RelatorioVendasCreare,
   ResumoCaixa,
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
@@ -126,6 +127,10 @@ import {
   extrairRelatorioMaquininhaComGemini,
   leituraRelatorioMaquininhaSimulada
 } from "./gemini-relatorio-maquininha.js";
+import {
+  extrairRelatorioVendasCreareComGemini,
+  extrairRelatorioVendasCreareDePdf
+} from "./gemini-relatorio-vendas-creare.js";
 import { transcreverObservacaoComGroq } from "./groq-transcricao-observacao.js";
 import { listarVendasPaginadas, totaisVendas } from "../vendas/vendas.service.js";
 
@@ -418,6 +423,38 @@ export async function analisarRelatorioMaquininhaFechamento(caixaId: string, ane
       normalizarNumeroMaquininha(numeroVinculado!) !== normalizarNumeroMaquininha(sugestao.numeroMaquininha!),
     simulada: false
   };
+}
+
+export async function analisarRelatorioVendasCreareFechamento(
+  caixaId: string,
+  anexoId: string,
+  perfil: PerfilUsuario
+): Promise<{ sugestao: RelatorioVendasCreare; anexoConsiderado: string }> {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") throw new Error("Caixa ja fechado");
+  const anexos = await listarAnexosFechamentoCaixaComCaminhoRepository(caixa.id, caixa.empresaId);
+  const folha = anexos.find((anexo) => anexo.id === anexoId && anexo.tipo === "relatorio_vendas_creare");
+  if (!folha) throw new Error("Relatorio CREARE nao encontrado");
+  if (!folha.mimeType.startsWith("image/") && folha.mimeType !== "application/pdf") {
+    throw new ErroDominio("Envie imagem ou PDF para a leitura da folha CREARE.", 415, "IA_FORMATO_INVALIDO");
+  }
+  const arquivo = await readFile(caminhoAbsolutoDocumento(folha.caminho));
+  const leituraLocal = folha.mimeType === "application/pdf" ? await extrairRelatorioVendasCreareDePdf(arquivo) : null;
+  if (leituraLocal) return { sugestao: leituraLocal, anexoConsiderado: folha.id };
+  if (!env.GEMINI_API_KEY) {
+    throw new ErroDominio(
+      "A leitura por IA ainda nao foi configurada. Preencha os campos visiveis manualmente.",
+      503,
+      "IA_NAO_CONFIGURADA"
+    );
+  }
+  const sugestao = await extrairRelatorioVendasCreareComGemini(
+    { dados: arquivo, mimeType: folha.mimeType },
+    { chave: env.GEMINI_API_KEY, modelo: env.GEMINI_MODEL, timeoutMs: env.GEMINI_TIMEOUT_MS }
+  );
+  return { sugestao, anexoConsiderado: folha.id };
 }
 
 export async function salvarRelatorioMaquininhaFechamento(

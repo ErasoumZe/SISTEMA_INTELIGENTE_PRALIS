@@ -20,6 +20,14 @@ type RelatorioGerado = {
   geradoEm: string;
 };
 type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
+type SugestaoCreare = Record<
+  "totalBruto" | "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "despesasExcetoSangria" | "resultadoFinal",
+  number | null
+> & {
+  documentoLegivel: boolean;
+  camposDuvidosos: string[];
+  observacoes: string[];
+};
 
 const props = defineProps<{ caixaId: string }>();
 const { apiUrl, apiGet, apiPost } = useApi();
@@ -28,6 +36,7 @@ const galeriaCreare = useTemplateRef<HTMLInputElement>("galeriaCreare");
 
 const carregando = ref(false);
 const erro = ref("");
+const aviso = ref("");
 const gerado = ref(false);
 const totais = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const intervalo = ref<{ abertura: string; fechamento: string } | null>(null);
@@ -59,6 +68,34 @@ const camposCreare = [
 let consultaAtual = 0;
 const totaisPorForma = computed(() => totais.value?.porFormaPagamento ?? []);
 
+function numeroDoCampo(valor: string) {
+  const texto = valor.trim();
+  if (!texto) return null;
+  const normalizado = texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto;
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) && numero >= 0 ? numero : null;
+}
+
+function aplicarSugestaoCreare(sugestao: SugestaoCreare) {
+  for (const { chave } of camposCreare) {
+    const valor = sugestao[chave];
+    leituraCreare.value[chave] =
+      valor === null ? "" : valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  const pendentes = sugestao.camposDuvidosos.length ? " Revise: " + sugestao.camposDuvidosos.join(", ") + "." : "";
+  aviso.value = sugestao.documentoLegivel
+    ? "A leitura preencheu os valores visiveis da folha. Confira antes de gerar." + pendentes
+    : "A leitura nao confirmou a legibilidade da folha. Confira e preencha os campos visiveis." + pendentes;
+}
+
+async function analisarAnexoCreare(anexoId: string) {
+  const leitura = await apiPost<{ sugestao: SugestaoCreare }>(
+    "/api/caixa/" + encodeURIComponent(props.caixaId) + "/relatorio-vendas/analisar",
+    { anexoId }
+  );
+  aplicarSugestaoCreare(leitura.sugestao);
+}
+
 function aplicarRelatorio(relatorio: RelatorioGerado) {
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
@@ -79,7 +116,14 @@ async function carregarRelatorioExistente() {
     const anexoCreare = anexos.find((anexo) => anexo.tipo === "relatorio_vendas_creare");
     anexoCreareEnviado.value = Boolean(anexoCreare);
     anexoCreareId.value = anexoCreare?.id ?? "";
-    if (!relatorio) return;
+    if (!relatorio && anexoCreare) {
+      try {
+        await analisarAnexoCreare(anexoCreare.id);
+      } catch {
+        aviso.value = "A folha foi anexada. A leitura automÃ¡tica nÃ£o ficou disponÃ­vel; preencha apenas os valores visÃ­veis.";
+      }
+    }
+    if (consulta !== consultaAtual || !relatorio) return;
     aplicarRelatorio(relatorio);
   } catch {
     // A leitura do rascunho salvo não pode bloquear a geração manual do relatório.
@@ -102,7 +146,7 @@ async function gerarRelatorio() {
               ...Object.fromEntries(
                 camposCreare.map(({ chave }) => [
                   chave,
-                  leituraCreare.value[chave] ? Number(leituraCreare.value[chave].replace(",", ".")) : null
+                  numeroDoCampo(leituraCreare.value[chave])
                 ])
               ),
               camposDuvidosos: [],
@@ -143,6 +187,11 @@ async function enviarRelatorioCreare(evento: Event) {
     if (!resposta.ok) throw new Error(json.detail || "Não foi possível anexar o relatório do CREARE.");
     anexoCreareEnviado.value = true;
     anexoCreareId.value = json.data?.id ?? "";
+    try {
+      await analisarAnexoCreare(anexoCreareId.value);
+    } catch {
+      aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
+    }
   } catch (falha) {
     erro.value = mensagemErro(falha);
   } finally {
@@ -196,10 +245,12 @@ watch(
       <small v-if="anexoCreareEnviado" class="text-success">Folha do CREARE anexada.</small>
     </section>
 
+    <v-alert v-if="aviso" type="info" density="compact" variant="tonal" class="mt-4">{{ aviso }}</v-alert>
+
     <section v-if="anexoCreareEnviado" class="relatorio-vendas__leitura mt-4" aria-label="Valores conferidos do CREARE">
       <div>
         <strong>Valores da folha CREARE</strong>
-        <p>Confira a foto e informe apenas os valores visíveis antes de gerar.</p>
+        <p>Os valores serão sugeridos pela leitura do arquivo. Revise-os antes de gerar.</p>
       </div>
       <v-text-field
         v-for="campo in camposCreare"

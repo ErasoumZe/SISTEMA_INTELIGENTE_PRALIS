@@ -44,6 +44,7 @@ import {
   removerAnexoFechamentoCaixa,
   salvarAnexoFechamentoCaixa,
   analisarRelatorioMaquininhaFechamento,
+  analisarRelatorioVendasCreareFechamento,
   obterRelatorioMaquininhaFechamento,
   salvarRelatorioMaquininhaFechamento,
   transcreverObservacaoFechamento,
@@ -287,6 +288,21 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       try {
         return ok(await obterRelatorioMaquininhaFechamento(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/caixa/:caixaId/relatorio-vendas/analisar",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const { anexoId } = z.object({ anexoId: z.string().uuid() }).parse(request.body);
+      try {
+        return ok(await analisarRelatorioVendasCreareFechamento(caixaId, anexoId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
