@@ -66,19 +66,19 @@ const etapas = [
   {
     id: 1,
     titulo: "Resumo",
+    resumo: "Confirme responsáveis e dados do turno.",
     passos: [
       "Informe quem operou o caixa e quem supervisiona este fechamento.",
       "Confira o PDV, o turno, o horário de abertura e a maquininha vinculada.",
       "Os dois responsáveis são obrigatórios e permanecem preenchidos ao voltar de etapa."
     ],
     quandoAvancar: "os dois responsáveis estiverem informados.",
-    icone: "mdi-clipboard-text-clock-outline",
-    cor: "var(--cx-positive)",
-    classe: "resumo"
+    cor: "var(--cx-positive)"
   },
   {
     id: 2,
     titulo: "Vendas",
+    resumo: "Anexe a folha CREARE e confronte vendas e saídas.",
     passos: [
       "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
       "Revise o total bruto, dinheiro, crédito, débito, Pix, voucher, despesas sem sangria e resultado final.",
@@ -86,13 +86,12 @@ const etapas = [
       "A folha CREARE é diferente da folha do malote usada no fechamento físico."
     ],
     quandoAvancar: "a foto estiver anexada e o relatório de vendas tiver sido gerado e revisado.",
-    icone: "mdi-receipt-text-outline",
-    cor: "var(--cat-entradas-base)",
-    classe: "vendas"
+    cor: "var(--cat-entradas-base)"
   },
   {
     id: 3,
     titulo: "Maquininha",
+    resumo: "Envie a leitura e confira o líquido do turno.",
     passos: [
       "Abra somente o painel do turno em que está trabalhando.",
       "Envie o comprovante pela câmera ou galeria e revise crédito, débito, Pix e voucher.",
@@ -101,13 +100,12 @@ const etapas = [
       "O acumulado da tarde não pode ser menor que a leitura salva pela manhã."
     ],
     quandoAvancar: "a leitura do turno estiver salva sem pendência.",
-    icone: "mdi-credit-card-outline",
-    cor: "var(--cx-brand)",
-    classe: "maquininha"
+    cor: "var(--cx-brand)"
   },
   {
     id: 4,
     titulo: "Relatório final",
+    resumo: "Revise recebimentos, saídas, lacres e diferenças.",
     passos: [
       "Confira a comparação CREARE × Pralis e os recebimentos por forma de pagamento.",
       "Revise os valores da maquininha e as vendas canceladas.",
@@ -115,13 +113,12 @@ const etapas = [
       "Se houver pendência ou divergência, volte à etapa correspondente, corrija e gere ou salve novamente."
     ],
     quandoAvancar: "os dados consolidados estiverem revisados e sem pendência operacional.",
-    icone: "mdi-swap-horizontal",
-    cor: "var(--cat-retiradas-base)",
-    classe: "movimentacoes"
+    cor: "var(--cat-retiradas-base)"
   },
   {
     id: 5,
     titulo: "Fechamento",
+    resumo: "Conte o físico, anexe o malote e envie à Tesouraria.",
     passos: [
       "Conte cédulas e moedas e informe também o total contado; ele deve ser a soma dos dois campos.",
       "Anexe a folha de fechamento do malote e informe o lacre físico reservado para este fechamento.",
@@ -129,9 +126,7 @@ const etapas = [
       "Execute retornos programados, se existirem, e só então envie o malote à Tesouraria."
     ],
     quandoAvancar: "o físico, a folha, o lacre e as justificativas obrigatórias estiverem preenchidos.",
-    icone: "mdi-cash-register",
-    cor: "var(--cx-attention)",
-    classe: "fechamento"
+    cor: "var(--cx-attention)"
   }
 ] as const;
 const etapaAtualDefinicao = computed(() => etapas.find((etapa) => etapa.id === etapaAtual.value) ?? etapas[0]);
@@ -139,10 +134,6 @@ const podeAvancarResumo = computed(() =>
   Boolean(props.fechamento.caixaResponsavelNome.trim() && props.fechamento.supervisorResponsavelNome.trim())
 );
 const resumo = computed(() => props.resumo);
-
-function irPara(etapa: number) {
-  if (etapa <= etapaAtual.value) etapaAtual.value = etapa;
-}
 
 function formatarHora(dataHora: string | null | undefined) {
   if (!dataHora) return "—";
@@ -203,38 +194,19 @@ function formatarHora(dataHora: string | null | undefined) {
       </div>
     </header>
 
-    <nav
+    <section
       v-show="etapasNavegacaoVisiveis"
       id="fechamento-navegacao"
-      class="fechamento-wizard__navegacao"
-      aria-label="Etapas do fechamento"
+      class="fechamento-wizard__resumos-etapas"
+      aria-label="Resumo das etapas do fechamento"
     >
       <ol>
-        <li
-          v-for="etapa in etapas"
-          :key="etapa.id"
-          :class="{ 'fechamento-wizard__item--ativa': etapa.id === etapaAtual }"
-        >
-          <button
-            type="button"
-            :class="{
-              'fechamento-wizard__etapa--ativa': etapa.id === etapaAtual,
-              'fechamento-wizard__etapa--concluida': etapa.id < etapaAtual,
-              [`fechamento-wizard__etapa--${etapa.classe}`]: true
-            }"
-            :style="{ '--etapa-cor': etapa.cor }"
-            :aria-current="etapa.id === etapaAtual ? 'step' : undefined"
-            :aria-controls="etapa.id === 1 ? undefined : `fechamento-painel-${etapa.id}`"
-            :disabled="etapa.id > etapaAtual"
-            @click="irPara(etapa.id)"
-          >
-            <span>{{ etapa.id }}</span
-            ><v-icon :icon="etapa.icone" size="17" /><strong>{{ etapa.titulo }}</strong>
-            <small class="fechamento-wizard__progresso">Etapa {{ etapa.id }} de 5</small>
-          </button>
+        <li v-for="etapa in etapas" :key="etapa.id" :class="{ ativa: etapa.id === etapaAtual }">
+          <strong>Etapa {{ etapa.id }} · {{ etapa.titulo }}</strong>
+          <span>{{ etapa.resumo }}</span>
         </li>
       </ol>
-    </nav>
+    </section>
     <div class="fechamento-wizard__progresso-mobile" aria-hidden="true">
       <span
         v-for="etapa in etapas"
@@ -288,7 +260,11 @@ function formatarHora(dataHora: string | null | undefined) {
       @anexos-atualizados="emit('anexosAtualizados', $event)"
     />
 
-    <footer v-if="etapaAtual < 5" class="fechamento-wizard__rodape">
+    <footer
+      v-if="etapaAtual < 5"
+      class="fechamento-wizard__rodape"
+      :class="{ 'fechamento-wizard__rodape--inicio': etapaAtual === 1 }"
+    >
       <v-btn v-if="etapaAtual > 1" color="error" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual -= 1"
         >Voltar etapa</v-btn
       >
@@ -371,79 +347,39 @@ function formatarHora(dataHora: string | null | undefined) {
   justify-content: flex-end;
   gap: 8px;
 }
-.fechamento-wizard__navegacao {
-  overflow-x: auto;
+.fechamento-wizard__resumos-etapas {
   margin-bottom: 18px;
-  padding-bottom: 4px;
 }
-.fechamento-wizard__navegacao ol {
-  display: flex;
-  min-width: max-content;
+.fechamento-wizard__resumos-etapas ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.fechamento-wizard__navegacao button {
-  display: flex;
-  min-height: 46px;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 14px;
+.fechamento-wizard__resumos-etapas li {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 12px;
   border: 1px solid var(--cx-line);
   border-radius: 10px;
-  background: var(--cx-surface);
-  color: var(--cx-ink-soft);
-  cursor: pointer;
-  transition:
-    border-color var(--cx-dur-2) var(--cx-ease),
-    background var(--cx-dur-2) var(--cx-ease),
-    color var(--cx-dur-2) var(--cx-ease);
-}
-.fechamento-wizard__navegacao button > span {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 999px;
   background: var(--cx-surface-sunken);
-  font-size: 0.75rem;
+}
+.fechamento-wizard__resumos-etapas li.ativa {
+  border-color: var(--fechamento-etapa-cor);
+  background: color-mix(in srgb, var(--fechamento-etapa-cor) 14%, var(--cx-surface));
+}
+.fechamento-wizard__resumos-etapas strong {
+  color: var(--cx-ink);
+  font-size: 0.82rem;
   font-weight: 800;
 }
-.fechamento-wizard__navegacao button:focus-visible {
-  outline: 3px solid var(--cx-focus);
-  outline-offset: 2px;
-}
-.fechamento-wizard__etapa--ativa {
-  border-color: var(--etapa-cor) !important;
-  background: var(--etapa-cor) !important;
-  color: var(--cx-brand-on) !important;
-}
-.fechamento-wizard__etapa--fechamento.fechamento-wizard__etapa--ativa,
-.fechamento-wizard__etapa--fechamento.fechamento-wizard__etapa--ativa :deep(.v-icon) {
-  color: var(--cx-canvas) !important;
-}
-.fechamento-wizard__etapa--vendas.fechamento-wizard__etapa--ativa {
-  color: var(--cx-canvas) !important;
-}
-.fechamento-wizard__etapa--resumo.fechamento-wizard__etapa--ativa {
-  color: var(--cx-canvas) !important;
-}
-.fechamento-wizard__etapa--resumo.fechamento-wizard__etapa--ativa > span {
-  background: rgb(0 0 0 / 0.14) !important;
-}
-.fechamento-wizard__etapa--ativa > span {
-  background: rgb(255 255 255 / 0.22) !important;
-}
-.fechamento-wizard__etapa--concluida {
-  border-color: var(--etapa-cor) !important;
-  color: var(--etapa-cor) !important;
-}
-.fechamento-wizard__etapa--concluida > span {
-  background: color-mix(in srgb, var(--etapa-cor) 18%, var(--cx-surface)) !important;
-}
-.fechamento-wizard__progresso {
-  display: none;
+.fechamento-wizard__resumos-etapas span {
+  color: var(--cx-ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.3;
 }
 .fechamento-wizard__progresso-mobile {
   display: none;
@@ -525,24 +461,8 @@ function formatarHora(dataHora: string | null | undefined) {
   .fechamento-wizard__cabecalho {
     display: none;
   }
-  .fechamento-wizard__navegacao {
-    overflow: visible;
-  }
-  .fechamento-wizard__navegacao ol {
-    min-width: 0;
-  }
-  .fechamento-wizard__navegacao ol {
-    flex-direction: column;
-  }
-  .fechamento-wizard__navegacao button {
-    width: 100%;
-  }
-  .fechamento-wizard__progresso {
-    display: inline;
-    margin-left: auto;
-    font-size: 0.72rem;
-    font-weight: 700;
-    opacity: 0.82;
+  .fechamento-wizard__resumos-etapas ol {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .fechamento-wizard__progresso-mobile {
     display: flex;
@@ -568,6 +488,13 @@ function formatarHora(dataHora: string | null | undefined) {
   .fechamento-wizard__rodape :deep(.v-btn) {
     min-height: 48px;
   }
+  .fechamento-wizard__rodape--inicio :deep(.v-btn) {
+    min-width: min(250px, 100%);
+  }
+  .fechamento-wizard__rodape--inicio :deep(.v-btn__content) {
+    justify-content: space-between;
+    white-space: nowrap;
+  }
   .fechamento-wizard__rodape {
     position: sticky;
     bottom: 0;
@@ -586,12 +513,19 @@ function formatarHora(dataHora: string | null | undefined) {
   .fechamento-wizard__rodape :deep(.v-spacer) {
     display: none;
   }
-  .fechamento-wizard__rodape :deep(.v-btn),
-  .fechamento-wizard__rodape :deep(.v-btn__content) {
+  .fechamento-wizard__rodape :deep(.v-btn) {
     min-width: 0;
     width: 100%;
-    white-space: normal;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn__content) {
+    justify-content: space-between;
+    white-space: nowrap;
     text-align: center;
+  }
+  .fechamento-wizard__rodape--inicio :deep(.v-spacer + .v-btn) {
+    grid-column: 1 / -1;
+    justify-self: end;
+    width: min(250px, 100%);
   }
 }
 @media (max-width: 420px) {
@@ -602,13 +536,15 @@ function formatarHora(dataHora: string | null | undefined) {
   .fechamento-wizard__rodape :deep(.v-spacer) {
     display: none;
   }
-  .fechamento-wizard__rodape :deep(.v-btn:only-child) {
-    grid-column: 1 / -1;
+  .fechamento-wizard__resumos-etapas ol {
+    grid-template-columns: 1fr;
   }
-  .fechamento-wizard__rodape :deep(.v-btn),
-  .fechamento-wizard__rodape :deep(.v-btn__content) {
+  .fechamento-wizard__rodape :deep(.v-btn) {
     width: 100%;
-    white-space: normal;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn__content) {
+    justify-content: space-between;
+    white-space: nowrap;
     text-align: center;
   }
 }

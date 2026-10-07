@@ -96,4 +96,16 @@ function dataCancelamento(venda: VendaCanceladaCaixa) {
     gap: 8px;
   }
 }
+@media (max-width: 480px) {
+  .canceladas__titulo {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .canceladas__titulo :deep(.v-chip) {
+    justify-self: start;
+    max-width: 100%;
+    white-space: nowrap;
+  }
+}
 </style>

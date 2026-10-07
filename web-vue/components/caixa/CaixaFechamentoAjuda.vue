@@ -83,6 +83,9 @@ defineProps<{
   flex: 0 0 auto;
   min-width: 40px;
   min-height: 40px;
-  color: var(--cx-brand-text);
+  border: 1px solid var(--cx-negative);
+  border-radius: 10px;
+  background: var(--cx-canvas);
+  color: var(--cx-attention);
 }
 </style>
