@@ -190,7 +190,7 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-@media (max-width: 420px) {
+@media (max-width: 600px) {
   .folha__acoes :deep(.v-btn) {
     width: 100%;
     min-height: 46px;

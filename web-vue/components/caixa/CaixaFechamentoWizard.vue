@@ -518,4 +518,38 @@ function formatarHora(dataHora: string | null | undefined) {
     text-align: center;
   }
 }
+@media (max-width: 600px) {
+  .fechamento-wizard__rodape {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 0;
+  }
+  .fechamento-wizard__rodape :deep(.v-spacer) {
+    display: none;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn) {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn__content) {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    white-space: nowrap;
+  }
+}
+@media (min-width: 601px) and (max-width: 720px) {
+  .fechamento-wizard__rodape :deep(.v-btn) {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+@media (max-width: 360px) {
+  .fechamento-wizard__rodape :deep(.v-btn) {
+    font-size: 0.78rem;
+  }
+}
 </style>

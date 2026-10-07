@@ -481,4 +481,14 @@ watch(
     min-height: 48px;
   }
 }
+@media (max-width: 600px) {
+  .relatorio-vendas__gerar {
+    width: 100%;
+    min-height: 48px;
+  }
+  .relatorio-vendas__anexo :deep(.v-btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+}
 </style>

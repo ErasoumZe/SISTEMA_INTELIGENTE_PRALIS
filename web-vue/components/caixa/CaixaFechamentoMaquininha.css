@@ -67,6 +67,7 @@
 }
 .maquininha__painel :deep(.v-expansion-panel-title span) {
   display: grid;
+  min-width: 0;
   gap: 2px;
 }
 .maquininha__painel :deep(.v-expansion-panel-title strong) {
@@ -99,6 +100,7 @@
 .maquininha__foto span,
 .maquininha__foto small {
   display: block;
+  overflow-wrap: anywhere;
 }
 .maquininha__botoes {
   display: flex;
