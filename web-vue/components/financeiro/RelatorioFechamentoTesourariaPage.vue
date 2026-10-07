@@ -47,6 +47,16 @@ const carregandoDossie = ref(false);
 const dialogoAberto = ref(false);
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 const periodoInvertido = computed(() => Boolean(filtros.dataInicio && filtros.dataFim && filtros.dataInicio > filtros.dataFim));
+const secoesLancamentos = computed(() => {
+  const lancamentos = dossie.value?.lancamentos;
+  return [
+    { titulo: "Vendas", itens: lancamentos?.linhasVendas ?? [] },
+    { titulo: "Transferências", itens: lancamentos?.linhasTransferencias ?? [] },
+    { titulo: "Despesas", itens: lancamentos?.linhasDespesas ?? [] },
+    { titulo: "Mercadorias", itens: lancamentos?.linhasMercadorias ?? [] },
+    { titulo: "Retiradas", itens: lancamentos?.linhasRetiradas ?? [] }
+  ];
+});
 
 function parametros() {
   const params = new URLSearchParams({ empresaId: props.empresaId, page: String(pagina.value), pageSize: String(itensPorPagina) });
@@ -187,7 +197,7 @@ watch(() => props.empresaId, () => { pagina.value = 1; void buscar(); }, { immed
             </v-expansion-panel>
             <v-expansion-panel title="Conferências físicas e quebras"><v-expansion-panel-text><v-table density="compact"><thead><tr><th>Etapa</th><th>Resultado</th><th>Declarado</th><th>Contado</th><th>Conferido em</th></tr></thead><tbody><tr v-for="item in dossie.conferencias" :key="String(item.id)"><td>{{ texto(item.etapa) }}</td><td>{{ texto(item.resultado) }}</td><td>{{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}</td><td>{{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}</td><td>{{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : '--' }}</td></tr><tr v-if="!dossie.conferencias.length"><td colspan="5">Ainda não há conferência física registrada.</td></tr></tbody></v-table><v-alert v-for="quebra in dossie.quebras" :key="String(quebra.id)" type="error" variant="tonal" class="mt-3"><strong>Quebra {{ dinheiro(numero(quebra.valor)) }}</strong> · {{ texto(quebra.observacao) }}</v-alert></v-expansion-panel-text></v-expansion-panel>
             <v-expansion-panel title="CREARE e maquininha"><v-expansion-panel-text><v-row dense><v-col cols="12" md="6"><strong>Relatório CREARE</strong><pre>{{ json(dossie.relatorioVendas?.dados ?? 'Não gerado') }}</pre></v-col><v-col cols="12" md="6"><strong>Relatório da maquininha</strong><pre>{{ json(dossie.relatorioMaquininha ?? 'Não informado') }}</pre></v-col></v-row></v-expansion-panel-text></v-expansion-panel>
-            <v-expansion-panel title="Movimentações e vendas canceladas"><v-expansion-panel-text><div class="dossie-grid"><span>Vendas</span><strong>{{ dossie.lancamentos.linhasVendas?.length ?? 0 }}</strong><span>Despesas</span><strong>{{ dossie.lancamentos.linhasDespesas?.length ?? 0 }}</strong><span>Mercadorias</span><strong>{{ dossie.lancamentos.linhasMercadorias?.length ?? 0 }}</strong><span>Retiradas</span><strong>{{ dossie.lancamentos.linhasRetiradas?.length ?? 0 }}</strong><span>Vendas canceladas</span><strong>{{ dossie.vendasCanceladas.length }}</strong></div></v-expansion-panel-text></v-expansion-panel>
+            <v-expansion-panel title="Movimentações e vendas canceladas"><v-expansion-panel-text><v-list density="compact" lines="two"><template v-for="secao in secoesLancamentos" :key="secao.titulo"><v-list-subheader>{{ secao.titulo }} · {{ secao.itens.length }}</v-list-subheader><v-list-item v-for="item in secao.itens" :key="String(item.id)"><v-list-item-title>{{ texto(item.descricao) }}</v-list-item-title><v-list-item-subtitle>{{ item.data ? formatarDataSomenteDia(String(item.data)) : '--' }}</v-list-item-subtitle><template #append><strong>{{ dinheiro(numero(item.valor)) }}</strong></template></v-list-item><v-list-item v-if="!secao.itens.length" title="Nenhum lançamento" /></template></v-list><v-alert v-if="dossie.vendasCanceladas.length" type="warning" variant="tonal" class="mt-2">{{ dossie.vendasCanceladas.length }} venda(s) cancelada(s), fora dos totais do caixa.</v-alert></v-expansion-panel-text></v-expansion-panel>
             <v-expansion-panel title="Folhas e comprovantes anexados"><v-expansion-panel-text><v-row dense><v-col v-for="anexo in dossie.anexos" :key="anexo.id" cols="12" sm="6" md="4"><v-card variant="outlined"><v-img v-if="anexo.mimeType.startsWith('image/')" :src="anexoUrl(anexo)" height="120" cover /><v-sheet v-else class="pa-6 text-center"><v-icon icon="mdi-file-pdf-box" size="42" color="error" /></v-sheet><v-card-text><strong>{{ rotuloAnexo(anexo.tipo) }}</strong><div class="text-caption text-truncate">{{ anexo.nomeOriginal }}</div></v-card-text><v-card-actions><v-btn :href="anexoUrl(anexo)" target="_blank" size="small" prepend-icon="mdi-download">Abrir</v-btn></v-card-actions></v-card></v-col><v-col v-if="!dossie.anexos.length" cols="12"><span class="text-medium-emphasis">Nenhum anexo foi enviado.</span></v-col></v-row></v-expansion-panel-text></v-expansion-panel>
           </v-expansion-panels>
         </template>

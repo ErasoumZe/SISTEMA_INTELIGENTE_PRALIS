@@ -96,6 +96,21 @@ describe("item de menu do historico de caixas", () => {
   });
 });
 
+describe("relatorio de fechamento da Tesouraria", () => {
+  it("aparece somente para quem possui a permissao propria de consulta", () => {
+    const menu = menuDoPerfil(["relatorio_fechamento_visualizar"]);
+    expect(idsDaSecao(menu, "Resultados")).toContain("relatorio_fechamento");
+    expect(idsNaRaiz(menuDoPerfil(["transferencias_visualizar"]))).not.toContain("relatorio_fechamento");
+  });
+
+  it("usa a porta de permissao separada da operacao do Caixa", () => {
+    expect(itemPorTela.relatorio_fechamento).toMatchObject({
+      permissao: "relatorio_fechamento_visualizar",
+      icone: "mdi-clipboard-text-search"
+    });
+  });
+});
+
 describe("Socios e Gestores", () => {
   it("tem permissao administrativa propria e nao aparece para quem so opera retiradas", () => {
     expect(itemPorTela.socios_gestores?.permissao).toBe("cadastro_socios_gestores_visualizar");
