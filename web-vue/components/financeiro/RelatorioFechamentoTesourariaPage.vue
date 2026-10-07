@@ -47,7 +47,6 @@ type Dossie = {
   vendasCanceladas: Array<Record<string, unknown>>;
   ajuste: Record<string, unknown> | null;
 };
-type LinhaConferencia = { forma: string; creare: number | null; sistema: number | null };
 type LinhaMaquininha = { forma: string; inicial: number | null; acumulado: number | null; liquido: number | null };
 
 const { apiGet, apiGetPaginado, apiPost, apiUrl } = useApi();
@@ -76,6 +75,7 @@ const resultadoConferencia = ref<"conferido" | "divergente">("conferido");
 const observacaoConferencia = ref("");
 const confirmandoConferencia = ref(false);
 const erroConferencia = ref("");
+const detalhesAbertos = ref<string[]>([]);
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 const linhasParaConferir = computed(() =>
   linhas.value.filter((linha) =>
@@ -108,26 +108,6 @@ const secoesLancamentos = computed(() => {
     { titulo: "Retiradas", itens: lancamentos?.linhasRetiradas ?? [] }
   ];
 });
-const conferenciaCreare = computed<LinhaConferencia[]>(() => {
-  const dados = registro(dossie.value?.relatorioVendas?.dados);
-  const vendas = registro(dados.vendas);
-  const creare = registro(registro(dados.creare).leitura);
-  const totaisPralis = new Map<string, number>();
-  const porForma = Array.isArray(vendas.porFormaPagamento) ? vendas.porFormaPagamento : [];
-  for (const item of porForma) {
-    const linha = registro(item);
-    const categoria = texto(linha.categoriaFechamentoCaixa).toLowerCase();
-    totaisPralis.set(categoria, numero(linha.total));
-  }
-  return [
-    { forma: "Total de vendas", creare: valorOpcional(creare.totalBruto), sistema: valorOpcional(vendas.totalGeral) },
-    { forma: "Dinheiro", creare: valorOpcional(creare.dinheiro), sistema: totaisPralis.get("dinheiro") ?? null },
-    { forma: "Crédito", creare: valorOpcional(creare.credito), sistema: totaisPralis.get("credito") ?? null },
-    { forma: "Débito", creare: valorOpcional(creare.debito), sistema: totaisPralis.get("debito") ?? null },
-    { forma: "Pix", creare: valorOpcional(creare.pix), sistema: totaisPralis.get("pix") ?? null },
-    { forma: "Voucher", creare: valorOpcional(creare.voucher), sistema: totaisPralis.get("voucher") ?? null }
-  ];
-});
 const conferenciaMaquininha = computed<LinhaMaquininha[]>(() => {
   const relatorio = registro(dossie.value?.relatorioMaquininha);
   return ["credito", "debito", "pix", "voucher"].map((forma) => {
@@ -141,9 +121,6 @@ const conferenciaMaquininha = computed<LinhaMaquininha[]>(() => {
     };
   });
 });
-const anexosComLink = computed(() =>
-  (dossie.value?.anexos ?? []).map((anexo) => ({ ...anexo, href: anexoUrl(anexo) }))
-);
 const ultimaConferenciaTesouraria = computed(() => dossie.value?.conferenciasTesouraria.at(-1) ?? null);
 const podeConfirmarSemDivergencia = computed(() => dossie.value?.situacaoTesouraria === "fechado_sem_pendencias");
 const podeRegistrarDivergencia = computed(() => dossie.value?.situacaoTesouraria === "com_quebra");
@@ -188,6 +165,7 @@ async function abrirDossie(linha: LinhaRelatorio) {
   caixaSelecionado.value = linha;
   dossie.value = null;
   erroDossie.value = "";
+  detalhesAbertos.value = [];
   dialogoAberto.value = true;
   await carregarDossie(linha.id);
 }
@@ -209,6 +187,7 @@ function fecharDossie() {
   dossie.value = null;
   caixaSelecionado.value = null;
   erroDossie.value = "";
+  detalhesAbertos.value = [];
 }
 
 function aoAlterarDossie(aberto: boolean) {
@@ -288,13 +267,6 @@ function formatarDataHoraOuTraco(valor: unknown) {
 }
 function registro(valor: unknown): Record<string, unknown> {
   return valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {};
-}
-function confere(linha: LinhaConferencia) {
-  return (
-    linha.creare !== null &&
-    linha.sistema !== null &&
-    Math.round(linha.creare * 100) === Math.round(linha.sistema * 100)
-  );
 }
 function anexoUrl(anexo: Anexo) {
   return `${apiUrl}/api/relatorios/fechamentos/${caixaSelecionado.value?.id}/anexos/${anexo.id}`;
@@ -475,14 +447,14 @@ watch(
 
   <v-dialog
     v-model="dialogoAberto"
-    max-width="1200"
+    max-width="920"
     scrollable
     class="dialogo-dossie"
     @update:model-value="aoAlterarDossie"
   >
     <v-card class="dialogo-dossie__card">
-      <v-toolbar color="primary" density="comfortable"
-        ><v-toolbar-title>Folha digital do fechamento · {{ caixaSelecionado?.pdvNome }}</v-toolbar-title
+      <v-toolbar color="primary" density="compact"
+        ><v-toolbar-title>Fechamento · {{ caixaSelecionado?.pdvNome }}</v-toolbar-title
         ><v-btn icon="mdi-close" aria-label="Fechar folha digital" title="Fechar" @click.stop="fecharDossie"
       /></v-toolbar>
       <v-card-text class="pa-4">
@@ -494,53 +466,7 @@ watch(
             ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
             Tesouraria não recalcula valores nem altera lacres.</v-alert
           >
-          <v-card variant="outlined" class="identificacao-fechamento">
-            <v-card-text class="pa-3">
-              <div class="text-overline">IDENTIFICAÇÃO</div>
-              <div class="identificacao-fechamento__itens">
-                <div>
-                  <span>PDV</span><strong>{{ texto(dossie.caixa.pdvNome) }}</strong>
-                </div>
-                <div>
-                  <span>Turno</span><strong>{{ texto(dossie.caixa.turnoNome) }}</strong>
-                </div>
-                <div>
-                  <span>Operador</span><strong>{{ texto(dossie.caixa.usuarioCaixaNome) }}</strong>
-                </div>
-                <div>
-                  <span>Aberto em</span
-                  ><strong>{{
-                    dossie.caixa.dataHoraAbertura ? formatarDataHora(String(dossie.caixa.dataHoraAbertura)) : "--"
-                  }}</strong>
-                </div>
-                <div>
-                  <span>Fechado em</span
-                  ><strong>{{
-                    dossie.caixa.dataHoraFechamento
-                      ? formatarDataHora(String(dossie.caixa.dataHoraFechamento))
-                      : "Ainda não fechado"
-                  }}</strong>
-                </div>
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <RelatorioFechamentoFolhaDigital
-            class="mt-3"
-            :caixa="dossie.caixa"
-            :resumo="dossie.resumo"
-            :anexos="anexosComLink"
-            :maquininha="conferenciaMaquininha"
-            :transferencias="dossie.transferencias"
-            :relatorio-vendas="dossie.relatorioVendas"
-            :ajuste="dossie.ajuste"
-            :dinheiro="dinheiro"
-            :numero="numero"
-            :texto="texto"
-            :data-hora="formatarDataHoraOuTraco"
-          />
-
-          <v-card class="conferencia-tesouraria mt-4" variant="outlined">
+          <v-card class="conferencia-tesouraria mb-3" variant="outlined">
             <v-card-text class="d-flex flex-wrap align-center justify-space-between ga-3">
               <div>
                 <div class="text-overline">TESOURARIA</div>
@@ -593,35 +519,21 @@ watch(
             </v-card-text>
           </v-card>
 
-          <v-expansion-panels multiple class="mt-4">
-            <v-expansion-panel title="Transferências, sangrias e lacres">
-              <v-expansion-panel-text
-                ><v-table density="compact"
-                  ><thead>
-                    <tr>
-                      <th>Tipo</th>
-                      <th>Valor</th>
-                      <th>Lacre</th>
-                      <th>Status</th>
-                      <th>Data</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in dossie.transferencias" :key="String(item.id)">
-                      <td>{{ texto(item.tipo) }}</td>
-                      <td>{{ dinheiro(numero(item.valorOriginal)) }}</td>
-                      <td>{{ texto(item.lacreNumero) }}</td>
-                      <td>{{ texto(item.status) }}</td>
-                      <td>{{ item.dataTransferencia ? formatarDataHora(String(item.dataTransferencia)) : "--" }}</td>
-                    </tr>
-                    <tr v-if="!dossie.transferencias.length">
-                      <td colspan="5">Nenhuma transferência vinculada.</td>
-                    </tr>
-                  </tbody></v-table
-                ></v-expansion-panel-text
-              >
-            </v-expansion-panel>
-            <v-expansion-panel title="Conferências físicas e quebras"
+          <RelatorioFechamentoFolhaDigital
+            :caixa="dossie.caixa"
+            :resumo="dossie.resumo"
+            :maquininha="conferenciaMaquininha"
+            :transferencias="dossie.transferencias"
+            :relatorio-vendas="dossie.relatorioVendas"
+            :ajuste="dossie.ajuste"
+            :dinheiro="dinheiro"
+            :numero="numero"
+            :texto="texto"
+            :data-hora="formatarDataHoraOuTraco"
+          />
+
+          <v-expansion-panels v-model="detalhesAbertos" multiple class="mt-4">
+            <v-expansion-panel value="fisico" title="Conferências físicas e quebras"
               ><v-expansion-panel-text
                 ><v-table density="compact"
                   ><thead>
@@ -656,7 +568,7 @@ watch(
                 ></v-expansion-panel-text
               ></v-expansion-panel
             >
-            <v-expansion-panel title="Decisões da Tesouraria"
+            <v-expansion-panel value="decisoes" title="Decisões da Tesouraria"
               ><v-expansion-panel-text
                 ><v-table density="compact"
                   ><thead>
@@ -681,89 +593,7 @@ watch(
                 ></v-expansion-panel-text
               ></v-expansion-panel
             >
-            <v-expansion-panel title="Conferência CREARE × maquininha">
-              <v-expansion-panel-text>
-                <v-row dense>
-                  <v-col cols="12" lg="7">
-                    <v-card class="folha-conferencia h-100" variant="outlined">
-                      <v-card-title class="text-subtitle-1">Vendas por forma de pagamento</v-card-title>
-                      <v-card-subtitle
-                        >Valores informados na folha CREARE comparados aos lançamentos do PDV.</v-card-subtitle
-                      >
-                      <v-card-text>
-                        <v-alert v-if="!dossie.relatorioVendas" type="info" variant="tonal" density="compact"
-                          >A folha CREARE ainda não foi gerada neste caixa.</v-alert
-                        >
-                        <v-table v-else density="compact" class="tabela-conferencia">
-                          <thead>
-                            <tr>
-                              <th>Forma</th>
-                              <th class="text-right">CREARE</th>
-                              <th class="text-right">PDV</th>
-                              <th class="text-right">Conferência</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="linha in conferenciaCreare" :key="linha.forma">
-                              <td>{{ linha.forma }}</td>
-                              <td class="text-right">{{ linha.creare === null ? "—" : dinheiro(linha.creare) }}</td>
-                              <td class="text-right">{{ linha.sistema === null ? "—" : dinheiro(linha.sistema) }}</td>
-                              <td class="text-right">
-                                <v-chip
-                                  v-if="linha.creare !== null && linha.sistema !== null"
-                                  :color="confere(linha) ? 'success' : 'error'"
-                                  size="x-small"
-                                  variant="tonal"
-                                  >{{ confere(linha) ? "Bateu" : "Divergente" }}</v-chip
-                                ><span v-else class="text-medium-emphasis">Pendente</span>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </v-table>
-                      </v-card-text>
-                    </v-card>
-                  </v-col>
-                  <v-col cols="12" lg="5">
-                    <v-card class="maquininha-conferencia h-100" variant="outlined">
-                      <v-card-title class="text-subtitle-1">Leitura da maquininha</v-card-title>
-                      <v-card-subtitle>Inicial, acumulado e líquido informado para este PDV.</v-card-subtitle>
-                      <v-card-text>
-                        <v-alert v-if="!dossie.relatorioMaquininha" type="info" variant="tonal" density="compact"
-                          >A leitura da maquininha ainda não foi informada.</v-alert
-                        >
-                        <v-table v-else density="compact" class="tabela-conferencia">
-                          <thead>
-                            <tr>
-                              <th>Forma</th>
-                              <th class="text-right">Inicial</th>
-                              <th class="text-right">Acumulado</th>
-                              <th class="text-right">Líquido</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="linha in conferenciaMaquininha" :key="linha.forma">
-                              <td>{{ linha.forma }}</td>
-                              <td class="text-right">{{ linha.inicial === null ? "—" : dinheiro(linha.inicial) }}</td>
-                              <td class="text-right">
-                                {{ linha.acumulado === null ? "—" : dinheiro(linha.acumulado) }}
-                              </td>
-                              <td class="text-right font-weight-bold">
-                                {{ linha.liquido === null ? "—" : dinheiro(linha.liquido) }}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </v-table>
-                        <p class="text-caption text-medium-emphasis mt-3 mb-0">
-                          No turno da tarde, o líquido é o acumulado menos a leitura da manhã do mesmo PDV e da mesma
-                          maquininha.
-                        </p>
-                      </v-card-text>
-                    </v-card>
-                  </v-col>
-                </v-row>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-            <v-expansion-panel title="Movimentações e vendas canceladas"
+            <v-expansion-panel value="movimentacoes" title="Movimentações e vendas canceladas"
               ><v-expansion-panel-text
                 ><v-list density="compact" lines="two"
                   ><template v-for="secao in secoesLancamentos" :key="secao.titulo"
@@ -782,7 +612,7 @@ watch(
                 ></v-expansion-panel-text
               ></v-expansion-panel
             >
-            <v-expansion-panel title="Folhas e comprovantes anexados"
+            <v-expansion-panel value="anexos" title="Folhas e comprovantes anexados"
               ><v-expansion-panel-text
                 ><v-row dense
                   ><v-col v-for="anexo in dossie.anexos" :key="anexo.id" cols="12" sm="6" md="4"
@@ -877,9 +707,17 @@ watch(
 }
 .dialogo-dossie__card {
   min-width: 0;
+  max-height: min(88dvh, 820px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.identificacao-fechamento {
-  display: none;
+.dialogo-dossie :deep(.v-overlay__content) {
+  width: min(calc(100vw - 32px), 920px);
+  max-height: min(88dvh, 820px);
+}
+.dialogo-dossie__card > .v-card-text {
+  overflow-y: auto;
 }
 .conferencia-tesouraria {
   border-left: 4px solid #22c55e;
@@ -890,40 +728,26 @@ watch(
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1.2fr);
   gap: 9px 16px;
 }
-.identificacao-fechamento__itens {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 28px;
-}
-.identificacao-fechamento__itens div {
-  display: grid;
-  gap: 2px;
-  min-width: 150px;
-}
-.identificacao-fechamento__itens span {
-  color: rgb(var(--v-theme-on-surface-variant));
-  font-size: 0.75rem;
-}
-.folha-conferencia {
-  border-top: 4px solid #f59e0b;
-  background: rgba(245, 158, 11, 0.055);
-}
-.maquininha-conferencia {
-  border-top: 4px solid #7c3aed;
-  background: rgba(124, 58, 237, 0.07);
-}
-.tabela-conferencia :deep(th) {
-  white-space: nowrap;
-  color: rgb(var(--v-theme-on-surface-variant));
-  font-size: 0.75rem;
-}
-.tabela-conferencia :deep(td) {
-  white-space: nowrap;
-}
 @media (max-width: 599px) {
+  .dialogo-dossie :deep(.v-overlay__content) {
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    margin: 8px;
+  }
+  .dialogo-dossie__card {
+    max-height: calc(100dvh - 16px);
+    display: flex;
+    flex-direction: column;
+  }
+  .dialogo-dossie__card > .v-card-text {
+    padding: 12px !important;
+  }
   .dialogo-dossie :deep(.v-toolbar-title) {
     min-width: 0;
     font-size: 0.92rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .cartao-caixa :deep(.v-card-text > .d-flex:first-child) {
     flex-wrap: wrap;
@@ -934,10 +758,6 @@ watch(
   }
   .dossie-grid strong {
     margin-bottom: 8px;
-  }
-  .tabela-conferencia {
-    overflow-x: auto;
-    display: block;
   }
   .v-table {
     display: block;

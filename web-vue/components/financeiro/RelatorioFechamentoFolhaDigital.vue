@@ -1,6 +1,5 @@
 <script setup lang="ts">
 type Registro = Record<string, unknown>;
-type Anexo = { id: string; tipo: string; nomeOriginal: string; mimeType: string; href: string };
 type LinhaMaquininha = { forma: string; liquido: number | null };
 type Transferencia = Registro & {
   tipo?: string;
@@ -12,7 +11,6 @@ type Transferencia = Registro & {
 const props = defineProps<{
   caixa: Registro;
   resumo: Registro | null;
-  anexos: Anexo[];
   maquininha: LinhaMaquininha[];
   transferencias: Transferencia[];
   relatorioVendas: Registro | null;
@@ -23,9 +21,6 @@ const props = defineProps<{
   dataHora: (valor: unknown) => string;
 }>();
 
-const folhaFinal = computed(() => props.anexos.filter((anexo) => anexo.tipo === "folha_fechamento"));
-const folhaCreare = computed(() => props.anexos.filter((anexo) => anexo.tipo === "relatorio_vendas_creare"));
-const comprovantesCartao = computed(() => props.anexos.filter((anexo) => anexo.tipo === "comprovante_cartao"));
 const entradas = computed(() =>
   props.transferencias.filter((item) => ["abertura", "suprimento"].includes(String(item.tipo)))
 );
@@ -73,17 +68,7 @@ function rotuloPagamento(item: Registro) {
 </script>
 
 <template>
-  <section class="folha-kaylane" aria-labelledby="folha-digital-titulo">
-    <div class="folha-kaylane__cabecalho">
-      <div>
-        <div class="text-overline text-primary">TESOURARIA</div>
-        <h3 id="folha-digital-titulo" class="text-h6">Relatório do fechamento</h3>
-      </div>
-      <v-chip :color="folhaFinal.length ? 'success' : 'warning'" variant="tonal" size="small">
-        {{ folhaFinal.length ? "Folha final anexada" : "Folha final pendente" }}
-      </v-chip>
-    </div>
-
+  <section class="folha-kaylane" aria-label="Dados do fechamento">
     <section class="folha-kaylane__bloco">
       <h4>Identificação</h4>
       <div class="identificacao">
@@ -133,11 +118,6 @@ function rotuloPagamento(item: Registro) {
         </div>
       </div>
       <p v-else>Nenhum relatório CREARE gerado neste caixa.</p>
-      <div v-if="folhaCreare.length" class="anexos-inline">
-        <a v-for="anexo in folhaCreare" :key="anexo.id" :href="anexo.href" target="_blank">
-          Abrir folha CREARE: {{ anexo.nomeOriginal }}
-        </a>
-      </div>
     </section>
 
     <section class="folha-kaylane__bloco">
@@ -152,11 +132,6 @@ function rotuloPagamento(item: Registro) {
         </div>
       </div>
       <p v-else>Nenhuma leitura de maquininha informada.</p>
-      <div v-if="comprovantesCartao.length" class="anexos-inline">
-        <a v-for="anexo in comprovantesCartao" :key="anexo.id" :href="anexo.href" target="_blank">
-          Abrir comprovante: {{ anexo.nomeOriginal }}
-        </a>
-      </div>
     </section>
 
     <section class="folha-kaylane__bloco">
@@ -224,31 +199,14 @@ function rotuloPagamento(item: Registro) {
       </v-sheet>
     </section>
 
-    <section class="folha-kaylane__bloco anexos-finais">
-      <h4>Folhas e comprovantes anexados</h4>
-      <div v-if="folhaFinal.length" class="anexos-inline">
-        <a v-for="anexo in folhaFinal" :key="anexo.id" :href="anexo.href" target="_blank">
-          Abrir folha final: {{ anexo.nomeOriginal }}
-        </a>
-      </div>
-      <p v-else>Folha final ainda não foi anexada pelo operador antes do encerramento.</p>
-    </section>
   </section>
 </template>
 
 <style scoped>
 .folha-kaylane {
-  max-width: 760px;
+  max-width: 680px;
   margin: 0 auto;
 }
-.folha-kaylane__cabecalho {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-.folha-kaylane__cabecalho h3,
 .folha-kaylane__bloco h4,
 .relatorio-final h4 {
   margin: 0;
@@ -256,16 +214,16 @@ function rotuloPagamento(item: Registro) {
 .folha-kaylane__bloco {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 12px;
+  margin-bottom: 10px;
 }
 .folha-kaylane__bloco h4 {
-  font-size: 0.98rem;
-  margin-bottom: 12px;
+  font-size: 0.92rem;
+  margin-bottom: 8px;
 }
 .folha-kaylane__bloco p {
   margin: 0;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: var(--cx-ink-soft);
 }
 .identificacao {
   display: grid;
@@ -275,11 +233,11 @@ function rotuloPagamento(item: Registro) {
   font-size: 1rem;
 }
 .identificacao span {
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: var(--cx-ink-soft);
 }
 .linhas {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 .linhas > div {
   display: flex;
@@ -292,34 +250,24 @@ function rotuloPagamento(item: Registro) {
   overflow-wrap: anywhere;
 }
 .linhas small {
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: var(--cx-ink-soft);
 }
 .linha-total {
   border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   margin-top: 5px;
   padding-top: 8px;
 }
-.anexos-inline {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-}
-.anexos-inline a {
-  color: rgb(var(--v-theme-primary));
-  font-size: 0.84rem;
-  overflow-wrap: anywhere;
-}
 .relatorio-final {
-  margin: 22px 0;
+  margin: 14px 0;
 }
 .relatorio-final__grade {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .resumo {
-  min-height: 92px;
-  padding: 13px;
+  min-height: 70px;
+  padding: 10px;
   border-left: 4px solid;
   border-radius: 10px;
   display: grid;
@@ -358,7 +306,7 @@ function rotuloPagamento(item: Registro) {
 .diferenca-geral {
   display: grid;
   gap: 4px;
-  padding: 14px;
+  padding: 11px;
   border-left: 4px solid;
   border-radius: 10px;
   margin-top: 12px;
@@ -367,7 +315,7 @@ function rotuloPagamento(item: Registro) {
   font-size: 1.35rem;
 }
 .diferenca-geral small {
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: var(--cx-ink-soft);
 }
 .diferenca-geral--ok {
   border-color: #16a34a;
@@ -378,15 +326,13 @@ function rotuloPagamento(item: Registro) {
   background: rgba(124, 58, 237, 0.12);
 }
 @media (max-width: 599px) {
-  .folha-kaylane__cabecalho {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .folha-kaylane__bloco {
-    padding: 14px;
+    padding: 10px;
   }
   .linhas > div {
-    gap: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
   .linhas strong {
     white-space: nowrap;
@@ -397,7 +343,7 @@ function rotuloPagamento(item: Registro) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .resumo {
-    min-height: 80px;
+    min-height: 62px;
   }
 }
 </style>
