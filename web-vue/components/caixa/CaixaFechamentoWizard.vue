@@ -61,13 +61,17 @@ const emit = defineEmits<{
 }>();
 
 const etapaAtual = ref(1);
-const cabecalhoMobileAberto = ref(false);
+const etapasNavegacaoVisiveis = ref(false);
 const etapas = [
   {
     id: 1,
     titulo: "Resumo",
-    resumo: "Confirme operador e supervisor.",
-    ajuda: "Informe quem operou o caixa e quem conferiu o fechamento.",
+    passos: [
+      "Informe quem operou o caixa e quem supervisiona este fechamento.",
+      "Confira o PDV, o turno, o horário de abertura e a maquininha vinculada.",
+      "Os dois responsáveis são obrigatórios e permanecem preenchidos ao voltar de etapa."
+    ],
+    quandoAvancar: "os dois responsáveis estiverem informados.",
     icone: "mdi-clipboard-text-clock-outline",
     cor: "var(--cx-positive)",
     classe: "resumo"
@@ -75,8 +79,13 @@ const etapas = [
   {
     id: 2,
     titulo: "Vendas",
-    resumo: "Envie a folha CREARE e confira.",
-    ajuda: "Envie a folha do CREARE, revise os valores e gere o relatório de vendas.",
+    passos: [
+      "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
+      "Revise o total bruto, dinheiro, crédito, débito, Pix, voucher, despesas sem sangria e resultado final.",
+      "Gere o relatório para o sistema comparar a folha com as vendas e saídas registradas.",
+      "A folha CREARE é diferente da folha do malote usada no fechamento físico."
+    ],
+    quandoAvancar: "a foto estiver anexada e o relatório de vendas tiver sido gerado e revisado.",
     icone: "mdi-receipt-text-outline",
     cor: "var(--cat-entradas-base)",
     classe: "vendas"
@@ -84,9 +93,14 @@ const etapas = [
   {
     id: 3,
     titulo: "Maquininha",
-    resumo: "Envie a leitura do turno.",
-    ajuda:
-      "Envie a leitura da maquininha. À tarde, o sistema desconta automaticamente a leitura da manhã do mesmo PDV.",
+    passos: [
+      "Abra somente o painel do turno em que está trabalhando.",
+      "Envie o comprovante pela câmera ou galeria e revise crédito, débito, Pix e voucher.",
+      "No primeiro turno, informe o total do próprio turno.",
+      "No segundo turno do mesmo PDV e máquina na mesma data, informe o acumulado: o sistema desconta a manhã automaticamente.",
+      "O acumulado da tarde não pode ser menor que a leitura salva pela manhã."
+    ],
+    quandoAvancar: "a leitura do turno estiver salva sem pendência.",
     icone: "mdi-credit-card-outline",
     cor: "var(--cx-brand)",
     classe: "maquininha"
@@ -94,8 +108,13 @@ const etapas = [
   {
     id: 4,
     titulo: "Relatório final",
-    resumo: "Revise vendas, saídas e lacres.",
-    ajuda: "Confira os recebimentos, sangrias, despesas, retiradas e lacres usados no turno.",
+    passos: [
+      "Confira a comparação CREARE × Pralis e os recebimentos por forma de pagamento.",
+      "Revise os valores da maquininha e as vendas canceladas.",
+      "Abra os blocos de sangrias, retornos, lacres, entradas e saídas para conferir cada item.",
+      "Se houver pendência ou divergência, volte à etapa correspondente, corrija e gere ou salve novamente."
+    ],
+    quandoAvancar: "os dados consolidados estiverem revisados e sem pendência operacional.",
     icone: "mdi-swap-horizontal",
     cor: "var(--cat-retiradas-base)",
     classe: "movimentacoes"
@@ -103,8 +122,13 @@ const etapas = [
   {
     id: 5,
     titulo: "Fechamento",
-    resumo: "Conte o dinheiro e as moedas.",
-    ajuda: "Informe o total contado, registre o lacre e explique qualquer diferença antes de fechar.",
+    passos: [
+      "Conte cédulas e moedas e informe também o total contado; ele deve ser a soma dos dois campos.",
+      "Anexe a folha de fechamento do malote e informe o lacre físico reservado para este fechamento.",
+      "Se a contagem divergir, explique o motivo na observação; o campo aceita preenchimento por voz.",
+      "Execute retornos programados, se existirem, e só então envie o malote à Tesouraria."
+    ],
+    quandoAvancar: "o físico, a folha, o lacre e as justificativas obrigatórias estiverem preenchidos.",
     icone: "mdi-cash-register",
     cor: "var(--cx-attention)",
     classe: "fechamento"
@@ -119,6 +143,11 @@ const resumo = computed(() => props.resumo);
 function irPara(etapa: number) {
   if (etapa <= etapaAtual.value) etapaAtual.value = etapa;
 }
+
+function formatarHora(dataHora: string | null | undefined) {
+  if (!dataHora) return "—";
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(dataHora));
+}
 </script>
 
 <template>
@@ -130,30 +159,39 @@ function irPara(etapa: number) {
     data-teste="etapa-fechamento"
   >
     <div class="fechamento-wizard__resumo-mobile">
-      <button
-        type="button"
-        class="fechamento-wizard__resumo-mobile-botao"
-        :aria-expanded="cabecalhoMobileAberto"
-        aria-controls="fechamento-cabecalho fechamento-navegacao"
-        @click="cabecalhoMobileAberto = !cabecalhoMobileAberto"
-      >
-        <span>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</span>
-        <span>{{ cabecalhoMobileAberto ? "Ocultar detalhes" : etapaAtualDefinicao.resumo }}</span>
-      </button>
-      <CaixaFechamentoAjuda :etapas="etapas" />
+      <strong>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</strong>
+      <div class="fechamento-wizard__acoes-topo">
+        <CaixaFechamentoAjuda :etapa="etapaAtualDefinicao" />
+        <v-btn
+          :aria-expanded="etapasNavegacaoVisiveis"
+          aria-controls="fechamento-navegacao"
+          :aria-label="etapasNavegacaoVisiveis ? 'Fechar etapas' : 'Mostrar etapas'"
+          :icon="etapasNavegacaoVisiveis ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          size="small"
+          variant="text"
+          @click="etapasNavegacaoVisiveis = !etapasNavegacaoVisiveis"
+        />
+      </div>
+      <div class="fechamento-wizard__horarios-mobile" aria-label="Horários do caixa">
+        <span>Abertura {{ formatarHora(caixa.dataHoraAbertura) }}</span>
+        <span>Fechamento {{ formatarHora(caixa.dataHoraFechamento) }}</span>
+      </div>
     </div>
-    <header
-      id="fechamento-cabecalho"
-      class="fechamento-wizard__cabecalho"
-      :class="{ 'fechamento-wizard__cabecalho--mobile-aberto': cabecalhoMobileAberto }"
-    >
-      <div>
-        <span class="fechamento-wizard__sobretitulo">Fechamento do caixa</span>
-        <div class="fechamento-wizard__titulo-com-ajuda">
-          <h2 id="fechamento-wizard-titulo">{{ etapaAtualDefinicao.titulo }}</h2>
-          <CaixaFechamentoAjuda :etapas="etapas" />
+    <header id="fechamento-cabecalho" class="fechamento-wizard__cabecalho">
+      <div class="fechamento-wizard__etapa-topo">
+        <h2 id="fechamento-wizard-titulo">Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</h2>
+        <div class="fechamento-wizard__acoes-topo">
+          <CaixaFechamentoAjuda :etapa="etapaAtualDefinicao" />
+          <v-btn
+            :aria-expanded="etapasNavegacaoVisiveis"
+            aria-controls="fechamento-navegacao"
+            :aria-label="etapasNavegacaoVisiveis ? 'Fechar etapas' : 'Mostrar etapas'"
+            :icon="etapasNavegacaoVisiveis ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+            size="small"
+            variant="text"
+            @click="etapasNavegacaoVisiveis = !etapasNavegacaoVisiveis"
+          />
         </div>
-        <p>{{ etapaAtualDefinicao.resumo }}</p>
       </div>
       <div class="fechamento-wizard__horarios" aria-label="Horários do caixa">
         <v-chip color="success" variant="tonal" prepend-icon="mdi-play-circle-outline">
@@ -166,9 +204,9 @@ function irPara(etapa: number) {
     </header>
 
     <nav
+      v-show="etapasNavegacaoVisiveis"
       id="fechamento-navegacao"
       class="fechamento-wizard__navegacao"
-      :class="{ 'fechamento-wizard__navegacao--mobile-aberta': cabecalhoMobileAberto }"
       aria-label="Etapas do fechamento"
     >
       <ol>
@@ -309,35 +347,22 @@ function irPara(etapa: number) {
 .fechamento-wizard__cabecalho {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 .fechamento-wizard__resumo-mobile {
   display: none;
 }
-.fechamento-wizard__sobretitulo {
-  color: var(--cx-brand-text);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
 .fechamento-wizard__cabecalho h2 {
-  margin: 2px 0 4px;
-  font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+  margin: 0;
+  font-size: clamp(1rem, 2.1vw, 1.35rem);
 }
-.fechamento-wizard__titulo-com-ajuda {
+.fechamento-wizard__etapa-topo,
+.fechamento-wizard__acoes-topo {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-.fechamento-wizard__titulo-com-ajuda h2 {
-  margin: 2px 0 4px;
-}
-.fechamento-wizard__cabecalho p {
-  margin: 0;
-  color: var(--cx-ink-soft);
+  gap: 2px;
 }
 .fechamento-wizard__horarios {
   display: flex;
@@ -471,48 +496,34 @@ function irPara(etapa: number) {
 }
 @media (max-width: 720px) {
   .fechamento-wizard__resumo-mobile {
-    display: flex;
+    display: grid;
     width: 100%;
-    min-height: 48px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 56px;
     align-items: center;
     gap: 12px;
     margin-bottom: 12px;
+    padding: 8px 8px 8px 12px;
     border: 1px solid var(--cx-line);
     border-radius: 10px;
     background: var(--cx-surface);
   }
-  .fechamento-wizard__resumo-mobile-botao {
-    display: grid;
-    flex: 1 1 auto;
+  .fechamento-wizard__resumo-mobile > strong {
     min-width: 0;
-    gap: 2px;
-    padding: 10px 0 10px 12px;
-    border: 0;
-    background: transparent;
     color: var(--cx-ink);
-    font-weight: 800;
-    text-align: left;
+    font-size: 0.9rem;
   }
-  .fechamento-wizard__resumo-mobile-botao span:first-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .fechamento-wizard__resumo-mobile-botao span:last-child {
-    color: var(--cx-brand-text);
-    font-size: 0.78rem;
+  .fechamento-wizard__horarios-mobile {
+    display: flex;
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    color: var(--cx-ink-soft);
+    font-size: 0.72rem;
     font-weight: 700;
-    white-space: normal;
   }
   .fechamento-wizard__cabecalho {
     display: none;
-  }
-  .fechamento-wizard__cabecalho--mobile-aberto {
-    display: flex;
-    flex-direction: column;
-  }
-  .fechamento-wizard__horarios {
-    justify-content: flex-start;
   }
   .fechamento-wizard__navegacao {
     overflow: visible;
@@ -520,14 +531,8 @@ function irPara(etapa: number) {
   .fechamento-wizard__navegacao ol {
     min-width: 0;
   }
-  .fechamento-wizard__navegacao--mobile-aberta ol {
+  .fechamento-wizard__navegacao ol {
     flex-direction: column;
-  }
-  .fechamento-wizard__navegacao li:not(.fechamento-wizard__item--ativa) {
-    display: none;
-  }
-  .fechamento-wizard__navegacao--mobile-aberta li:not(.fechamento-wizard__item--ativa) {
-    display: block;
   }
   .fechamento-wizard__navegacao button {
     width: 100%;
@@ -569,8 +574,24 @@ function irPara(etapa: number) {
     z-index: 3;
     padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
     border: 0;
-    background: linear-gradient(to bottom, transparent, var(--cx-canvas) 30%);
+    background: transparent;
     box-shadow: none;
+  }
+}
+@media (max-width: 560px) and (min-width: 421px) {
+  .fechamento-wizard__rodape {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fechamento-wizard__rodape :deep(.v-spacer) {
+    display: none;
+  }
+  .fechamento-wizard__rodape :deep(.v-btn),
+  .fechamento-wizard__rodape :deep(.v-btn__content) {
+    min-width: 0;
+    width: 100%;
+    white-space: normal;
+    text-align: center;
   }
 }
 @media (max-width: 420px) {

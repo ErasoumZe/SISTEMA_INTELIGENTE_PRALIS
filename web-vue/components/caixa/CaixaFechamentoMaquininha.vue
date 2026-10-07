@@ -245,7 +245,12 @@ watch(
             </section>
             <v-alert v-if="aviso" type="info" density="compact" class="mt-4">{{ aviso }}</v-alert
             ><v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert
-            ><v-btn color="success" class="mt-4" :loading="salvando" :disabled="!podeSalvar" @click="salvar"
+            ><v-btn
+              color="success"
+              class="maquininha__salvar mt-4"
+              :loading="salvando"
+              :disabled="!podeSalvar"
+              @click="salvar"
               >Salvar leitura da maquininha</v-btn
             >
           </template>

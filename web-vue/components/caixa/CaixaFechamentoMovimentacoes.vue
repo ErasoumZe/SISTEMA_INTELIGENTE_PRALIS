@@ -370,6 +370,9 @@ watch(
   justify-content: space-between;
   gap: 12px;
 }
+.fechamento-movimentacoes__bloco header > div {
+  min-width: 0;
+}
 .fechamento-movimentacoes__bloco header span {
   display: block;
   color: var(--cx-brand-text);
@@ -380,6 +383,7 @@ watch(
 }
 .fechamento-movimentacoes__bloco h4 {
   margin: 2px 0 0;
+  overflow-wrap: anywhere;
 }
 .fechamento-movimentacoes__bloco > header > :deep(.v-icon) {
   color: var(--cx-brand-text);

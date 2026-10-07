@@ -178,7 +178,7 @@
     grid-template-columns: 1fr;
   }
   .maquininha__foto :deep(.v-btn),
-  .maquininha > :deep(.v-btn) {
+  .maquininha__salvar {
     width: 100%;
     min-height: 48px;
   }

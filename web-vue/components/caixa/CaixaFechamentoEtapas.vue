@@ -93,13 +93,6 @@ function solicitarFechamento() {
         <p class="text-body-2 mb-0">Conte o físico, anexe a folha obrigatória e confira tudo antes de encerrar.</p>
       </div>
     </header>
-    <header v-else class="fechamento-etapas__cabecalho mb-4">
-      <div>
-        <div class="fechamento-etapas__sobretitulo">Etapa 5 · fechamento</div>
-        <h3 class="text-h5">Fechamento do caixa</h3>
-        <p class="text-body-2 mb-0">Conte o físico, anexe a folha obrigatória e envie o malote para a Tesouraria.</p>
-      </div>
-    </header>
 
     <section class="fechamento-etapas__situacao" aria-label="Situação do fechamento">
       <v-alert

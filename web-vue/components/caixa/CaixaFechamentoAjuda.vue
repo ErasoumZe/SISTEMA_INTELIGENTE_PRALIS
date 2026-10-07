@@ -2,11 +2,12 @@
 type EtapaAjuda = {
   id: number;
   titulo: string;
-  ajuda: string;
+  passos: readonly string[];
+  quandoAvancar: string;
 };
 
 defineProps<{
-  etapas: readonly EtapaAjuda[];
+  etapa: EtapaAjuda;
 }>();
 </script>
 
@@ -24,14 +25,12 @@ defineProps<{
     </template>
 
     <v-card class="fechamento-ajuda" elevation="8">
-      <v-card-title class="fechamento-ajuda__titulo">Como fechar o caixa</v-card-title>
+      <v-card-title class="fechamento-ajuda__titulo">Como fazer: {{ etapa.titulo }}</v-card-title>
       <v-card-text class="fechamento-ajuda__conteudo">
         <ol>
-          <li v-for="etapa in etapas" :key="etapa.id">
-            <strong>{{ etapa.id }}. {{ etapa.titulo }}</strong>
-            <span>{{ etapa.ajuda }}</span>
-          </li>
+          <li v-for="passo in etapa.passos" :key="passo">{{ passo }}</li>
         </ol>
+        <p class="fechamento-ajuda__avancar"><strong>Antes de avançar:</strong> {{ etapa.quandoAvancar }}</p>
       </v-card-text>
     </v-card>
   </v-menu>
@@ -40,6 +39,8 @@ defineProps<{
 <style scoped>
 .fechamento-ajuda {
   width: min(336px, calc(100vw - 32px));
+  max-height: min(560px, calc(100dvh - 32px));
+  overflow-y: auto;
 }
 
 .fechamento-ajuda__titulo {
@@ -67,14 +68,15 @@ defineProps<{
   line-height: 1.35;
 }
 
-.fechamento-ajuda strong,
-.fechamento-ajuda span {
-  display: block;
+.fechamento-ajuda__avancar {
+  margin: 14px 0 0;
+  color: var(--cx-ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
-.fechamento-ajuda strong {
+.fechamento-ajuda__avancar strong {
   color: var(--cx-ink);
-  font-size: 0.86rem;
 }
 
 .fechamento-ajuda__ativador {
