@@ -532,6 +532,12 @@ watch(
             :data-hora="formatarDataHoraOuTraco"
           />
 
+          <div class="mt-4 mb-2">
+            <div class="text-subtitle-2 font-weight-bold">Evidências adicionais</div>
+            <div class="text-caption text-medium-emphasis">
+              Detalhes e documentos do fechamento, sem repetir os dados da folha acima.
+            </div>
+          </div>
           <v-expansion-panels v-model="detalhesAbertos" multiple class="mt-4">
             <v-expansion-panel value="fisico" title="Conferências físicas e quebras"
               ><v-expansion-panel-text

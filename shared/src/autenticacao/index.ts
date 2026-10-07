@@ -414,8 +414,10 @@ const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
   relatorio_vendas_comprovantes_criar: "Permite gerar comprovantes para as vendas consultadas.",
   transferencias_conferir:
     "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento.",
+  relatorio_fechamento_visualizar:
+    "Permite consultar a fila e a folha digital de fechamento. Esta permissão só é efetiva para o cargo Tesouraria.",
   fechamentos_caixa_conferir:
-    "Permite registrar a conferência final da Tesouraria em um fechamento de caixa já encerrado."
+    "Permite registrar a conferência final da Tesouraria em um fechamento de caixa já encerrado. Esta permissão só é efetiva para o cargo Tesouraria."
 };
 
 const acoesPermissao: ReadonlyArray<[string, (recurso: string) => string]> = [
@@ -611,6 +613,11 @@ function normalizarCargo(nome: string) {
 // Incluir o legado aqui seria vazamento: ele veria numeros do negocio inteiro por herdar um nome.
 export function ehAdministradorTotal(perfil: Pick<PerfilUsuario, "role">): boolean {
   return perfil.role === "usuario_admin";
+}
+
+/** Regra de cargo para a conferência final, exclusiva da Tesouraria. */
+export function ehTesouraria(perfil: Pick<PerfilUsuario, "cargos">): boolean {
+  return perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("tesouraria"));
 }
 
 export function podeLancarSemCaixa(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {

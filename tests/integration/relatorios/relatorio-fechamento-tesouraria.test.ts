@@ -9,13 +9,15 @@ import { consultarTodos, executarSql, json } from "../../setup/integracao.js";
 describe("Relatório de fechamento - conferência final da Tesouraria", () => {
   let contexto: ContextoApiTeste;
   let cookieTesouraria = "";
+  let cookieAdmin = "";
   let cookieSemPermissao = "";
   const caixaComDivergencia = randomUUID();
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieTesouraria, cookieSemPermissao] = await Promise.all([
+    [cookieTesouraria, cookieAdmin, cookieSemPermissao] = await Promise.all([
       cookieSessao(contexto.app, "tesouraria"),
+      cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "semPermissao")
     ]);
 
@@ -50,6 +52,23 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
     });
 
     assertProblem(resposta, 403);
+  });
+
+  it("recusa administrador com todas as permissões quando não pertence à Tesouraria", async () => {
+    const lista = await contexto.app.inject({
+      method: "GET",
+      url: "/api/relatorios/fechamentos?page=1&pageSize=10",
+      headers: { cookie: cookieAdmin }
+    });
+    assertProblem(lista, 403);
+
+    const decisao = await contexto.app.inject({
+      method: "POST",
+      url: `/api/relatorios/fechamentos/${idsTeste.caixaFechado}/conferir`,
+      headers: { cookie: cookieAdmin },
+      payload: { resultado: "conferido" }
+    });
+    assertProblem(decisao, 403);
   });
 
   it("confirma um caixa fechado sem pendências, preserva os fatos e não duplica a decisão", async () => {

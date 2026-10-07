@@ -4,6 +4,7 @@ import {
   deCentavos,
   // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
   ehAdministradorTotal,
+  ehTesouraria,
   podeLancarSemCaixa,
   paraCentavos,
   somarCentavos,
@@ -356,6 +357,12 @@ const {
   telasDesabilitadasMenu,
   motivosTelasDesabilitadas
 } = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
+const podeAcessarRelatorioFechamento = computed(() =>
+  Boolean(sessao.value?.perfil && ehTesouraria(sessao.value.perfil))
+);
+const telasComAcessoDeCargo = computed(() =>
+  telasPermitidas.value.filter((tela) => tela.id !== "relatorio_fechamento" || podeAcessarRelatorioFechamento.value)
+);
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
 const podeEditarTransferencia = computed(() => temPermissao("transferencias_editar"));
@@ -404,12 +411,12 @@ const telaBloqueadaPorCaixa = computed(() => {
 const telasTemaPermitidas = computed(() => [
   { id: "padrao", titulo: "Padrão (todas as telas)" },
   { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
-  ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
+  ...telasComAcessoDeCargo.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
 ]);
 const telasShell = computed(() => {
   // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
   // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
-  return telasPermitidas.value.map((item) => ({
+  return telasComAcessoDeCargo.value.map((item) => ({
     ...item,
     cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id)
   }));
@@ -2275,7 +2282,7 @@ const pageContext = computed(() => ({
   cancelarPlanejamentoRetorno,
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
-  podeConferirFechamento: temPermissao("fechamentos_caixa_conferir"),
+  podeConferirFechamento: podeAcessarRelatorioFechamento.value && temPermissao("fechamentos_caixa_conferir"),
   // R-200: o painel de mensagens mora no Monitor de caixas abertos e nao tem item de menu proprio.
   // O servidor exige as mesmas chaves; isto aqui so decide o que aparece.
   podeVerMensagensAdmin: temPermissao("mensagens_admin_visualizar"),

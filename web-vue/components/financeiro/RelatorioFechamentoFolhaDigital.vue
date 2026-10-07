@@ -137,10 +137,10 @@ function rotuloPagamento(item: Registro) {
     <section class="folha-kaylane__bloco">
       <h4>Transferência final</h4>
       <div class="linhas">
-        <div>
+        <div class="linha-lacre">
           <span>Nº lacre de abertura</span><strong>{{ texto(resumo?.lacreAbertura) }}</strong>
         </div>
-        <div>
+        <div class="linha-lacre">
           <span>Nº lacre final</span><strong>{{ texto(resumo?.lacreFechamento) }}</strong>
         </div>
         <div>
@@ -198,7 +198,6 @@ function rotuloPagamento(item: Registro) {
         }}</small>
       </v-sheet>
     </section>
-
   </section>
 </template>
 
@@ -338,6 +337,15 @@ function rotuloPagamento(item: Registro) {
     white-space: nowrap;
     flex: none;
     text-align: right;
+  }
+  .linhas > .linha-lacre {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .linhas > .linha-lacre strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
   .relatorio-final__grade {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { historicoCaixaQuerySchema } from "@padaria/shared/caixa";
 import { erro, ok, paginadoDeResultado } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirPermissao, exigirTesouraria } from "../auth/guards.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import {
   listarRelatoriosFechamento,
@@ -27,7 +27,7 @@ function statusErro(mensagem: string) {
 export async function registrarRotasRelatorioFechamento(app: FastifyInstance) {
   app.get(
     "/api/relatorios/fechamentos",
-    { preHandler: exigirPermissao("relatorio_fechamento_visualizar") },
+    { preHandler: [exigirPermissao("relatorio_fechamento_visualizar"), exigirTesouraria()] },
     async (request, reply) => {
       const query = historicoCaixaQuerySchema.parse(request.query);
       try {
@@ -45,7 +45,7 @@ export async function registrarRotasRelatorioFechamento(app: FastifyInstance) {
 
   app.get(
     "/api/relatorios/fechamentos/:caixaId",
-    { preHandler: exigirPermissao("relatorio_fechamento_visualizar") },
+    { preHandler: [exigirPermissao("relatorio_fechamento_visualizar"), exigirTesouraria()] },
     async (request, reply) => {
       const { caixaId } = paramsSchema.parse(request.params);
       try {
@@ -59,7 +59,7 @@ export async function registrarRotasRelatorioFechamento(app: FastifyInstance) {
 
   app.post(
     "/api/relatorios/fechamentos/:caixaId/conferir",
-    { preHandler: exigirPermissao("fechamentos_caixa_conferir") },
+    { preHandler: [exigirPermissao("fechamentos_caixa_conferir"), exigirTesouraria()] },
     async (request, reply) => {
       const { caixaId } = paramsSchema.parse(request.params);
       const dados = conferenciaTesourariaSchema.parse(request.body);
@@ -74,7 +74,7 @@ export async function registrarRotasRelatorioFechamento(app: FastifyInstance) {
 
   app.get(
     "/api/relatorios/fechamentos/:caixaId/anexos/:anexoId",
-    { preHandler: exigirPermissao("relatorio_fechamento_visualizar") },
+    { preHandler: [exigirPermissao("relatorio_fechamento_visualizar"), exigirTesouraria()] },
     async (request, reply) => {
       const { caixaId, anexoId } = paramsSchema.extend({ anexoId: z.string().uuid() }).parse(request.params);
       try {
