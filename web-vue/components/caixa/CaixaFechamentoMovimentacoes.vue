@@ -475,7 +475,7 @@ watch(
   width: 18px;
   margin-left: auto;
   color: var(--cx-ink-soft);
-  content: "⌄";
+  content: "\25BE";
   font-size: 1.1rem;
   line-height: 1;
   text-align: center;

@@ -33,7 +33,7 @@
   border: 1px solid var(--cx-line);
 }
 .maquininha__painel--manha {
-  border-color: color-mix(in srgb, #60a5fa 76%, var(--cx-line));
+  border-color: color-mix(in srgb, #7db8ff 76%, var(--cx-line));
 }
 .maquininha__painel--tarde {
   border-color: color-mix(in srgb, #7e22ce 76%, var(--cx-line));
@@ -43,15 +43,15 @@
   gap: 10px;
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-title) {
-  border-bottom: 3px solid #60a5fa;
-  background: color-mix(in srgb, #60a5fa 62%, var(--cx-surface));
+  border-bottom: 3px solid #7db8ff;
+  background: color-mix(in srgb, #7db8ff 54%, var(--cx-surface));
 }
 .maquininha__painel--manha :deep(.v-expansion-panel-text__wrapper) {
   background: color-mix(in srgb, var(--cat-retiradas-base) 6%, var(--cx-surface));
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-title) {
   border-bottom: 3px solid #7e22ce;
-  background: #3b1c62;
+  background: #2a1248;
 }
 .maquininha__painel--tarde :deep(.v-expansion-panel-text__wrapper) {
   background: color-mix(in srgb, var(--cx-brand) 6%, var(--cx-surface));
