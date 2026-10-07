@@ -44,6 +44,7 @@ export const permissoes = [
   "lancamentos_recorrencia_criar",
   "caixa_operar",
   "caixas_gerenciar",
+  "relatorio_fechamento_visualizar",
   "caixa_alterar_horario",
   "fechamento_com_diferenca_visualizar",
   "relatorio_produtos_visualizar",

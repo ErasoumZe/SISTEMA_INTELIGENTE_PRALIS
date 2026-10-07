@@ -13,6 +13,7 @@ export const idsMenuConfiguraveis = [
   "relatorio_produtos",
   "caixa",
   "historico_caixas",
+  "relatorio_fechamento",
   "campanhas",
   "promocoes",
   "relatorio_faltas",

@@ -112,6 +112,7 @@ type TipoPagina =
   | "operacoes"
   | "caixa"
   | "historico_caixas"
+  | "relatorio_fechamento"
   | "campanhas"
   | "fechamento"
   | "relatorio_produtos"
@@ -838,7 +839,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         []
       )
     ]);
-  } else if (tela === "historico_caixas") {
+  } else if (tela === "historico_caixas" || tela === "relatorio_fechamento") {
     // Opcoes dos filtros da retaguarda (PDV/turno/operador). A listagem em si e paginada e
     // filtrada pelo servidor dentro da propria tela.
     [dados.pdvs, dados.turnos, dados.colaboradores] = await Promise.all([

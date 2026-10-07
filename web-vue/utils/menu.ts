@@ -57,7 +57,7 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     // Resultados – Relatorios + Diferenca de fechamento.
     titulo: "Resultados",
     cor: "resultado",
-    ids: ["fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
+    ids: ["fechamento", "relatorio_fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
   },
   {
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.

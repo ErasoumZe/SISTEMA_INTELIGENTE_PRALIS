@@ -166,6 +166,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       maquininhaNumeroSerie: maquininhas.numeroSerie,
       caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
       supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
+      lacreAbertura: fechamentosCaixa.lacreAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -1244,6 +1245,7 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
       .select({
         id: transferencias.id,
         tipo: transferencias.tipo,
+        status: transferencias.status,
         ordem: transferencias.ordem,
         valorOriginal: transferencias.valorOriginal,
         valorEspecieDeclarado: transferencias.valorEspecieDeclarado,

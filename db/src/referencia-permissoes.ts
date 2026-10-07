@@ -178,6 +178,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
+      "relatorio_fechamento_visualizar",
       "transferencias_criar",
       // R-191: classifica posteriormente a saída pendente, sem operar caixa nem pagar/efetuar.
       "despesas_discriminar",

@@ -100,6 +100,12 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "caixas_gerenciar",
     icone: "mdi-history"
   },
+  relatorio_fechamento: {
+    id: "relatorio_fechamento",
+    titulo: "Relatório de fechamento",
+    permissao: "relatorio_fechamento_visualizar",
+    icone: "mdi-clipboard-text-search"
+  },
   // R-200: a UNICA tela nova das duas frentes. Mensagem para PDV nao entra aqui de proposito — ela
   // vive dentro do Monitor de caixas abertos, sem rota e sem item de menu.
   campanhas: {
