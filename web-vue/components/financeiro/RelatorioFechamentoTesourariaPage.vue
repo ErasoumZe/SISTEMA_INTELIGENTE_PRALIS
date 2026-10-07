@@ -7,7 +7,7 @@ import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{ empresaId: string; pdvs: Opcao[]; turnos: Opcao[] }>();
 
-type Situacao = "aberto" | "em_fechamento" | "aguardando_tesouraria" | "conferido" | "com_quebra";
+type Situacao = "aberto" | "em_fechamento" | "aguardando_tesouraria" | "fechado_sem_pendencias" | "com_quebra";
 type LinhaRelatorio = LinhaHistoricoCaixa & { situacaoTesouraria: Situacao };
 type Anexo = { id: string; tipo: string; nomeOriginal: string; mimeType: string; tamanhoBytes: number; criadoEm: string | null };
 type Dossie = {
@@ -16,6 +16,7 @@ type Dossie = {
   situacaoTesouraria: Situacao;
   transferencias: Array<Record<string, unknown>>;
   conferencias: Array<Record<string, unknown>>;
+  quebras: Array<Record<string, unknown>>;
   relatorioVendas: Record<string, unknown> | null;
   relatorioMaquininha: Record<string, unknown> | null;
   anexos: Anexo[];
@@ -90,10 +91,10 @@ async function abrirDossie(linha: LinhaRelatorio) {
 }
 
 function corSituacao(situacao: Situacao) {
-  return { aberto: "info", em_fechamento: "warning", aguardando_tesouraria: "deep-orange", conferido: "success", com_quebra: "error" }[situacao];
+  return { aberto: "info", em_fechamento: "warning", aguardando_tesouraria: "deep-orange", fechado_sem_pendencias: "success", com_quebra: "error" }[situacao];
 }
 function textoSituacao(situacao: Situacao) {
-  return { aberto: "Aberto", em_fechamento: "Em fechamento", aguardando_tesouraria: "Aguardando Tesouraria", conferido: "Conferido", com_quebra: "Com quebra" }[situacao];
+  return { aberto: "Aberto", em_fechamento: "Em fechamento", aguardando_tesouraria: "Aguardando Tesouraria", fechado_sem_pendencias: "Fechado sem pendências", com_quebra: "Com quebra" }[situacao];
 }
 function numero(valor: unknown) { return typeof valor === "number" ? valor : Number(valor ?? 0); }
 function texto(valor: unknown) { return typeof valor === "string" && valor ? valor : "--"; }
@@ -184,7 +185,7 @@ watch(() => props.empresaId, () => { pagina.value = 1; void buscar(); }, { immed
             <v-expansion-panel title="Transferências, sangrias e lacres">
               <v-expansion-panel-text><v-table density="compact"><thead><tr><th>Tipo</th><th>Valor</th><th>Lacre</th><th>Status</th><th>Data</th></tr></thead><tbody><tr v-for="item in dossie.transferencias" :key="String(item.id)"><td>{{ texto(item.tipo) }}</td><td>{{ dinheiro(numero(item.valorOriginal)) }}</td><td>{{ texto(item.lacreNumero) }}</td><td>{{ texto(item.status) }}</td><td>{{ item.dataTransferencia ? formatarDataHora(String(item.dataTransferencia)) : '--' }}</td></tr><tr v-if="!dossie.transferencias.length"><td colspan="5">Nenhuma transferência vinculada.</td></tr></tbody></v-table></v-expansion-panel-text>
             </v-expansion-panel>
-            <v-expansion-panel title="Conferências físicas e quebras"><v-expansion-panel-text><v-table density="compact"><thead><tr><th>Etapa</th><th>Resultado</th><th>Declarado</th><th>Contado</th><th>Conferido em</th></tr></thead><tbody><tr v-for="item in dossie.conferencias" :key="String(item.id)"><td>{{ texto(item.etapa) }}</td><td>{{ texto(item.resultado) }}</td><td>{{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}</td><td>{{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}</td><td>{{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : '--' }}</td></tr><tr v-if="!dossie.conferencias.length"><td colspan="5">Ainda não há conferência física registrada.</td></tr></tbody></v-table></v-expansion-panel-text></v-expansion-panel>
+            <v-expansion-panel title="Conferências físicas e quebras"><v-expansion-panel-text><v-table density="compact"><thead><tr><th>Etapa</th><th>Resultado</th><th>Declarado</th><th>Contado</th><th>Conferido em</th></tr></thead><tbody><tr v-for="item in dossie.conferencias" :key="String(item.id)"><td>{{ texto(item.etapa) }}</td><td>{{ texto(item.resultado) }}</td><td>{{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}</td><td>{{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}</td><td>{{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : '--' }}</td></tr><tr v-if="!dossie.conferencias.length"><td colspan="5">Ainda não há conferência física registrada.</td></tr></tbody></v-table><v-alert v-for="quebra in dossie.quebras" :key="String(quebra.id)" type="error" variant="tonal" class="mt-3"><strong>Quebra {{ dinheiro(numero(quebra.valor)) }}</strong> · {{ texto(quebra.observacao) }}</v-alert></v-expansion-panel-text></v-expansion-panel>
             <v-expansion-panel title="CREARE e maquininha"><v-expansion-panel-text><v-row dense><v-col cols="12" md="6"><strong>Relatório CREARE</strong><pre>{{ json(dossie.relatorioVendas?.dados ?? 'Não gerado') }}</pre></v-col><v-col cols="12" md="6"><strong>Relatório da maquininha</strong><pre>{{ json(dossie.relatorioMaquininha ?? 'Não informado') }}</pre></v-col></v-row></v-expansion-panel-text></v-expansion-panel>
             <v-expansion-panel title="Movimentações e vendas canceladas"><v-expansion-panel-text><div class="dossie-grid"><span>Vendas</span><strong>{{ dossie.lancamentos.linhasVendas?.length ?? 0 }}</strong><span>Despesas</span><strong>{{ dossie.lancamentos.linhasDespesas?.length ?? 0 }}</strong><span>Mercadorias</span><strong>{{ dossie.lancamentos.linhasMercadorias?.length ?? 0 }}</strong><span>Retiradas</span><strong>{{ dossie.lancamentos.linhasRetiradas?.length ?? 0 }}</strong><span>Vendas canceladas</span><strong>{{ dossie.vendasCanceladas.length }}</strong></div></v-expansion-panel-text></v-expansion-panel>
             <v-expansion-panel title="Folhas e comprovantes anexados"><v-expansion-panel-text><v-row dense><v-col v-for="anexo in dossie.anexos" :key="anexo.id" cols="12" sm="6" md="4"><v-card variant="outlined"><v-img v-if="anexo.mimeType.startsWith('image/')" :src="anexoUrl(anexo)" height="120" cover /><v-sheet v-else class="pa-6 text-center"><v-icon icon="mdi-file-pdf-box" size="42" color="error" /></v-sheet><v-card-text><strong>{{ rotuloAnexo(anexo.tipo) }}</strong><div class="text-caption text-truncate">{{ anexo.nomeOriginal }}</div></v-card-text><v-card-actions><v-btn :href="anexoUrl(anexo)" target="_blank" size="small" prepend-icon="mdi-download">Abrir</v-btn></v-card-actions></v-card></v-col><v-col v-if="!dossie.anexos.length" cols="12"><span class="text-medium-emphasis">Nenhum anexo foi enviado.</span></v-col></v-row></v-expansion-panel-text></v-expansion-panel>

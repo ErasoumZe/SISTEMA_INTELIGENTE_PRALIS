@@ -12,26 +12,35 @@ import {
   listarAnexosFechamentoCaixaRepository,
   listarConferenciasFisicasCaixaRepository,
   listarLancamentosCaixaRepository,
+  listarQuebrasCaixaRepository,
   listarTransferenciasCaixaRepository,
   listarVendasCanceladasCaixaRepository
 } from "../caixa/caixa.repository.js";
 import { listarHistoricoCaixa } from "../caixa/caixa.service.js";
 
-export type SituacaoTesouraria = "aberto" | "em_fechamento" | "aguardando_tesouraria" | "conferido" | "com_quebra";
+export type SituacaoTesouraria =
+  | "aberto"
+  | "em_fechamento"
+  | "aguardando_tesouraria"
+  | "fechado_sem_pendencias"
+  | "com_quebra";
 
 function situacaoDoFechamento(input: {
   status: string;
   temAjuste?: boolean;
+  quebras: Array<{ id: string }>;
   transferencias: Array<{ status: string | null }>;
   conferencias: Array<{ resultado: string }>;
 }): SituacaoTesouraria {
-  if (input.temAjuste || input.conferencias.some((item) => item.resultado === "divergente") || input.transferencias.some((item) => item.status === "divergente")) {
+  if (input.temAjuste || input.quebras.length || input.conferencias.some((item) => item.resultado === "divergente") || input.transferencias.some((item) => item.status === "divergente")) {
     return "com_quebra";
   }
   if (input.status === "aberto") return "aberto";
   if (input.status === "em_fechamento") return "em_fechamento";
   if (input.transferencias.some((item) => item.status === "pendente")) return "aguardando_tesouraria";
-  return "conferido";
+  // Nao existe evento persistido de conferencia FINAL do malote pela Tesouraria. Este rotulo
+  // descreve somente o que os fatos atuais permitem afirmar; "conferido" exigiria regra nova.
+  return "fechado_sem_pendencias";
 }
 
 function iso(valor: Date | string | null | undefined) {
@@ -53,15 +62,17 @@ export async function listarRelatoriosFechamento(query: HistoricoCaixaQuery, per
   const historico = await listarHistoricoCaixa(query, perfil);
   const itens = await Promise.all(
     historico.itens.map(async (item) => {
-      const [transferencias, conferencias] = await Promise.all([
+      const [transferencias, conferencias, quebras] = await Promise.all([
         listarTransferenciasCaixaRepository(item.id),
-        listarConferenciasFisicasCaixaRepository(item.id, item.empresaId)
+        listarConferenciasFisicasCaixaRepository(item.id, item.empresaId),
+        listarQuebrasCaixaRepository(item.id, item.empresaId)
       ]);
       return {
         ...item,
         situacaoTesouraria: situacaoDoFechamento({
           status: item.status,
           temAjuste: item.temAjuste,
+          quebras,
           transferencias,
           conferencias
         })
@@ -73,11 +84,12 @@ export async function listarRelatoriosFechamento(query: HistoricoCaixaQuery, per
 
 export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuario) {
   const caixa = await caixaPermitido(caixaId, perfil);
-  const [resumo, transferencias, conferencias, relatorioVendas, relatorioMaquininha, anexos, lancamentos, vendasCanceladas, ajuste] =
+  const [resumo, transferencias, conferencias, quebras, relatorioVendas, relatorioMaquininha, anexos, lancamentos, vendasCanceladas, ajuste] =
     await Promise.all([
       buscarResumoFechamentoCaixaRepository(caixa.id, caixa.empresaId),
       listarTransferenciasCaixaRepository(caixa.id),
       listarConferenciasFisicasCaixaRepository(caixa.id, caixa.empresaId),
+      listarQuebrasCaixaRepository(caixa.id, caixa.empresaId),
       buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId),
       buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId),
       listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId),
@@ -106,6 +118,7 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
     situacaoTesouraria: situacaoDoFechamento({
       status: caixa.status,
       temAjuste: Boolean(ajuste),
+      quebras,
       transferencias,
       conferencias
     }),
@@ -124,6 +137,7 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
       valorMoedasContado: numero(item.valorMoedasContado),
       conferidoEm: iso(item.conferidoEm)
     })),
+    quebras: quebras.map((item) => ({ ...item, valor: numero(item.valor), criadoEm: iso(item.criadoEm) })),
     relatorioVendas: relatorioVendas
       ? { ...relatorioVendas, periodoInicio: iso(relatorioVendas.periodoInicio), periodoFim: iso(relatorioVendas.periodoFim), geradoEm: iso(relatorioVendas.geradoEm) }
       : null,

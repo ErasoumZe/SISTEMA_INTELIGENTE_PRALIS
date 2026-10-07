@@ -1374,6 +1374,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       caixaAberto: null,
       resumo: null,
       lacreFechamentoReservado: null,
+      indisponibilidadeAberta: null,
       entregasPendentes: [],
       planejamentosPendentes: []
     } satisfies CaixaStatus;
@@ -1839,7 +1840,7 @@ export async function obterTransferenciasCaixa(
     else totalEntradaCentavos += valorCentavos;
     return {
       id: linha.id,
-      tipo: linha.tipo,
+      tipo: z.enum(["abertura", "suprimento", "sangria", "retorno"]).parse(linha.tipo),
       ordem,
       valor: deCentavos(valorCentavos),
       valorEspecie: linha.valorEspecieDeclarado === null ? null : deCentavos(paraCentavos(linha.valorEspecieDeclarado)),
@@ -1904,6 +1905,7 @@ export async function listarHistoricoCaixa(
         ...caixaPublico,
         dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
         dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+        fechamentoIniciadoEm: serializarData(caixa.fechamentoIniciadoEm),
         fechadoPor: caixa.fechadoPor,
         fechadoPorNome: caixa.fechadoPorNome,
         totalEntradas: aoVivo?.totalEntradas ?? numero(caixa.totalEntradas),
@@ -2107,6 +2109,7 @@ export async function gerarRelatorioVendasFechamento(
         "RELATORIO_FORA_DO_CORTE"
       );
     }
+    if (!travado.dataHoraAbertura) throw new Error("Caixa sem horario de abertura");
     const anexo = await buscarAnexoFechamentoCaixaRepository(travado.id, leituraCreare.anexoId, travado.empresaId, tx);
     if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
       throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
@@ -2171,6 +2174,7 @@ export async function listarVendasDoCaixaAberto(caixaId: string, filtros: Vendas
   if (caixa.status !== "aberto" && caixa.status !== "em_fechamento") {
     throw new Error("Consulta disponivel apenas para caixa aberto ou em fechamento");
   }
+  if (!caixa.dataHoraAbertura || !caixa.pdvId) throw new Error("Caixa sem dados operacionais de abertura");
 
   // `caixa_id` ja e o vinculo operacional atomico. Assim vendas manuais sem `data_venda` continuam
   // visiveis sem filtro de horario. Quando o operador pede hora, elas ficam fora da busca porque

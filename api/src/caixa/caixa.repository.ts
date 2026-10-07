@@ -392,6 +392,26 @@ export async function criarQuebraCaixaRepository(
   return quebra;
 }
 
+// Leitura auditavel: a quebra ja foi registrada pelo fluxo de fechamento ou de conferencia da
+// transferencia. A Tesouraria consulta o fato persistido; nao recalcula diferenca nem altera saldo.
+export async function listarQuebrasCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: quebrasCaixa.id,
+      valor: quebrasCaixa.valor,
+      observacao: quebrasCaixa.observacao,
+      transferenciaId: quebrasCaixa.transferenciaId,
+      criadoEm: quebrasCaixa.criadoEm
+    })
+    .from(quebrasCaixa)
+    .where(and(eq(quebrasCaixa.fechamentoCaixaId, fechamentoCaixaId), eq(quebrasCaixa.empresaId, empresaId)))
+    .orderBy(asc(quebrasCaixa.criadoEm));
+}
+
 export async function listarUsuariosTesourariaRepository(empresaId: string, db: ExecutorBanco = banco) {
   return db
     .selectDistinct({ usuarioId: colaboradores.usuarioId })
@@ -2217,6 +2237,7 @@ export async function listarHistoricoCaixaRepository(
       turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,
       fechadoPor: fechamentosCaixa.fechadoPor,
       fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,
