@@ -413,60 +413,54 @@ watch(
           <v-progress-circular indeterminate color="primary" /><span class="ml-3">Carregando dossiê auditável…</span>
         </div>
         <template v-else-if="dossie">
-          <v-alert :color="corSituacao(dossie.situacaoTesouraria)" variant="tonal" class="mb-4"
+          <v-alert :color="corSituacao(dossie.situacaoTesouraria)" variant="tonal" density="compact" class="mb-3"
             ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
             Tesouraria não recalcula valores nem altera lacres.</v-alert
           >
-          <v-row dense>
-            <v-col cols="12" md="6"
-              ><v-card variant="outlined"
-                ><v-card-title class="text-subtitle-1">Identificação e responsáveis</v-card-title
-                ><v-card-text class="dossie-grid"
-                  ><span>PDV</span><strong>{{ texto(dossie.caixa.pdvNome) }}</strong
-                  ><span>Turno</span><strong>{{ texto(dossie.caixa.turnoNome) }}</strong
-                  ><span>Operador</span><strong>{{ texto(dossie.caixa.usuarioCaixaNome) }}</strong
-                  ><span>Aberto em</span
+          <v-card variant="outlined" class="identificacao-fechamento">
+            <v-card-text class="pa-3">
+              <div class="text-overline">IDENTIFICAÇÃO</div>
+              <div class="identificacao-fechamento__itens">
+                <div>
+                  <span>PDV</span><strong>{{ texto(dossie.caixa.pdvNome) }}</strong>
+                </div>
+                <div>
+                  <span>Turno</span><strong>{{ texto(dossie.caixa.turnoNome) }}</strong>
+                </div>
+                <div>
+                  <span>Operador</span><strong>{{ texto(dossie.caixa.usuarioCaixaNome) }}</strong>
+                </div>
+                <div>
+                  <span>Aberto em</span
                   ><strong>{{
                     dossie.caixa.dataHoraAbertura ? formatarDataHora(String(dossie.caixa.dataHoraAbertura)) : "--"
-                  }}</strong
-                  ><span>Fechado em</span
+                  }}</strong>
+                </div>
+                <div>
+                  <span>Fechado em</span
                   ><strong>{{
                     dossie.caixa.dataHoraFechamento
                       ? formatarDataHora(String(dossie.caixa.dataHoraFechamento))
                       : "Ainda não fechado"
-                  }}</strong></v-card-text
-                ></v-card
-              ></v-col
-            >
-            <v-col cols="12" md="6"
-              ><v-card variant="outlined"
-                ><v-card-title class="text-subtitle-1">Contagem e lacres</v-card-title
-                ><v-card-text class="dossie-grid"
-                  ><span>Lacre de abertura</span><strong>{{ texto(dossie.resumo?.lacreAbertura) }}</strong
-                  ><span>Lacre de fechamento</span><strong>{{ texto(dossie.resumo?.lacreFechamento) }}</strong
-                  ><span>Físico esperado</span
-                  ><strong>{{ dinheiro(numero(dossie.resumo?.valorFisicoEsperadoFechamento)) }}</strong
-                  ><span>Espécie contada</span
-                  ><strong>{{ dinheiro(numero(dossie.resumo?.valorEspecieFechamento)) }}</strong
-                  ><span>Moedas contadas</span
-                  ><strong>{{ dinheiro(numero(dossie.resumo?.valorMoedasFechamento)) }}</strong
-                  ><span>Diferença / ajuste</span
-                  ><strong>{{
-                    dossie.ajuste ? dinheiro(numero(dossie.ajuste.valorDiferenca)) : "Sem ajuste"
-                  }}</strong></v-card-text
-                ></v-card
-              ></v-col
-            >
-          </v-row>
+                  }}</strong>
+                </div>
+              </div>
+            </v-card-text>
+          </v-card>
 
           <RelatorioFechamentoFolhaDigital
-            class="mt-5"
+            class="mt-3"
+            :caixa="dossie.caixa"
             :resumo="dossie.resumo"
             :anexos="anexosComLink"
             :maquininha="conferenciaMaquininha"
+            :transferencias="dossie.transferencias"
+            :relatorio-vendas="dossie.relatorioVendas"
             :ajuste="dossie.ajuste"
             :dinheiro="dinheiro"
             :numero="numero"
+            :texto="texto"
+            :data-hora="(valor) => (valor ? formatarDataHora(String(valor)) : '--')"
           />
 
           <v-card class="conferencia-tesouraria mt-4" variant="outlined">
@@ -791,6 +785,9 @@ watch(
 .cartao-caixa {
   border-top: 3px solid rgb(var(--v-theme-primary));
 }
+.identificacao-fechamento {
+  display: none;
+}
 .conferencia-tesouraria {
   border-left: 4px solid #22c55e;
   background: rgba(34, 197, 94, 0.07);
@@ -799,6 +796,20 @@ watch(
   display: grid;
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1.2fr);
   gap: 9px 16px;
+}
+.identificacao-fechamento__itens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+.identificacao-fechamento__itens div {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+}
+.identificacao-fechamento__itens span {
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 0.75rem;
 }
 .folha-conferencia {
   border-top: 4px solid #f59e0b;
