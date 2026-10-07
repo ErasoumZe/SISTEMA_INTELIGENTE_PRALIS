@@ -12,7 +12,13 @@ const { apiGet, apiUrl } = useApi();
 const detalhe = ref<DetalheCaixaResponse | null>(null);
 const carregando = ref(false);
 const erro = ref("");
-const anexos = ref<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>([]);
+const anexos = ref<
+  Array<{
+    id: string;
+    tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
+    nomeOriginal: string;
+  }>
+>([]);
 const conferencias = ref<
   Array<{
     id: string;
@@ -33,9 +39,13 @@ async function carregar() {
   try {
     const [detalheCarregado, anexosCarregados, conferenciasCarregadas] = await Promise.all([
       apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`),
-      apiGet<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>(
-        `/api/caixa/${props.caixa.id}/anexos`
-      ),
+      apiGet<
+        Array<{
+          id: string;
+          tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
+          nomeOriginal: string;
+        }>
+      >(`/api/caixa/${props.caixa.id}/anexos`),
       apiGet<typeof conferencias.value>(`/api/caixa/${props.caixa.id}/conferencias-fisicas`)
     ]);
     detalhe.value = detalheCarregado;
@@ -131,7 +141,14 @@ onMounted(carregar);
               target="_blank"
               rel="noopener"
             >
-              {{ anexo.tipo === "folha_fechamento" ? "Folha de fechamento" : "Comprovante de cartão" }} —
+              {{
+                anexo.tipo === "folha_fechamento"
+                  ? "Folha de fechamento"
+                  : anexo.tipo === "relatorio_vendas_creare"
+                    ? "Folha CREARE"
+                    : "Comprovante de cartão"
+              }}
+              —
               {{ anexo.nomeOriginal }}
             </a>
           </div>

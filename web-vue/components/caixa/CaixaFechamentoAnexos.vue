@@ -1,5 +1,10 @@
 <script setup lang="ts">
-type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string; mimeType: string };
+type Anexo = {
+  id: string;
+  tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
+  nomeOriginal: string;
+  mimeType: string;
+};
 const props = defineProps<{ caixaId: string | null }>();
 const emit = defineEmits<{
   (event: "folha-enviada", valor: boolean): void;

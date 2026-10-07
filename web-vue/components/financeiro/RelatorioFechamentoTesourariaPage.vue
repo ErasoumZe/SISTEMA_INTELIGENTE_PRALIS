@@ -363,8 +363,8 @@ watch(
       <v-progress-linear v-if="carregando" indeterminate color="primary" class="mt-5" />
       <template v-else>
         <v-tabs v-model="abaAtiva" color="primary" class="mt-4 abas-tesouraria" grow>
-          <v-tab value="conferir">Para conferir ({{ linhasParaConferir.length }})</v-tab>
-          <v-tab value="historico">Histórico ({{ linhasHistorico.length }})</v-tab>
+          <v-tab value="conferir">Para conferir nesta página ({{ linhasParaConferir.length }})</v-tab>
+          <v-tab value="historico">Histórico nesta página ({{ linhasHistorico.length }})</v-tab>
         </v-tabs>
         <v-alert v-if="caixasEmOperacao.length" type="info" variant="tonal" density="compact" class="mt-3">
           {{ caixasEmOperacao.length }} caixa(s) em abertura ou fechamento operacional não entram na fila da Tesouraria.
@@ -553,11 +553,17 @@ watch(
                   </thead>
                   <tbody>
                     <tr v-for="item in dossie.conferencias" :key="String(item.id)">
-                      <td>{{ texto(item.etapa) }}</td>
-                      <td>{{ texto(item.resultado) }}</td>
-                      <td>{{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}</td>
-                      <td>{{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}</td>
-                      <td>{{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : "--" }}</td>
+                      <td data-rotulo="Etapa">{{ texto(item.etapa) }}</td>
+                      <td data-rotulo="Resultado">{{ texto(item.resultado) }}</td>
+                      <td data-rotulo="Declarado">
+                        {{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}
+                      </td>
+                      <td data-rotulo="Contado">
+                        {{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}
+                      </td>
+                      <td data-rotulo="Conferido em">
+                        {{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : "--" }}
+                      </td>
                     </tr>
                     <tr v-if="!dossie.conferencias.length">
                       <td colspan="5">Ainda não há conferência física registrada.</td>
@@ -587,10 +593,12 @@ watch(
                   </thead>
                   <tbody>
                     <tr v-for="item in dossie.conferenciasTesouraria" :key="item.id">
-                      <td>{{ item.resultado === "conferido" ? "Conferido" : "Divergência" }}</td>
-                      <td>{{ item.observacao || "--" }}</td>
-                      <td>{{ item.conferidoPorNome || item.conferidoPor }}</td>
-                      <td>{{ item.conferidoEm ? formatarDataHora(item.conferidoEm) : "--" }}</td>
+                      <td data-rotulo="Resultado">
+                        {{ item.resultado === "conferido" ? "Conferido" : "Divergência" }}
+                      </td>
+                      <td data-rotulo="Justificativa">{{ item.observacao || "--" }}</td>
+                      <td data-rotulo="Conferido por">{{ item.conferidoPorNome || item.conferidoPor }}</td>
+                      <td data-rotulo="Data">{{ item.conferidoEm ? formatarDataHora(item.conferidoEm) : "--" }}</td>
                     </tr>
                     <tr v-if="!dossie.conferenciasTesouraria.length">
                       <td colspan="4">Nenhuma decisão final registrada.</td>
@@ -765,9 +773,36 @@ watch(
   .dossie-grid strong {
     margin-bottom: 8px;
   }
-  .v-table {
+  .v-table :deep(thead) {
+    display: none;
+  }
+  .v-table :deep(tbody),
+  .v-table :deep(tr),
+  .v-table :deep(td) {
     display: block;
-    overflow-x: auto;
+    width: 100%;
+  }
+  .v-table :deep(tr) {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  }
+  .v-table :deep(td) {
+    min-height: 0;
+    padding: 4px 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .v-table :deep(td[data-rotulo]) {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 12px;
+    text-align: right;
+  }
+  .v-table :deep(td[data-rotulo]::before) {
+    content: attr(data-rotulo);
+    color: var(--cx-ink-soft);
+    text-align: left;
+    font-weight: 500;
   }
 }
 </style>

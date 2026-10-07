@@ -57,7 +57,7 @@ export default defineConfig({
     {
       // Preserva os E2E que ja existiam na main; o filtro de admissoes nao pode silencia-los.
       name: "sistema",
-      testMatch: /(?:app-sidebar|caixa-.*|usuarios-acessos)\.spec\.ts/u,
+      testMatch: /(?:app-sidebar|caixa-.*|relatorio-fechamento-tesouraria|usuarios-acessos)\.spec\.ts/u,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
     }
   ]

@@ -95,7 +95,12 @@ const fechamento = reactive({
 });
 const folhaFechamentoEnviada = ref(false);
 const anexosFechamento = ref<
-  Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string; relatorio: unknown }>
+  Array<{
+    id: string;
+    tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
+    nomeOriginal: string;
+    relatorio: unknown;
+  }>
 >([]);
 const revisaoFechamentoAberta = ref(false);
 const confirmacaoInicioFechamentoAberta = ref(false);

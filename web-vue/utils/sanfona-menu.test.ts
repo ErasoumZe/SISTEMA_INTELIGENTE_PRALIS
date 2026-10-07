@@ -29,7 +29,7 @@ describe("idDoGrupo", () => {
       expect(idDoGrupo(secao.titulo), secao.titulo).toMatch(/^sidebar-grupo-[a-z0-9-]+$/);
     }
     // Anti-falso-verde: sem isto o `for` acima passaria sobre uma lista vazia.
-    expect(SECOES_MENU).toHaveLength(5);
+    expect(SECOES_MENU).toHaveLength(6);
   });
 
   // Menu e home renderizam os MESMOS titulos ao mesmo tempo no Painel. Sem prefixo os ids
@@ -41,7 +41,7 @@ describe("idDoGrupo", () => {
       expect(doMenu, secao.titulo).not.toBe(daHome);
       expect(daHome, secao.titulo).toMatch(/^atalhos-grupo-[a-z0-9-]+$/);
     }
-    expect(SECOES_MENU).toHaveLength(5);
+    expect(SECOES_MENU).toHaveLength(6);
   });
 
   it("nao colide entre as secoes existentes", () => {

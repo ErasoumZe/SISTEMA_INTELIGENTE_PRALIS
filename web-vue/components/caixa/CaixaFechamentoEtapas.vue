@@ -50,7 +50,7 @@ const emit = defineEmits<{
     event: "anexosAtualizados",
     anexos: Array<{
       id: string;
-      tipo: "folha_fechamento" | "comprovante_cartao";
+      tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
       nomeOriginal: string;
       relatorio: unknown;
     }>
