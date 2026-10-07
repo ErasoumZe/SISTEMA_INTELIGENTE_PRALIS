@@ -2382,6 +2382,41 @@ export const fechamentosCaixa = pgTable(
   ]
 );
 
+// Conferência final é uma trilha própria e append-only. Não reaproveita o status operacional do
+// Caixa nem a confirmação individual de transferência: Tesouraria pode registrar uma divergência
+// e, depois de resolvê-la no fluxo correto, fazer uma nova conferência sem apagar a anterior.
+export const fechamentosCaixaConferenciasTesouraria = pgTable(
+  "fechamentos_caixa_conferencias_tesouraria",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    resultado: text("resultado").notNull().$type<"conferido" | "divergente">(),
+    observacao: text("observacao"),
+    conferidoPor: text("conferido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    conferidoEm: timestamp("conferido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_conferencias_tesouraria_caixa_empresa_fk"
+    }).onDelete("restrict"),
+    check(
+      "fechamentos_caixa_conferencias_tesouraria_resultado_check",
+      sql`${table.resultado} in ('conferido', 'divergente')`
+    ),
+    check(
+      "fechamentos_caixa_conferencias_tesouraria_observacao_check",
+      sql`${table.resultado} = 'conferido'
+        or (${table.observacao} is not null and length(btrim(${table.observacao})) > 0)`
+    ),
+    index("fechamentos_caixa_conferencias_tesouraria_caixa_idx").on(table.fechamentoCaixaId, table.conferidoEm)
+  ]
+);
+
 // Registro operacional de parada do computador do PDV durante um Caixa aberto. Cada linha e um
 // intervalo imutavel: o servidor abre a ocorrencia e somente marca o retorno; nunca regrava o
 // instante ou os motivos informados pelo operador.

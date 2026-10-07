@@ -38,6 +38,7 @@ import {
   debitosColaboradores,
   edicoesCaixa,
   fechamentosCaixaAnexos,
+  fechamentosCaixaConferenciasTesouraria,
   fechamentosCaixaRelatoriosMaquininha,
   fechamentosCaixaRelatoriosVendas,
   fechamentosCaixa,
@@ -255,6 +256,13 @@ export async function buscarResumoFechamentoCaixaRepository(
       valorEspecieFechamento: fechamentosCaixa.valorEspecieFechamento,
       valorMoedasFechamento: fechamentosCaixa.valorMoedasFechamento,
       valorFisicoEsperadoFechamento: fechamentosCaixa.valorFisicoEsperadoFechamento,
+      totalEntradas: fechamentosCaixa.totalEntradas,
+      totalTransferenciasEntrada: fechamentosCaixa.totalTransferenciasEntrada,
+      totalTransferenciasSaida: fechamentosCaixa.totalTransferenciasSaida,
+      totalDespesas: fechamentosCaixa.totalDespesas,
+      totalRetiradas: fechamentosCaixa.totalRetiradas,
+      totalMercadorias: fechamentosCaixa.totalMercadorias,
+      saldo: fechamentosCaixa.saldo,
       observacao: fechamentosCaixa.observacao
     })
     .from(fechamentosCaixa)
@@ -599,6 +607,52 @@ export async function listarConferenciasFisicasCaixaRepository(
     .orderBy(asc(transferenciasConferenciasFisicas.conferidoEm));
 }
 
+export async function criarConferenciaTesourariaFechamentoRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    resultado: "conferido" | "divergente";
+    observacao: string | null;
+    conferidoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [conferencia] = await db.insert(fechamentosCaixaConferenciasTesouraria).values(input).returning({
+    id: fechamentosCaixaConferenciasTesouraria.id,
+    resultado: fechamentosCaixaConferenciasTesouraria.resultado,
+    observacao: fechamentosCaixaConferenciasTesouraria.observacao,
+    conferidoPor: fechamentosCaixaConferenciasTesouraria.conferidoPor,
+    conferidoEm: fechamentosCaixaConferenciasTesouraria.conferidoEm
+  });
+  if (!conferencia) throw new Error("Conferência da Tesouraria não registrada");
+  return conferencia;
+}
+
+export async function listarConferenciasTesourariaFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: fechamentosCaixaConferenciasTesouraria.id,
+      resultado: fechamentosCaixaConferenciasTesouraria.resultado,
+      observacao: fechamentosCaixaConferenciasTesouraria.observacao,
+      conferidoPor: fechamentosCaixaConferenciasTesouraria.conferidoPor,
+      conferidoPorNome: perfisUsuarios.nome,
+      conferidoEm: fechamentosCaixaConferenciasTesouraria.conferidoEm
+    })
+    .from(fechamentosCaixaConferenciasTesouraria)
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixaConferenciasTesouraria.conferidoPor))
+    .where(
+      and(
+        eq(fechamentosCaixaConferenciasTesouraria.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaConferenciasTesouraria.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(fechamentosCaixaConferenciasTesouraria.conferidoEm));
+}
+
 // --- Concorrencia do caixa (B1/B2) ------------------------------------------------------------
 // Trava a LINHA do caixa ate o fim da transacao. Quem chegar depois espera aqui e, ao passar, ja
 // enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o
@@ -774,6 +828,21 @@ export async function travarCaixaCompartilhadoRepository(
     .from(fechamentosCaixa)
     .where(eq(fechamentosCaixa.id, caixaId))
     .for("share");
+  return linha ?? null;
+}
+
+// A conferência final não pode se apoiar em uma leitura antiga: enquanto decide se ainda há
+// pendência ou quebra, bloqueia o fechamento até o evento auditável ser gravado.
+export async function travarCaixaParaConferenciaTesourariaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: TransacaoBanco
+): Promise<{ id: string; status: string } | null> {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id, status: fechamentosCaixa.status })
+    .from(fechamentosCaixa)
+    .where(and(eq(fechamentosCaixa.id, caixaId), eq(fechamentosCaixa.empresaId, empresaId)))
+    .for("update");
   return linha ?? null;
 }
 
@@ -1947,9 +2016,9 @@ export async function buscarRelatorioMaquininhaPrecedenteRepository(
   return relatorio ?? null;
 }
 
-// A leitura inicial de um turno Ã© sempre a leitura final do Ãºltimo fechamento concluÃ­do da
-// MESMA maquininha. NÃ£o usamos data do navegador, nem um relatÃ³rio de outro equipamento: isso
-// evita fabricar um saldo-base e deixa a origem auditÃ¡vel no JSON revisado.
+// A leitura inicial de um turno é sempre a leitura final do último fechamento concluído da
+// MESMA maquininha. Não usamos data do navegador, nem um relatório de outro equipamento: isso
+// evita fabricar um saldo-base e deixa a origem auditável no JSON revisado.
 export async function salvarRelatorioMaquininhaFechamentoRepository(
   input: {
     fechamentoCaixaId: string;

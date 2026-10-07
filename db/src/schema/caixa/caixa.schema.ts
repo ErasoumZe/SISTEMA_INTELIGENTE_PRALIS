@@ -6,6 +6,7 @@ export {
   debitosColaboradores,
   edicoesCaixa,
   fechamentosCaixa,
+  fechamentosCaixaConferenciasTesouraria,
   fechamentosCaixaAnexos,
   fechamentosCaixaRelatoriosMaquininha,
   fechamentosCaixaRelatoriosVendas,

@@ -111,7 +111,7 @@ export async function extrairRelatorioVendasCreareDePdf(arquivo: Buffer): Promis
       documentoLegivel: true,
       ...valores,
       camposDuvidosos,
-      observacoes: ["Valores lidos do texto nativo do PDF; revise antes de gerar o relatÃ³rio."]
+      observacoes: ["Valores lidos do texto nativo do PDF; revise antes de gerar o relatório."]
     });
   } catch {
     return null;

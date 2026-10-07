@@ -386,6 +386,13 @@
       "when": 1791315671982,
       "tag": "0054_fechamento_creare_maquininha_v6",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791392408105,
+      "tag": "0055_serious_husk",
+      "breakpoints": true
     }
   ]
 }

@@ -120,7 +120,7 @@ async function carregarRelatorioExistente() {
       try {
         await analisarAnexoCreare(anexoCreare.id);
       } catch {
-        aviso.value = "A folha foi anexada. A leitura automÃ¡tica nÃ£o ficou disponÃ­vel; preencha apenas os valores visÃ­veis.";
+        aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
       }
     }
     if (consulta !== consultaAtual || !relatorio) return;

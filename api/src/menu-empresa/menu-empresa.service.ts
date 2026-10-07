@@ -1,4 +1,3 @@
-import type { DadosExternos } from "@padaria/shared/api";
 import {
   estruturaMenuEmpresaSchema,
   normalizarEstruturaMenuEmpresa,
@@ -13,7 +12,7 @@ import {
 /** Configuração ausente/corrompida preserva o menu padrão do front, sem quebrar a navegação. */
 export async function carregarMenuEmpresa(empresaId: string): Promise<EstruturaMenuEmpresa | null> {
   const estrutura = await obterEstruturaMenuEmpresaRepository(empresaId);
-  const validada = estruturaMenuEmpresaSchema.safeParse(estrutura as DadosExternos);
+  const validada = estruturaMenuEmpresaSchema.safeParse(estrutura);
   return validada.success ? normalizarEstruturaMenuEmpresa(validada.data) : null;
 }
 

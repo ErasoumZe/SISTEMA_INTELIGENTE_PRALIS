@@ -6,10 +6,11 @@ import RelatorioFechamentoTesourariaPage from "~/components/financeiro/Relatorio
 <template>
   <AppWorkspace tela-inicial="relatorio_fechamento" tipo-pagina="relatorio_fechamento" v-slot="ctx">
     <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? 'Relatório de fechamento'" />
-  <RelatorioFechamentoTesourariaPage
+    <RelatorioFechamentoTesourariaPage
       :empresa-id="ctx.empresaId"
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :turnos="ctx.opcoesEmpresa.turnos"
-  />
+      :pode-conferir="ctx.podeConferirFechamento"
+    />
   </AppWorkspace>
 </template>

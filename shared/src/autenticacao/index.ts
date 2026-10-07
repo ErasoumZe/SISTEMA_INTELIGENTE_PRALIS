@@ -45,6 +45,7 @@ export const permissoes = [
   "caixa_operar",
   "caixas_gerenciar",
   "relatorio_fechamento_visualizar",
+  "fechamentos_caixa_conferir",
   "caixa_alterar_horario",
   "fechamento_com_diferenca_visualizar",
   "relatorio_produtos_visualizar",
@@ -412,7 +413,9 @@ const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
   admissoes_testes_cancelar: "Permite cancelar um período de teste antes do encerramento.",
   relatorio_vendas_comprovantes_criar: "Permite gerar comprovantes para as vendas consultadas.",
   transferencias_conferir:
-    "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento."
+    "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento.",
+  fechamentos_caixa_conferir:
+    "Permite registrar a conferência final da Tesouraria em um fechamento de caixa já encerrado."
 };
 
 const acoesPermissao: ReadonlyArray<[string, (recurso: string) => string]> = [

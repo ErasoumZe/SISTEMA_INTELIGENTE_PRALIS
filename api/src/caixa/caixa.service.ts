@@ -346,7 +346,7 @@ export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil
           dataMovimento: caixa.dataMovimento,
           fechamentoCaixaId: caixa.id
         });
-  const dadosPrecedentes = precedente?.dadosRevisados as Record<string, unknown> | undefined;
+  const dadosPrecedentes = precedente?.dadosRevisados as Record<string, DadosExternos> | undefined;
   return {
     turnoNome: relatorio?.turnoNome ?? turnoDoRelatorio(caixa),
     etapaDia: precedente ? "tarde" : "manha",
@@ -506,7 +506,7 @@ export async function salvarRelatorioMaquininhaFechamento(
       },
       tx
     );
-    const dadosPrecedentes = precedente?.dadosRevisados as Record<string, unknown> | undefined;
+    const dadosPrecedentes = precedente?.dadosRevisados as Record<string, DadosExternos> | undefined;
     if (dadosPrecedentes?.["etapaDia"] === "tarde") {
       throw new ErroDominio(
         "Este PDV já registrou manhã e tarde nesta maquininha hoje.",

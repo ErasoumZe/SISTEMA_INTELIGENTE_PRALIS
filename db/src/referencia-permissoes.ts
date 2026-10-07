@@ -179,6 +179,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
       "relatorio_fechamento_visualizar",
+      "fechamentos_caixa_conferir",
       "transferencias_criar",
       // R-191: classifica posteriormente a saída pendente, sem operar caixa nem pagar/efetuar.
       "despesas_discriminar",
