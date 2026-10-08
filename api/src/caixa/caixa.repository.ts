@@ -1881,9 +1881,9 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   return relatorio ?? null;
 }
 
-// A leitura inicial de um turno Ã© sempre a leitura final do Ãºltimo fechamento concluÃ­do da
-// MESMA maquininha. NÃ£o usamos data do navegador, nem um relatÃ³rio de outro equipamento: isso
-// evita fabricar um saldo-base e deixa a origem auditÃ¡vel no JSON revisado.
+// A leitura inicial de um turno é sempre a leitura final do último fechamento concluído da
+// mesma maquininha. Não usamos data do navegador, nem um relatório de outro equipamento: isso
+// evita fabricar um saldo-base e deixa a origem auditável no JSON revisado.
 export async function salvarRelatorioMaquininhaFechamentoRepository(
   input: {
     fechamentoCaixaId: string;
