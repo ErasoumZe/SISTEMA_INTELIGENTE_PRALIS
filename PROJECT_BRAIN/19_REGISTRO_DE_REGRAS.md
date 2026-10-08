@@ -1181,6 +1181,16 @@ Somente o ato de marcar um pedido como **Recebido**, depois da conferência fís
 
 Esta regra não define ainda recebimento parcial, saída por venda/produção/perda, ajuste de inventário ou o gatilho automático de reposição. Esses atos exigem decisão própria antes de qualquer implementação.
 
+### R-209 — Pedido de Compra: fornecedor único e recebimento parcial auditável (José, 08/10/2026)
+
+Todo **novo** pedido pertence a um único fornecedor. Itens destinados a fornecedores diferentes formam pedidos distintos; assim, envio por WhatsApp/formulário, negociação e estado do pedido continuam tendo uma única verdade. O `fornecedor_id` por item fica apenas como fato histórico dos pedidos antigos e deixa de ser caminho de escrita.
+
+O recebimento pode ser parcial. Cada conferência física gera uma entrada auditável com quantidade por item, ator, hora do servidor e saldo anterior/posterior; essa quantidade entra no estoque imediatamente conforme R-208. Enquanto restar item pendente, o pedido fica em **Recebido parcialmente**. Ao alcançar as quantidades solicitadas, fica **Recebido**. Se o restante for cancelado, nenhum saldo já recebido é estornado: o cancelamento encerra apenas o que não chegou.
+
+O ciclo novo é **A fazer → Enviado → Retornado → Confirmado → Recebido parcialmente → Recebido**, com **Cancelado** como estado terminal auditável. Estados legados `rascunho` e `aprovado` não ganham nova porta de escrita; permanecem apenas para leitura histórica até uma migração de dados aprovada por contagem e amostra.
+
+O gerador `máximo − atual` é, por enquanto, uma **sugestão de reposição** acionada pelo Compras. Ele só poderá disparar sozinho quando venda, produção, perda e inventário também gerarem movimentos de estoque rastreáveis.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
