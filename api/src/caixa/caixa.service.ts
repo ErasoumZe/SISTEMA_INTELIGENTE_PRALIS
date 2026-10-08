@@ -944,8 +944,8 @@ async function abrirCaixaEmTransacao(
       throw new Error("Maquininha nao encontrada ou inativa");
     }
 
-    // R-040: o lacre e opcional (R-033 â€” sem lacre o caixa abre zerado e o fundo chega depois).
-    // Informado, ele identifica a transferencia pendente que este caixa vai reivindicar.
+    // R-040/B1: o lacre identifica obrigatoriamente a transferência pendente que este caixa
+    // vai reivindicar; abertura sem malote não existe no fluxo vigente.
     const lacreInformado = dados.lacreAbertura.trim();
     const abertura = await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx);
 
