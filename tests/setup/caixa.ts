@@ -1,7 +1,21 @@
+import { randomUUID } from "node:crypto";
 import { expect, onTestFinished } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { idsTeste } from "./contexto.js";
 import { consultarUm, executarSql, json } from "./integracao.js";
+
+const arquivoPngMinimo = Buffer.from("89504e470d0a1a0000000049454e44ae426082", "hex");
+
+function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao") {
+  const boundary = `----padaria-caixa-${randomUUID()}`;
+  const inicio = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="arquivo"; filename="${tipo}.png"\r\n` +
+      "Content-Type: image/png\r\n\r\n"
+  );
+  const fim = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return { boundary, corpo: Buffer.concat([inicio, arquivoPngMinimo, fim]) };
+}
 
 // Alguns arquivos exercitam um ciclo completo com o admin como OPERADOR. O seed, por outro lado,
 // tambem mantem um caixa aberto do admin para os testes de status/historico. Esses dois cenarios nao
@@ -106,6 +120,7 @@ export async function abrirCaixaDoOperador(
   const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
 
   const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
+  const lacreRetorno = `TESTE-RETORNO-${pdvId}`;
   const transferencia = await app.inject({
     method: "POST",
     url: "/api/transferencias",
@@ -119,7 +134,8 @@ export async function abrirCaixaDoOperador(
       valorMoedasDeclarado: 0,
       contaOrigemId: idsTeste.contaBanco,
       contaDestinoId: contaId,
-      nLacreDoc: lacreAbertura
+      nLacreDoc: lacreAbertura,
+      lacresRetorno: [lacreRetorno]
     }
   });
   expect(transferencia.statusCode, transferencia.body).toBe(201);
@@ -144,6 +160,100 @@ export async function abrirCaixaDoOperador(
   registrarEncerramentoCaixaParaTeste(caixaId);
 
   return { caixaId, contaId, pdvId, usuarioId: usuario.id };
+}
+
+/**
+ * Leva um caixa aberto ate a ultima etapa antes da contagem/fechamento, usando as mesmas rotas
+ * publicas da operacao: inicia o fechamento, anexa a folha e os dois comprovantes, gera CREARE e
+ * salva a leitura completa da maquininha. Nao fecha o caixa nem escolhe a contagem fisica.
+ */
+export async function prepararFechamentoValido(
+  app: FastifyInstance,
+  entrada: { cookieOperador: string; caixaId: string }
+) {
+  const inicio = await app.inject({
+    method: "POST",
+    url: `/api/caixa/${entrada.caixaId}/iniciar-fechamento`,
+    headers: { cookie: entrada.cookieOperador },
+    payload: {}
+  });
+  expect(inicio.statusCode, inicio.body).toBe(200);
+
+  async function anexar(tipo: "folha_fechamento" | "comprovante_cartao") {
+    const { boundary, corpo } = multipartAnexoFechamento(tipo);
+    const resposta = await app.inject({
+      method: "POST",
+      url: `/api/caixa/${entrada.caixaId}/anexos`,
+      headers: { cookie: entrada.cookieOperador, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: corpo
+    });
+    expect(resposta.statusCode, resposta.body).toBe(201);
+    return json<{ data: { id: string } }>(resposta).data.id;
+  }
+
+  const folhaId = await anexar("folha_fechamento");
+  const anexoManhaId = await anexar("comprovante_cartao");
+  const anexoTardeId = await anexar("comprovante_cartao");
+  const relatorioVendas = await app.inject({
+    method: "POST",
+    url: `/api/caixa/${entrada.caixaId}/relatorio-vendas`,
+    headers: { cookie: entrada.cookieOperador }
+  });
+  expect(relatorioVendas.statusCode, relatorioVendas.body).toBe(200);
+
+  const leitura = {
+    documentoLegivel: true,
+    numeroMaquininha: null,
+    dataEmissao: null,
+    acumulador: 0,
+    credito: 0,
+    debito: 0,
+    pix: 0,
+    voucher: 0,
+    detalhes: { credito: [], debito: [], pix: [], voucher: [] },
+    camposDuvidosos: [],
+    observacoes: []
+  };
+  const relatorioMaquininha = await app.inject({
+    method: "PUT",
+    url: `/api/caixa/${entrada.caixaId}/relatorio-maquininha`,
+    headers: { cookie: entrada.cookieOperador },
+    payload: { anexoManhaId, leituraManha: leitura, anexoTardeId, leituraTarde: leitura }
+  });
+  expect(relatorioMaquininha.statusCode, relatorioMaquininha.body).toBe(200);
+  return { folhaId, anexoManhaId, anexoTardeId };
+}
+
+/** Cria um retorno/sangria com a bolsa retornavel recebida na abertura do mesmo caixa. */
+export async function criarRetornoValido(
+  app: FastifyInstance,
+  entrada: { cookieOperador: string; caixaId: string; valor: number; responsavelNome?: string }
+) {
+  const lacres = await app.inject({
+    method: "GET",
+    url: `/api/caixa/${entrada.caixaId}/lacres-retorno`,
+    headers: { cookie: entrada.cookieOperador }
+  });
+  expect(lacres.statusCode, lacres.body).toBe(200);
+  const lacre = json<{ data: Array<{ id: string; numero: string }> }>(lacres).data[0];
+  if (!lacre) throw new Error("Fixture sem lacre de retorno disponivel");
+
+  const resposta = await app.inject({
+    method: "POST",
+    url: `/api/caixa/${entrada.caixaId}/transferencia-cofre`,
+    headers: { cookie: entrada.cookieOperador },
+    payload: {
+      valor: entrada.valor,
+      valorEspecie: entrada.valor,
+      valorMoedas: 0,
+      lacreId: lacre.id,
+      responsavelNome: entrada.responsavelNome ?? "Operador de teste",
+      observacao: "Retorno de teste",
+      idempotenciaChave: randomUUID()
+    }
+  });
+  expect(resposta.statusCode, resposta.body).toBe(200);
+  return { lacre, resposta: json<{ data: { id?: string } }>(resposta).data };
 }
 
 /**
