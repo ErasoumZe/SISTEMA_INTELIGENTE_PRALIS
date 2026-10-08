@@ -378,6 +378,9 @@ export const fornecedores = pgTable("fornecedores", {
   empresaId,
   nome: text("nome").notNull(),
   documento: text("documento"),
+  // Canal operacional do fornecedor para o pedido de compra. O documento continua sendo fiscal;
+  // WhatsApp nao substitui CNPJ/CPF nem e obrigatorio para fornecedores historicos.
+  whatsapp: text("whatsapp"),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -828,7 +831,11 @@ export const produtos = pgTable(
     quantidadeEstoque: numeric("quantidade_estoque", { precision: 14, scale: 3 }).notNull().default("0"),
     estoqueMin: numeric("estoque_min", { precision: 14, scale: 3 }),
     estoqueMax: numeric("estoque_max", { precision: 14, scale: 3 }),
+    // Area e local sao dimensoes diferentes: area organiza o estoque; local identifica onde o
+    // produto fica guardado. Curva ABC e classificacao manual ate existir regra de calculo aprovada.
+    areaEstoque: text("area_estoque"),
     setorEstoque: text("setor_estoque"),
+    curvaAbc: text("curva_abc").$type<"A" | "B" | "C" | null>(),
     // Locais de venda e foto
     localVenda1: text("local_venda_1"),
     localVenda2: text("local_venda_2"),
@@ -843,7 +850,8 @@ export const produtos = pgTable(
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
     uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
     check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
-    check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`)
+    check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`),
+    check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`)
   ]
 );
 
@@ -1463,15 +1471,17 @@ export const despesasItens = pgTable(
   ]
 );
 
-// PEDIDOS de compra/reposicao de estoque (V1). Header + itens. Itens podem ter fornecedores
-// diferentes (misto). Agendamento por data unica (dataAgendada) e/ou recorrencia.
+// PEDIDOS de compra/reposicao de estoque. Cada pedido NOVO pertence a um unico fornecedor; o
+// fornecedor por item fica apenas como fotografia dos pedidos legados. Agendamento e lembrete de
+// revisao/geracao, nunca envia pedido sem revisao humana.
 export const pedidos = pgTable(
   "pedidos",
   {
     id: idUuid,
     empresaId,
     tipo: text("tipo").notNull().default("manual"),
-    status: text("status").notNull().default("rascunho"),
+    status: text("status").notNull().default("a_fazer"),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id, { onDelete: "restrict" }),
     dataAgendada: timestamp("data_agendada", { withTimezone: true }),
     recorrencia: text("recorrencia").notNull().default("nenhuma"),
     observacao: text("observacao"),
@@ -1483,9 +1493,90 @@ export const pedidos = pgTable(
   },
   (table) => [
     check("pedidos_tipo_check", sql`${table.tipo} in ('manual', 'automatico')`),
-    check("pedidos_status_check", sql`${table.status} in ('rascunho', 'aprovado', 'cancelado')`),
+    // rascunho/aprovado ficam somente para leitura de historico, sem escritor no fluxo novo.
+    check(
+      "pedidos_status_check",
+      sql`${table.status} in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+    ),
     check("pedidos_recorrencia_check", sql`${table.recorrencia} in ('nenhuma', 'semanal', 'quinzenal', 'mensal')`),
     index("pedidos_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+// Trilha imutavel do ciclo do pedido. A atualizacao do status e o evento sao gravados juntos na
+// transacao de dominio; a tabela e a explicacao de quem fez cada ato e quando.
+export const pedidosEventos = pgTable(
+  "pedidos_eventos",
+  {
+    id: idUuid,
+    empresaId,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    check(
+      "pedidos_eventos_status_check",
+      sql`${table.status} in ('a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+    ),
+    index("pedidos_eventos_empresa_pedido_criado_idx").on(table.empresaId, table.pedidoId, table.criadoEm)
+  ]
+);
+
+// Uma conferencia fisica pode receber parte do pedido. A chave de idempotencia impede que retry da
+// mesma intencao some o estoque duas vezes.
+export const pedidosRecebimentos = pgTable(
+  "pedidos_recebimentos",
+  {
+    id: idUuid,
+    empresaId,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    observacao: text("observacao"),
+    idempotenciaChave: uuid("idempotencia_chave").notNull(),
+    recebidoPor: text("recebido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    recebidoEm: timestamp("recebido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    unique("pedidos_recebimentos_empresa_idempotencia_unica").on(table.empresaId, table.idempotenciaChave),
+    index("pedidos_recebimentos_empresa_pedido_recebido_idx").on(table.empresaId, table.pedidoId, table.recebidoEm)
+  ]
+);
+
+// Agenda da conferencia fisica. Agendar nao altera saldo: a divergencia so tera efeito quando a
+// regra propria de inventario for definida e implementada.
+export const conferenciasEstoque = pgTable(
+  "conferencias_estoque",
+  {
+    id: idUuid,
+    empresaId,
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id, { onDelete: "set null" }),
+    areaEstoque: text("area_estoque"),
+    localVenda: text("local_venda"),
+    localEstoque: text("local_estoque"),
+    curvaAbc: text("curva_abc").$type<"A" | "B" | "C" | null>(),
+    agendadaPara: timestamp("agendada_para", { withTimezone: true }).notNull(),
+    observacao: text("observacao"),
+    status: text("status").notNull().default("agendada"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("conferencias_estoque_status_check", sql`${table.status} in ('agendada', 'cancelada', 'concluida')`),
+    check("conferencias_estoque_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),
+    index("conferencias_estoque_empresa_agendada_idx").on(table.empresaId, table.agendadaPara)
   ]
 );
 
@@ -1508,6 +1599,40 @@ export const pedidosItens = pgTable(
   (table) => [
     check("pedidos_itens_quantidade_check", sql`${table.quantidade} > 0`),
     index("pedidos_itens_pedido_idx").on(table.pedidoId)
+  ]
+);
+
+// Livro razao de estoque: por ora so recebe entrada de compra. Outros tipos so entram quando cada
+// fluxo (venda, producao, perda ou inventario) tiver a propria regra auditavel.
+export const estoqueMovimentos = pgTable(
+  "estoque_movimentos",
+  {
+    id: idUuid,
+    empresaId,
+    produtoId: uuid("produto_id")
+      .notNull()
+      .references(() => produtos.id, { onDelete: "restrict" }),
+    pedidoItemId: uuid("pedido_item_id")
+      .notNull()
+      .references(() => pedidosItens.id, { onDelete: "restrict" }),
+    pedidoRecebimentoId: uuid("pedido_recebimento_id")
+      .notNull()
+      .references(() => pedidosRecebimentos.id, { onDelete: "restrict" }),
+    tipo: text("tipo").notNull().default("recebimento_compra"),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    saldoAnterior: numeric("saldo_anterior", { precision: 14, scale: 3 }).notNull(),
+    saldoPosterior: numeric("saldo_posterior", { precision: 14, scale: 3 }).notNull(),
+    criadoEm
+  },
+  (table) => [
+    unique("estoque_movimentos_recebimento_item_unico").on(table.pedidoRecebimentoId, table.pedidoItemId),
+    check("estoque_movimentos_tipo_check", sql`${table.tipo} = 'recebimento_compra'`),
+    check("estoque_movimentos_quantidade_check", sql`${table.quantidade} > 0`),
+    check(
+      "estoque_movimentos_saldo_check",
+      sql`${table.saldoPosterior} = ${table.saldoAnterior} + ${table.quantidade}`
+    ),
+    index("estoque_movimentos_empresa_produto_criado_idx").on(table.empresaId, table.produtoId, table.criadoEm)
   ]
 );
 

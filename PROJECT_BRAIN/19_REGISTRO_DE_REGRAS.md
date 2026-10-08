@@ -1191,6 +1191,16 @@ O ciclo novo é **A fazer → Enviado → Retornado → Confirmado → Recebido 
 
 O gerador `máximo − atual` é, por enquanto, uma **sugestão de reposição** acionada pelo Compras. Ele só poderá disparar sozinho quando venda, produção, perda e inventário também gerarem movimentos de estoque rastreáveis.
 
+### R-210 — Módulo Compras: filtros e agenda de conferência (José, 08/10/2026)
+
+O módulo **Compras** concentra Estoque, Conferências, Pedidos e Fornecedores no menu; Mercadorias e NF-e continuam sendo lançamentos/financeiro e não ganham uma segunda tela de compra. A listagem de estoque filtra por grupo, área, local de venda, local de estoque e Curva ABC.
+
+**Área** e **Local de estoque** são dimensões distintas do produto. A Curva ABC entra inicialmente como classificação manual (`A`, `B` ou `C`), visível e filtrável; não haverá cálculo automático fingindo usar giro, faturamento ou margem sem a fórmula e o período definidos pelo negócio.
+
+A **Conferência de estoque** agenda a contagem física com os mesmos filtros. Agendar ou concluir a agenda não altera saldo. A regra de ajuste de divergência (sobra/perda) fica bloqueada até ser decidida em regra própria.
+
+O **agendador** de compras é uma data/recorrência para o comprador revisar ou gerar uma sugestão; não cria envio ao fornecedor e não é um robô autônomo. Enquanto venda, produção, perda e inventário não emitirem movimentos rastreáveis, o botão de reposição continua uma sugestão assistida, calculada por `estoque máximo − estoque atual` quando o saldo atingir o mínimo.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

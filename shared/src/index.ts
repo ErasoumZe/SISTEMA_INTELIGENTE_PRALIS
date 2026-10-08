@@ -8,6 +8,7 @@ export * from "./areas/index.js";
 export * from "./clientes/index.js";
 export * from "./colaboradores/index.js";
 export * from "./contas/index.js";
+export * from "./compras/index.js";
 export * from "./empresas/index.js";
 export * from "./fornecedores/index.js";
 export * from "./funcoes/index.js";

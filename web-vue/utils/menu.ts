@@ -8,14 +8,14 @@ import type { ItemMenu } from "~/types/padaria";
 // categoria e so navegacao — cada tela continua com a sua listagem separada por categoria.
 export type CategoriaMenu = { id: string; titulo: string; icone: string; ids: readonly string[] };
 
-// "Lancamentos" SUBSTITUI os tres itens soltos (Despesas / Mercadorias / Retiradas) no menu: eles
+// "Lancamentos" agrupa as saidas financeiras que nao sao do fluxo operacional de Compras.
 // deixam de existir na raiz e passam a viver DENTRO desta categoria. A visibilidade continua sendo
 // a de cada tela — cargo sem nenhuma das tres (ou Caixa com o caixa fechado) nao ve a categoria.
 export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   id: "lancamentos",
   titulo: "Lançamentos",
   icone: "mdi-format-list-checks",
-  ids: ["despesas", "mercadorias", "retiradas"]
+  ids: ["despesas", "retiradas"]
 };
 
 export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
@@ -48,10 +48,16 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     ids: ["transferencias", "contas"]
   },
   {
-    // Saidas – Lancamentos (Despesas / Mercadorias / Retiradas, agrupadas na categoria) + estoque e a pagar.
+    // Saidas financeiras fora do fluxo de Compras.
     titulo: "Saidas",
     cor: "neutro",
-    ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "pedidos", "perdas_sobras", "estoque_produtos"]
+    ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "perdas_sobras"]
+  },
+  {
+    // Cada ato de compra aparece uma vez: estoque, conferencia, pedido, fornecedor e a mercadoria
+    // financeira/NF-e relacionada. Nao existe uma segunda tela para registrar a mesma mercadoria.
+    titulo: "Compras",
+    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "mercadorias", "fornecedores"]
   },
   {
     // Resultados – Relatorios + Diferenca de fechamento.
@@ -86,7 +92,6 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
       "grupos",
       "unidades",
       "formas_pagamento",
-      "fornecedores",
       "socios_gestores",
       "clientes",
       "promocoes",

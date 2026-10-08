@@ -242,6 +242,14 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               @update:model-value="atualizarDocumentoCadastro(String($event || ''))"
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'fornecedores'" cols="12" md="6">
+            <v-text-field
+              :model-value="formCadastro.whatsapp"
+              label="WhatsApp"
+              maxlength="15"
+              @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
+            />
+          </v-col>
           <template v-if="cadastroTela === 'clientes'">
             <v-col v-if="documentoEhCpf(formCadastro.documento)" cols="12" md="6">
               <v-text-field v-model="formCadastro.dataNascimento" type="date" label="Data de nascimento" />

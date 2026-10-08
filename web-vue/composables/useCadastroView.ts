@@ -48,7 +48,12 @@ export function useCadastroView(params: {
         ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "fornecedores")
-      return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
+      return listas.fornecedores.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        documento: item.documento,
+        whatsapp: item.whatsapp
+      }));
     if (tela === "socios_gestores")
       return listas.sociosGestores.map((item) => ({
         id: item.id,

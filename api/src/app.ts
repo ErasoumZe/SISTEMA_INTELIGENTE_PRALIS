@@ -13,6 +13,7 @@ import { registrarRotasRelatorioFechamento } from "./relatorios/relatorio-fecham
 import { registrarRotasCampanhas } from "./campanhas/campanhas.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
+import { registrarRotasCompras } from "./compras/compras.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
@@ -281,6 +282,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasProdutosMaisVendidos(app);
   await registrarRotasIntegracoes(app);
   await registrarRotasPedidos(app);
+  await registrarRotasCompras(app);
 
   return app;
 }

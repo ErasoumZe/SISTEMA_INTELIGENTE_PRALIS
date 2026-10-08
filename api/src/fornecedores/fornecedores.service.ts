@@ -37,7 +37,8 @@ export async function salvarFornecedor(id: string | null, body: DadosExternos) {
     ...(id ? { id } : {}),
     empresaId: dados.empresaId,
     nome: dados.nome.trim(),
-    documento: apenasDigitos(dados.documento)
+    documento: apenasDigitos(dados.documento),
+    whatsapp: dados.whatsapp ? apenasDigitos(dados.whatsapp) : null
   });
 }
 

@@ -3,17 +3,20 @@ import {
   gerarPedidoAutomaticoPayloadSchema,
   pedidoEdicaoPayloadSchema,
   pedidoPayloadSchema,
+  pedidoRecebimentoPayloadSchema,
+  pedidoSituacaoPayloadSchema,
   pedidosQuerySchema
 } from "@padaria/shared/pedidos";
 import { apiIdParamsSchema, criadoId, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
 import {
-  aprovarPedido,
+  alterarSituacaoPedido,
   atualizarPedido,
   criarPedido,
   gerarPedidoAutomatico,
   listarPedidos,
-  obterPedido
+  obterPedido,
+  receberPedido
 } from "./pedidos.service.js";
 
 export async function registrarRotasPedidos(app: FastifyInstance): Promise<void> {
@@ -31,7 +34,7 @@ export async function registrarRotasPedidos(app: FastifyInstance): Promise<void>
     return criadoId(reply, pedido.id);
   });
 
-  app.post("/api/pedidos/gerar-automatico", { preHandler: exigirPermissao("pedidos_criar") }, async (request) =>
+  app.post("/api/pedidos/gerar-sugestao", { preHandler: exigirPermissao("pedidos_criar") }, async (request) =>
     ok(await gerarPedidoAutomatico(gerarPedidoAutomaticoPayloadSchema.parse(request.body), request.perfilUsuario!))
   );
 
@@ -41,9 +44,14 @@ export async function registrarRotasPedidos(app: FastifyInstance): Promise<void>
     return semConteudo(reply);
   });
 
-  app.post("/api/pedidos/:id/aprovar", { preHandler: exigirPermissao("pedidos_aprovar") }, async (request, reply) => {
+  app.post("/api/pedidos/:id/situacao", { preHandler: exigirPermissao("pedidos_editar") }, async (request, reply) => {
     const { id } = apiIdParamsSchema.parse(request.params);
-    await aprovarPedido(id, request.perfilUsuario!);
+    await alterarSituacaoPedido(id, pedidoSituacaoPayloadSchema.parse(request.body), request.perfilUsuario!);
     return semConteudo(reply);
+  });
+
+  app.post("/api/pedidos/:id/recebimentos", { preHandler: exigirPermissao("pedidos_aprovar") }, async (request) => {
+    const { id } = apiIdParamsSchema.parse(request.params);
+    return ok(await receberPedido(id, pedidoRecebimentoPayloadSchema.parse(request.body), request.perfilUsuario!));
   });
 }

@@ -5,7 +5,7 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-describe("pedidos integration (compra/reposicao de estoque)", () => {
+describe("pedidos integration (Compras)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
 
@@ -14,78 +14,77 @@ describe("pedidos integration (compra/reposicao de estoque)", () => {
     cookieAdmin = await cookieSessao(contexto.app, "admin");
   }, 120_000);
 
-  afterAll(async () => {
-    await contexto.fechar();
-  });
+  afterAll(async () => { await contexto.fechar(); });
+  function post(url: string, payload: object) { return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload }); }
 
-  function post(url: string, payload: object) {
-    return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
-  }
-
-  it("cria pedido MANUAL, detalha e aprova; nao deixa editar apos aprovado", async () => {
+  it("recebe parcialmente uma compra, soma so a conferencia e e idempotente", async () => {
     const criar = await post("/api/pedidos", {
       empresaId: idsTeste.empresaA,
+      fornecedorId: idsTeste.fornecedor,
       recorrencia: "nenhuma",
-      itens: [{ produtoId: idsTeste.produto, quantidade: 12 }]
+      itens: [{ produtoId: idsTeste.produto, quantidade: 5 }]
     });
     expect(criar.statusCode, criar.body).toBe(201);
     const pedidoId = json<{ data: { id: string } }>(criar).data.id;
 
-    const detalhe = await contexto.app.inject({
-      method: "GET",
-      url: `/api/pedidos/${pedidoId}`,
-      headers: { cookie: cookieAdmin }
-    });
-    assertOk(detalhe);
-    const dto = json<{
-      data: { tipo: string; status: string; itens: Array<{ produtoId: string; quantidade: string }> };
-    }>(detalhe).data;
-    expect(dto).toMatchObject({ tipo: "manual", status: "rascunho" });
-    expect(dto.itens[0]).toMatchObject({ produtoId: idsTeste.produto, quantidade: "12.000" });
+    const detalheInicial = await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } });
+    assertOk(detalheInicial);
+    const inicial = json<{ data: { status: string; fornecedorId: string; itens: Array<{ id: string; quantidadeRecebida: string }> } }>(detalheInicial).data;
+    expect(inicial).toMatchObject({ status: "a_fazer", fornecedorId: idsTeste.fornecedor });
+    expect(inicial.itens[0]?.quantidadeRecebida).toBe("0");
+    expect((await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [idsTeste.produto]))?.quantidade_estoque).toBe("0.000");
 
-    const aprovar = await post(`/api/pedidos/${pedidoId}/aprovar`, {});
-    expect(aprovar.statusCode, aprovar.body).toBe(204);
-    const cab = await consultarUm<{ status: string }>("select status from pedidos where id = $1", [pedidoId]);
-    expect(cab?.status).toBe("aprovado");
+    for (const status of ["enviado", "retornado", "confirmado"] as const) {
+      const situacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status });
+      expect(situacao.statusCode, situacao.body).toBe(204);
+    }
 
-    const editar = await contexto.app.inject({
-      method: "PUT",
-      url: `/api/pedidos/${pedidoId}`,
-      headers: { cookie: cookieAdmin },
-      payload: { itens: [{ produtoId: idsTeste.produto, quantidade: 5 }] }
+    const pedidoConfirmado = json<{ data: { itens: Array<{ id: string }> } }>(
+      await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
+    ).data;
+    const itemId = pedidoConfirmado.itens[0]!.id;
+    const primeiroRecebimento = {
+      idempotenciaChave: "00000000-0000-4000-8000-000000000901",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 3 }]
+    };
+    const receber = await post(`/api/pedidos/${pedidoId}/recebimentos`, primeiroRecebimento);
+    assertOk(receber);
+    expect(json<{ data: { status: string; duplicado: boolean } }>(receber).data).toMatchObject({ status: "recebido_parcial", duplicado: false });
+    expect((await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [idsTeste.produto]))?.quantidade_estoque).toBe("3.000");
+
+    const retry = await post(`/api/pedidos/${pedidoId}/recebimentos`, primeiroRecebimento);
+    assertOk(retry);
+    expect(json<{ data: { duplicado: boolean } }>(retry).data.duplicado).toBe(true);
+    expect((await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [idsTeste.produto]))?.quantidade_estoque).toBe("3.000");
+
+    const finalizar = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: "00000000-0000-4000-8000-000000000902",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 2 }]
     });
-    assertProblem(editar, 400);
+    assertOk(finalizar);
+    expect(json<{ data: { status: string } }>(finalizar).data.status).toBe("recebido");
+    expect((await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [idsTeste.produto]))?.quantidade_estoque).toBe("5.000");
+    expect((await consultarUm<{ total: string }>("select count(*)::text as total from estoque_movimentos where pedido_item_id = $1", [itemId]))?.total).toBe("2");
   });
 
-  it("gera pedido AUTOMATICO com a quantidade que enche ate o maximo (max - atual)", async () => {
-    // Produto no minimo: estoque 5, min 10, max 100 -> deve sugerir 95.
-    await executarSql(
-      "update produtos set quantidade_estoque = '5', estoque_min = '10', estoque_max = '100' where id = $1",
-      [idsTeste.produto]
-    );
-
-    const gerar = await post("/api/pedidos/gerar-automatico", { empresaId: idsTeste.empresaA });
+  it("pedido manual respeita o maximo e sugestao cria A fazer", async () => {
+    await executarSql("update produtos set quantidade_estoque = '5', estoque_min = '10', estoque_max = '100' where id = $1", [idsTeste.produto]);
+    const gerar = await post("/api/pedidos/gerar-sugestao", { empresaId: idsTeste.empresaA, fornecedorId: idsTeste.fornecedor });
     assertOk(gerar);
     const { id, totalItens } = json<{ data: { id: string; totalItens: number } }>(gerar).data;
     expect(totalItens).toBeGreaterThanOrEqual(1);
-
-    const item = await consultarUm<{ quantidade: string }>(
-      "select quantidade from pedidos_itens where pedido_id = $1 and produto_id = $2",
-      [id, idsTeste.produto]
-    );
-    expect(item?.quantidade).toBe("95.000");
-
-    const cab = await consultarUm<{ tipo: string; status: string }>("select tipo, status from pedidos where id = $1", [
-      id
-    ]);
-    expect(cab).toMatchObject({ tipo: "automatico", status: "rascunho" });
+    expect(await consultarUm<{ status: string; tipo: string }>("select status, tipo from pedidos where id = $1", [id])).toMatchObject({
+      status: "a_fazer",
+      tipo: "automatico"
+    });
   });
 
-  it("gerar-automatico sem produto no minimo retorna 400", async () => {
-    await executarSql("update produtos set estoque_min = null, estoque_max = null where empresa_id = $1", [
-      idsTeste.empresaA
-    ]);
-    const gerar = await post("/api/pedidos/gerar-automatico", { empresaId: idsTeste.empresaA });
-    assertProblem(gerar, 400);
+  it("recusa pedido manual que ultrapassa estoque maximo", async () => {
+    const criar = await post("/api/pedidos", {
+      empresaId: idsTeste.empresaA,
+      fornecedorId: idsTeste.fornecedor,
+      itens: [{ produtoId: idsTeste.produto, quantidade: 96 }]
+    });
+    assertProblem(criar, 400);
   });
 });

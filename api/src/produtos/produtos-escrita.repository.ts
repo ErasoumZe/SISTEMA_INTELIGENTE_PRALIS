@@ -181,7 +181,9 @@ export interface ProdutoParaGravar {
   quantidadeEstoque: number | null;
   estoqueMin: number | null;
   estoqueMax: number | null;
+  areaEstoque: string | null;
   setorEstoque: string | null;
+  curvaAbc: "A" | "B" | "C" | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;
@@ -256,7 +258,9 @@ export async function salvarProdutoRepository(
     quantidadeEstoque: String(input.quantidadeEstoque ?? 0),
     estoqueMin: input.estoqueMin != null ? String(input.estoqueMin) : null,
     estoqueMax: input.estoqueMax != null ? String(input.estoqueMax) : null,
+    areaEstoque: input.areaEstoque,
     setorEstoque: input.setorEstoque,
+    curvaAbc: input.curvaAbc,
     localVenda1: input.localVenda1,
     localVenda2: input.localVenda2,
     fotoUrl: input.fotoUrl

@@ -100,7 +100,9 @@ export async function listarProdutosPaginadoRepository(
       quantidadeEstoque: produtos.quantidadeEstoque,
       estoqueMin: produtos.estoqueMin,
       estoqueMax: produtos.estoqueMax,
+      areaEstoque: produtos.areaEstoque,
       setorEstoque: produtos.setorEstoque,
+      curvaAbc: produtos.curvaAbc,
       precoVenda: produtos.precoVenda,
       fotoUrl: produtos.fotoUrl,
       criadoPorNome: perfisUsuarios.nome

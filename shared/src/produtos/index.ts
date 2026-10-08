@@ -98,7 +98,9 @@ export const produtoPayloadSchema = z.object({
   quantidadeEstoque: z.coerce.number().min(0).optional().nullable(),
   estoqueMin: z.coerce.number().min(0).optional().nullable(),
   estoqueMax: z.coerce.number().min(0).optional().nullable(),
+  areaEstoque: z.string().trim().max(120).optional().nullable(),
   setorEstoque: z.string().optional().nullable(),
+  curvaAbc: z.enum(["A", "B", "C"]).optional().nullable(),
   localVenda1: z.string().optional().nullable(),
   localVenda2: z.string().optional().nullable(),
   fotoUrl: z.string().optional().nullable(),
@@ -172,7 +174,9 @@ export interface ProdutoResumo {
   quantidadeEstoque: string;
   estoqueMin: string | null;
   estoqueMax: string | null;
+  areaEstoque: string | null;
   setorEstoque: string | null;
+  curvaAbc: "A" | "B" | "C" | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
   fotoUrl: string | null;
@@ -227,7 +231,9 @@ export interface ProdutoDetalhe {
   quantidadeEstoque: string;
   estoqueMin: string | null;
   estoqueMax: string | null;
+  areaEstoque: string | null;
   setorEstoque: string | null;
+  curvaAbc: "A" | "B" | "C" | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;

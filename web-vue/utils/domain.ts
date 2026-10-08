@@ -140,6 +140,12 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "estoque_produtos_visualizar",
     icone: "mdi-warehouse"
   },
+  conferencias_estoque: {
+    id: "conferencias_estoque",
+    titulo: "Conferências de estoque",
+    permissao: "conferencias_estoque_visualizar",
+    icone: "mdi-clipboard-check-outline"
+  },
   relatorio_dre: {
     id: "relatorio_dre",
     titulo: "Relatórios de DRE",

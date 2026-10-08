@@ -48,6 +48,10 @@ function tabelasDoArrayDa0002(): string[] {
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
   "campanhas",
+  // Conferencia nasce apenas como agenda; nao ha escritor de atualizacao de status nesta entrega.
+  // Quando a contagem fisica ganhar conclusao/cancelamento, ela precisa sair desta lista com o
+  // trigger correspondente na mesma vertical.
+  "conferencias_estoque",
   "fechamentos_caixa_relatorios_maquininha",
   "maquininhas",
   "notas_fiscais",
