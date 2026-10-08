@@ -95,6 +95,8 @@ O cargo **Compras** existe no seed e no catálogo de permissões. Vê Pedidos, M
 
 ## 5. Lacunas comprovadas para Compras operar de ponta a ponta
 
+> **Decisão posterior à auditoria — R-208, José, 08/10/2026:** só o recebimento físico, no status **Recebido**, aumenta o estoque; e aumenta pela quantidade efetivamente conferida. Pedido, envio, negociação, confirmação, Mercadoria e NF-e continuam sem efeito de estoque até existir o ato único de recebimento auditável.
+
 | Prioridade | Lacuna                      | Evidência                                                                                                                                                        | Consequência prática                                                                                |
 | ---------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | P0         | Dados reais em produção     | O seed/planilha é idempotente, mas o registro histórico diz que a carga validada foi somente no dev; não foi feita consulta ao banco de produção nesta auditoria | Pedido, mínimo/máximo e relatórios não representam a operação até a carga ser validada e autorizada |

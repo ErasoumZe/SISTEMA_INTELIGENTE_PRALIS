@@ -1175,6 +1175,12 @@ Toda venda cancelada já exige no CREARE login/autorização do gerente e motivo
 
 O motivo aparece em modo somente leitura no relatório final e no dossiê da Tesouraria. Ausência de motivo no dado integrado é uma pendência de integração/auditoria visível, não uma oportunidade para reescrever o fato em outro sistema.
 
+### R-213 — Recebimento físico é a única entrada de estoque (José, 08/10/2026)
+
+Somente o ato de marcar um pedido como **Recebido**, depois da conferência física, aumenta o estoque. O saldo sobe pela **quantidade efetivamente conferida**, nunca pela quantidade inicialmente pedida, enviada, negociada ou confirmada. Criar pedido, enviá-lo ao fornecedor, negociar preço, confirmar o pedido, aprovar Mercadoria ou importar NF-e não altera estoque por si só. Toda entrada precisa deixar ator, data/hora do servidor, pedido, itens e quantidade recebida auditáveis; não existe campo livre para aumentar o saldo do produto.
+
+Esta regra não define ainda recebimento parcial, saída por venda/produção/perda, ajuste de inventário ou o gatilho automático de reposição. Esses atos exigem decisão própria antes de qualquer implementação.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
