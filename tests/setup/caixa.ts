@@ -6,7 +6,7 @@ import { consultarUm, executarSql, json } from "./integracao.js";
 
 const arquivoPngMinimo = Buffer.from("89504e470d0a1a0a0000000049454e44ae426082", "hex");
 
-function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao") {
+function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare") {
   const boundary = `----padaria-caixa-${randomUUID()}`;
   const inicio = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
@@ -182,7 +182,7 @@ export async function prepararFechamentoValido(
   });
   expect(inicio.statusCode, inicio.body).toBe(200);
 
-  async function anexar(tipo: "folha_fechamento" | "comprovante_cartao") {
+  async function anexar(tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare") {
     const { boundary, corpo } = multipartAnexoFechamento(tipo);
     const resposta = await app.inject({
       method: "POST",
@@ -195,12 +195,26 @@ export async function prepararFechamentoValido(
   }
 
   const folhaId = await anexar("folha_fechamento");
-  const anexoManhaId = await anexar("comprovante_cartao");
-  const anexoTardeId = await anexar("comprovante_cartao");
+  const anexoMaquininhaId = await anexar("comprovante_cartao");
+  const anexoCreareId = await anexar("relatorio_vendas_creare");
   const relatorioVendas = await app.inject({
     method: "POST",
     url: `/api/caixa/${entrada.caixaId}/relatorio-vendas`,
-    headers: { cookie: entrada.cookieOperador }
+    headers: { cookie: entrada.cookieOperador },
+    payload: {
+      anexoId: anexoCreareId,
+      leituraCreare: {
+        documentoLegivel: true,
+        totalBruto: 0,
+        dinheiro: 0,
+        credito: 0,
+        debito: 0,
+        pix: 0,
+        voucher: 0,
+        despesasExcetoSangria: 0,
+        resultadoFinal: 0
+      }
+    }
   });
   expect(relatorioVendas.statusCode, relatorioVendas.body).toBe(200);
 
@@ -221,10 +235,10 @@ export async function prepararFechamentoValido(
     method: "PUT",
     url: `/api/caixa/${entrada.caixaId}/relatorio-maquininha`,
     headers: { cookie: entrada.cookieOperador },
-    payload: { anexoManhaId, leituraManha: leitura, anexoTardeId, leituraTarde: leitura }
+    payload: { anexoId: anexoMaquininhaId, leituraAcumulada: leitura }
   });
   expect(relatorioMaquininha.statusCode, relatorioMaquininha.body).toBe(200);
-  return { folhaId, anexoManhaId, anexoTardeId };
+  return { folhaId, anexoMaquininhaId, anexoCreareId };
 }
 
 /** Cria um retorno/sangria com a bolsa retornavel recebida na abertura do mesmo caixa. */
