@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, onTestFinished } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { cookieSessao } from "./auth.js";
 import { idsTeste } from "./contexto.js";
 import { consultarUm, executarSql, json } from "./integracao.js";
 
@@ -46,7 +47,7 @@ export function registrarEncerramentoCaixaParaTeste(caixaId: string) {
            data_hora_fechamento = coalesce(data_hora_fechamento, now()),
            fechado_em = coalesce(fechado_em, now()),
            fechado_por = coalesce(fechado_por, usuario_caixa_id)
-       where id = $1 and status = 'aberto'`,
+       where id = $1 and status <> 'fechado'`,
       [caixaId]
     );
   });
@@ -138,10 +139,15 @@ export async function abrirCaixaDoOperador(
   const lacreRetorno = lacresRetorno[0]!;
   const lacreFechamento = entrada.lacreFechamento ?? `TESTE-FECHAMENTO-${pdvId}`;
   const valorAbertura = entrada.valorAbertura ?? 100;
+  // A Tesouraria e a origem normal do malote. Nunca use o administrador como atalho quando ele
+  // tambem e o operador deste caso: a regra de producao corretamente impede que quem enviou
+  // confirme o proprio recebimento. Casos que precisam provar outro remetente continuam podendo
+  // declara-lo explicitamente.
+  const cookieRemetente = entrada.cookieRemetente ?? (await cookieSessao(app, "tesouraria"));
   const transferencia = await app.inject({
     method: "POST",
     url: "/api/transferencias",
-    headers: { cookie: entrada.cookieRemetente ?? entrada.cookieAdmin },
+    headers: { cookie: cookieRemetente },
     payload: {
       empresaId,
       dataReferencia: "2026-07-31",

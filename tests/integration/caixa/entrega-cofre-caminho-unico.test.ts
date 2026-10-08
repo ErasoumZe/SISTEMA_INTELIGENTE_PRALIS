@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido, prepararFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -51,7 +51,16 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
   const DIA = "2026-08-01";
 
   function inject(method: "GET" | "POST" | "PUT", url: string, cookie: string, payload?: object) {
-    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-CAMINHO-${url}`, ...payload } : payload;
+    const corpo = url.endsWith("/fechar")
+      ? {
+          lacreFechamento: `FCH-CAMINHO-${url}`,
+          caixaResponsavelNome: usuariosTeste.caixa.nome,
+          supervisorResponsavelNome: "Supervisor de teste",
+          valorEspecieFechamento: 0,
+          valorMoedasFechamento: 0,
+          ...payload
+        }
+      : payload;
     return contexto.app.inject({ method, url, headers: { cookie }, ...(corpo ? { payload: corpo } : {}) });
   }
 
@@ -63,7 +72,8 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
       cookieAdmin,
       cookieOperador: cookieCaixa,
       emailOperador: usuariosTeste.caixa.email,
-      nome: `${nome} ${sequencia}`
+      nome: `${nome} ${sequencia}`,
+      valorAbertura: 200
     });
   }
 
@@ -90,13 +100,20 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
       contaOrigemId,
       contaDestinoId,
       nLacreDoc: `P1-GEN-${sequencia}`,
+      ...(contaOrigemId === idsTeste.contaCofre
+        ? {
+            valorEspecieDeclarado: valor,
+            valorMoedasDeclarado: 0,
+            lacreFechamentoPlanejado: `P1-FECHAMENTO-${sequencia}`
+          }
+        : {}),
       tempoConfirmacao: "1dia"
     });
   }
 
-  function transferenciasDoCaixa(caixaId: string) {
+  function transferenciasOperacionaisDoCaixa(caixaId: string) {
     return consultarTodos<{ tipo: string; status: string }>(
-      "select tipo, status from transferencias where caixa_id = $1 order by criado_em",
+      "select tipo, status from transferencias where caixa_id = $1 and tipo <> 'abertura' order by criado_em",
       [caixaId]
     );
   }
@@ -116,7 +133,7 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
     expect(resposta.body).toMatch(/cofre/iu);
     expect(resposta.body).toMatch(/caixa/iu);
     // E nao pode sobrar linha nenhuma: recusa que grava metade e pior do que recusa nenhuma.
-    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([]);
+    expect(await transferenciasOperacionaisDoCaixa(fx.caixaId)).toEqual([]);
   });
 
   // ------------------------------------------------------------------------------------------
@@ -131,14 +148,12 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
     // Pelo caminho canonico a mesma entrega acontece — e ai ela TRAVA o fechamento, como a R-171
     // manda. E este o contraste do caso: fechar a porta nao some com a operacao, devolve ela para
     // o fluxo que tem conferencia, lacre e ordem.
-    const entrega = await inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
-      valor: 200,
-      lacre: `P1-CANONICO-${sequencia}`,
-      idempotenciaChave: randomUUID()
-    });
-    expect(entrega.statusCode, entrega.body).toBe(200);
-    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([{ tipo: "retorno", status: "pendente" }]);
+    await criarRetornoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId, valor: 200 });
+    expect(await transferenciasOperacionaisDoCaixa(fx.caixaId)).toEqual([{ tipo: "retorno", status: "pendente" }]);
 
+    // A guarda de retorno pendente e avaliada depois de o operador concluir as etapas obrigatorias
+    // do fechamento. Sem esse preparo o 409 de etapas incompletas esconderia a regra que este caso prova.
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId });
     assertProblem(await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, { observacao: "Turno" }), 400);
   });
 
@@ -211,7 +226,7 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
       expect(resposta.statusCode, resposta.body).toBe(404);
     }
     // E nenhuma delas deixou rastro: rota removida nao grava linha nem meia linha.
-    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([]);
+    expect(await transferenciasOperacionaisDoCaixa(fx.caixaId)).toEqual([]);
   });
 
   // ------------------------------------------------------------------------------------------
@@ -248,7 +263,10 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
 
     // `agendada` nunca contou como saida (`transferenciaContaComoSaida`), entao o saldo do turno
     // ignora a linha e o fechamento apura os R$ 200 da venda como sobra a devolver.
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId });
     const fechar = await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, {
+      lacreFechamento: fx.lacreFechamento,
+      valorEspecieFechamento: 200,
       observacao: "Turno com ordem legada"
     });
     expect(fechar.statusCode, fechar.body).toBe(204);

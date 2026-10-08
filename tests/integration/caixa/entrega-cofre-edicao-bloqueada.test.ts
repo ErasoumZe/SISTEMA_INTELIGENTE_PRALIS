@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -55,7 +55,8 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
       cookieAdmin,
       cookieOperador: cookieAdmin,
       emailOperador: usuariosTeste.admin.email,
-      nome: `${nome} ${sequencia}`
+      nome: `${nome} ${sequencia}`,
+      valorAbertura: 200
     });
   }
 
@@ -77,13 +78,8 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
   }
 
   // Caminho canonico: o unico que grava `retorno`.
-  async function entregarAoCofre(caixaId: string, valor: number, lacre: string) {
-    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieAdmin, {
-      valor,
-      lacre,
-      idempotenciaChave: randomUUID()
-    });
-    expect(resposta.statusCode, resposta.body).toBe(200);
+  async function entregarAoCofre(caixaId: string, valor: number) {
+    await criarRetornoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId, valor });
     const movimento = await consultarUm<{ id: string }>(
       "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [caixaId]
@@ -140,7 +136,7 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
   it("Deve_RecusarAEdicao_Quando_OPUTTrocaODestinoDeUmaEntregaAoCofre", async () => {
     const fx = await novoCaixa("P1 PUT entrega");
     await venda(500);
-    const entrega = await entregarAoCofre(fx.caixaId, 200, `P1-PUT-ENTREGA-${sequencia}`);
+    const entrega = await entregarAoCofre(fx.caixaId, 200);
     const destinoAlternativo = await contaNova("Conta desvio");
 
     const resposta = await editar(entrega, {
