@@ -57,7 +57,7 @@ describe("caixa - transferencia de retorno (M2)", () => {
       emailOperador: usuariosTeste.admin.email,
       nome,
       valorAbertura,
-      lacresRetorno,
+      ...(lacresRetorno ? { lacresRetorno } : {}),
       dataHoraAbertura: "2026-07-31T08:00"
     });
   }
