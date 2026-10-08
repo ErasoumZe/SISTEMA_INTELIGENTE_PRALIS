@@ -2162,6 +2162,7 @@ export async function listarHistoricoCaixaRepository(
       turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,
       fechadoPor: fechamentosCaixa.fechadoPor,
       fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,
