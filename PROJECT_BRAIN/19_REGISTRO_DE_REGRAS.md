@@ -277,8 +277,8 @@ Estado confirmado no código e nos testes:
 | R-019          | ✅     | confirmação com valor divergente emite `transferencia_divergencia` para destinatário e Tesouraria                                         |
 | R-021 (quebra) | ✅     | quebra não altera `contas` e vive em tabela própria, com `empresa_id` e FK composta que impede cruzamento de tenant                       |
 | R-032          | ✅     | Tesouraria, Gerência/Gerente, Financeiro, Diretor Geral e admin transferem sem caixa; Caixa continua exigindo caixa aberto e conta do PDV |
-| R-033          | ✅     | abertura sem lacre continua permitida e pode começar zerada                                                                               |
-| R-039          | ✅     | cadastro de maquininha por empresa, série, apelido e estado; seleção opcional na abertura                                                 |
+| R-033          | 🚫     | superada no Caixa B1: abertura exige malote/lacre identificado e não existe abertura zerada                                               |
+| R-039          | 🚫     | superada no Caixa B1: maquininha cadastrada e vinculada é obrigatória na abertura e na conferência por turno                              |
 | R-025/R-027    | ✅     | transferência manual exige lacre novo; confirmação rompe o lacre atomicamente e impede reuso                                              |
 | R-028/R-030    | ✅     | só operador de conta destino confirma; disputa entre múltiplos destinos tem uma única atualização vencedora                               |
 | R-029/R-035    | ✅     | agendamento persiste; prazo opcional só é calculado na transferência direta quando explicitamente escolhido                               |
