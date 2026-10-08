@@ -26,12 +26,18 @@ const rotulosStatus: Record<PedidoStatus, string> = {
   recebido: "Recebido",
   cancelado: "Cancelado"
 };
+const etapas: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
 function corStatus(status: PedidoStatus) {
   if (status === "recebido") return "success";
   if (status === "recebido_parcial" || status === "confirmado") return "info";
   if (status === "cancelado") return "error";
   if (status === "retornado") return "warning";
   return "secondary";
+}
+function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
+  if (pedido.status === "cancelado" || pedido.status === "rascunho" || pedido.status === "aprovado")
+    return pedido.status === etapa;
+  return etapas.indexOf(etapa) <= etapas.indexOf(pedido.status);
 }
 </script>
 
@@ -46,7 +52,17 @@ function corStatus(status: PedidoStatus) {
         <v-alert v-if="pedido.status === 'rascunho' || pedido.status === 'aprovado'" type="warning" variant="tonal">
           Pedido histórico: leitura preservada; não entra no novo fluxo sem migração de dados aprovada.
         </v-alert>
-        <div class="responsive-table-shell">
+        <div v-else class="d-flex flex-wrap ga-1">
+          <v-chip
+            v-for="etapa in etapas"
+            :key="etapa"
+            :color="etapaAtual(pedido, etapa) ? corStatus(etapa) : undefined"
+            :variant="etapaAtual(pedido, etapa) ? 'tonal' : 'outlined'"
+            size="small"
+            >{{ rotulosStatus[etapa] }}</v-chip
+          >
+        </div>
+        <div class="d-none d-sm-block">
           <v-table density="compact">
             <thead>
               <tr>
@@ -65,6 +81,20 @@ function corStatus(status: PedidoStatus) {
               </tr>
             </tbody>
           </v-table>
+        </div>
+        <div class="d-sm-none d-grid ga-2">
+          <v-card v-for="item in pedido.itens ?? []" :key="item.id" variant="tonal">
+            <v-card-text class="py-3"
+              ><div class="font-weight-medium">{{ item.descricaoProduto }}</div>
+              <div class="d-flex justify-space-between text-body-2 mt-2">
+                <span>Pedido {{ item.quantidade }}</span
+                ><span>Recebido {{ item.quantidadeRecebida }}</span>
+              </div>
+              <div class="text-caption text-medium-emphasis mt-1">
+                Pendente: {{ item.quantidadePendente }}
+              </div></v-card-text
+            >
+          </v-card>
         </div>
         <v-list v-if="pedido.eventos?.length" density="compact">
           <v-list-subheader>Histórico</v-list-subheader>
