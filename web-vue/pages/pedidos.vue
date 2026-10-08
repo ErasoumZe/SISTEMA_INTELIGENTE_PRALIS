@@ -59,13 +59,6 @@ const rotulosStatus: Record<PedidoStatus, string> = {
   recebido: "Recebido",
   cancelado: "Cancelado"
 };
-function corStatus(status: PedidoStatus) {
-  if (status === "recebido") return "success";
-  if (status === "recebido_parcial" || status === "confirmado") return "info";
-  if (status === "cancelado") return "error";
-  if (status === "retornado") return "warning";
-  return "secondary";
-}
 function notificar(text: string, color = "success") {
   snackbar.text = text;
   snackbar.color = color;
@@ -290,39 +283,7 @@ onMounted(async () => {
       <div v-if="podeCriar" class="d-flex justify-end">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="abrirNovo">Novo pedido manual</v-btn>
       </div>
-      <v-card
-        ><v-card-title>Pedidos</v-card-title
-        ><v-card-text
-          ><div class="responsive-table-shell">
-            <v-table
-              ><thead>
-                <tr>
-                  <th>Fornecedor</th>
-                  <th>Tipo</th>
-                  <th>Situação</th>
-                  <th>Itens</th>
-                  <th>Agendado</th>
-                  <th class="text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!pedidos.length">
-                  <td colspan="6" class="text-center text-medium-emphasis">Nenhum pedido encontrado.</td>
-                </tr>
-                <tr v-for="pedido in pedidos" :key="pedido.id">
-                  <td>{{ pedido.fornecedorNome ?? "Histórico sem fornecedor" }}</td>
-                  <td>{{ pedido.tipo === "automatico" ? "Sugestão" : "Manual" }}</td>
-                  <td>
-                    <v-chip :color="corStatus(pedido.status)" size="small">{{ rotulosStatus[pedido.status] }}</v-chip>
-                  </td>
-                  <td>{{ pedido.totalItens }}</td>
-                  <td>{{ pedido.dataAgendada ? new Date(pedido.dataAgendada).toLocaleString("pt-BR") : "—" }}</td>
-                  <td class="text-right">
-                    <v-btn icon="mdi-eye" size="small" variant="text" @click="verPedido(pedido.id)" />
-                  </td>
-                </tr></tbody
-            ></v-table></div></v-card-text
-      ></v-card>
+      <PedidosFila :pedidos="pedidos" @abrir="verPedido" />
     </div>
     <PedidoFormDialog
       v-model="dialogForm"
