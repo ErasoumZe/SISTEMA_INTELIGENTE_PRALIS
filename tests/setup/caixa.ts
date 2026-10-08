@@ -66,13 +66,25 @@ export async function abrirCaixaDoOperador(
   app: FastifyInstance,
   entrada: {
     cookieAdmin: string;
+    // Quando o caso exercita a abertura, o malote precisa ter sido enviado por outro perfil:
+    // quem enviou nao pode confirmar a propria transferencia abrindo o caixa.
+    cookieRemetente?: string;
     cookieOperador: string;
     emailOperador: string;
     nome: string;
     dataHoraAbertura?: string;
     empresaId?: string;
+    lacreRetorno?: string;
+    lacreFechamento?: string;
   }
-): Promise<{ caixaId: string; contaId: string; pdvId: string; usuarioId: string; lacreFechamento: string }> {
+): Promise<{
+  caixaId: string;
+  contaId: string;
+  pdvId: string;
+  usuarioId: string;
+  lacreRetorno: string;
+  lacreFechamento: string;
+}> {
   const empresaId = entrada.empresaId ?? idsTeste.empresaA;
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
     entrada.emailOperador
@@ -120,12 +132,12 @@ export async function abrirCaixaDoOperador(
   const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
 
   const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
-  const lacreRetorno = `TESTE-RETORNO-${pdvId}`;
-  const lacreFechamento = `TESTE-FECHAMENTO-${pdvId}`;
+  const lacreRetorno = entrada.lacreRetorno ?? `TESTE-RETORNO-${pdvId}`;
+  const lacreFechamento = entrada.lacreFechamento ?? `TESTE-FECHAMENTO-${pdvId}`;
   const transferencia = await app.inject({
     method: "POST",
     url: "/api/transferencias",
-    headers: { cookie: entrada.cookieAdmin },
+    headers: { cookie: entrada.cookieRemetente ?? entrada.cookieAdmin },
     payload: {
       empresaId,
       dataReferencia: "2026-07-31",
@@ -162,7 +174,7 @@ export async function abrirCaixaDoOperador(
   const caixaId = json<{ data: { id: string } }>(abertura).data.id;
   registrarEncerramentoCaixaParaTeste(caixaId);
 
-  return { caixaId, contaId, pdvId, usuarioId: usuario.id, lacreFechamento };
+  return { caixaId, contaId, pdvId, usuarioId: usuario.id, lacreRetorno, lacreFechamento };
 }
 
 /**

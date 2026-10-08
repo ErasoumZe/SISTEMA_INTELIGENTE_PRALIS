@@ -536,19 +536,25 @@ export async function recusarConferencia(
       especieContadaCentavos !== null &&
       moedasContadasCentavos !== null
     ) {
+      // A recusa pode ocorrer apenas pelo lacre ou pela observacao do malote, mesmo quando a
+      // contagem fisica bate. A trilha de recusa guarda o motivo; esta tabela representa somente
+      // o resultado da contagem e sua constraint exige observacao nula quando ela e convergente.
+      const contagemFisicaDivergente =
+        atual.valorEspecieDeclaradoCentavos !== especieContadaCentavos ||
+        atual.valorMoedasDeclaradoCentavos !== moedasContadasCentavos;
       await criarConferenciaFisicaTransferenciaRepository(
         {
           empresaId: atual.empresaId,
           transferenciaId,
           fechamentoCaixaId: atual.caixaId,
           etapa: "retorno_sangria",
-          resultado: "divergente",
+          resultado: contagemFisicaDivergente ? "divergente" : "convergente",
           encerraConferencia: dados.encerrar,
           valorEspecieDeclaradoCentavos: atual.valorEspecieDeclaradoCentavos,
           valorMoedasDeclaradoCentavos: atual.valorMoedasDeclaradoCentavos,
           valorEspecieContadoCentavos: especieContadaCentavos,
           valorMoedasContadoCentavos: moedasContadasCentavos,
-          observacao: dados.motivo.trim(),
+          observacao: contagemFisicaDivergente ? dados.motivo.trim() : null,
           conferidoPor: perfil.usuarioId,
           conferidoEm: new Date()
         },
