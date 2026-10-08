@@ -8,12 +8,16 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
   let adminId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
+    ]);
     adminId = (await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
       usuariosTeste.admin.email
     ]))!.usuario_id;
@@ -45,6 +49,39 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
       turnoId,
       idsTeste.colaboradorAdmin
     ]);
+    const maquininha = await contexto.app.inject({
+      method: "POST",
+      url: "/api/maquininhas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        numeroSerie: `TURNO-ABERTURA-${turnoId}`,
+        apelido: "Maquininha do turno",
+        ativo: true
+      }
+    });
+    expect(maquininha.statusCode, maquininha.body).toBe(201);
+    const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
+    const lacreAbertura = `TURNO-ABERTURA-${turnoId}`;
+    const malote = await contexto.app.inject({
+      method: "POST",
+      url: "/api/transferencias",
+      headers: { cookie: cookieTesouraria },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: "2026-07-16",
+        descricao: "Malote para teste de turno",
+        valorOriginal: 100,
+        valorEspecieDeclarado: 100,
+        valorMoedasDeclarado: 0,
+        contaOrigemId: idsTeste.contaCofre,
+        contaDestinoId: idsTeste.contaLivre,
+        nLacreDoc: lacreAbertura,
+        lacreFechamentoPlanejado: `TURNO-FECHAMENTO-${turnoId}`
+      }
+    });
+    expect(malote.statusCode, malote.body).toBe(201);
+
     const abrir = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -53,7 +90,10 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
         empresaId: idsTeste.empresaA,
         pdvId: idsTeste.pdvLivre,
         usuarioCaixaId: adminId,
-        dataHoraAbertura: "2026-07-16T08:00"
+        maquininhaId,
+        lacreAbertura,
+        caixaResponsavelNome: "Admin de teste",
+        supervisorResponsavelNome: "Supervisor de teste"
       }
     });
     expect(abrir.statusCode, abrir.body).toBe(201);
