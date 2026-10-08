@@ -72,7 +72,7 @@ export async function abrirCaixaDoOperador(
     dataHoraAbertura?: string;
     empresaId?: string;
   }
-): Promise<{ caixaId: string; contaId: string; pdvId: string; usuarioId: string }> {
+): Promise<{ caixaId: string; contaId: string; pdvId: string; usuarioId: string; lacreFechamento: string }> {
   const empresaId = entrada.empresaId ?? idsTeste.empresaA;
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
     entrada.emailOperador
@@ -121,6 +121,7 @@ export async function abrirCaixaDoOperador(
 
   const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
   const lacreRetorno = `TESTE-RETORNO-${pdvId}`;
+  const lacreFechamento = `TESTE-FECHAMENTO-${pdvId}`;
   const transferencia = await app.inject({
     method: "POST",
     url: "/api/transferencias",
@@ -136,7 +137,8 @@ export async function abrirCaixaDoOperador(
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: lacreAbertura,
-      lacresRetorno: [lacreRetorno]
+      lacresRetorno: [lacreRetorno],
+      lacreFechamentoPlanejado: lacreFechamento
     }
   });
   expect(transferencia.statusCode, transferencia.body).toBe(201);
@@ -160,7 +162,7 @@ export async function abrirCaixaDoOperador(
   const caixaId = json<{ data: { id: string } }>(abertura).data.id;
   registrarEncerramentoCaixaParaTeste(caixaId);
 
-  return { caixaId, contaId, pdvId, usuarioId: usuario.id };
+  return { caixaId, contaId, pdvId, usuarioId: usuario.id, lacreFechamento };
 }
 
 /**

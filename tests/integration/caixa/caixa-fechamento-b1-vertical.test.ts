@@ -61,7 +61,7 @@ describe("caixa - fechamento B1 vertical", () => {
       url: `/api/caixa/${caixa.caixaId}/fechar`,
       headers: { cookie: cookieCaixa },
       payload: {
-        lacreFechamento: `FCH-B1-${caixa.caixaId}`,
+        lacreFechamento: caixa.lacreFechamento,
         caixaResponsavelNome: "Fluxo B1",
         supervisorResponsavelNome: "Supervisor de teste",
         valorEspecieFechamento: 0,
