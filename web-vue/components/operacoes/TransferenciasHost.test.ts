@@ -132,7 +132,7 @@ describe("host único +Novo / Transferências", () => {
 
   it("troca a aba no mesmo host e não mantém comum visível sobre retorno", async () => {
     const { wrapper, empresaId, modalOperacaoAberto } = montar(true, true, true);
-    await wrapper.get('[data-tab="retorno"]').trigger("click");
+    await wrapper.getComponent({ name: "VTabs" }).setValue("retorno");
     await flushPromises();
     expect(wrapper.get(".transferencias-host__comum").attributes("style")).toContain("display: none");
     expect(wrapper.findComponent({ name: "CaixaRetornoSangriaForm" }).exists()).toBe(true);
