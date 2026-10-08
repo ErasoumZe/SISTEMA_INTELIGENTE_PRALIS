@@ -87,6 +87,43 @@ export async function abrirCaixaDoOperador(
   expect(pdv.statusCode, pdv.body).toBe(201);
   const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
+  // A abertura da referencia 5174 sempre registra a maquininha vinculada e consome um malote
+  // pendente identificado por lacre. A fixture precisa montar esse estado pelo mesmo contrato
+  // publico: sem isso, todos os testes que dependem de um caixa proprio falham antes de provar
+  // a regra que vieram testar.
+  const maquininha = await app.inject({
+    method: "POST",
+    url: "/api/maquininhas",
+    headers: { cookie: entrada.cookieAdmin },
+    payload: {
+      empresaId,
+      numeroSerie: `TESTE-ABERTURA-${pdvId}`,
+      apelido: `Maquininha ${entrada.nome}`,
+      ativo: true
+    }
+  });
+  expect(maquininha.statusCode, maquininha.body).toBe(201);
+  const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
+
+  const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
+  const transferencia = await app.inject({
+    method: "POST",
+    url: "/api/transferencias",
+    headers: { cookie: entrada.cookieAdmin },
+    payload: {
+      empresaId,
+      dataReferencia: "2026-07-31",
+      descricao: `Fundo de abertura ${entrada.nome}`,
+      valorOriginal: 100,
+      valorEspecieDeclarado: 100,
+      valorMoedasDeclarado: 0,
+      contaOrigemId: idsTeste.contaBanco,
+      contaDestinoId: contaId,
+      nLacreDoc: lacreAbertura
+    }
+  });
+  expect(transferencia.statusCode, transferencia.body).toBe(201);
+
   const abertura = await app.inject({
     method: "POST",
     url: "/api/caixa/abrir",
@@ -95,7 +132,11 @@ export async function abrirCaixaDoOperador(
       empresaId,
       pdvId,
       usuarioCaixaId: usuario.id,
-      dataHoraAbertura: entrada.dataHoraAbertura ?? "2026-07-31T08:00"
+      dataHoraAbertura: entrada.dataHoraAbertura ?? "2026-07-31T08:00",
+      maquininhaId,
+      lacreAbertura,
+      caixaResponsavelNome: entrada.nome,
+      supervisorResponsavelNome: "Supervisor de teste"
     }
   });
   expect(abertura.statusCode, abertura.body).toBe(201);
