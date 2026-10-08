@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { idsTeste } from "./contexto.js";
 import { consultarUm, executarSql, json } from "./integracao.js";
 
-const arquivoPngMinimo = Buffer.from("89504e470d0a1a0000000049454e44ae426082", "hex");
+const arquivoPngMinimo = Buffer.from("89504e470d0a1a0a0000000049454e44ae426082", "hex");
 
 function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao") {
   const boundary = `----padaria-caixa-${randomUUID()}`;
