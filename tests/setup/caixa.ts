@@ -74,6 +74,8 @@ export async function abrirCaixaDoOperador(
     nome: string;
     dataHoraAbertura?: string;
     empresaId?: string;
+    valorAbertura?: number;
+    lacresRetorno?: string[];
     lacreRetorno?: string;
     lacreFechamento?: string;
   }
@@ -99,7 +101,7 @@ export async function abrirCaixaDoOperador(
     method: "POST",
     url: "/api/contas",
     headers: { cookie: entrada.cookieAdmin },
-    payload: { empresaId, nome: `Conta ${entrada.nome}`, saldoInicial: 100_000 }
+    payload: { empresaId, nome: `Conta ${entrada.nome}`, saldoInicial: 100_000, usuariosIds: [usuario.id] }
   });
   expect(conta.statusCode, conta.body).toBe(201);
   const contaId = json<{ data: { id: string } }>(conta).data.id;
@@ -132,8 +134,10 @@ export async function abrirCaixaDoOperador(
   const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
 
   const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
-  const lacreRetorno = entrada.lacreRetorno ?? `TESTE-RETORNO-${pdvId}`;
+  const lacresRetorno = entrada.lacresRetorno ?? [entrada.lacreRetorno ?? `TESTE-RETORNO-${pdvId}`];
+  const lacreRetorno = lacresRetorno[0]!;
   const lacreFechamento = entrada.lacreFechamento ?? `TESTE-FECHAMENTO-${pdvId}`;
+  const valorAbertura = entrada.valorAbertura ?? 100;
   const transferencia = await app.inject({
     method: "POST",
     url: "/api/transferencias",
@@ -142,14 +146,14 @@ export async function abrirCaixaDoOperador(
       empresaId,
       dataReferencia: "2026-07-31",
       descricao: `Fundo de abertura ${entrada.nome}`,
-      valorOriginal: 100,
-      valorEspecieDeclarado: 100,
+      valorOriginal: valorAbertura,
+      valorEspecieDeclarado: valorAbertura,
       valorMoedasDeclarado: 0,
       // Bolsas/lacres de retorno so podem acompanhar o malote Cofre -> Caixa.
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: lacreAbertura,
-      lacresRetorno: [lacreRetorno],
+      lacresRetorno,
       lacreFechamentoPlanejado: lacreFechamento
     }
   });

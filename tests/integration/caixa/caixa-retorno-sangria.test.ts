@@ -1,10 +1,14 @@
-import { randomUUID } from "node:crypto";
 import { diaNegocio } from "@padaria/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  criarRetornoValido,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararFechamentoValido
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -32,17 +36,8 @@ describe("caixa - transferencia de retorno (M2)", () => {
   const empresaId = idsTeste.empresaA;
   const hoje = diaNegocio(new Date());
 
-  async function usuarioAdminId() {
-    const u = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
-    ]);
-    if (!u) throw new Error("Usuario admin nao encontrado");
-    return u.id;
-  }
-
   function post(url: string, payload: object) {
-    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-RETORNO-${url}`, ...payload } : payload;
-    return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload: corpo });
+    return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
   }
 
   async function criar(url: string, payload: object) {
@@ -51,43 +46,20 @@ describe("caixa - transferencia de retorno (M2)", () => {
     return json<{ data: { id: string } }>(r).data.id;
   }
 
-  // R-040: o fundo chega por uma transferencia da TESOURARIA, e o caixa a confirma ao abrir
-  // informando o lacre. Quem envia nunca confirma o proprio envio (R-028) — dai a tesouraria.
-  async function abrir(nome: string, fundo?: { lacre: string; valor: number }) {
-    const contaId = await criar("/api/contas", {
-      empresaId,
-      nome: `Conta ${nome}`,
-      usuariosIds: [await usuarioAdminId()]
+  // A fixture percorre a mesma abertura da porta 5174: malote Tesouraria -> PDV, composicao
+  // fisica, lacres retornaveis, lacre final e maquininha. Caixa sem malote nao e mais um estado
+  // valido para os cenarios de retorno.
+  function abrir(nome: string, valorAbertura = 100, lacresRetorno?: string[]) {
+    return abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome,
+      valorAbertura,
+      lacresRetorno,
+      dataHoraAbertura: "2026-07-31T08:00"
     });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
-    if (fundo) {
-      const envio = await contexto.app.inject({
-        method: "POST",
-        url: "/api/transferencias",
-        headers: { cookie: cookieTesouraria },
-        payload: {
-          empresaId,
-          dataReferencia: hoje,
-          descricao: `Fundo de troco ${nome}`,
-          valorOriginal: fundo.valor,
-          contaOrigemId: idsTeste.contaCofre,
-          contaDestinoId: contaId,
-          nLacreDoc: fundo.lacre,
-          tempoConfirmacao: "1dia"
-        }
-      });
-      expect(envio.statusCode, envio.body).toBe(201);
-    }
-    const abrirResp = await post("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      ...(fundo ? { lacreAbertura: fundo.lacre } : {})
-    });
-    expect(abrirResp.statusCode, abrirResp.body).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrirResp).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
-    return { contaId, pdvId, caixaId };
   }
 
   async function venda(contaId: string, pdvId: string, dataReferencia: string, valor: number) {
@@ -107,13 +79,8 @@ describe("caixa - transferencia de retorno (M2)", () => {
     });
   }
 
-  // B2: chave nova a cada chamada — aqui cada uma e uma INTENCAO diferente de verdade. Repetir a
-  // chave e o que os testes de idempotencia fazem, de proposito, em caixa-idempotencia-cofre.
-  function transferenciaCofre(caixaId: string, valor: number) {
-    return post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      valor,
-      idempotenciaChave: randomUUID()
-    });
+  async function transferenciaCofre(caixaId: string, valor: number) {
+    return criarRetornoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId, valor });
   }
 
   async function resumoAtual() {
@@ -144,10 +111,7 @@ describe("caixa - transferencia de retorno (M2)", () => {
   }
 
   it("Retorno apenas MOVE dinheiro: o saldo fisico cai e nao ha divida com o cofre (R-001)", async () => {
-    const { contaId, pdvId, caixaId } = await abrir("retorno", {
-      lacre: "LAC-RETORNO",
-      valor: 490
-    });
+    const { contaId, pdvId, caixaId } = await abrir("retorno", 490);
 
     await venda(contaId, pdvId, hoje, 490);
     // R-001: o fundo e fundo, nao emprestimo — dividaCofre = 0, sem deficit a rastrear.
@@ -156,8 +120,7 @@ describe("caixa - transferencia de retorno (M2)", () => {
     expect(await resumoAtual()).toMatchObject({ dividaCofre: 0, saldoProprio: 490, saldo: 980 });
 
     // Retorno de 200: so MOVE dinheiro -> o fisico cai 200 e o operacional nao se mexe.
-    const retorno = await transferenciaCofre(caixaId, 200);
-    expect(retorno.statusCode, retorno.body).toBe(200);
+    await transferenciaCofre(caixaId, 200);
     expect(await resumoAtual()).toMatchObject({ dividaCofre: 0, saldoProprio: 490, saldo: 780 });
   });
 
@@ -172,9 +135,13 @@ describe("caixa - transferencia de retorno (M2)", () => {
         dataReferencia: hoje,
         descricao: "Suprimento direto da Tesouraria",
         valorOriginal: 200,
+        valorEspecieDeclarado: 200,
+        valorMoedasDeclarado: 0,
         contaOrigemId: idsTeste.contaCofre,
         contaDestinoId: contaId,
-        nLacreDoc: "LAC-SUPRIMENTO-TESOURARIA"
+        nLacreDoc: "LAC-SUPRIMENTO-TESOURARIA",
+        lacresRetorno: ["RET-SUPRIMENTO-TESOURARIA"],
+        lacreFechamentoPlanejado: "FCH-SUPRIMENTO-TESOURARIA"
       }
     });
     expect(envio.statusCode, envio.body).toBe(201);
@@ -193,47 +160,38 @@ describe("caixa - transferencia de retorno (M2)", () => {
     });
     expect(conferencia.statusCode, conferencia.body).toBe(200);
     expect(await resumoAtual()).toMatchObject({
-      totalTransferencias: 200,
-      totalTransferenciasEntrada: 200,
-      saldo: 200
+      totalTransferencias: 300,
+      totalTransferenciasEntrada: 300,
+      saldo: 300
     });
   });
 
   it("Retorno da sobra zera o saldo e libera o fechamento", async () => {
-    const { contaId, pdvId, caixaId } = await abrir("retorno-fechamento");
+    const { contaId, pdvId, caixaId, lacreFechamento } = await abrir("retorno-fechamento");
     await venda(contaId, pdvId, hoje, 300);
 
     const resumo = await resumoAtual();
-    expect(resumo).toMatchObject({ saldo: 300, propostaRetorno: 300 });
+    expect(resumo).toMatchObject({ saldo: 400, propostaRetorno: 400 });
 
-    const retorno = await transferenciaCofre(caixaId, resumo["propostaRetorno"] ?? 0);
-    expect(retorno.statusCode, retorno.body).toBe(200);
+    await transferenciaCofre(caixaId, resumo["propostaRetorno"] ?? 0);
     expect(await resumoAtual()).toMatchObject({ saldo: 0, propostaRetorno: 0 });
 
-    // G1/R-171: zerar o saldo nao basta mais. O retorno saiu do caixa e esta `pendente` — dinheiro
-    // na rua trava o fechamento comum ate o cofre conferir. O que libera e a conferencia.
-    const travado = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento com retorno" });
-    expect(travado.statusCode, travado.body).toBe(400);
-    expect(travado.body).toMatch(/aguardando confer[eê]ncia/iu);
-
-    const entregue = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and status = 'pendente' order by criado_em desc limit 1",
-      [caixaId]
-    );
-    const conferencia = await contexto.app.inject({
-      method: "POST",
-      url: `/api/transferencias/${entregue!.id}/confirmar`,
-      headers: { cookie: cookieTesouraria },
-      payload: { contaDestinoId: idsTeste.contaCofre, valorRecebido: 300 }
+    // A transferencia continua pendente para auditoria, mas nao desaparece nem trava a conclusao
+    // do turno: as provas e a contagem do fechamento sao a porta de fechamento.
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId });
+    const fechar = await post(`/api/caixa/${caixaId}/fechar`, {
+      observacao: "Fechamento com retorno",
+      lacreFechamento,
+      caixaResponsavelNome: "Operador de teste",
+      supervisorResponsavelNome: "Supervisor de teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
-    expect(conferencia.statusCode, conferencia.body).toBe(200);
-
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento com retorno" });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });
 
   it("Agrega por caixa+dia: 1a/2a saida (abertura+suprimento) e 1a/2a transferencia de retorno", async () => {
-    const { contaId, caixaId } = await abrir("agrega", { lacre: "LAC-AGREGA", valor: 490 });
+    const { contaId, caixaId } = await abrir("agrega", 490, ["RET-AGREGA-001", "RET-AGREGA-002"]);
 
     // 2o suprimento (cofre -> caixa) pela rota manual de transferencias.
     await criar("/api/transferencias", {
@@ -241,13 +199,17 @@ describe("caixa - transferencia de retorno (M2)", () => {
       dataReferencia: hoje,
       descricao: "Suprimento reforco",
       valorOriginal: 100,
+      valorEspecieDeclarado: 100,
+      valorMoedasDeclarado: 0,
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
-      nLacreDoc: "RET-SUPRIMENTO-001"
+      nLacreDoc: "RET-SUPRIMENTO-001",
+      lacresRetorno: ["RET-SUPRIMENTO-002"],
+      lacreFechamentoPlanejado: "FCH-SUPRIMENTO-002"
     });
     // Duas entradas (caixa -> cofre), ambas do tipo canonico retorno.
-    expect((await transferenciaCofre(caixaId, 200)).statusCode).toBe(200);
-    expect((await transferenciaCofre(caixaId, 150)).statusCode).toBe(200);
+    await transferenciaCofre(caixaId, 200);
+    await transferenciaCofre(caixaId, 150);
 
     const agg = await agregado(caixaId);
     // SAIDA do cofre = abertura(490) + suprimento(100) = 590; ENTRADA = retornos(200+150) = 350.
