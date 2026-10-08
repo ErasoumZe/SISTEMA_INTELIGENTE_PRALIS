@@ -132,7 +132,8 @@ export async function abrirCaixaDoOperador(
       valorOriginal: 100,
       valorEspecieDeclarado: 100,
       valorMoedasDeclarado: 0,
-      contaOrigemId: idsTeste.contaBanco,
+      // Bolsas/lacres de retorno so podem acompanhar o malote Cofre -> Caixa.
+      contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: lacreAbertura,
       lacresRetorno: [lacreRetorno]
