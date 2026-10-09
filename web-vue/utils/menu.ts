@@ -15,7 +15,7 @@ export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   id: "lancamentos",
   titulo: "Lançamentos",
   icone: "mdi-format-list-checks",
-  ids: ["despesas", "retiradas"]
+  ids: ["despesas", "mercadorias", "retiradas"]
 };
 
 export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
@@ -54,10 +54,9 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "perdas_sobras"]
   },
   {
-    // Cada ato de compra aparece uma vez: estoque, conferencia, pedido, fornecedor e a mercadoria
-    // financeira/NF-e relacionada. Nao existe uma segunda tela para registrar a mesma mercadoria.
+    // R-210: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
     titulo: "Compras",
-    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "mercadorias", "fornecedores"]
+    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "fornecedores"]
   },
   {
     // Resultados – Relatorios + Diferenca de fechamento.
