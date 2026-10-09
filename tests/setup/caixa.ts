@@ -79,6 +79,9 @@ export async function abrirCaixaDoOperador(
     lacresRetorno?: string[];
     lacreRetorno?: string;
     lacreFechamento?: string;
+    // Suites que compartilham um unico caixa no beforeAll deixam o container
+    // descartar o estado ao final; onTestFinished so e valido dentro de um it.
+    registrarLimpeza?: boolean;
   }
 ): Promise<{
   caixaId: string;
@@ -182,7 +185,7 @@ export async function abrirCaixaDoOperador(
   });
   expect(abertura.statusCode, abertura.body).toBe(201);
   const caixaId = json<{ data: { id: string } }>(abertura).data.id;
-  registrarEncerramentoCaixaParaTeste(caixaId);
+  if (entrada.registrarLimpeza !== false) registrarEncerramentoCaixaParaTeste(caixaId);
 
   return { caixaId, contaId, pdvId, usuarioId: usuario.id, lacreRetorno, lacreFechamento };
 }
