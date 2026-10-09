@@ -175,17 +175,6 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     await contexto.fechar();
   });
 
-  async function criar(url: string, payload: object) {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url,
-      headers: { cookie: cookieAdmin },
-      payload
-    });
-    expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
-    return resposta;
-  }
-
   async function enviarVenda(payload: object) {
     const resposta = await contexto.app.inject({
       method: "POST",
