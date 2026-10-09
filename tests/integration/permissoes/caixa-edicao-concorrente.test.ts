@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
@@ -34,56 +35,31 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
   let cookieAdmin = "";
   let cookieMultiempresa = "";
   let cookieCaixa = "";
+  let cookieTesouraria = "";
   let contaDoPdv = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieMultiempresa, cookieCaixa] = await Promise.all([
+    [cookieAdmin, cookieMultiempresa, cookieCaixa, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "multiempresa"),
-      cookieSessao(contexto.app, "caixa")
+      cookieSessao(contexto.app, "caixa"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
 
     // O operador PRECISA de caixa aberto proprio. Sem isto, `obterCaixaParaLancamento` estoura antes
     // de qualquer regra e todo 403 vira "Caixa fechado" — foi assim que o teste da mercadoria
     // passou verde sem nunca alcancar a checagem da conta gravada.
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.caixa.email
-    ]);
-    if (!usuario) throw new Error("Usuario caixa nao encontrado");
-
-    const conta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/contas",
-      headers: { cookie: cookieAdmin },
-      // R-165: fundo para as saidas da corrida; o que o arquivo prova e a atomicidade do
-      // reapontamento do PDV sob lock, nao o saldo.
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV concorrencia", saldoInicial: 100_000 }
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "CX-M06 concorrencia",
+      registrarLimpeza: false
     });
-    expect(conta.statusCode, conta.body).toBe(201);
-    contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
-
-    const pdv = await contexto.app.inject({
-      method: "POST",
-      url: "/api/pdvs",
-      headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "PDV concorrencia", contaId: contaDoPdv, ativo: true }
-    });
-    expect(pdv.statusCode, pdv.body).toBe(201);
-
-    const abertura = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieCaixa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId: json<{ data: { id: string } }>(pdv).data.id,
-        usuarioCaixaId: usuario.id,
-        dataHoraAbertura: "2026-07-31T08:00"
-      }
-    });
-    expect(abertura.statusCode, abertura.body).toBe(201);
+    contaDoPdv = abertura.contaId;
   }, 180_000);
 
   afterAll(async () => contexto.fechar());
