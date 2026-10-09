@@ -25,17 +25,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
 const PDV_EXTERNO = "PDV-41-ROTACAO";
-const DATA_VENDA = "2026-06-30T13:00:00.000Z";
 const VENDA = "R41-ROTACAO-VENDA";
 
 type Resposta = { statusCode: number; body: string; json: () => unknown };
 
-function payloadVenda(idVenda: string) {
+function payloadVenda(idVenda: string, dataHoraVenda: string) {
   return {
     DadosIntegracao: { origem: "vitest-r41-rotacao" },
     Venda: {
@@ -45,7 +44,7 @@ function payloadVenda(idVenda: string) {
       idCliente: null,
       nomeCliente: null,
       documentoCliente: null,
-      dataHoraVenda: DATA_VENDA,
+      dataHoraVenda,
       valorOriginal: 33,
       desconto: 0,
       acrescimo: 0,
@@ -58,7 +57,7 @@ function payloadVenda(idVenda: string) {
         idRegistro: `${idVenda}-ITEM-1`,
         idProduto: "PROD-R41-ROT",
         descricaoProduto: "Sonho (R41 rotacao)",
-        dataHoraItem: DATA_VENDA,
+        dataHoraItem: dataHoraVenda,
         quantidade: 1,
         valorUnitario: 33,
         total: 33,
@@ -72,6 +71,8 @@ function payloadVenda(idVenda: string) {
 describe("#41 · reenvio depois de trocar a chave da integracao", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
+  let dataHoraVenda: string;
   let chaveAntigaId: string;
   let codigoAntigo: string;
   let chaveNovaId: string;
@@ -80,23 +81,21 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
-
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
 
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta R41 rotacao" });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-
-    const pdv = await criar("/api/pdvs", {
-      empresaId: idsTeste.empresaA,
-      nome: "PDV R41 rotacao",
-      contaId,
-      ativo: true
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "R41 rotacao",
+      registrarLimpeza: false
     });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const pdvId = abertura.pdvId;
+    dataHoraVenda = new Date().toISOString();
 
     const vinculo = await contexto.app.inject({
       method: "PUT",
@@ -112,14 +111,6 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
       }
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
-
-    await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: usuario.id,
-      dataHoraAbertura: "2026-06-29T08:00",
-      observacao: "Caixa R41 rotacao"
-    });
 
     // O codigo cru nao volta na resposta da rota (so o id) — ele vive em `integracoes_chaves.codigo`.
     ({ id: chaveAntigaId, codigo: codigoAntigo } = await criarChave());
@@ -160,7 +151,7 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
   }
 
   it("a venda entra uma vez com a chave antiga", async () => {
-    const resposta = await enviarCom(codigoAntigo, payloadVenda(VENDA));
+    const resposta = await enviarCom(codigoAntigo, payloadVenda(VENDA, dataHoraVenda));
     expect(resposta.statusCode, resposta.body).toBe(200);
     expect(json<{ data: { status: string } }>(resposta).data.status).toBe("criado");
 
@@ -181,11 +172,11 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
     expect(chaveNovaId).not.toBe(chaveAntigaId);
 
     // A chave antiga tem de estar mesmo fora do ar — senao a rotacao nao foi rotacao.
-    const comAntiga = await enviarCom(codigoAntigo, payloadVenda(VENDA));
+    const comAntiga = await enviarCom(codigoAntigo, payloadVenda(VENDA, dataHoraVenda));
     expect(comAntiga.statusCode, `a chave inativada deveria ser recusada: ${comAntiga.body}`).toBe(401);
 
     // Payload IDENTICO, chave nova.
-    const resposta = await enviarCom(codigoNovo, payloadVenda(VENDA));
+    const resposta = await enviarCom(codigoNovo, payloadVenda(VENDA, dataHoraVenda));
     expect(resposta.statusCode, resposta.body).toBe(200);
 
     const linhas = await vendasDe(VENDA);
@@ -227,7 +218,7 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
   });
 
   it("reenviar de novo pela chave nova nao cria uma terceira venda", async () => {
-    const resposta = await enviarCom(codigoNovo, payloadVenda(VENDA));
+    const resposta = await enviarCom(codigoNovo, payloadVenda(VENDA, dataHoraVenda));
     expect(resposta.statusCode, resposta.body).toBe(200);
     expect(json<{ data: { status: string } }>(resposta).data.status).toBe("sem_novidade");
     expect((await vendasDe(VENDA)).length).toBe(1);
