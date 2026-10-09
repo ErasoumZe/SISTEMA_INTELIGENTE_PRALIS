@@ -5,6 +5,7 @@ import type { PedidoFormEdicao } from "~/components/pedidos/PedidoFormDialog.vue
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { itemPorTela, mensagemErro } from "~/utils/domain";
+import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 const router = useRouter();
 const { apiGet, apiPost, apiPut, carregarSessao } = useApi();
@@ -27,6 +28,7 @@ const salvando = ref(false);
 const gerando = ref(false);
 const transicionando = ref(false);
 const recebendo = ref(false);
+const tentativaRecebimento = ref<TentativaRecebimento | null>(null);
 const sugestaoFornecedorId = ref("");
 
 function formVazio(): PedidoFormEdicao {
@@ -201,11 +203,18 @@ async function confirmarRecebimento(
   observacao: string
 ) {
   if (!detalhe.value || !itens.length) return notificar("Informe ao menos uma quantidade conferida.", "error");
+  tentativaRecebimento.value = obterTentativaRecebimento(
+    tentativaRecebimento.value,
+    detalhe.value.id,
+    itens,
+    observacao,
+    chaveIdempotencia
+  );
   recebendo.value = true;
   try {
     const resposta = await apiPost<{ status: "recebido" | "recebido_parcial" }>(
       `/api/pedidos/${detalhe.value.id}/recebimentos`,
-      { idempotenciaChave: chaveIdempotencia(), observacao: observacao || null, itens }
+      { idempotenciaChave: tentativaRecebimento.value.chave, observacao: observacao.trim() || null, itens }
     );
     notificar(
       resposta.status === "recebido"
@@ -213,6 +222,7 @@ async function confirmarRecebimento(
         : "Recebimento parcial registrado e estoque atualizado."
     );
     dialogRecebimento.value = false;
+    tentativaRecebimento.value = null;
     await carregarDados();
     await verPedido(detalhe.value.id);
   } catch (causa) {

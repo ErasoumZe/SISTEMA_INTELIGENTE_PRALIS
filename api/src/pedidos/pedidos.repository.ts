@@ -117,7 +117,13 @@ async function inserirItens(pedidoId: string, itens: ItemPedidoParaCriar[], tx: 
 }
 
 async function inserirEvento(
-  input: { empresaId: string; pedidoId: string; status: PedidoStatusNovo; observacao: string | null; criadoPor: string },
+  input: {
+    empresaId: string;
+    pedidoId: string;
+    status: PedidoStatusNovo;
+    observacao: string | null;
+    criadoPor: string;
+  },
   tx: ExecutorBanco
 ): Promise<void> {
   await tx.insert(pedidosEventos).values(input);
@@ -153,7 +159,13 @@ export async function criarPedidoRepository(
     if (!pedido) throw new Error("Pedido nao criado");
     await inserirItens(pedido.id, input.itens, tx);
     await inserirEvento(
-      { empresaId: input.empresaId, pedidoId: pedido.id, status: "a_fazer", observacao: input.observacao, criadoPor: input.criadoPor },
+      {
+        empresaId: input.empresaId,
+        pedidoId: pedido.id,
+        status: "a_fazer",
+        observacao: input.observacao,
+        criadoPor: input.criadoPor
+      },
       tx
     );
     return { id: pedido.id };
@@ -189,7 +201,13 @@ export async function atualizarPedidoRepository(
   });
 }
 
-export type PedidoLinhaBase = { id: string; empresaId: string; status: string; tipo: string; fornecedorId: string | null };
+export type PedidoLinhaBase = {
+  id: string;
+  empresaId: string;
+  status: string;
+  tipo: string;
+  fornecedorId: string | null;
+};
 
 export async function buscarPedidoBaseRepository(
   pedidoId: string,
@@ -241,7 +259,10 @@ export async function listarPedidosRepository(
   return linhas.map(serializarCabecalho);
 }
 
-export async function obterPedidoDetalheRepository(pedidoId: string, db: ExecutorBanco = banco): Promise<PedidoDto | null> {
+export async function obterPedidoDetalheRepository(
+  pedidoId: string,
+  db: ExecutorBanco = banco
+): Promise<PedidoDto | null> {
   const [cabecalho] = await db
     .select({
       id: pedidos.id,
@@ -264,11 +285,23 @@ export async function obterPedidoDetalheRepository(pedidoId: string, db: Executo
   if (!cabecalho) return null;
   const itens = await listarItensDoPedidoRepository(pedidoId, db);
   const eventos: PedidoEventoDto[] = await db
-    .select({ id: pedidosEventos.id, status: pedidosEventos.status, observacao: pedidosEventos.observacao, criadoPor: pedidosEventos.criadoPor, criadoEm: pedidosEventos.criadoEm })
+    .select({
+      id: pedidosEventos.id,
+      status: pedidosEventos.status,
+      observacao: pedidosEventos.observacao,
+      criadoPor: pedidosEventos.criadoPor,
+      criadoEm: pedidosEventos.criadoEm
+    })
     .from(pedidosEventos)
     .where(eq(pedidosEventos.pedidoId, pedidoId))
     .orderBy(asc(pedidosEventos.criadoEm))
-    .then((linhas) => linhas.map((linha) => ({ ...linha, status: linha.status as PedidoStatusNovo, criadoEm: linha.criadoEm.toISOString() })));
+    .then((linhas) =>
+      linhas.map((linha) => ({
+        ...linha,
+        status: linha.status as PedidoStatusNovo,
+        criadoEm: linha.criadoEm.toISOString()
+      }))
+    );
   return { ...serializarCabecalho({ ...cabecalho, totalItens: itens.length }), itens, eventos };
 }
 
@@ -280,7 +313,10 @@ export type ItemPedidoRecebimentoLinha = {
   quantidadeRecebida: number;
 };
 
-export async function listarItensDoPedidoRepository(pedidoId: string, db: ExecutorBanco = banco): Promise<PedidoItemDto[]> {
+export async function listarItensDoPedidoRepository(
+  pedidoId: string,
+  db: ExecutorBanco = banco
+): Promise<PedidoItemDto[]> {
   const itens = await db
     .select({
       id: pedidosItens.id,
@@ -289,13 +325,28 @@ export async function listarItensDoPedidoRepository(pedidoId: string, db: Execut
       quantidade: pedidosItens.quantidade,
       estoqueAtual: pedidosItens.estoqueAtual,
       estoqueMin: pedidosItens.estoqueMin,
-      estoqueMax: pedidosItens.estoqueMax,
-      quantidadeRecebida: sql<string>`coalesce((select sum(${estoqueMovimentos.quantidade}) from ${estoqueMovimentos} where ${estoqueMovimentos.pedidoItemId} = ${pedidosItens.id}), 0)`
+      estoqueMax: pedidosItens.estoqueMax
     })
     .from(pedidosItens)
     .where(eq(pedidosItens.pedidoId, pedidoId));
+  const recebidos = itens.length
+    ? await db
+        .select({
+          pedidoItemId: estoqueMovimentos.pedidoItemId,
+          quantidadeRecebida: sql<string>`sum(${estoqueMovimentos.quantidade})`
+        })
+        .from(estoqueMovimentos)
+        .where(
+          inArray(
+            estoqueMovimentos.pedidoItemId,
+            itens.map((item) => item.id)
+          )
+        )
+        .groupBy(estoqueMovimentos.pedidoItemId)
+    : [];
+  const recebidoPorItem = new Map(recebidos.map((item) => [item.pedidoItemId, Number(item.quantidadeRecebida)]));
   return itens.map((item) => {
-    const recebida = Number(item.quantidadeRecebida);
+    const recebida = recebidoPorItem.get(item.id) ?? 0;
     const quantidade = Number(item.quantidade);
     return {
       id: item.id,
@@ -327,10 +378,19 @@ export async function travarPedidoRepository(pedidoId: string, db: TransacaoBanc
 }
 
 export async function atualizarSituacaoPedidoRepository(
-  input: { pedidoId: string; empresaId: string; status: PedidoStatusNovo; observacao: string | null; criadoPor: string },
+  input: {
+    pedidoId: string;
+    empresaId: string;
+    status: PedidoStatusNovo;
+    observacao: string | null;
+    criadoPor: string;
+  },
   db: ExecutorBanco
 ): Promise<void> {
-  await db.update(pedidos).set({ status: input.status, atualizadoEm: new Date() }).where(eq(pedidos.id, input.pedidoId));
+  await db
+    .update(pedidos)
+    .set({ status: input.status, atualizadoEm: new Date() })
+    .where(eq(pedidos.id, input.pedidoId));
   await inserirEvento(input, db);
 }
 
@@ -338,17 +398,48 @@ export async function buscarRecebimentoPorIdempotenciaRepository(
   empresaId: string,
   idempotenciaChave: string,
   db: ExecutorBanco
-): Promise<{ id: string; pedidoId: string } | null> {
+): Promise<{
+  id: string;
+  pedidoId: string;
+  observacao: string | null;
+  itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>;
+} | null> {
   const [recebimento] = await db
-    .select({ id: pedidosRecebimentos.id, pedidoId: pedidosRecebimentos.pedidoId })
+    .select({
+      id: pedidosRecebimentos.id,
+      pedidoId: pedidosRecebimentos.pedidoId,
+      observacao: pedidosRecebimentos.observacao
+    })
     .from(pedidosRecebimentos)
-    .where(and(eq(pedidosRecebimentos.empresaId, empresaId), eq(pedidosRecebimentos.idempotenciaChave, idempotenciaChave)))
+    .where(
+      and(eq(pedidosRecebimentos.empresaId, empresaId), eq(pedidosRecebimentos.idempotenciaChave, idempotenciaChave))
+    )
     .limit(1);
-  return recebimento ?? null;
+  if (!recebimento) return null;
+  const movimentos = await db
+    .select({
+      pedidoItemId: estoqueMovimentos.pedidoItemId,
+      quantidade: estoqueMovimentos.quantidade
+    })
+    .from(estoqueMovimentos)
+    .where(eq(estoqueMovimentos.pedidoRecebimentoId, recebimento.id));
+  return {
+    ...recebimento,
+    itens: movimentos.map((item) => ({
+      pedidoItemId: item.pedidoItemId,
+      quantidadeConferida: Number(item.quantidade)
+    }))
+  };
 }
 
 export async function criarRecebimentoRepository(
-  input: { empresaId: string; pedidoId: string; observacao: string | null; idempotenciaChave: string; recebidoPor: string },
+  input: {
+    empresaId: string;
+    pedidoId: string;
+    observacao: string | null;
+    idempotenciaChave: string;
+    recebidoPor: string;
+  },
   db: ExecutorBanco
 ): Promise<string | null> {
   const [recebimento] = await db

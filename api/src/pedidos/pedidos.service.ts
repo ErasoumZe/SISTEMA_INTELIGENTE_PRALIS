@@ -131,7 +131,11 @@ export async function gerarPedidoAutomatico(
   return { id: pedido.id, totalItens: sugeridos.length };
 }
 
-export async function atualizarPedido(pedidoId: string, payload: PedidoEdicaoPayload, perfil: PerfilUsuario): Promise<void> {
+export async function atualizarPedido(
+  pedidoId: string,
+  payload: PedidoEdicaoPayload,
+  perfil: PerfilUsuario
+): Promise<void> {
   const base = await buscarPedidoBaseRepository(pedidoId);
   if (!base || !podeAcessarEmpresa(perfil, base.empresaId)) throw naoEncontrado("Pedido nao encontrado");
   if (base.status !== "a_fazer") throw erroValidacao("So e possivel editar pedido em A fazer", "PEDIDO_NAO_EDITAVEL");
@@ -190,8 +194,16 @@ export async function receberPedido(
     if (!pedido || !podeAcessarEmpresa(perfil, pedido.empresaId)) throw naoEncontrado("Pedido nao encontrado");
     const repetido = await buscarRecebimentoPorIdempotenciaRepository(pedido.empresaId, payload.idempotenciaChave, tx);
     if (repetido) {
-      if (repetido.pedidoId !== pedidoId) throw erroValidacao("Chave de recebimento ja usada para outro pedido", "IDEMPOTENCIA_CONFLITO");
-      return { recebimentoId: repetido.id, duplicado: true, status: pedido.status === "recebido" ? "recebido" : "recebido_parcial" };
+      if (repetido.pedidoId !== pedidoId)
+        throw erroValidacao("Chave de recebimento ja usada para outro pedido", "IDEMPOTENCIA_CONFLITO");
+      if (!mesmaIntencaoRecebimento(repetido, payload)) {
+        throw erroValidacao("Chave de recebimento reutilizada com dados diferentes", "IDEMPOTENCIA_CONFLITO");
+      }
+      return {
+        recebimentoId: repetido.id,
+        duplicado: true,
+        status: pedido.status === "recebido" ? "recebido" : "recebido_parcial"
+      };
     }
 
     if (pedido.status !== "confirmado" && pedido.status !== "recebido_parcial") {
@@ -201,13 +213,20 @@ export async function receberPedido(
     const itensPedido = await listarItensDoPedidoRepository(pedidoId, tx);
     const itensPorId = new Map(itensPedido.map((item) => [item.id, item]));
     if (new Set(payload.itens.map((item) => item.pedidoItemId)).size !== payload.itens.length) {
-      throw erroValidacao("Um item nao pode ser conferido duas vezes no mesmo recebimento", "ITEM_RECEBIMENTO_DUPLICADO");
+      throw erroValidacao(
+        "Um item nao pode ser conferido duas vezes no mesmo recebimento",
+        "ITEM_RECEBIMENTO_DUPLICADO"
+      );
     }
     for (const itemRecebido of payload.itens) {
       const itemPedido = itensPorId.get(itemRecebido.pedidoItemId);
-      if (!itemPedido || !itemPedido.produtoId) throw erroValidacao("Item do pedido nao encontrado", "ITEM_PEDIDO_INVALIDO");
+      if (!itemPedido || !itemPedido.produtoId)
+        throw erroValidacao("Item do pedido nao encontrado", "ITEM_PEDIDO_INVALIDO");
       if (itemRecebido.quantidadeConferida > Number(itemPedido.quantidadePendente)) {
-        throw erroValidacao(`Quantidade conferida ultrapassa o pendente de ${itemPedido.descricaoProduto}`, "RECEBIMENTO_ACIMA_PEDIDO");
+        throw erroValidacao(
+          `Quantidade conferida ultrapassa o pendente de ${itemPedido.descricaoProduto}`,
+          "RECEBIMENTO_ACIMA_PEDIDO"
+        );
       }
     }
 
@@ -222,7 +241,11 @@ export async function receberPedido(
       tx
     );
     if (!recebimentoId) {
-      const vencedor = await buscarRecebimentoPorIdempotenciaRepository(pedido.empresaId, payload.idempotenciaChave, tx);
+      const vencedor = await buscarRecebimentoPorIdempotenciaRepository(
+        pedido.empresaId,
+        payload.idempotenciaChave,
+        tx
+      );
       if (!vencedor || vencedor.pedidoId !== pedidoId) throw new Error("Recebimento nao criado");
       return { recebimentoId: vencedor.id, duplicado: true, status: "recebido_parcial" };
     }
@@ -263,9 +286,33 @@ export async function receberPedido(
       ? "recebido"
       : "recebido_parcial";
     await atualizarSituacaoPedidoRepository(
-      { pedidoId, empresaId: pedido.empresaId, status, observacao: payload.observacao ?? null, criadoPor: perfil.usuarioId },
+      {
+        pedidoId,
+        empresaId: pedido.empresaId,
+        status,
+        observacao: payload.observacao ?? null,
+        criadoPor: perfil.usuarioId
+      },
       tx
     );
     return { recebimentoId, duplicado: false, status };
   });
+}
+
+function mesmaIntencaoRecebimento(
+  gravado: {
+    observacao: string | null;
+    itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>;
+  },
+  recebido: PedidoRecebimentoPayload
+): boolean {
+  const assinatura = (itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>) =>
+    [...itens]
+      .sort((a, b) => a.pedidoItemId.localeCompare(b.pedidoItemId))
+      .map((item) => `${item.pedidoItemId}:${item.quantidadeConferida}`)
+      .join("|");
+  return (
+    (gravado.observacao ?? "") === (recebido.observacao ?? "") &&
+    assinatura(gravado.itens) === assinatura(recebido.itens)
+  );
 }
