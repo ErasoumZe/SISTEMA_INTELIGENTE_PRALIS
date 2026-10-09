@@ -15,6 +15,8 @@ const carregando = ref(true);
 const empresaCarregando = ref(false);
 const erro = ref("");
 const produtos = ref<ProdutoEstoqueDto[]>([]);
+const dialogExtrato = ref(false);
+const produtoExtrato = ref<ProdutoEstoqueDto | null>(null);
 const catalogoFiltros = ref<ProdutoEstoqueDto[]>([]);
 const busca = ref("");
 const filtros = reactive({ grupoMercadoriaId: "", areaEstoque: "", localVenda: "", localEstoque: "", curvaAbc: "" });
@@ -85,6 +87,10 @@ async function trocarEmpresa(id: string) {
   Object.assign(filtros, { grupoMercadoriaId: "", areaEstoque: "", localVenda: "", localEstoque: "", curvaAbc: "" });
   busca.value = "";
   await carregarEmpresa();
+}
+function abrirExtrato(produto: ProdutoEstoqueDto | null = null) {
+  produtoExtrato.value = produto;
+  dialogExtrato.value = true;
 }
 
 onMounted(async () => {
@@ -197,11 +203,19 @@ onMounted(async () => {
       <v-card
         ><v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2"
           ><span>Posição de estoque</span
+          ><v-btn size="small" variant="tonal" prepend-icon="mdi-history" @click="abrirExtrato()"
+            >Extrato completo</v-btn
           ><span class="text-body-2 text-medium-emphasis"
             >{{ produtosExibidos.length }} produto(s) exibido(s)</span
           ></v-card-title
-        ><v-card-text><EstoqueLista :produtos="produtosExibidos" /></v-card-text
+        ><v-card-text><EstoqueLista :produtos="produtosExibidos" @extrato="abrirExtrato" /></v-card-text
       ></v-card>
     </div>
+    <EstoqueExtratoDialog
+      v-model="dialogExtrato"
+      :empresa-id="empresaId"
+      :produtos="catalogoFiltros"
+      :produto-inicial="produtoExtrato"
+    />
   </AppShell>
 </template>

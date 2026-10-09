@@ -1,6 +1,7 @@
 import type {
   ConferenciaEstoquePayload,
   ConferenciasEstoqueQuery,
+  EstoqueMovimentosQuery,
   EstoqueProdutosQuery
 } from "@padaria/shared/compras";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
@@ -9,6 +10,7 @@ import { proibido } from "../erros.js";
 import {
   criarConferenciaEstoqueRepository,
   listarConferenciasEstoqueRepository,
+  listarEstoqueMovimentosRepository,
   listarEstoqueProdutosRepository
 } from "./compras.repository.js";
 
@@ -19,6 +21,11 @@ function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
 export async function listarEstoqueProdutos(filtros: EstoqueProdutosQuery, perfil: PerfilUsuario) {
   validarEmpresa(perfil, filtros.empresaId);
   return listarEstoqueProdutosRepository(filtros);
+}
+
+export async function listarEstoqueMovimentos(filtros: EstoqueMovimentosQuery, perfil: PerfilUsuario) {
+  validarEmpresa(perfil, filtros.empresaId);
+  return listarEstoqueMovimentosRepository(filtros);
 }
 
 export async function listarConferenciasEstoque(filtros: ConferenciasEstoqueQuery, perfil: PerfilUsuario) {

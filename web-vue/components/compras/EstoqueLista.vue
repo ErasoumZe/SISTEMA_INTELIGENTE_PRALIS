@@ -2,6 +2,7 @@
 import type { ProdutoEstoqueDto } from "@padaria/shared";
 
 defineProps<{ produtos: ProdutoEstoqueDto[] }>();
+const emit = defineEmits<{ extrato: [produto: ProdutoEstoqueDto] }>();
 
 function numero(valor: string | null) {
   return Number(valor ?? 0);
@@ -28,11 +29,12 @@ function situacao(produto: ProdutoEstoqueDto) {
           <th class="text-right">Saldo</th>
           <th class="text-right">Mín./máx.</th>
           <th>Situação</th>
+          <th class="text-right">Ações</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="!produtos.length">
-          <td colspan="6" class="text-center text-medium-emphasis py-8">Nenhum produto encontrado.</td>
+          <td colspan="7" class="text-center text-medium-emphasis py-8">Nenhum produto encontrado.</td>
         </tr>
         <tr v-for="produto in produtos" :key="produto.id">
           <td>
@@ -53,6 +55,9 @@ function situacao(produto: ProdutoEstoqueDto) {
           <td class="text-right">{{ produto.estoqueMin ?? "—" }} / {{ produto.estoqueMax ?? "—" }}</td>
           <td>
             <v-chip :color="situacao(produto).cor" size="small" label>{{ situacao(produto).texto }}</v-chip>
+          </td>
+          <td class="text-right">
+            <v-btn size="small" variant="text" @click="emit('extrato', produto)">Extrato</v-btn>
           </td>
         </tr>
       </tbody>
@@ -81,6 +86,7 @@ function situacao(produto: ProdutoEstoqueDto) {
           {{ produto.areaEstoque ?? "Sem área" }} · {{ produto.localEstoque ?? "Sem local" }} ·
           {{ produto.localVenda.join(", ") || "Sem local de venda" }}
         </div>
+        <v-btn block size="small" variant="tonal" @click="emit('extrato', produto)">Ver extrato</v-btn>
       </v-card-text>
     </v-card>
   </div>

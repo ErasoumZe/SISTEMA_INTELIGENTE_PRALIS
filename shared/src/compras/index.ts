@@ -24,10 +24,18 @@ export const conferenciaEstoquePayloadSchema = z.object({
 });
 
 export const conferenciasEstoqueQuerySchema = z.object({ empresaId: uuidSchema });
+export const estoqueMovimentosQuerySchema = z.object({
+  empresaId: uuidSchema,
+  produtoId: uuidSchema.optional(),
+  localEstoque: z.string().trim().min(1).max(120).optional(),
+  dataInicio: z.string().datetime({ offset: true }).optional(),
+  dataFim: z.string().datetime({ offset: true }).optional()
+});
 
 export type EstoqueProdutosQuery = z.infer<typeof estoqueProdutosQuerySchema>;
 export type ConferenciaEstoquePayload = z.infer<typeof conferenciaEstoquePayloadSchema>;
 export type ConferenciasEstoqueQuery = z.infer<typeof conferenciasEstoqueQuerySchema>;
+export type EstoqueMovimentosQuery = z.infer<typeof estoqueMovimentosQuerySchema>;
 
 export type ProdutoEstoqueDto = {
   id: string;
@@ -55,5 +63,22 @@ export type ConferenciaEstoqueDto = {
   agendadaPara: string;
   observacao: string | null;
   status: "agendada" | "cancelada" | "concluida";
+  criadoEm: string;
+};
+
+export type EstoqueMovimentoDto = {
+  id: string;
+  produtoId: string;
+  produtoDescricao: string;
+  localEstoque: string | null;
+  pedidoId: string;
+  pedidoRecebimentoId: string;
+  tipo: "recebimento_compra";
+  quantidade: string;
+  saldoAnterior: string;
+  saldoPosterior: string;
+  recebidoPorId: string;
+  recebidoPorNome: string;
+  recebidoEm: string;
   criadoEm: string;
 };

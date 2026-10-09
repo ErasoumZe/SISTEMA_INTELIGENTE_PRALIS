@@ -91,6 +91,32 @@ describe("pedidos integration (Compras)", () => {
       await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
     ).data;
     expect(aposPrimeiro.itens[0]).toMatchObject({ quantidadeRecebida: "3", quantidadePendente: "2" });
+    const extrato = await contexto.app.inject({
+      method: "GET",
+      url: `/api/compras/estoque/movimentos?empresaId=${idsTeste.empresaA}&produtoId=${idsTeste.produto}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(extrato);
+    const movimento = json<{
+      data: Array<{
+        pedidoId: string;
+        produtoId: string;
+        quantidade: string;
+        saldoAnterior: string;
+        saldoPosterior: string;
+        recebidoPorNome: string;
+        recebidoEm: string;
+      }>;
+    }>(extrato).data[0];
+    expect(movimento).toMatchObject({
+      pedidoId,
+      produtoId: idsTeste.produto,
+      quantidade: "3.000",
+      saldoAnterior: "0.000",
+      saldoPosterior: "3.000"
+    });
+    expect(movimento?.recebidoPorNome).toBeTruthy();
+    expect(Number.isNaN(Date.parse(movimento?.recebidoEm ?? ""))).toBe(false);
 
     const chaveComOutraIntencao = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
       ...primeiroRecebimento,
