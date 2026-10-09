@@ -389,7 +389,6 @@ function montarProdutoParaGravar(
     auto: dados.auto,
     status: dados.status,
     tipo: dados.tipo,
-    quantidadeEstoque: dados.quantidadeEstoque ?? null,
     estoqueMin: dados.estoqueMin ?? null,
     estoqueMax: dados.estoqueMax ?? null,
     areaEstoque: dados.areaEstoque?.trim() || null,

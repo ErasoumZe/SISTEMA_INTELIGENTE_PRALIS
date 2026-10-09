@@ -179,7 +179,6 @@ export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar
     auto: form.auto,
     status: form.status,
     tipo: form.tipo,
-    quantidadeEstoque: numero(form.quantidadeEstoque),
     estoqueMin: numero(form.estoqueMin),
     estoqueMax: numero(form.estoqueMax),
     areaEstoque: form.areaEstoque || null,

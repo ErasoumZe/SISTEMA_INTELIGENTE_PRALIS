@@ -94,8 +94,7 @@ export const produtoPayloadSchema = z.object({
   auto: z.boolean().optional().default(false),
   status: statusProdutoSchema.optional().default("ativo"),
   tipo: tipoProdutoSchema.optional().default("revenda"),
-  // Estoque (saldo + parametrizacao), locais de venda e foto.
-  quantidadeEstoque: z.coerce.number().min(0).optional().nullable(),
+  // Parametrizacao de estoque. O saldo e somente leitura e muda por movimentos auditados.
   estoqueMin: z.coerce.number().min(0).optional().nullable(),
   estoqueMax: z.coerce.number().min(0).optional().nullable(),
   areaEstoque: z.string().trim().max(120).optional().nullable(),

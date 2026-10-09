@@ -178,7 +178,6 @@ export interface ProdutoParaGravar {
   auto: boolean;
   status: "ativo" | "inativo";
   tipo: "revenda" | "transformacao";
-  quantidadeEstoque: number | null;
   estoqueMin: number | null;
   estoqueMax: number | null;
   areaEstoque: string | null;
@@ -255,7 +254,6 @@ export async function salvarProdutoRepository(
     auto: input.auto,
     status: input.status,
     tipo: input.tipo,
-    quantidadeEstoque: String(input.quantidadeEstoque ?? 0),
     estoqueMin: input.estoqueMin != null ? String(input.estoqueMin) : null,
     estoqueMax: input.estoqueMax != null ? String(input.estoqueMax) : null,
     areaEstoque: input.areaEstoque,
@@ -284,7 +282,13 @@ export async function salvarProdutoRepository(
     const codigoInterno = input.codigoInterno ?? (await proximoCodigoInterno(tx, input.empresaId));
     const inserido = await tx
       .insert(produtos)
-      .values({ ...valores, codigo, codigoInterno, criadoPor: input.criadoPor ?? null })
+      .values({
+        ...valores,
+        codigo,
+        codigoInterno,
+        criadoPor: input.criadoPor ?? null,
+        quantidadeEstoque: "0"
+      })
       .returning({ id: produtos.id });
     produtoId = inserido[0]?.id ?? "";
     if (!produtoId) throw new Error("Produto nao criado");

@@ -176,7 +176,8 @@ export async function copiarProdutosRepository(
           auto: produto.auto,
           status: produto.status,
           tipo: produto.tipo,
-          quantidadeEstoque: produto.quantidadeEstoque,
+          // Importar o cadastro nunca importa o saldo fisico da empresa de origem.
+          quantidadeEstoque: "0",
           estoqueMin: produto.estoqueMin,
           estoqueMax: produto.estoqueMax,
           areaEstoque: produto.areaEstoque,
