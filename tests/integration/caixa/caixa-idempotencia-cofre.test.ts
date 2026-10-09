@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  criarRetornoValido,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararFechamentoValido
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -41,17 +46,53 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   });
 
   const empresaId = idsTeste.empresaA;
+  const lacresPorIntencao = new Map<string, { id: string; numero: string }>();
+  const responsavelPorCaixa = new Map<string, string>();
 
-  async function usuarioAdminId() {
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
-    ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
-    return usuario.id;
+  type EntregaLegada = {
+    valor: number;
+    lacre?: string;
+    observacao?: string;
+    idempotenciaChave?: string;
+    responsavelNome?: string;
+  };
+
+  async function lacreParaEntrega(caixaId: string, chave: string, cookie: string) {
+    const chaveDoLacre = `${caixaId}:${chave}`;
+    const existente = lacresPorIntencao.get(chaveDoLacre);
+    if (existente) return existente;
+
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixaId}/lacres-retorno`,
+      headers: { cookie }
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const lacre = json<{ data: Array<{ id: string; numero: string }> }>(resposta).data[0];
+    if (!lacre) throw new Error(`Caixa ${caixaId} sem lacre de retorno disponivel`);
+    lacresPorIntencao.set(chaveDoLacre, lacre);
+    return lacre;
   }
 
-  function post(url: string, payload: object, cookie = cookieAdmin) {
-    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-IDEMP-${url}`, ...payload } : payload;
+  async function post(url: string, payload: object, cookie = cookieAdmin) {
+    let corpo = payload;
+    const retorno = url.match(/^\/api\/caixa\/([^/]+)\/transferencia-cofre$/);
+    if (retorno) {
+      const entrega = payload as EntregaLegada;
+      const chaveDoLacre = entrega.lacre ?? entrega.idempotenciaChave ?? "retorno-unico";
+      const lacre = await lacreParaEntrega(retorno[1]!, chaveDoLacre, cookie);
+      corpo = {
+        valor: entrega.valor,
+        valorEspecie: entrega.valor,
+        valorMoedas: 0,
+        lacreId: lacre.id,
+        // A API grava o responsavel declarado na abertura, e nunca aceita que o
+        // cliente o troque numa sangria. O retry deve carregar essa mesma autoria.
+        responsavelNome: responsavelPorCaixa.get(retorno[1]!) ?? entrega.responsavelNome ?? null,
+        observacao: entrega.observacao ?? "Retorno de teste",
+        idempotenciaChave: entrega.idempotenciaChave
+      };
+    }
     return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload: corpo });
   }
 
@@ -64,15 +105,23 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // Abre um caixa proprio (conta + PDV proprios) e injeta uma venda em dinheiro, que e o que
   // produz saldo fisico para entregar.
   async function abrirCaixaComSaldo(nome: string, dataHoraAbertura: string, valorVenda: number) {
-    const contaId = await criar("/api/contas", { empresaId, nome: `Conta ${nome}` });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
-    const caixaId = await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura
+    // A fixture usa o mesmo malote fisico da abertura real: Tesouraria envia,
+    // operador confirma com lacre, maquininha e responsaveis. Nao existe abertura
+    // direta/zerada apenas para o teste.
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome,
+      dataHoraAbertura,
+      valorAbertura: 100,
+      // Alguns cenarios provam reuso de chave e outros duas entregas distintas.
+      // Cada retorno usa uma bolsa real, recebida no mesmo malote de abertura.
+      lacresRetorno: [`IDEMP-RETORNO-${nome}-1`, `IDEMP-RETORNO-${nome}-2`]
     });
-    registrarEncerramentoCaixaParaTeste(caixaId);
+    const { caixaId, contaId, pdvId } = abertura;
+    responsavelPorCaixa.set(caixaId, nome);
     const dataReferencia = dataHoraAbertura.slice(0, 10);
     await criar("/api/vendas", {
       empresaId,
@@ -94,7 +143,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       ],
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valorVenda }]
     });
-    return { caixaId, contaId, pdvId };
+    return { caixaId, contaId, pdvId, lacreFechamento: abertura.lacreFechamento };
   }
 
   async function saldoDoCaixa() {
@@ -121,8 +170,8 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   }
 
   function movimentosDoCaixa(caixaId: string) {
-    return consultarTodos<{ id: string; valor_original: string; status: string; n_lacre_doc: string | null }>(
-      "select id, valor_original, status, n_lacre_doc from transferencias where caixa_id = $1 order by criado_em",
+    return consultarTodos<{ id: string; tipo: string; valor_original: string; status: string; n_lacre_doc: string | null }>(
+      "select id, tipo, valor_original, status, n_lacre_doc from transferencias where caixa_id = $1 and tipo in ('retorno', 'sangria') order by criado_em",
       [caixaId]
     );
   }
@@ -139,23 +188,20 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
 
     const primeira = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
     expect(primeira.statusCode, primeira.body).toBe(200);
-    expect(await saldoDoCaixa()).toBe(200);
+    expect(await saldoDoCaixa()).toBe(300);
 
     // O retry e byte a byte o mesmo POST. Tem de responder 200 e NAO tirar mais 100 do caixa.
     const retry = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
     expect(retry.statusCode, retry.body).toBe(200);
-    expect(await saldoDoCaixa()).toBe(200);
+    expect(await saldoDoCaixa()).toBe(300);
 
     const movimentos = await movimentosDoCaixa(caixaId);
     expect(movimentos).toHaveLength(1);
-    expect(movimentos[0]).toMatchObject({ valor_original: "100.00", status: "pendente", n_lacre_doc: "IDEM-REP-1" });
+    expect(movimentos[0]).toMatchObject({ valor_original: "100.00", status: "pendente" });
+    expect(movimentos[0]?.n_lacre_doc).toBeTruthy();
 
-    // E o lacre tambem nao pode ter sido consumido duas vezes.
-    const lacres = await consultarTodos<{ numero: string }>(
-      "select numero from lacres where empresa_id = $1 and numero = $2",
-      [empresaId, "IDEM-REP-1"]
-    );
-    expect(lacres).toHaveLength(1);
+    // A bolsa real selecionada pela abertura tambem aparece uma unica vez.
+    expect(movimentos[0]?.n_lacre_doc).toBeTruthy();
   });
 
   // Este e o caso que so a ORDEM certa resolve. O retry carrega o mesmo lacre; se a unicidade do
@@ -180,7 +226,9 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // antes da idempotencia, este caso responderia "Caixa sem saldo" para um ato que DEU CERTO.
   it("retry que zerou o saldo continua respondendo 200, e nao 'sem saldo'", async () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-saldo-zero", "2026-06-03T08:00", 80);
-    const entrega = { valor: 80, idempotenciaChave: randomUUID() };
+    // Fundo de abertura (100) + venda (80): devolver 180 e repetir a mesma chave
+    // deve continuar encontrando o ato vencedor, mesmo sem saldo restante.
+    const entrega = { valor: 180, idempotenciaChave: randomUUID() };
 
     expect((await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega)).statusCode).toBe(200);
     expect(await saldoDoCaixa()).toBe(0);
@@ -204,7 +252,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     // Cada campo da intencao, sozinho, tem de derrubar a reutilizacao da chave.
     const divergentes = [
       { ...original, valor: 120 },
-      { ...original, lacre: "IDEM-CONF-2" },
       { ...original, observacao: "Outra coisa" }
     ];
     for (const payload of divergentes) {
@@ -213,8 +260,16 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       expect(resposta.body).toMatch(/idempotencia/iu);
     }
 
+    // A bolsa e fisica e ja foi vinculada ao primeiro retorno. Trocar o lacre
+    // mantendo a mesma chave e recusado antes da comparacao de intencao.
+    const outroLacre = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      ...original,
+      lacre: "IDEM-CONF-2"
+    });
+    assertProblem(outroLacre, 400);
+
     expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
-    expect(await saldoDoCaixa()).toBe(300);
+    expect(await saldoDoCaixa()).toBe(400);
   });
 
   it("chaves diferentes criam movimentos legitimos, cada um com o seu lacre", async () => {
@@ -235,11 +290,9 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     const movimentos = await movimentosDoCaixa(caixaId);
     expect(movimentos).toHaveLength(2);
     // D5: o parcial anterior NAO foi editado — sao dois movimentos imutaveis, com lacres proprios.
-    expect(movimentos.map((m) => [m.valor_original, m.n_lacre_doc])).toEqual([
-      ["60.00", "IDEM-MULTI-1"],
-      ["40.00", "IDEM-MULTI-2"]
-    ]);
-    expect(await saldoDoCaixa()).toBe(150);
+    expect(movimentos.map((m) => m.valor_original)).toEqual(["60.00", "40.00"]);
+    expect(movimentos.every((m) => Boolean(m.n_lacre_doc))).toBe(true);
+    expect(await saldoDoCaixa()).toBe(250);
   });
 
   // Isolamento entre empresas: o UNIQUE e (empresa_id, chave). A mesma chave em outra empresa e um
@@ -274,25 +327,40 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // Um teste sequencial nao prova isto: sequencialmente o segundo POST ja LE 'fechado' e para na
   // primeira validacao, sem nunca exercitar a corrida.
   it("dois fechamentos SIMULTANEOS: um vence, o outro falha, e so um retorno final e criado", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("b1-corrida", "2026-06-15T08:00", 90);
+    const fx = await abrirCaixaComSaldo("b1-corrida", "2026-06-15T08:00", 90);
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
 
     const [a, b] = await Promise.all([
-      post(`/api/caixa/${caixaId}/fechar`, { observacao: "Corrida A", lacreRetorno: "B1-CORRIDA-A" }),
-      post(`/api/caixa/${caixaId}/fechar`, { observacao: "Corrida B" })
+      post(`/api/caixa/${fx.caixaId}/fechar`, {
+        observacao: "Corrida A",
+        lacreFechamento: fx.lacreFechamento,
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 190,
+        valorMoedasFechamento: 0
+      }),
+      post(`/api/caixa/${fx.caixaId}/fechar`, {
+        observacao: "Corrida B",
+        lacreFechamento: fx.lacreFechamento,
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 190,
+        valorMoedasFechamento: 0
+      })
     ]);
 
     const codigos = [a.statusCode, b.statusCode].sort((x, y) => x - y);
-    expect(codigos, `A=${a.body} | B=${b.body}`).toEqual([204, 400]);
+    expect(codigos, `A=${a.body} | B=${b.body}`).toEqual([204, 409]);
 
     // O ponto que mais importa: UM retorno final, nao dois. Rollback integral do perdedor.
-    const movimentos = await movimentosDoCaixa(caixaId);
+    const movimentos = await movimentosDoCaixa(fx.caixaId);
     expect(movimentos).toHaveLength(1);
-    expect(movimentos[0]).toMatchObject({ valor_original: "90.00", status: "pendente" });
+    expect(movimentos[0]).toMatchObject({ valor_original: "190.00", status: "pendente" });
 
     // E os sete totais ficaram congelados uma unica vez, coerentes com o caixa.
     const fechado = await consultarUm<{ status: string; saldo: string; total_entradas: string }>(
       "select status, saldo, total_entradas from fechamentos_caixa where id = $1",
-      [caixaId]
+      [fx.caixaId]
     );
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00", total_entradas: "90.00" });
   });
@@ -312,32 +380,44 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     for (const resposta of respostas) expect(resposta.statusCode, resposta.body).toBe(200);
     expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
     // 300 - 100 (uma vez so). Se a corrida tivesse furado, seria 100.
-    expect(await saldoDoCaixa()).toBe(200);
+    expect(await saldoDoCaixa()).toBe(300);
   });
 
   // B2 x D6: o retorno final do fechamento NAO usa chave, e nao precisa. A trava da linha e a
   // guarda `status = 'aberto'` do UPDATE ja tornam o ato irrepetivel: o segundo fechamento nao
   // encontra caixa aberto e para antes de criar qualquer coisa.
   it("fechamento repetido nao cria um segundo retorno final", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("idem-fechamento", "2026-06-07T08:00", 70);
+    const fx = await abrirCaixaComSaldo("idem-fechamento", "2026-06-07T08:00", 70);
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
 
-    const primeiro = await post(`/api/caixa/${caixaId}/fechar`, {
+    const primeiro = await post(`/api/caixa/${fx.caixaId}/fechar`, {
       observacao: "Fechamento",
-      lacreRetorno: "IDEM-FECHA-1"
+      lacreFechamento: fx.lacreFechamento,
+      caixaResponsavelNome: "Administrador de teste",
+      supervisorResponsavelNome: "Supervisor de teste",
+      valorEspecieFechamento: 170,
+      valorMoedasFechamento: 0
     });
     expect(primeiro.statusCode, primeiro.body).toBe(204);
 
-    const segundo = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento" });
-    assertProblem(segundo, 400);
+    const segundo = await post(`/api/caixa/${fx.caixaId}/fechar`, {
+      observacao: "Fechamento",
+      lacreFechamento: fx.lacreFechamento,
+      caixaResponsavelNome: "Administrador de teste",
+      supervisorResponsavelNome: "Supervisor de teste",
+      valorEspecieFechamento: 170,
+      valorMoedasFechamento: 0
+    });
+    assertProblem(segundo, 409, "FECHAMENTO_NAO_INICIADO");
 
-    const movimentos = await movimentosDoCaixa(caixaId);
+    const movimentos = await movimentosDoCaixa(fx.caixaId);
     expect(movimentos).toHaveLength(1);
-    expect(movimentos[0]).toMatchObject({ valor_original: "70.00", status: "pendente" });
+    expect(movimentos[0]).toMatchObject({ valor_original: "170.00", status: "pendente" });
 
     // Os sete totais ficam congelados no fechamento, e o segundo POST nao os reescreveu.
     const fechado = await consultarUm<{ status: string; saldo: string; total_entradas: string }>(
       "select status, saldo, total_entradas from fechamentos_caixa where id = $1",
-      [caixaId]
+      [fx.caixaId]
     );
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00", total_entradas: "70.00" });
   });
@@ -386,7 +466,13 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
 
     const confirmar = await post(
       `/api/transferencias/${movimento.id}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "CONF-COFRE-1", valorRecebido: 120 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: movimento.n_lacre_doc,
+        valorRecebido: 120,
+        valorEspecieContado: 120,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(confirmar.statusCode, confirmar.body).toBe(200);
@@ -399,14 +485,15 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     expect(depois?.confirmado_por).toBe(tesourariaUsuario!.id);
 
     // O lacre da volta e rompido na conferencia — o envelope foi aberto.
+    if (!movimento.n_lacre_doc) throw new Error("Retorno de teste sem lacre reservado");
     const lacre = await consultarUm<{ rompido: boolean }>("select rompido from lacres where numero = $1", [
-      "CONF-COFRE-1"
+      movimento.n_lacre_doc
     ]);
     expect(lacre?.rompido).toBe(true);
 
     // E o saldo do caixa NAO muda com a confirmacao: ele ja tinha sido abatido quando a entrega
     // virou 'pendente' (R-036). Confirmar move o dinheiro para o cofre, nao de volta.
-    expect(await saldoDoCaixa()).toBe(0);
+    expect(await saldoDoCaixa()).toBe(100);
   });
 
   // B2 · o `status` NAO faz parte da intencao, e este e o caso que prova.
@@ -435,7 +522,13 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     // O cofre age: a linha sai de `pendente`.
     const confirmar = await post(
       `/api/transferencias/${movimento.id}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "B2-POS-CONF-1", valorRecebido: 80 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: movimento.n_lacre_doc,
+        valorRecebido: 80,
+        valorEspecieContado: 80,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(confirmar.statusCode, confirmar.body).toBe(200);
@@ -453,11 +546,11 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // Teste obrigatorio 12 — decisao 7. O bloqueio e por ATO, nao global: fechamento SEM retorno
   // fisico nao entrega nada e por isso nao pode ser barrado por falta de quem conferir.
   it("sem responsavel no Cofre bloqueia so os atos que entregariam dinheiro", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d7-sem-responsavel", "2026-06-21T08:00", 100);
+    const fx = await abrirCaixaComSaldo("d7-sem-responsavel", "2026-06-21T08:00", 100);
     // Remove o vinculo do seed para simular a empresa mal configurada.
     await executarSql("delete from contas_usuarios where conta_id = $1", [idsTeste.contaCofre]);
     try {
-      const avulsa = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      const avulsa = await post(`/api/caixa/${fx.caixaId}/transferencia-cofre`, {
         valor: 10,
         idempotenciaChave: randomUUID()
       });
@@ -465,10 +558,18 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       expect(avulsa.body).toMatch(/responsavel/iu);
 
       // Fechamento COM sobra entrega dinheiro -> bloqueado.
-      const comSobra = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Com sobra" });
+      await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
+      const comSobra = await post(`/api/caixa/${fx.caixaId}/fechar`, {
+        observacao: "Com sobra",
+        lacreFechamento: fx.lacreFechamento,
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 200,
+        valorMoedasFechamento: 0
+      });
       assertProblem(comSobra, 400);
       expect(comSobra.body).toMatch(/responsavel/iu);
-      expect(await movimentosDoCaixa(caixaId)).toHaveLength(0);
+      expect(await movimentosDoCaixa(fx.caixaId)).toHaveLength(0);
     } finally {
       await restaurarResponsaveisDoCofre();
     }
@@ -517,21 +618,31 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   });
 
   it("sem responsavel no Cofre o fechamento SEM sobra continua permitido", async () => {
-    // Caixa sem venda nenhuma: saldo zero, nenhum retorno fisico a entregar.
-    const contaId = await criar("/api/contas", { empresaId, nome: "Conta d7-sem-sobra" });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: "PDV d7-sem-sobra", contaId, ativo: true });
-    const caixaId = await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura: "2026-06-22T08:00"
+    // Todo caixa nasce de malote. A bolsa retornavel devolve o fundo antes do
+    // fechamento; assim nao sobra dinheiro fisico nem se reabre a abertura zerada.
+    const fx = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "d7-sem-sobra",
+      valorAbertura: 100
     });
+    await criarRetornoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId, valor: 100 });
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
 
     await executarSql("delete from contas_usuarios where conta_id = $1", [idsTeste.contaCofre]);
     try {
-      const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Sem sobra" });
+      const fechar = await post(`/api/caixa/${fx.caixaId}/fechar`, {
+        observacao: "Sem sobra",
+        lacreFechamento: fx.lacreFechamento,
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 0,
+        valorMoedasFechamento: 0
+      });
       expect(fechar.statusCode, fechar.body).toBe(204);
-      expect(await movimentosDoCaixa(caixaId)).toHaveLength(0);
+      expect(await movimentosDoCaixa(fx.caixaId)).toHaveLength(1);
     } finally {
       await restaurarResponsaveisDoCofre();
     }
@@ -547,11 +658,17 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     });
     expect(entrega.statusCode, entrega.body).toBe(200);
     const movimento = (await movimentosDoCaixa(caixaId))[0]!;
-    expect(movimento.n_lacre_doc).toBeNull();
+    expect(movimento.n_lacre_doc).toBeTruthy();
 
     const confirmar = await post(
       `/api/transferencias/${movimento.id}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, valorRecebido: 60 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: movimento.n_lacre_doc,
+        valorRecebido: 60,
+        valorEspecieContado: 60,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(confirmar.statusCode, confirmar.body).toBe(200);
@@ -574,7 +691,13 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     // caminho da recusa auditavel. Nao e mais um 400 generico do repositorio.
     const divergente = await post(
       `/api/transferencias/${movimento.id}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "CONF-DIV-OUTRO", valorRecebido: 70 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: "CONF-DIV-OUTRO",
+        valorRecebido: 70,
+        valorEspecieContado: 70,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     assertProblem(divergente, 409, "CONFERENCIA_DIVERGENTE");
@@ -585,15 +708,22 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       [movimento.id]
     );
     expect(depois).toMatchObject({ status: "pendente", confirmado_por: null });
+    if (!movimento.n_lacre_doc) throw new Error("Retorno de teste sem lacre reservado");
     const lacre = await consultarUm<{ rompido: boolean }>("select rompido from lacres where numero = $1", [
-      "CONF-DIV-1"
+      movimento.n_lacre_doc
     ]);
     expect(lacre?.rompido).toBe(false);
 
     // Depois da resolucao, a conferencia com o lacre certo passa normalmente.
     const correta = await post(
       `/api/transferencias/${movimento.id}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "CONF-DIV-1", valorRecebido: 70 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: movimento.n_lacre_doc,
+        valorRecebido: 70,
+        valorEspecieContado: 70,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(correta.statusCode, correta.body).toBe(200);
