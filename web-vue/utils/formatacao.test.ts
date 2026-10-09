@@ -12,7 +12,8 @@ import {
   mascararCnpj,
   mascararCpf,
   mascararDocumento,
-  mascararWhatsapp
+  mascararWhatsapp,
+  normalizarWhatsappParaLink
 } from "./formatacao";
 
 describe("formatacao", () => {
@@ -85,7 +86,13 @@ describe("formatacao", () => {
   it("mascararWhatsapp formata celular (11) e fixo (10)", () => {
     expect(mascararWhatsapp("11987654321")).toBe("(11) 98765-4321");
     expect(mascararWhatsapp("1132654321")).toBe("(11) 3265-4321");
+    expect(mascararWhatsapp("5511987654321")).toBe("+55 (11) 98765-4321");
     expect(mascararWhatsapp("11")).toBe("11");
+  });
+
+  it("normalizarWhatsappParaLink acrescenta DDI somente ao numero local", () => {
+    expect(normalizarWhatsappParaLink("(11) 98765-4321")).toBe("5511987654321");
+    expect(normalizarWhatsappParaLink("+55 (11) 98765-4321")).toBe("5511987654321");
   });
 
   it("mascararCep formata 8 digitos", () => {

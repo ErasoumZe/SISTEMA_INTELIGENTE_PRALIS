@@ -69,11 +69,18 @@ export function documentoEhCpf(valor: string) {
 }
 
 export function mascararWhatsapp(valor: string) {
-  const digitos = apenasDigitos(valor).slice(0, 11);
-  if (digitos.length <= 2) return digitos;
+  const recebidos = apenasDigitos(valor).slice(0, 13);
+  const temDdiBrasil = recebidos.startsWith("55") && recebidos.length > 11;
+  const digitos = temDdiBrasil ? recebidos.slice(2) : recebidos.slice(0, 11);
+  if (digitos.length <= 2) return temDdiBrasil ? `+55 ${digitos}` : digitos;
   const prefixo = digitos.length > 10 ? digitos.slice(2, 7) : digitos.slice(2, 6);
   const sufixo = digitos.length > 10 ? digitos.slice(7) : digitos.slice(6);
-  return `(${digitos.slice(0, 2)}) ${prefixo}${sufixo ? `-${sufixo}` : ""}`;
+  return `${temDdiBrasil ? "+55 " : ""}(${digitos.slice(0, 2)}) ${prefixo}${sufixo ? `-${sufixo}` : ""}`;
+}
+
+export function normalizarWhatsappParaLink(valor: string) {
+  const digitos = apenasDigitos(valor);
+  return digitos.length <= 11 ? `55${digitos}` : digitos;
 }
 
 export function mascararCep(valor: string) {

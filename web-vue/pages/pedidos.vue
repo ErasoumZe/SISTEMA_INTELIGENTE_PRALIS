@@ -5,6 +5,7 @@ import type { PedidoFormEdicao } from "~/components/pedidos/PedidoFormDialog.vue
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { itemPorTela, mensagemErro } from "~/utils/domain";
+import { normalizarWhatsappParaLink } from "~/utils/formatacao";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 const router = useRouter();
@@ -170,15 +171,17 @@ function editarPedido(pedido: PedidoDto) {
   dialogForm.value = true;
 }
 async function mudarSituacao(status: "enviado" | "retornado" | "confirmado" | "cancelado") {
-  if (!detalhe.value) return;
+  if (!detalhe.value) return false;
   transicionando.value = true;
   try {
     await apiPost(`/api/pedidos/${detalhe.value.id}/situacao`, { status });
     notificar(`Pedido marcado como ${rotulosStatus[status]}.`);
     await carregarDados();
     await verPedido(detalhe.value.id);
+    return true;
   } catch (causa) {
     notificar(mensagemErro(causa), "error");
+    return false;
   } finally {
     transicionando.value = false;
   }
@@ -186,10 +189,16 @@ async function mudarSituacao(status: "enviado" | "retornado" | "confirmado" | "c
 async function enviarWhatsapp() {
   if (!detalhe.value?.fornecedorWhatsapp)
     return notificar("Cadastre o WhatsApp do fornecedor antes de enviar.", "error");
-  await mudarSituacao("enviado");
-  const numero = detalhe.value.fornecedorWhatsapp.replace(/\D/gu, "");
+  const numero = normalizarWhatsappParaLink(detalhe.value.fornecedorWhatsapp);
+  if (numero.length < 12 || numero.length > 15)
+    return notificar("WhatsApp do fornecedor invalido. Informe DDD e numero.", "error");
   const itens = (detalhe.value.itens ?? []).map((item) => `• ${item.descricaoProduto}: ${item.quantidade}`).join("\n");
-  window.open(`https://wa.me/${numero}?text=${encodeURIComponent(`Pedido Pralis\n${itens}`)}`, "_blank", "noopener");
+  const url = `https://wa.me/${numero}?text=${encodeURIComponent(`Pedido Pralis\n${itens}`)}`;
+  const janela = window.open("about:blank", "_blank");
+  if (!janela) return notificar("O navegador bloqueou o WhatsApp. Libere pop-ups e tente novamente.", "error");
+  janela.opener = null;
+  if (!(await mudarSituacao("enviado"))) return void janela.close();
+  janela.location.replace(url);
 }
 function chaveIdempotencia() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
