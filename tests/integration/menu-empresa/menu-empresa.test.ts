@@ -36,7 +36,9 @@ describe("menu da empresa integration", () => {
   });
 
   it("Deve_SalvarEConsultarMenuDaEmpresa_QuandoTiverPermissao", async () => {
-    const cookie = await cookieSessao(contexto.app, "gerente");
+    // Salvar a estrutura do menu requer `cadastro_permissoes_editar`; o administrador
+    // tem a permissao sem ampliar o perfil de Gerencia, que deve continuar somente leitor.
+    const cookie = await cookieSessao(contexto.app, "admin");
     const salvar = await contexto.app.inject({
       method: "PUT",
       url: "/api/menu-empresa",
