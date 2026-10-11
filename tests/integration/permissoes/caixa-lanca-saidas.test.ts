@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador, prepararFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -19,6 +19,7 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
   let cookieCaixa: string;
   let caixaId = "";
   let contaDoPdv = "";
+  let lacreFechamento = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
@@ -27,49 +28,28 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa")
     ]);
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.caixa.email
-    ]);
-    if (!usuario) throw new Error("Usuario caixa nao encontrado");
-
-    // Conta + PDV proprios: o pdvA do seed ja tem caixa e o periodo colidiria.
-    const conta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/contas",
-      headers: { cookie: cookieAdmin },
-      // R-165: fundo para as saidas da R-121; o que o arquivo prova e o AMARRE a conta do PDV.
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta R-121", saldoInicial: 100_000 }
+    // O caso abre um caixa proprio pelo contrato fisico da operacao.
+    // `beforeAll` nao possui um `it` ativo, entao a fixture nao pode registrar limpeza individual.
+    const caixa = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "R-121 Saidas",
+      dataHoraAbertura: "2026-07-31T08:00",
+      // As saidas exercitadas abaixo somam R$ 102,00. O fundo precisa ser fisicamente suficiente
+      // para que este caso prove a permissao de edicao pos-fechamento, e nao uma quebra artificial.
+      valorAbertura: 102,
+      registrarLimpeza: false
     });
-    expect(conta.statusCode, conta.body).toBe(201);
-    contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
-    const pdv = await contexto.app.inject({
-      method: "POST",
-      url: "/api/pdvs",
-      headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "PDV R-121", contaId: contaDoPdv, ativo: true }
-    });
-    expect(pdv.statusCode, pdv.body).toBe(201);
-
-    const abertura = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieCaixa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId: json<{ data: { id: string } }>(pdv).data.id,
-        usuarioCaixaId: usuario.id,
-        dataHoraAbertura: "2026-07-31T08:00"
-      }
-    });
-    expect(abertura.statusCode, abertura.body).toBe(201);
-    caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    caixaId = caixa.caixaId;
+    contaDoPdv = caixa.contaId;
+    lacreFechamento = caixa.lacreFechamento;
   }, 120_000);
 
   afterAll(async () => contexto.fechar());
 
   function post(cookie: string, url: string, payload: object) {
-    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-SAIDAS-${url}`, ...payload } : payload;
-    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload: corpo });
+    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
   }
   function put(cookie: string, url: string, payload: object) {
     return contexto.app.inject({ method: "PUT", url, headers: { cookie }, payload });
@@ -239,25 +219,51 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
 
     // Zera o caixa e fecha. Depois disso corrigir vira ato de tesouraria — e o que protege os
     // totais congelados em `fechamentos_caixa`.
-    const status = await contexto.app.inject({
-      method: "GET",
-      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
-      headers: { cookie: cookieCaixa }
+    // As saidas deste cenario consomem o fundo de abertura. A contagem fisica zero nao inventa
+    // retorno e deixa este caso focado no bloqueio de edicao depois do fechamento.
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId });
+    const fechar = await post(cookieCaixa, `/api/caixa/${caixaId}/fechar`, {
+      lacreFechamento,
+      caixaResponsavelNome: "Operador R-121",
+      supervisorResponsavelNome: "Supervisor de teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0,
+      observacao: "Contagem fisica zero no fechamento do teste"
     });
-    const proposta = json<{ data: { resumo: { propostaRetorno: number } } }>(status).data.resumo.propostaRetorno;
-    if (proposta > 0) {
-      const retorno = await post(cookieCaixa, `/api/caixa/${caixaId}/transferencia-cofre`, {
-        tipo: "retorno",
-        valor: proposta,
-        idempotenciaChave: randomUUID()
-      });
-      expect(retorno.statusCode, retorno.body).toBe(200);
-    }
-    const fechar = await post(cookieCaixa, `/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento do teste" });
     expect(fechar.statusCode, fechar.body).toBe(204);
 
     const editada = await put(cookieCaixa, `/api/despesas/${id}`, despesaBase({ descricao: "Tarde demais" }));
     assertProblem(editada, 403);
     expect(editada.body).toContain("Tesouraria");
+  });
+
+  it("Deve_Retornar409_Quando_SaidasFisicasSuperamOSaldoAntesDoFechamento", async () => {
+    // Apos o caso anterior, o operador pode abrir uma nova fixture propria. O objetivo e provar
+    // que a protecao da composicao fisica devolve erro de dominio, sem vazar a restricao do banco
+    // como 500.
+    const caixaNegativo = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "R-121 Saldo Fisico Negativo",
+      valorAbertura: 100
+    });
+    const saidaMaiorQueOFundo = await post(cookieCaixa, "/api/despesas", {
+      ...despesaBase({ descricao: "Saida que excede o fundo", valorOriginal: 101 }),
+      contaOrigemId: caixaNegativo.contaId
+    });
+    expect(saidaMaiorQueOFundo.statusCode, saidaMaiorQueOFundo.body).toBe(201);
+
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: caixaNegativo.caixaId });
+    const fechar = await post(cookieCaixa, `/api/caixa/${caixaNegativo.caixaId}/fechar`, {
+      lacreFechamento: caixaNegativo.lacreFechamento,
+      caixaResponsavelNome: "Operador R-121",
+      supervisorResponsavelNome: "Supervisor de teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0,
+      observacao: "Saldo fisico negativo deve ser corrigido antes do fechamento"
+    });
+    assertProblem(fechar, 409);
+    expect(fechar.body).toContain("SALDO_FISICO_NEGATIVO");
   });
 });

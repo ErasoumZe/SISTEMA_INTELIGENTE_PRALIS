@@ -1252,6 +1252,17 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     }
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
     const valorFisicoEsperadoCentavos = saldoFisicoCaixaCentavos(totais);
+    // A composicao registrada no fechamento representa dinheiro que poderia existir na gaveta e
+    // por isso o banco corretamente proibe valor esperado negativo. Sem esta guarda, saidas fisicas
+    // acima do saldo chegavam ao UPDATE e a restricao virava 500 opaco. A formula continua a mesma:
+    // apenas recusamos o fechamento ate que a saida indevida seja tratada na trilha auditavel.
+    if (valorFisicoEsperadoCentavos < 0) {
+      throw new ErroDominio(
+        "O saldo fisico calculado esta negativo. Revise as saidas fisicas antes de fechar o caixa.",
+        409,
+        "SALDO_FISICO_NEGATIVO"
+      );
+    }
     const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
     const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
