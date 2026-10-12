@@ -6,6 +6,7 @@ import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirCaixaDoOperador,
   encerrarCaixaSeedAdminParaTeste,
+  prepararPayloadFechamentoValido,
   registrarEncerramentoCaixaParaTeste,
   universoDoCaixa
 } from "../../setup/caixa.js";
@@ -39,6 +40,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   let cookieAdmin = "";
   let cookieCaixa = "";
   let cookieGerente = "";
+  let cookieTesouraria = "";
   let gerenteId = "";
   const hoje = "2026-08-01";
   let sequencia = 0;
@@ -46,10 +48,11 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    [cookieAdmin, cookieCaixa, cookieGerente] = await Promise.all([
+    [cookieAdmin, cookieCaixa, cookieGerente, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa"),
-      cookieSessao(contexto.app, "gerente")
+      cookieSessao(contexto.app, "gerente"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
     const gerente = await consultarUm<{ usuario_id: string }>(
       "select usuario_id from perfis_usuarios where lower(email) = lower($1)",
@@ -109,12 +112,16 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     expect(venda.statusCode, venda.body).toBe(201);
   }
 
-  function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+  async function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookie,
+      caixaId
+    });
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload: { lacreFechamento: `FCH-PORTAS-${caixaId}`, ...payload }
+      payload: { ...fechamentoFisico, ...payload }
     });
   }
 
@@ -132,6 +139,17 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       contaId,
       ativo: true
     });
+  }
+
+  async function criarMaquininhaParaAbertura(nome: string) {
+    const maquininha = await inject("POST", "/api/maquininhas", cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      numeroSerie: `TESTE-${nome}-${randomUUID()}`,
+      apelido: `Maquininha ${nome}`,
+      ativo: true
+    });
+    expect(maquininha.statusCode, maquininha.body).toBe(201);
+    return json<{ data: { id: string } }>(maquininha).data.id;
   }
 
   // ------------------------------------------------------------------------------------------
@@ -172,9 +190,20 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     });
     expect(transferencia.statusCode, transferencia.body).toBe(201);
 
+    // O dossie e preparado antes do gate. A corrida abaixo mede somente o POST /fechar, que e
+    // quem toma o lock do cofre; anexar arquivos dentro da corrida mascara essa ordem.
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: fx.caixaId
+    });
     const bloqueador = await segurarContaDoCofre();
     try {
-      const fechamento = fecharCaixaInject(fx.caixaId, cookieCaixa);
+      const fechamento = contexto.app.inject({
+        method: "POST",
+        url: `/api/caixa/${fx.caixaId}/fechar`,
+        headers: { cookie: cookieCaixa },
+        payload: fechamentoFisico
+      });
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
       // A troca chega DURANTE o fechamento: tem de esperar (serializa com o FOR UPDATE) e, ao
@@ -233,15 +262,20 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     });
     expect(pdv.statusCode, pdv.body).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const maquininhaId = await criarMaquininhaParaAbertura(`S3c ${sequencia}`);
 
-    const criada = await inject("POST", "/api/transferencias", cookieGerente, {
+    const criada = await inject("POST", "/api/transferencias", cookieTesouraria, {
       empresaId: idsTeste.empresaA,
       dataReferencia: hoje,
       descricao: lacre,
       valorOriginal: 35,
-      contaOrigemId: idsTeste.contaBanco,
+      valorEspecieDeclarado: 35,
+      valorMoedasDeclarado: 0,
+      contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaCId,
-      nLacreDoc: lacre
+      nLacreDoc: lacre,
+      lacresRetorno: [`${lacre}-RETORNO`],
+      lacreFechamentoPlanejado: `${lacre}-FECHAMENTO`
     });
     expect(criada.statusCode, criada.body).toBe(201);
     const transferenciaId = json<{ data: { id: string } }>(criada).data.id;
@@ -264,7 +298,10 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
         pdvId,
         usuarioCaixaId: usuarioCaixa!.id,
         dataHoraAbertura: "2026-07-31T08:30",
-        lacreAbertura: lacre
+        maquininhaId,
+        lacreAbertura: lacre,
+        caixaResponsavelNome: "Operador de teste",
+        supervisorResponsavelNome: "Supervisor de teste"
       });
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
       await bloqueador.cliente.query("commit");
@@ -343,12 +380,16 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     const usuarioGerente = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
       usuariosTeste.gerente.email
     ]);
+    const maquininhaId = await criarMaquininhaParaAbertura(`S4a ${sequencia}`);
     const abertura = await inject("POST", "/api/caixa/abrir", cookieGerente, {
       empresaId: idsTeste.empresaA,
       pdvId: pdvBId,
       usuarioCaixaId: usuarioGerente!.id,
       dataHoraAbertura: "2026-07-31T09:00",
-      lacreAbertura: lacre
+        maquininhaId,
+        lacreAbertura: lacre,
+        caixaResponsavelNome: "Gerente de teste",
+        supervisorResponsavelNome: "Supervisor de teste"
     });
     expect(abertura.statusCode, abertura.body).toBe(400);
     expect(abertura.body).toMatch(/pertence a outro caixa/i);
@@ -367,8 +408,8 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       [pdvBId]
     );
     expect(Number(caixasNoPdvB?.total ?? "0")).toBe(0);
-    // A saida segue contando no caixa de origem (ainda aberto).
-    expect(await universoDoCaixa(fx.caixaId)).toMatchObject({ status: "aberto", transferencias: 1 });
+    // O malote de abertura e a saida do cenario pertencem ao caixa de origem, que segue aberto.
+    expect(await universoDoCaixa(fx.caixaId)).toMatchObject({ status: "aberto", transferencias: 2 });
   });
 
   it("Deve_AbrirNormalmente_Quando_OLacreVemDeTransferenciaSemCaixa", async () => {
@@ -387,15 +428,20 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       ativo: true
     });
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const maquininhaId = await criarMaquininhaParaAbertura(`S4b ${sequencia}`);
 
-    const criada = await inject("POST", "/api/transferencias", cookieGerente, {
+    const criada = await inject("POST", "/api/transferencias", cookieTesouraria, {
       empresaId: idsTeste.empresaA,
       dataReferencia: hoje,
       descricao: lacre,
       valorOriginal: 25,
-      contaOrigemId: idsTeste.contaBanco,
+      valorEspecieDeclarado: 25,
+      valorMoedasDeclarado: 0,
+      contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
-      nLacreDoc: lacre
+      nLacreDoc: lacre,
+      lacresRetorno: [`${lacre}-RETORNO`],
+      lacreFechamentoPlanejado: `${lacre}-FECHAMENTO`
     });
     expect(criada.statusCode, criada.body).toBe(201);
     expect(
@@ -412,7 +458,10 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       pdvId,
       usuarioCaixaId: usuarioCaixa!.id,
       dataHoraAbertura: "2026-07-31T09:30",
-      lacreAbertura: lacre
+      maquininhaId,
+      lacreAbertura: lacre,
+      caixaResponsavelNome: "Operador de teste",
+      supervisorResponsavelNome: "Supervisor de teste"
     });
     expect(abertura.statusCode, abertura.body).toBe(201);
     registrarEncerramentoCaixaParaTeste(json<{ data: { id: string } }>(abertura).data.id);

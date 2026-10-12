@@ -27,8 +27,8 @@ export async function salvarPdv(id: string | null, body: DadosExternos) {
         const caixaAberto = await buscarCaixaAbertoDoPdvRepository(id, tx);
         if (caixaAberto) {
           const trava = await travarCaixaCompartilhadoRepository(caixaAberto.id, tx);
-          if (trava?.status === "aberto") {
-            falharValidacao("PDV com caixa aberto: a conta nao pode ser trocada");
+          if (trava && trava.status !== "fechado") {
+            falharValidacao("PDV com caixa aberto ou em fechamento: a conta nao pode ser trocada");
           }
         }
       }

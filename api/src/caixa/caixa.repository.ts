@@ -796,7 +796,9 @@ export async function buscarCaixaAbertoDoPdvRepository(pdvId: string, db: Execut
   const [linha] = await db
     .select({ id: fechamentosCaixa.id })
     .from(fechamentosCaixa)
-    .where(and(eq(fechamentosCaixa.pdvId, pdvId), eq(fechamentosCaixa.status, "aberto")))
+    // `em_fechamento` ainda e circuito vivo: o fechamento pode estar segurando o cofre enquanto
+    // congela os totais. Trocar a conta do PDV nessa janela muda o pivo financeiro do proprio ato.
+    .where(and(eq(fechamentosCaixa.pdvId, pdvId), inArray(fechamentosCaixa.status, ["aberto", "em_fechamento"])))
     .limit(1);
   return linha ?? null;
 }

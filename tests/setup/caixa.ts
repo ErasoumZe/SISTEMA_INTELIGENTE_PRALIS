@@ -266,6 +266,54 @@ export async function prepararFechamentoValido(
   return { folhaId, anexoMaquininhaId, anexoCreareId };
 }
 
+/**
+ * Prepara o dossie obrigatorio e devolve a contagem que representa o fisico mostrado pelo proprio
+ * Caixa antes do corte. E a unica fixture para suites que precisam disparar o fechamento dentro
+ * de uma corrida: nao inventa lacre, nao manda `NaN` e nao esconde uma divergencia real.
+ */
+export async function prepararPayloadFechamentoValido(
+  app: FastifyInstance,
+  entrada: {
+    cookieOperador: string;
+    caixaId: string;
+    empresaId?: string;
+    caixaResponsavelNome?: string;
+    supervisorResponsavelNome?: string;
+    observacao?: string;
+  }
+) {
+  const empresaId = entrada.empresaId ?? idsTeste.empresaA;
+  const status = await app.inject({
+    method: "GET",
+    url: `/api/caixa/status?empresaId=${empresaId}`,
+    headers: { cookie: entrada.cookieOperador }
+  });
+  expect(status.statusCode, status.body).toBe(200);
+  const dadosStatus = json<{
+    data: { caixaAberto: { id: string } | null; resumo: { saldo: number } | null; lacreFechamentoReservado: string | null };
+  }>(status).data;
+  if (dadosStatus.caixaAberto?.id !== entrada.caixaId) {
+    throw new Error(`Fixture de fechamento esperava o caixa ${entrada.caixaId} aberto para o operador`);
+  }
+  if (!dadosStatus.lacreFechamentoReservado) {
+    throw new Error("Fixture de fechamento sem lacre reservado pelo malote de abertura");
+  }
+  const saldo = dadosStatus.resumo?.saldo;
+  if (typeof saldo !== "number" || !Number.isFinite(saldo) || saldo < 0) {
+    throw new Error("Fixture de fechamento recebeu saldo fisico invalido; o cenario deve corrigir a saida antes de fechar");
+  }
+
+  await prepararFechamentoValido(app, entrada);
+  return {
+    lacreFechamento: dadosStatus.lacreFechamentoReservado,
+    caixaResponsavelNome: entrada.caixaResponsavelNome ?? "Operador de teste",
+    supervisorResponsavelNome: entrada.supervisorResponsavelNome ?? "Supervisor de teste",
+    valorEspecieFechamento: saldo,
+    valorMoedasFechamento: 0,
+    observacao: entrada.observacao ?? "Fechamento fisico da fixture"
+  };
+}
+
 /** Cria um retorno/sangria com a bolsa retornavel recebida na abertura do mesmo caixa. */
 export async function criarRetornoValido(
   app: FastifyInstance,
