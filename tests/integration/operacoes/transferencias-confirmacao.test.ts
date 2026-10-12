@@ -54,6 +54,7 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
   }
 
   function payloadTransferencia(lacre: string, origem: string, destino: string, extras: Record<string, unknown> = {}) {
+    const destinoEhPdv = destino === idsTeste.contaCaixa || destino === idsTeste.contaLivre;
     return {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
@@ -63,6 +64,16 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       contaDestinoId: destino,
       nLacreDoc: lacre,
       tempoConfirmacao: "5min",
+      // Cofre -> PDV e o malote fisico da abertura: deve declarar sua composicao e levar o
+      // lacre que ficara reservado para o fechamento. Transferencias comuns mantem o contrato
+      // original, pois esses campos so sao validos nesse circuito.
+      ...(origem === idsTeste.contaCofre && destinoEhPdv
+        ? {
+            valorEspecieDeclarado: 100,
+            valorMoedasDeclarado: 0,
+            lacreFechamentoPlanejado: `${lacre}-FECHAMENTO`
+          }
+        : {}),
       ...extras
     };
   }
