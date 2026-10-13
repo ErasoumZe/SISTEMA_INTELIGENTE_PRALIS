@@ -63,6 +63,10 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaA,
         pdvId: idsTeste.pdvLivre,
         usuarioCaixaId: usuarioAdminId,
+        maquininhaId: randomUUID(),
+        lacreAbertura: "TESTE-SEGUNDO-CAIXA",
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
         observacao: "Segundo caixa do mesmo operador"
       }
     });
@@ -94,7 +98,7 @@ describe("caixa integration", () => {
     expect(JSON.stringify(resposta.json())).toContain(idsTeste.caixaFechado);
   });
 
-  it("Deve_Retornar403NoHistoricoEDetalhe_Quando_UsuarioSoOperaCaixa", async () => {
+  it("Deve_RestringirHistoricoMasPermitirDetalheDoProprioCaixa_Quando_UsuarioSoOperaCaixa", async () => {
     const cookieCaixa = await cookieSessao(contexto.app, "caixa");
     const historico = await contexto.app.inject({
       method: "GET",
@@ -108,7 +112,7 @@ describe("caixa integration", () => {
     });
 
     assertProblem(historico, 403);
-    assertProblem(detalhe, 403);
+    assertOk(detalhe);
   });
 
   it("Deve_OmitirTokenEdicao_Quando_ListarHistorico", async () => {
@@ -354,22 +358,24 @@ describe("caixa integration", () => {
       };
     }>(detalhe).data;
     expect(corpo.lancamentos.find((grupo) => grupo.categoria === "entradas")?.total).toBe(42);
-    expect(corpo.vendasCanceladas).toContainEqual(
-      expect.objectContaining({
-        id: vendaId,
-        identificadorExterno: "CREARE:CANCELADA-CAIXA",
-        valor: 120,
-        pagamentos: [{ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 }],
-        produtos: [
-          expect.objectContaining({
-            id: produtoId,
-            descricao: "Produto cancelado de teste",
-            quantidade: 2,
-            valorTotal: 125,
-            cancelado: true
-          })
-        ]
-      })
+    const canceladaNoDetalhe = corpo.vendasCanceladas.find((venda) => venda.id === vendaId);
+    expect(canceladaNoDetalhe).toMatchObject({
+      identificadorExterno: "CREARE:CANCELADA-CAIXA",
+      valor: 120
+    });
+    expect(canceladaNoDetalhe?.pagamentos).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 })])
+    );
+    expect(canceladaNoDetalhe?.produtos).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: produtoId,
+          descricao: "Produto cancelado de teste",
+          quantidade: 2,
+          valorTotal: 125,
+          cancelado: true
+        })
+      ])
     );
     expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(
       vendaId
@@ -421,6 +427,10 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaB,
         pdvId: idsTeste.pdvA,
         usuarioCaixaId: usuarioAdminId,
+        maquininhaId: randomUUID(),
+        lacreAbertura: "TESTE-EMPRESA-PROIBIDA",
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
         dataHoraAbertura: "2026-07-02T08:00",
         observacao: "Caixa proibido"
       }
@@ -564,6 +574,10 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaA,
         pdvId: "99999999-9999-4999-8999-999999999999",
         usuarioCaixaId,
+        maquininhaId: randomUUID(),
+        lacreAbertura: "TESTE-PDV-INVALIDO",
+        caixaResponsavelNome: "Caixa de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
         dataHoraAbertura: "2026-07-03T08:00"
       }
     });
@@ -575,6 +589,10 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaA,
         pdvId: idsTeste.pdvA,
         usuarioCaixaId,
+        maquininhaId: randomUUID(),
+        lacreAbertura: "TESTE-PDV-OCUPADO",
+        caixaResponsavelNome: "Caixa de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
         dataHoraAbertura: "2026-07-03T08:00"
       }
     });
