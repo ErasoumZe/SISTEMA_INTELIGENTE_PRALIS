@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { entrar, escolherNoSelect, escolherPrimeiraOpcao, observarConsole, USUARIOS } from "./apoio.js";
-import { irParaTela } from "./apoio-compras.js";
+import { escolherNoFiltro, irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(180_000);
 
@@ -51,11 +51,11 @@ test("produto de Compras persiste parametros e aparece nos cinco filtros de esto
   await expect(linha).toContainText(localVenda1);
   await expect(linha).toContainText(/10(?:\.000)?\s*\/\s*40(?:\.000)?/);
 
-  await escolherNoSelect(page, "Grupo", "Farinhas");
-  await escolherNoSelect(page, "Área", area);
-  await escolherNoSelect(page, "Local de venda", localVenda1);
-  await escolherNoSelect(page, "Local de estoque", localEstoque);
-  await escolherNoSelect(page, "Curva ABC", "B");
+  await escolherNoFiltro(page, "Grupo", "Farinhas");
+  await escolherNoFiltro(page, "Área", area);
+  await escolherNoFiltro(page, "Local de venda", localVenda1);
+  await escolherNoFiltro(page, "Local de estoque", localEstoque);
+  await escolherNoFiltro(page, "Curva ABC", "B");
   await expect(linha).toBeVisible();
   expect(problemas).toEqual([]);
 });

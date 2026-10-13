@@ -143,6 +143,30 @@ export async function escolherProduto(raiz: Locator, page: Page, descricao: stri
 }
 
 /**
+ * Escolhe uma opcao num `v-select` de filtro pelo rotulo EXATO.
+ *
+ * `getByLabel(..., { exact: false })` casa por substring e sem diferenciar maiusculas: procurar
+ * "Grupo" na tela de Estoque tambem casa "Buscar produto ou grupo", e o `.first()` clicava no campo
+ * de busca. O menu nunca abria e o teste acusava filtro quebrado que nao estava quebrado.
+ */
+export async function escolherNoFiltro(page: Page, rotulo: string, opcao: string | RegExp) {
+  const campo = page.locator(".v-input", { has: page.getByLabel(rotulo, { exact: true }) }).first();
+  await campo.locator(".v-field").click();
+  await page.locator(".v-overlay-container .v-list-item").filter({ hasText: opcao }).first().click();
+  await expect(page.locator(".v-overlay-container .v-list-item")).toHaveCount(0);
+}
+
+/**
+ * Campo de texto pelo rotulo, sem colidir com o botao "limpar" do Vuetify.
+ *
+ * Um `v-text-field` com `clearable` expoe DOIS elementos com o mesmo rotulo: o `input` e o icone
+ * "Clear <rotulo>". `getByLabel` pega os dois e o modo estrito do Playwright falha.
+ */
+export function campoDeTexto(page: Page, rotulo: string): Locator {
+  return page.getByRole("textbox", { name: rotulo, exact: true });
+}
+
+/**
  * Navega para uma tela e espera o titulo aparecer.
  *
  * O teto e generoso de proposito: no servidor de DESENVOLVIMENTO a PRIMEIRA visita a cada rota

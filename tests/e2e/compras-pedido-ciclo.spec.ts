@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { entrar, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  campoDeTexto,
   criarFornecedor,
   criarProdutoDeEstoque,
   dialogoAberto,
@@ -67,7 +68,7 @@ test.describe("ciclo de compra", () => {
     await cartaoSugestao.getByRole("button", { name: "Gerar sugestão" }).click();
     await expect(page.locator(".v-snackbar__content")).toContainText(/[Ss]ugest/u);
 
-    await page.getByLabel("Buscar fornecedor").fill(fornecedorSugestao);
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorSugestao);
     const linhaSugestao = page.locator("tbody tr").filter({ hasText: fornecedorSugestao });
     await expect(linhaSugestao).toContainText("Sugestão");
     await linhaSugestao.getByRole("button", { name: "Abrir" }).click();
@@ -89,7 +90,7 @@ test.describe("ciclo de compra", () => {
     await formulario.getByRole("button", { name: "Salvar pedido" }).click();
     await expect(formulario).toBeHidden();
 
-    await page.getByLabel("Buscar fornecedor").fill(fornecedorManual);
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorManual);
     const linhaManual = page.locator("tbody tr").filter({ hasText: fornecedorManual });
     await expect(linhaManual).toContainText("Manual");
     await expect(linhaManual).toContainText("A fazer");
@@ -168,7 +169,7 @@ test.describe("ciclo de compra", () => {
 
     // 9) A tela reflete o recebimento concluido.
     await page.reload();
-    await page.getByLabel("Buscar fornecedor").fill(fornecedorManual);
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorManual);
     const linhaFinal = page.locator("tbody tr").filter({ hasText: fornecedorManual });
     await expect(linhaFinal).toContainText("Recebido");
     await linhaFinal.getByRole("button", { name: "Abrir" }).click();
