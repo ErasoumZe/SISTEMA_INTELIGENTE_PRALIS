@@ -28,6 +28,7 @@ import type {
 } from "~/types/padaria";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
+import AppTransicaoEntrada from "~/components/app/AppTransicaoEntrada.vue";
 import ConfirmacaoDialog from "~/components/comum/ConfirmacaoDialog.vue";
 import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
@@ -106,6 +107,7 @@ import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 import { separarNotificacoes } from "~/utils/notificacoes";
 import { useFilaMensagensOperador, useMensagensAdmin } from "~/composables/useMensagensAdmin";
+import { consumirTransicaoEntrada } from "~/composables/useTransicaoEntrada";
 import MensagemAdminPopup from "~/components/comum/MensagemAdminPopup.vue";
 
 type TipoPagina =
@@ -171,6 +173,7 @@ const mensagemAtual = computed(() => filaMensagens.atual());
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
+const mostrarTransicaoEntrada = ref(false);
 const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
 const atualizandoCaixaAutomaticamente = ref(false);
@@ -2350,6 +2353,18 @@ function atualizarAoRetomarPagina() {
   void atualizarCaixaAutomaticamente();
 }
 
+function exibirTransicaoEntradaAgendada() {
+  if (mostrarTransicaoEntrada.value || !consumirTransicaoEntrada()) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  mostrarTransicaoEntrada.value = true;
+}
+
+// A logo só entra depois que a casca autenticada existe. Assim o desfoque revela o painel em vez
+// de revelar o formulário de login, e a marca não reaparece ao trocar de página internamente.
+watch([carregando, sessao], ([estaCarregando, sessaoAtual]) => {
+  if (!estaCarregando && sessaoAtual) exibirTransicaoEntradaAgendada();
+});
+
 onMounted(() => {
   window.addEventListener("focus", atualizarAoRetomarPagina);
   document.addEventListener("visibilitychange", atualizarAoRetomarPagina);
@@ -2366,6 +2381,7 @@ onMounted(() => {
     carregando.value = false;
     erro.value = "";
     aplicarTema(temaAtual.value, temaResumoCaixa.value);
+    exibirTransicaoEntradaAgendada();
     void atualizarOperacoesAutomaticamente();
     return;
   }
@@ -2513,4 +2529,6 @@ onBeforeUnmount(() => {
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
+
+  <AppTransicaoEntrada v-if="mostrarTransicaoEntrada" @terminou="mostrarTransicaoEntrada = false" />
 </template>
