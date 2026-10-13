@@ -3,6 +3,7 @@ import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
 import { rotuloDiaSemanaCurto } from "~/utils/admissoes";
 import { dinheiro, permissaoPertenceASecao, permissoes, permissoesOcultasNaTela } from "~/utils/domain";
+import { mascararWhatsapp } from "~/utils/formatacao";
 import type { SecaoPermissao } from "~/utils/domain";
 
 type LinhaCadastro = Record<string, string | undefined>;
@@ -52,7 +53,7 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.nome,
         documento: item.documento,
-        whatsapp: item.whatsapp
+        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined
       }));
     if (tela === "socios_gestores")
       return listas.sociosGestores.map((item) => ({
