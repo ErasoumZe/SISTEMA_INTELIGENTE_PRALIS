@@ -620,7 +620,7 @@ describe("caixa integration", () => {
     });
 
     assertProblem(fecharInexistente, 404);
-    assertProblem(fecharFechado, 400);
+    assertProblem(fecharFechado, 409);
   });
 
   it("Deve_Retornar400_Quando_AbrirCaixaComPdvInvalidoOuOcupado", async () => {
@@ -781,23 +781,29 @@ describe("caixa integration", () => {
   // e o fechamento gravava quebra falsa no nome do operador.
   // Nao fecha o caixa do seed de proposito: ele e compartilhado com os demais testes do arquivo.
   it("Deve_Retornar400_Quando_RetornoMaiorQueOSaldoDoCaixa", async () => {
+    const caixa = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Teto físico do retorno"
+    });
     const antes = await consultarUm<{ total: string }>(
       "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",
-      [idsTeste.caixaAberto]
+      [caixa.caixaId]
     );
 
     const lacres = await contexto.app.inject({
       method: "GET",
-      url: `/api/caixa/${idsTeste.caixaAberto}/lacres-retorno`,
-      headers: { cookie: cookieAdmin }
+      url: `/api/caixa/${caixa.caixaId}/lacres-retorno`,
+      headers: { cookie: cookieCaixa }
     });
     assertOk(lacres);
     const lacre = json<{ data: Array<{ id: string }> }>(lacres).data[0];
     if (!lacre) throw new Error("Caixa seed sem lacre retornável para provar o teto físico");
     const resposta = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
-      headers: { cookie: cookieAdmin },
+      url: `/api/caixa/${caixa.caixaId}/transferencia-cofre`,
+      headers: { cookie: cookieCaixa },
       payload: {
         valor: 999999,
         valorEspecie: 999999,
@@ -813,7 +819,7 @@ describe("caixa integration", () => {
 
     const depois = await consultarUm<{ total: string }>(
       "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",
-      [idsTeste.caixaAberto]
+      [caixa.caixaId]
     );
     expect(depois?.total).toBe(antes?.total);
   });
@@ -830,7 +836,6 @@ describe("caixa integration", () => {
   });
 
   it("Deve_CalcularSaldoRetornarAoCofreEFechar_Quando_CicloOperacionalCompleto", async () => {
-    const usuarioOperadorId = await usuarioIdPorEmail(usuariosTeste.multiempresa.email);
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
 
     const conta = await contexto.app.inject({
@@ -850,20 +855,16 @@ describe("caixa integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: usuarioOperadorId,
-        dataHoraAbertura: "2026-03-01T08:00",
-        observacao: "Ciclo operacional"
-      }
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieMultiempresa,
+      emailOperador: usuariosTeste.multiempresa.email,
+      nome: "Ciclo operacional",
+      contaId: contaPdvId,
+      pdvId,
+      dataHoraAbertura: "2026-03-01T08:00"
     });
-    expect(abrir.statusCode).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    const { caixaId } = abertura;
 
     const dataRef = "2026-03-01";
     // R-129: data de pagamento nao pode ser retroativa. Este teste e sobre o CICLO do caixa, nao
@@ -1077,7 +1078,12 @@ describe("caixa integration", () => {
   });
 
   it("Deve_ConsultarSomenteAsVendasDoCaixaAbertoDoOperador", async () => {
-    const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
+    const caixa = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Corte de relatório"
+    });
     const vendaDoCaixa = randomUUID();
     const vendaDeOutroCaixa = randomUUID();
     const produtoVinculado = randomUUID();
@@ -1142,8 +1148,8 @@ describe("caixa integration", () => {
     const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
     const inicio = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${idsTeste.caixaAbertoEntradas}/iniciar-fechamento`,
-      headers: { cookie: cookieOperadorEntradas }
+      url: `/api/caixa/${caixa.caixaId}/iniciar-fechamento`,
+      headers: { cookie: cookieCaixa }
     });
 
     assertOk(inicio);
@@ -1151,8 +1157,8 @@ describe("caixa integration", () => {
 
     const relatorio = await contexto.app.inject({
       method: "GET",
-      url: `/api/caixa/${idsTeste.caixaAbertoEntradas}/vendas`,
-      headers: { cookie: cookieOperadorEntradas }
+      url: `/api/caixa/${caixa.caixaId}/vendas`,
+      headers: { cookie: cookieCaixa }
     });
 
     assertOk(relatorio);
