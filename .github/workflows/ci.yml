@@ -38,9 +38,11 @@ jobs:
   integracao:
     name: Testes de integracao (Testcontainers)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A suite e serializada para isolar Testcontainers. A execucao completa
+    # aprovada localmente pode levar cerca de 48 minutos.
+    timeout-minutes: 60
     env:
-      TEST_TIMEOUT_MS: "1500000"
+      TEST_TIMEOUT_MS: "3300000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
