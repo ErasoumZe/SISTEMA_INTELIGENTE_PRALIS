@@ -177,7 +177,8 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       payloadTransferencia("QA-DISPUTA-001", idsTeste.contaCofre, destinoVencedor, { tempoConfirmacao: null })
     );
     expect(edicaoConferida.statusCode, edicaoConferida.body).toBe(400);
-    expect(edicaoConferida.body).toMatch(/ja conferida nao pode ser editada/iu);
+    // O lacre de fechamento reservado é a primeira guarda de imutabilidade.
+    expect(edicaoConferida.body).toMatch(/lacre de fechamento reservado/i);
   });
 
   it("permite prazo apenas na transferencia direta e persiste ausencia de prazo como null", async () => {
