@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { entrar, escolherNoSelect, escolherPrimeiraOpcao, observarConsole, USUARIOS } from "./apoio.js";
+import { irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(180_000);
 
@@ -13,8 +14,7 @@ test("produto de Compras persiste parametros e aparece nos cinco filtros de esto
   const localEstoque = `Deposito E2E ${sufixo}`;
 
   await entrar(page, USUARIOS.compras);
-  await page.goto("/produtos/novo");
-  await expect(page.getByRole("heading", { name: "Novo produto" })).toBeVisible();
+  await irParaTela(page, "/produtos/novo", "Novo produto");
   await page.locator('[data-campo="descricao"] input').fill(nome);
   await page.locator('[data-campo="quantidadeIndividual"] input').fill("1");
   await escolherPrimeiraOpcao(page, '[data-campo="unidadeIndividualId"]');
@@ -43,8 +43,7 @@ test("produto de Compras persiste parametros e aparece nos cinco filtros de esto
   await expect(page.getByLabel("Local de venda 2")).toHaveValue(localVenda2);
   await expect(page.getByLabel("Estoque atual")).toHaveValue("0.000");
 
-  await page.goto("/estoque_produtos");
-  await expect(page.getByRole("heading", { name: "Estoque" })).toBeVisible();
+  await irParaTela(page, "/estoque_produtos", "Estoque");
   await page.getByRole("textbox", { name: "Buscar produto ou grupo" }).fill(nome);
   const linha = page.locator("tbody tr").filter({ hasText: nome });
   await expect(linha).toContainText(area);

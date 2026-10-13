@@ -1,6 +1,13 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { fornecedores, produtos } from "@padaria/db/schema/cadastro";
-import { estoqueMovimentos, pedidos, pedidosEventos, pedidosItens, pedidosRecebimentos } from "@padaria/db/schema";
+import {
+  estoqueMovimentos,
+  pedidos,
+  pedidosEventos,
+  pedidosItens,
+  pedidosRecebimentos,
+  perfisUsuarios
+} from "@padaria/db/schema";
 import type {
   PedidoDto,
   PedidoEventoDto,
@@ -290,9 +297,11 @@ export async function obterPedidoDetalheRepository(
       status: pedidosEventos.status,
       observacao: pedidosEventos.observacao,
       criadoPor: pedidosEventos.criadoPor,
+      criadoPorNome: perfisUsuarios.nome,
       criadoEm: pedidosEventos.criadoEm
     })
     .from(pedidosEventos)
+    .innerJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, pedidosEventos.criadoPor))
     .where(eq(pedidosEventos.pedidoId, pedidoId))
     .orderBy(asc(pedidosEventos.criadoEm))
     .then((linhas) =>

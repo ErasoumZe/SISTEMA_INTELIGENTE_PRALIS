@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { entrar, observarConsole, USUARIOS } from "./apoio.js";
+import { irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(120_000);
 
@@ -10,8 +11,7 @@ test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page })
   const nomeEditado = `${nome} Editado`;
 
   await entrar(page, USUARIOS.compras);
-  await page.goto("/fornecedores");
-  await expect(page.getByRole("heading", { name: "Fornecedores" })).toBeVisible();
+  await irParaTela(page, "/fornecedores", "Fornecedores");
 
   await page.getByRole("button", { name: "Novo cadastro" }).click();
   let dialogo = page.locator(".v-dialog.v-overlay--active");

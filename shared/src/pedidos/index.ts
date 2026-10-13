@@ -15,7 +15,15 @@ export const pedidoStatus = [
   "recebido",
   "cancelado"
 ] as const;
-export const pedidoStatusNovo = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido", "cancelado"] as const;
+export const pedidoStatusNovo = [
+  "a_fazer",
+  "enviado",
+  "retornado",
+  "confirmado",
+  "recebido_parcial",
+  "recebido",
+  "cancelado"
+] as const;
 export const pedidoRecorrencias = ["nenhuma", "semanal", "quinzenal", "mensal"] as const;
 export type PedidoTipo = (typeof pedidoTipos)[number];
 export type PedidoStatus = (typeof pedidoStatus)[number];
@@ -97,6 +105,8 @@ export type PedidoEventoDto = {
   status: PedidoStatusNovo;
   observacao: string | null;
   criadoPor: string;
+  // Quem agiu precisa ser legivel na tela: o id sozinho nao responde "quem enviou" nem "quem recebeu".
+  criadoPorNome: string;
   criadoEm: string;
 };
 

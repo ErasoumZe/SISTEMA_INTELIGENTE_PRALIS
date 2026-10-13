@@ -96,12 +96,13 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             >
           </v-card>
         </div>
-        <v-list v-if="pedido.eventos?.length" density="compact">
+        <v-list v-if="pedido.eventos?.length" density="compact" data-secao="historico-pedido">
           <v-list-subheader>Histórico</v-list-subheader>
           <v-list-item
             v-for="evento in pedido.eventos"
             :key="evento.id"
-            :title="rotulosStatus[evento.status]"
+            data-evento="pedido"
+            :title="`${rotulosStatus[evento.status]} · ${evento.criadoPorNome}`"
             :subtitle="`${new Date(evento.criadoEm).toLocaleString('pt-BR')} · ${evento.observacao ?? 'Sem observação'}`"
           />
         </v-list>
