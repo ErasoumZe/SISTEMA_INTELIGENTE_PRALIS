@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { agendarTransicaoEntrada, consumirTransicaoEntrada } from "../../web-vue/composables/useTransicaoEntrada";
+import { agendarTransicaoEntrada, consumirTransicaoEntrada } from "../../web-vue/composables/useTransicaoEntrada.js";
 
 function criarSessionStorage() {
   const valores = new Map<string, string>();
