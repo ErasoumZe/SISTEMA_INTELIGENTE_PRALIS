@@ -5,8 +5,7 @@ import { cookieSessao } from "../../setup/auth.js";
 import {
   abrirCaixaDoOperador,
   criarRetornoValido,
-  prepararPayloadFechamentoValido,
-  universoDoCaixa
+  prepararPayloadFechamentoValido
 } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {

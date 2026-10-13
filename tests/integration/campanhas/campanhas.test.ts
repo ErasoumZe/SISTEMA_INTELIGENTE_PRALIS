@@ -306,7 +306,7 @@ describe("campanhas de bonificacao", () => {
     });
     expect(atualizacao.statusCode, atualizacao.body).toBe(204);
 
-    const abertura = await abrirCaixaDoOperador(contexto.app, {
+    await abrirCaixaDoOperador(contexto.app, {
       cookieAdmin,
       cookieOperador: await cookieSessao(contexto.app, "caixa"),
       emailOperador: "caixa.integracao@padaria.local",

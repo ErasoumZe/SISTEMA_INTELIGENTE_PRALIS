@@ -99,8 +99,6 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
   }
 
   it("cenario completo: 4 operacoes manuais + entrada por integracao", async () => {
-    const usuarioAdmin = await usuarioAdminId();
-
     // Conta + PDV proprios, e vinculo do idCaixa externo -> este PDV (para a venda cair aqui).
     // R-165: a conta do PDV precisa de fundo para as 4 saidas manuais deste cenario.
     const conta = await criar("/api/contas", {
