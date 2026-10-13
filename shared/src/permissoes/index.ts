@@ -7,7 +7,19 @@ export { empresaQuerySchema as permissoesQuerySchema } from "../api/index.js";
 const uuidSchema = z.string().uuid();
 
 export const tipoPermissaoSchema = z.enum(["cargo", "setor", "usuario"]);
-export const regrasPermissoesSchema = z.partialRecord(z.enum(permissoes), z.boolean()).default({});
+// Códigos que deixaram de controlar uma ação podem continuar gravados em perfis antigos. Eles são
+// descartados na leitura para que um cadastro legado não impeça a pessoa de acessar o sistema nem
+// volte a exibir uma permissão sem efeito no editor.
+const permissoesAtuais = new Set<string>(permissoes);
+export const regrasPermissoesSchema = z
+  .preprocess(
+    (valor) => {
+      if (!valor || typeof valor !== "object" || Array.isArray(valor)) return valor;
+      return Object.fromEntries(Object.entries(valor).filter(([codigo]) => permissoesAtuais.has(codigo)));
+    },
+    z.partialRecord(z.enum(permissoes), z.boolean())
+  )
+  .default({});
 
 export const permissaoPayloadSchema = z.object({
   tipoPermissao: tipoPermissaoSchema.default("cargo"),

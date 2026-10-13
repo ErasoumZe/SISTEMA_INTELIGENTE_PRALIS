@@ -96,6 +96,21 @@ describe("item de menu do historico de caixas", () => {
   });
 });
 
+describe("relatorio de fechamento da Tesouraria", () => {
+  it("aparece somente para quem possui a permissao propria de consulta", () => {
+    const menu = menuDoPerfil(["relatorio_fechamento_visualizar"]);
+    expect(idsDaSecao(menu, "Resultados")).toContain("relatorio_fechamento");
+    expect(idsNaRaiz(menuDoPerfil(["transferencias_visualizar"]))).not.toContain("relatorio_fechamento");
+  });
+
+  it("usa a porta de permissao separada da operacao do Caixa", () => {
+    expect(itemPorTela.relatorio_fechamento).toMatchObject({
+      permissao: "relatorio_fechamento_visualizar",
+      icone: "mdi-clipboard-text-search"
+    });
+  });
+});
+
 describe("Socios e Gestores", () => {
   it("tem permissao administrativa propria e nao aparece para quem so opera retiradas", () => {
     expect(itemPorTela.socios_gestores?.permissao).toBe("cadastro_socios_gestores_visualizar");
@@ -230,21 +245,21 @@ describe("categoria Departamento pessoal no menu", () => {
   });
 });
 
-// PROJECT_BRAIN/17 §4: o "+ NOVO" tem TRES itens (um por eixo). Entradas NAVEGA (venda so entra por
-// integracao, D7); Transferencias e Saidas abrem modal — Saidas alterna a categoria por dentro.
+// +Novo oferece somente Saídas e Transferências, respeitando cada ato financeiro.
 describe("+ NOVO por papel", () => {
-  it("tem exatamente Entradas, Transferencias e Saidas — nada por categoria", () => {
+  it("tem exatamente Saídas e Transferências — sem Entradas e sem duplicar categorias", () => {
     const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
-    expect(acoes.map((acao) => acao.id)).toEqual(["entradas", "transferencias", "saidas"]);
-    expect(acoes.map((acao) => acao.titulo)).toEqual(["Entradas", "Transferências", "Saídas"]);
+    expect(acoes.map((acao) => acao.id)).toEqual(["transferencias", "saidas"]);
+    expect(acoes.map((acao) => acao.titulo)).toEqual(["Transferências", "Saídas"]);
   });
 
-  it("Entradas navega para a tela (nao abre modal) e Saidas abre o lancamento", () => {
+  it("remove Entradas do +Novo, preserva consulta no menu e mantém o modal de Saídas", () => {
     const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
     const entradas = acoes.find((acao) => acao.id === "entradas");
     const saidas = acoes.find((acao) => acao.id === "saidas");
-    expect(entradas).toMatchObject({ telaDestino: "entradas" });
-    expect(entradas?.entidade).toBeUndefined();
+    expect(entradas).toBeUndefined();
+    expect(itemPorTela.entradas?.permissao).toBe("entradas_visualizar");
+    expect(acoesNovoPermitidas(["entradas_visualizar"], true)).toEqual([]);
     expect(saidas).toMatchObject({ entidade: "despesa" });
     expect(saidas?.telaDestino).toBeUndefined();
   });
@@ -265,8 +280,21 @@ describe("+ NOVO por papel", () => {
     expect(categoriaInicialSaida(["retiradas_criar"])).toBe("retirada");
   });
 
-  it("quem nao cria nada nem navega para entradas nao ve nenhum item", () => {
+  it("quem não cria nada e não opera Caixa não vê nenhum item", () => {
     expect(acoesNovoPermitidas(["avaliacao_qualidade_visualizar"])).toEqual([]);
+  });
+});
+
+describe("+Novo / retorno manual", () => {
+  it("operador sem criação contábil acessa Transferências somente com Caixa aberto", () => {
+    expect(acoesNovoPermitidas(["caixa_operar"], false)).toEqual([]);
+    expect(acoesNovoPermitidas(["caixa_operar"], true).map((acao) => acao.id)).toEqual(["transferencias"]);
+  });
+  it("Caixa aberto não concede acesso sem caixa_operar", () => {
+    expect(acoesNovoPermitidas(["transferencias_visualizar"], true)).toEqual([]);
+  });
+  it("retaguarda cria transferência comum sem exigir Caixa aberto", () => {
+    expect(acoesNovoPermitidas(["transferencias_criar"], false).map((acao) => acao.id)).toEqual(["transferencias"]);
   });
 });
 

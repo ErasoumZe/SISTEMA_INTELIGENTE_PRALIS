@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, universoDoCaixa } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararPayloadFechamentoValido,
+  universoDoCaixa
+} from "../../setup/caixa.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -67,12 +72,16 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
     expect(venda.statusCode, venda.body).toBe(201);
   }
 
-  function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+  async function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookie,
+      caixaId
+    });
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload: { lacreFechamento: `FCH-CRON-${caixaId}`, ...payload }
+      payload: { ...fechamentoFisico, ...payload }
     });
   }
 
@@ -145,7 +154,9 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
       const cron = processarTransferenciasTemporais();
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
-      const fechamento = fecharCaixaInject(fx.caixaId, cookieCaixa);
+      // O cron vence a corrida e efetiva R$ 55 antes do corte: do malote de R$ 100 restam
+      // R$ 45 em especie. A contagem precisa representar o fisico real, nao o retrato pre-cron.
+      const fechamento = fecharCaixaInject(fx.caixaId, cookieCaixa, { valorEspecieFechamento: 45 });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
       await bloqueador.cliente.query("commit");

@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, json } from "../../setup/integracao.js";
 
 // D-06 · Venda integrada com pagamento DIVIDIDO (2 e 3 formas).
 // O bug historico mais citado: venda dividida contada 2x/3x no caixa (~R$1.000 de diferenca). Todo
@@ -72,6 +72,10 @@ function totalDoRateio(formas: FormaPagamento[]): number {
   return formas.reduce((total, forma) => total + paraCentavos(forma.valor), 0);
 }
 
+function totalEmDinheiro(formas: FormaPagamento[]): number {
+  return formas.filter((forma) => forma.id === "DIN").reduce((total, forma) => total + paraCentavos(forma.valor), 0);
+}
+
 const TOTAL_2_FORMAS = totalDoRateio(RATEIO_2_FORMAS);
 const TOTAL_3_FORMAS = totalDoRateio(RATEIO_3_FORMAS);
 
@@ -83,9 +87,8 @@ function esperado(formas: FormaPagamento[]) {
     .sort((a, b) => b.centavos - a.centavos || a.forma.localeCompare(b.forma));
 }
 
-function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPagamento[]) {
+function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPagamento[], dataHoraVenda = dataVendaAtual()) {
   const valorTotal = totalCentavos / 100;
-  const dataHoraVenda = dataVendaAtual();
   return {
     DadosIntegracao: { origem: "vitest-d06" },
     Venda: {
@@ -127,27 +130,28 @@ function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPa
 describe("D-06 · venda integrada com pagamento dividido", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
   let caixaId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
-
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
 
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta D06 dividido" });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-    const pdv = await criar("/api/pdvs", {
-      empresaId: idsTeste.empresaA,
-      nome: "PDV D06 dividido",
-      contaId,
-      ativo: true
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "D06 pagamento dividido",
+      dataHoraAbertura: "2026-06-29T08:00",
+      valorAbertura: 100,
+      registrarLimpeza: false
     });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const pdvId = abertura.pdvId;
 
     const vinculo = await contexto.app.inject({
       method: "PUT",
@@ -164,30 +168,12 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
 
-    const abertura = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: usuario.id,
-      dataHoraAbertura: "2026-06-29T08:00",
-      observacao: "Caixa D06 pagamento dividido"
-    });
-    caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    caixaId = abertura.caixaId;
   }, 120_000);
 
   afterAll(async () => {
     await contexto.fechar();
   });
-
-  async function criar(url: string, payload: object) {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url,
-      headers: { cookie: cookieAdmin },
-      payload
-    });
-    expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
-    return resposta;
-  }
 
   async function enviarVenda(payload: object) {
     const resposta = await contexto.app.inject({
@@ -258,8 +244,8 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
   }
 
   // Cria a venda do cenario e devolve o que ela gravou. Cada teste chama a sua.
-  async function criarVendaPropria(identificador: string, total: number, formas: FormaPagamento[]) {
-    const resultado = await enviarVenda(payloadDividido(identificador, total, formas));
+  async function criarVendaPropria(identificador: string, total: number, formas: FormaPagamento[], dataHoraVenda?: string) {
+    const resultado = await enviarVenda(payloadDividido(identificador, total, formas, dataHoraVenda));
     expect(resultado.status, `${identificador} deveria nascer nesta execucao`).toBe("criado");
 
     const vendas = await vendasGravadas(identificador);
@@ -285,7 +271,8 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     const movimento = delta(await medirCaixa(), antes);
     expect(movimento.entradas).toBe(somaEmCentavos(pagamentos));
     expect(movimento.entradas).toBe(TOTAL_2_FORMAS);
-    expect(movimento.saldo).toBe(TOTAL_2_FORMAS);
+    // O total de vendas inclui cartão, mas o físico do caixa só cresce pelo dinheiro.
+    expect(movimento.saldo).toBe(totalEmDinheiro(RATEIO_2_FORMAS));
   });
 
   it("venda com TRES formas: tres pagamentos com valores e formas preservados, sem multiplicar o caixa", async () => {
@@ -298,15 +285,16 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     const movimento = delta(await medirCaixa(), antes);
     expect(movimento.entradas).toBe(somaEmCentavos(pagamentos));
     expect(movimento.entradas).toBe(TOTAL_3_FORMAS);
-    expect(movimento.saldo).toBe(TOTAL_3_FORMAS);
+    expect(movimento.saldo).toBe(totalEmDinheiro(RATEIO_3_FORMAS));
   });
 
   it("reenvio IDENTICO da venda dividida: sem_novidade, sem venda nova, sem pagamento empilhado", async () => {
     const antesDeCriar = await medirCaixa();
-    const payload = payloadDividido(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
+    const dataHoraVenda = dataVendaAtual();
+    const payload = payloadDividido(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS, dataHoraVenda);
 
     // O proprio teste cria a venda que vai reenviar — nao depende de nenhum caso anterior.
-    const pagamentosCriados = await criarVendaPropria(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
+    const pagamentosCriados = await criarVendaPropria(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS, dataHoraVenda);
     const depoisDeCriar = await medirCaixa();
     expect(delta(depoisDeCriar, antesDeCriar).entradas).toBe(somaEmCentavos(pagamentosCriados));
 
@@ -322,6 +310,7 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
 
     const movimento = delta(await medirCaixa(), depoisDeCriar);
     expect(movimento.entradas, "reenvio nao pode mexer no total do caixa").toBe(0);
+    // A venda segue a mesma, porém o dinheiro mudou de R$ 7,31 para R$ 9,13.
     expect(movimento.saldo).toBe(0);
   });
 
@@ -347,6 +336,6 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
 
     const movimento = delta(await medirCaixa(), depoisDeCriar);
     expect(movimento.entradas, "trocar o rateio nao pode mexer no total do caixa").toBe(0);
-    expect(movimento.saldo).toBe(0);
+    expect(movimento.saldo).toBe(totalEmDinheiro(RATEIO_ALTERADO) - totalEmDinheiro(RATEIO_3_FORMAS));
   });
 });

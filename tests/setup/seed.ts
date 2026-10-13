@@ -124,6 +124,8 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoTesouraria,
     role: "usuario_comum",
     permissoes: [
+      "relatorio_fechamento_visualizar",
+      "fechamentos_caixa_conferir",
       "transferencias_visualizar",
       "transferencias_criar",
       "transferencias_conferir",

@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, universoDoCaixa } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararPayloadFechamentoValido,
+  universoDoCaixa
+} from "../../setup/caixa.js";
 import { sql } from "drizzle-orm";
 import { executarEmTransacao } from "../../../api/src/banco/conexao.js";
 import {
@@ -28,7 +33,7 @@ import {
 const LOCK_DO_FECHAMENTO = "update";
 const VALOR_INJETADO = 55;
 
-type Fixture = { caixaId: string; contaId: string; pdvId: string; usuarioId: string };
+type Fixture = { caixaId: string; contaId: string; pdvId: string; usuarioId: string; lacreRetorno: string };
 
 describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
   let contexto: ContextoApiTeste;
@@ -82,12 +87,16 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
     return json<{ data: { id: string } }>(venda).data.id;
   }
 
-  function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+  async function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookie,
+      caixaId
+    });
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload: { lacreFechamento: `FCH-BORDAS-${caixaId}`, ...payload }
+      payload: { ...fechamentoFisico, ...payload }
     });
   }
 
@@ -165,6 +174,14 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
 
   it("Deve_EsperarERecusar_Quando_ASangriaAvulsaConcorreComOFechamento", async () => {
     const fx = await novaFixture("F sangria");
+    const lacres = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${fx.caixaId}/lacres-retorno`,
+      headers: { cookie: cookieCaixa }
+    });
+    expect(lacres.statusCode, lacres.body).toBe(200);
+    const lacre = json<{ data: Array<{ id: string }> }>(lacres).data[0];
+    expect(lacre).toBeDefined();
 
     const bloqueador = await abrirBloqueador();
     try {
@@ -175,6 +192,10 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
 
       const retorno = inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
         valor: 10,
+        valorEspecie: 10,
+        valorMoedas: 0,
+        lacreId: lacre!.id,
+        responsavelNome: "Operador de teste",
         idempotenciaChave: randomUUID()
       });
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
@@ -386,7 +407,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
     ).toMatchObject({ status: "pendente" });
     expect(await universoDoCaixa(fx.caixaId)).toMatchObject({
       status: "fechado",
-      total_transferencias_entrada: "0.00"
+      total_transferencias_entrada: "100.00"
     });
   });
 
@@ -420,7 +441,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
     // como retorno final; saldo zero).
     expect(await universoDoCaixa(fx.caixaId)).toMatchObject({
       status: "fechado",
-      total_transferencias_entrada: "55.00",
+      total_transferencias_entrada: "155.00",
       saldo: "0.00"
     });
   });
@@ -447,8 +468,9 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
     // Conferencia fisica da entrega (fluxo estrito Caixa -> Cofre): valor contado + lacre identico.
     const resposta = await inject("POST", `/api/transferencias/${retorno!.id}/confirmar`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
-      nLacreDoc: lacre,
-      valorRecebido: 100
+      valorRecebido: 100,
+      valorEspecieContado: 100,
+      valorMoedasContado: 0
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     expect(

@@ -72,7 +72,11 @@ describe("db/seed.ts usa a referencia de permissoes, e nao uma copia", () => {
     // O bloco interno e do DP. A Gerencia carrega o processo, mas nao o ASO.
     expect(permissoesPorCargo["DP"]).toContain("admissoes_processos_editar_internos");
     expect(permissoesPorCargo["Gerencia"]).not.toContain("admissoes_processos_editar_internos");
-    // E o cargo do diretor segue vazio: o acesso total dele vem do role usuario_admin.
-    expect(permissoesPorCargo["Diretor Geral"]).toEqual([]);
+    // Diretor Geral nao participa de admissoes, mas acompanha e decide a conferencia final do
+    // caixa junto da Tesouraria. A excecao precisa continuar limitada a essas duas chaves.
+    expect(permissoesPorCargo["Diretor Geral"]).toEqual([
+      "relatorio_fechamento_visualizar",
+      "fechamentos_caixa_conferir"
+    ]);
   });
 });

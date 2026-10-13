@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -63,15 +63,16 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
   // Abre caixa com saldo e entrega tudo ao cofre — o movimento resultante fica `pendente`,
   // que e o estado em que a conferencia acontece.
   async function entregaPendente(nome: string, dataHora: string, valor: number, lacre: string | null) {
-    const contaId = await criar("/api/contas", { empresaId, nome: `Conta ${nome}` });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
-    const caixaId = await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: await usuarioPorEmail(usuariosTeste.admin.email),
-      dataHoraAbertura: dataHora
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: `Conferencia ${nome}`,
+      dataHoraAbertura: dataHora,
+      lacreRetorno: lacre ?? `RETORNO-${nome}`
     });
-    registrarEncerramentoCaixaParaTeste(caixaId);
+    const { caixaId, contaId, pdvId, lacreRetorno: numeroLacreRetorno } = abertura;
     const dataReferencia = hoje;
     await criar("/api/vendas", {
       empresaId,
@@ -87,9 +88,22 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       ],
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valor }]
     });
+    const lacres = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixaId}/lacres-retorno`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(lacres.statusCode, lacres.body).toBe(200);
+    const lacreDisponivel = json<{ data: Array<{ id: string; numero: string }> }>(lacres).data.find(
+      (item) => item.numero === numeroLacreRetorno
+    );
+    if (!lacreDisponivel) throw new Error("Lacre de retorno da fixture nao encontrado");
     const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
       valor,
-      ...(lacre ? { lacre } : {}),
+      valorEspecie: valor,
+      valorMoedas: 0,
+      lacreId: lacreDisponivel.id,
+      responsavelNome: "Operador de teste",
       idempotenciaChave: randomUUID()
     });
     expect(entrega.statusCode, entrega.body).toBe(200);
@@ -97,7 +111,7 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       "select id from transferencias where caixa_id = $1 order by criado_em desc limit 1",
       [caixaId]
     );
-    return { caixaId, contaId, movimentoId: movimento!.id };
+    return { caixaId, contaId, movimentoId: movimento!.id, lacre: lacreDisponivel.numero };
   }
 
   function recusas(transferenciaId: string) {
@@ -143,7 +157,7 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       cookieTesouraria
     );
     assertProblem(semValor, 400);
-    expect(semValor.body).toMatch(/valor recebido/iu);
+    expect(semValor.body).toMatch(/valor.*especie.*moedas/iu);
 
     // Continua pendente: nada foi confirmado.
     expect(
@@ -156,7 +170,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
 
     const divergente = await post(
       `/api/transferencias/${movimentoId}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "REC-DIV-1", valorRecebido: 90 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: "REC-DIV-1",
+        valorRecebido: 90,
+        valorEspecieContado: 90,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     assertProblem(divergente, 409);
@@ -181,7 +201,9 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
         contaDestinoId: idsTeste.contaCofre,
         motivo: "Envelope veio com 90, faltam 10",
         nLacreDoc: "REC-FLUXO-1",
-        valorRecebido: 90
+        valorRecebido: 90,
+        valorEspecieContado: 90,
+        valorMoedasContado: 0
       },
       cookieTesouraria
     );
@@ -210,7 +232,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // Segunda tentativa: OUTRA linha de auditoria (a trilha nao pode mentir por deduplicacao).
     const segunda = await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "Conferi de novo, continua faltando", valorRecebido: 90 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "Conferi de novo, continua faltando",
+        valorRecebido: 90,
+        valorEspecieContado: 90,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(segunda.statusCode, segunda.body).toBe(200);
@@ -220,7 +248,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // Resolvida a divergencia no mundo real, a conferencia correta passa normalmente.
     const correta = await post(
       `/api/transferencias/${movimentoId}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "REC-FLUXO-1", valorRecebido: 100 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: "REC-FLUXO-1",
+        valorRecebido: 100,
+        valorEspecieContado: 100,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     expect(correta.statusCode, correta.body).toBe(200);
@@ -243,10 +277,26 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // Quem recusa e o GERENTE: quem entregou nao confere a propria entrega (R-028).
     const recusa = await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "Lacre violado", nLacreDoc: "REC-EXEC-1", valorRecebido: 70 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "Lacre violado",
+        nLacreDoc: "REC-EXEC-1",
+        valorRecebido: 70,
+        valorEspecieContado: 70,
+        valorMoedasContado: 0
+      },
       cookieGerente
     );
     expect(recusa.statusCode, recusa.body).toBe(200);
+
+    // O lacre/observacao pode motivar a recusa mesmo quando a composicao fisica bate. A recusa
+    // permanece auditavel, mas a conferencia fisica nao pode mentir que houve falta de dinheiro.
+    expect(
+      await consultarUm<{ resultado: string; observacao: string | null }>(
+        "select resultado, observacao from transferencias_conferencias_fisicas where transferencia_id = $1",
+        [movimentoId]
+      )
+    ).toEqual({ resultado: "convergente", observacao: null });
 
     const destinatarios = await consultarTodos<{ destinatario_usuario_id: string }>(
       "select destinatario_usuario_id from notificacoes where referencia_id = $1 and tipo = 'transferencia_divergencia'",
@@ -300,7 +350,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // requisicao teria morrido antes da regra e o caso nao provaria nada.
     const proprioExecutor = await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "conferindo o proprio envio", valorRecebido: 70 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "conferindo o proprio envio",
+        valorRecebido: 70,
+        valorEspecieContado: 70,
+        valorMoedasContado: 0
+      },
       cookieGerente
     );
     assertProblem(proprioExecutor, 400);
@@ -313,7 +369,14 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // (2) e (3) Quem nao entregou encerra: a Tesouraria conta R$ 70 dos R$ 90 declarados.
     const encerramento = await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "faltou no malote", valorRecebido: 70, encerrar: true },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "faltou no malote",
+        valorRecebido: 70,
+        valorEspecieContado: 70,
+        valorMoedasContado: 0,
+        encerrar: true
+      },
       cookieTesouraria
     );
     expect(encerramento.statusCode, encerramento.body).toBe(200);
@@ -382,22 +445,34 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     expect(notificou.length).toBeGreaterThan(0);
   });
 
-  it("movimento do Caixa sem lacre confirma sem lacre e recusa lacre inventado", async () => {
-    const { movimentoId } = await entregaPendente("conf-sem-lacre", "2026-07-06T08:00", 40, null);
+  it("movimento do Caixa exige o lacre reservado e recusa lacre inventado", async () => {
+    const { movimentoId, lacre } = await entregaPendente("conf-lacre-reservado", "2026-07-06T08:00", 40, null);
 
     const comLacreInventado = await post(
       `/api/transferencias/${movimentoId}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "INVENTADO", valorRecebido: 40 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: "INVENTADO",
+        valorRecebido: 40,
+        valorEspecieContado: 40,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
     assertProblem(comLacreInventado, 409);
 
-    const semLacre = await post(
+    const comLacreCorreto = await post(
       `/api/transferencias/${movimentoId}/confirmar`,
-      { contaDestinoId: idsTeste.contaCofre, valorRecebido: 40 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: lacre,
+        valorRecebido: 40,
+        valorEspecieContado: 40,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
-    expect(semLacre.statusCode, semLacre.body).toBe(200);
+    expect(comLacreCorreto.statusCode, comLacreCorreto.body).toBe(200);
   });
 
   it("quem criou o movimento nao pode recusar a propria entrega", async () => {
@@ -406,7 +481,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // O admin criou a entrega; ele nao pode conferi-la nem recusa-la (R-028).
     const resposta = await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "tentando recusar o proprio envio", valorRecebido: 10 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "tentando recusar o proprio envio",
+        valorRecebido: 10,
+        valorEspecieContado: 10,
+        valorMoedasContado: 0
+      },
       cookieAdmin
     );
     assertProblem(resposta, 400);
@@ -446,7 +527,13 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     const { movimentoId } = await entregaPendente("recusa-lista", "2026-07-08T08:00", 30, "REC-LISTA-1");
     await post(
       `/api/transferencias/${movimentoId}/recusar-conferencia`,
-      { contaDestinoId: idsTeste.contaCofre, motivo: "divergencia", valorRecebido: 20 },
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "divergencia",
+        valorRecebido: 20,
+        valorEspecieContado: 20,
+        valorMoedasContado: 0
+      },
       cookieTesouraria
     );
 

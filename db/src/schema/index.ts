@@ -8,6 +8,7 @@ export * from "./campanhas/campanhas.schema.js";
 export * from "./despesa/despesa.schema.js";
 export * from "./mensagens/mensagens.schema.js";
 export * from "./mercadoria/mercadoria.schema.js";
+export * from "./menu/menu.schema.js";
 export * from "./nota-fiscal/nota-fiscal.schema.js";
 export * from "./retirada/retirada.schema.js";
 export * from "./tema/tema.schema.js";

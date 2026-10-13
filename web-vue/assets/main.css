@@ -1724,13 +1724,6 @@ body {
   background: var(--shell-hover);
   color: var(--shell-ink);
 }
-.shell-mobills .sidebar-item.com-cor:hover:not(.disabled):not(.active) {
-  background: color-mix(in srgb, var(--item-cor) 12%, transparent);
-  color: var(--item-cor);
-}
-.shell-mobills .sidebar-item.com-cor:hover:not(.disabled):not(.active) .v-icon {
-  color: var(--item-cor) !important;
-}
 /* O item afunda 1px no clique — o feedback de "apertei" que faltava. */
 .shell-mobills .sidebar-item:active:not(.disabled) {
   background: var(--cx-pressed);
@@ -1754,13 +1747,7 @@ body {
 
    Tela SEM categoria (Caixa, Contas, cadastros, Configuracao) NAO tem cor para usar e continua no
    roxo da marca, na regra acima. */
-.shell-mobills .sidebar-item.com-cor.active {
-  background: var(--item-cor-faixa) !important;
-  color: #fff !important;
-}
-.shell-mobills .sidebar-item.com-cor.active .v-icon {
-  color: #fff !important;
-}
+/* Cor escolhida para o grupo: destaca as telas abaixo, sem trocar o contraste do item ativo. */
 /* Barra do ativo: reaproveita o ::before do bloco LAB (que o shell tinha desligado),
    agora na cor da marca e entrando com o movimento da casca. */
 .shell-mobills .sidebar-item.active::before {
@@ -1773,9 +1760,6 @@ body {
 }
 /* Sobre o preenchimento solido da categoria a barra roxa sumiria; branca ela continua sendo o
    terceiro sinal do ativo (fundo + peso + barra), que e o que mantem a leitura sem depender de cor. */
-.shell-mobills .sidebar-item.com-cor.active::before {
-  background: #fff;
-}
 @keyframes cx-barra-ativa {
   from {
     height: 0%;
@@ -1787,7 +1771,7 @@ body {
   }
 }
 .shell-mobills .sidebar-group-label {
-  color: var(--shell-ink-soft);
+  color: var(--grupo-texto, var(--shell-ink-soft));
   letter-spacing: 1.2px;
 }
 /* O branco-transparente (rgb(255 255 255 / 0)) das pontas embacava o degrade sobre
@@ -3102,6 +3086,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--cx-sp-2);
+  color: var(--grupo-texto, var(--shell-ink-soft));
 }
 
 .sidebar-group-label::before {
@@ -3109,7 +3094,7 @@ body {
   width: 3px;
   height: 12px;
   border-radius: var(--cx-r-pill);
-  background: var(--grupo-cor, color-mix(in srgb, var(--cx-ink-soft) 40%, transparent));
+  display: none;
   content: "";
 }
 /* ===================== FIM VIS-E6g ===================== */
@@ -3285,7 +3270,10 @@ body {
   min-width: 0;
 }
 .sidebar-group-label:hover {
-  color: var(--marca-tinta);
+  color: var(--grupo-texto, var(--cx-ink));
+}
+.sidebar-group-label.aberto {
+  color: var(--grupo-texto, var(--shell-ink-soft));
 }
 /* O respiro entre grupos encolhe porque o gatilho cresceu: o proprio cabecalho ja separa. */
 .sidebar-group + .sidebar-group {
@@ -4137,16 +4125,14 @@ button.sidebar-logo-alvo {
    para a faixa do meio, e nao remover do celular.
    ================================================================================================= */
 @media (width <= 768px) {
-  /* Duas linhas: a saudacao ocupa a primeira inteira, hora e data dividem a segunda. */
+  /* No telefone sobra somente o contexto operacional: hora e data curta em uma linha. */
   .shell-mobills .topbar-relogio {
-    flex-wrap: wrap;
-    gap: 0 var(--cx-sp-2);
-    row-gap: 0;
+    flex-wrap: nowrap;
+    gap: var(--cx-sp-2);
     line-height: 1.2;
   }
   .shell-mobills .topbar-saudacao {
-    display: block;
-    width: 100%;
+    display: none;
   }
   /* O nome cai. E a unica parte da composicao que a tela nao precisa dizer. */
   .shell-mobills .topbar-nome {

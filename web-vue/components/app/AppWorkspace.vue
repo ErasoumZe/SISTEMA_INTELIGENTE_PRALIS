@@ -4,11 +4,13 @@ import {
   deCentavos,
   // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
   ehAdministradorTotal,
+  podeAcessarRelatorioFechamento,
   podeLancarSemCaixa,
   paraCentavos,
   somarCentavos,
   valorTotalCentavos,
   type AuthSession,
+  type EstruturaMenuEmpresa,
   type TemaAplicacao
 } from "@padaria/shared";
 import type {
@@ -111,6 +113,7 @@ type TipoPagina =
   | "operacoes"
   | "caixa"
   | "historico_caixas"
+  | "relatorio_fechamento"
   | "campanhas"
   | "fechamento"
   | "relatorio_produtos"
@@ -152,6 +155,9 @@ const telaInicialNormalizada = computed(() =>
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao", () => null);
 const opcoes = useState<Opcoes>("padaria.workspace.opcoes", () => opcoesVazias());
 const empresas = useState<Opcao[]>("padaria.workspace.empresas", () => []);
+// Estado compartilhado com o editor de permissões: ao salvar uma nova organização,
+// a barra lateral se atualiza no mesmo instante, sem exigir recarregar a página.
+const estruturaMenuEmpresa = useState<EstruturaMenuEmpresa | null>("estrutura-menu-empresa", () => null);
 const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () => []);
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
@@ -331,6 +337,10 @@ const restringeDataPagamentoAoHoje = computed(() => {
   const perfil = sessao.value?.perfil;
   return Boolean(perfil && !ehAdministradorTotal(perfil) && !podeLancarSemCaixa(perfil));
 });
+const podeOperarTransferenciaSemCaixa = computed(() => {
+  const perfil = sessao.value?.perfil;
+  return Boolean(perfil && podeLancarSemCaixa(perfil));
+});
 
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
 // O ESTADO E O ROTULO, e essa foi a decisao entre as duas que Marco deixou em aberto (texto ao
@@ -347,7 +357,16 @@ const {
   telasDesabilitadasMenu,
   motivosTelasDesabilitadas
 } = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
+const podeAcessarFolhaFechamento = computed(() =>
+  Boolean(sessao.value?.perfil && podeAcessarRelatorioFechamento(sessao.value.perfil))
+);
+const telasComAcessoDeCargo = computed(() =>
+  telasPermitidas.value.filter((tela) => tela.id !== "relatorio_fechamento" || podeAcessarFolhaFechamento.value)
+);
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
+const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
+const podeEditarTransferencia = computed(() => temPermissao("transferencias_editar"));
+const podeOperarCaixa = computed(() => temPermissao("caixa_operar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
 const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
 const podeCancelarPlanejamentoRetorno = computed(() => {
@@ -392,12 +411,12 @@ const telaBloqueadaPorCaixa = computed(() => {
 const telasTemaPermitidas = computed(() => [
   { id: "padrao", titulo: "Padrão (todas as telas)" },
   { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
-  ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
+  ...telasComAcessoDeCargo.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
 ]);
 const telasShell = computed(() => {
   // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
   // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
-  return telasPermitidas.value.map((item) => ({
+  return telasComAcessoDeCargo.value.map((item) => ({
     ...item,
     cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id)
   }));
@@ -430,10 +449,8 @@ const operacoesPaginadas = computed(() => operacoesDaTela.value);
 // dia do caixa em resolverEscopoEntradasDoDia); a tela mostra o campo desabilitado em vez de fingir
 // que funciona.
 const podeConsultarOutrosDiasEntradas = computed(() => podeConsultarOutrosDias(permissoesUsuario.value));
-// "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
-// caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
-// abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
-const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value));
+// +Novo tem dois atos: Saídas e Transferências. Retorno mantém seu gate de Caixa aberto.
+const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value, Boolean(caixaAberto.value)));
 const {
   dadosCadastro,
   descricaoTela,
@@ -621,6 +638,23 @@ async function selecionarEmpresa(id: string) {
   await trocarEmpresa(id);
 }
 
+async function carregarMenuEmpresa(idEmpresa = empresaId.value) {
+  if (!idEmpresa) {
+    estruturaMenuEmpresa.value = null;
+    return;
+  }
+  try {
+    estruturaMenuEmpresa.value = await apiGet<EstruturaMenuEmpresa | null>(
+      `/api/menu-empresa?empresaId=${encodeURIComponent(idEmpresa)}`
+    );
+  } catch (error) {
+    // Ordem do menu nunca pode impedir a operação: sem configuração ou em falha transitória,
+    // a sidebar usa o padrão de fábrica e continua filtrando as permissões normalmente.
+    estruturaMenuEmpresa.value = null;
+    console.error("Falha ao carregar a estrutura do menu", error);
+  }
+}
+
 async function carregarEmpresas() {
   empresas.value = sessao.value?.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
   opcoes.value.empresas = empresas.value;
@@ -751,6 +785,7 @@ async function marcarTodasNotificacoesComoVistas() {
 }
 
 async function trocarEmpresa(idEmpresa = empresaId.value) {
+  await carregarMenuEmpresa(idEmpresa);
   if (paginaInicialNeutra.value) {
     await carregarStatusCaixa(idEmpresa);
     await carregarTemaTela("padrao");
@@ -811,7 +846,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         []
       )
     ]);
-  } else if (tela === "historico_caixas") {
+  } else if (tela === "historico_caixas" || tela === "relatorio_fechamento") {
     // Opcoes dos filtros da retaguarda (PDV/turno/operador). A listagem em si e paginada e
     // filtrada pelo servidor dentro da propria tela.
     [dados.pdvs, dados.turnos, dados.colaboradores] = await Promise.all([
@@ -1071,7 +1106,11 @@ async function carregarTudo() {
       erro.value = "Sem permissão para acessar esta página.";
       return;
     }
-    await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
+    await Promise.all([
+      carregarStatusCaixa(empresaId.value),
+      carregarNotificacoes(empresaId.value),
+      carregarMenuEmpresa(empresaId.value)
+    ]);
     if (!paginaInicialNeutra.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(paginaInicialNeutra.value ? "padrao" : telaAtiva.value);
     await carregarTemaResumoCaixa();
@@ -1444,6 +1483,14 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
 }
 
 function executarAcaoNovo(acao: AcaoNovo) {
+  if (!acoesNovo.value.some((permitida) => permitida.id === acao.id)) return;
+  if (acao.id === "transferencias" && !podeCriarTransferencia.value) {
+    // Acesso apenas ao retorno manual: não carrega opções nem concede criação contábil.
+    entidadeNova.value = "transferencia";
+    operacaoEditandoId.value = "";
+    modalOperacaoAberto.value = true;
+    return;
+  }
   if (acao.telaDestino) {
     void router.push(rotaTela(acao.telaDestino));
     return;
@@ -1452,6 +1499,11 @@ function executarAcaoNovo(acao: AcaoNovo) {
   // "Saidas" abre o modal unico de lancamento na categoria que o perfil pode criar; as tres
   // continuam alternaveis nos botoes do topo, sem fechar.
   void abrirOperacao(acao.id === "saidas" ? categoriaInicialSaida(permissoesUsuario.value) : acao.entidade);
+}
+
+function abrirAcaoNovaMobile(id: "saidas" | "transferencias") {
+  const acao = acoesNovo.value.find((item) => item.id === id);
+  if (acao) executarAcaoNovo(acao);
 }
 
 // Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 §4).
@@ -1531,8 +1583,11 @@ async function salvarDiscriminacao() {
   }
   const endpoint = endpointOperacaoPorEntidade[entidade];
   await apiPatch(`/api/${endpoint}/${operacaoEditandoId.value}/discriminar`, corpo);
-  const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value);
-  const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoEditandoId.value, "foto-nota", "fotoNotaUrl");
+  const podeAnexarFotos = entidade !== "retirada";
+  const fotoUrl = podeAnexarFotos ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value) : "";
+  const fotoNotaUrl = podeAnexarFotos
+    ? await fotoNota.enviar(apiUrl, endpoint, operacaoEditandoId.value, "foto-nota", "fotoNotaUrl")
+    : "";
   const indice = operacoes.value.findIndex((operacao) => operacao.id === operacaoEditandoId.value);
   const linha = operacoes.value[indice];
   if (indice >= 0 && linha) {
@@ -1569,8 +1624,11 @@ async function salvarOperacao(criarNova = false) {
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
-    const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
-    const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
+    const podeAnexarFotos = entidadeSalva !== "retirada";
+    const fotoUrl = podeAnexarFotos ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id) : "";
+    const fotoNotaUrl = podeAnexarFotos
+      ? await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl")
+      : "";
     const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
@@ -1663,14 +1721,10 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
 }
 
 const { abrirAcessosUsuario, iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
-  empresaId,
-  opcoes,
-  cadastroTela,
-  cadastroEditandoId,
-  formCadastro,
-  modalCadastroAberto,
-  apiGet,
-  notificar
+  notificar,
+  navegar: async (rota) => {
+    await router.push(rota);
+  }
 });
 
 // Trava do rebaixamento silencioso: a linha da listagem pode chegar sem `role`, e ai o formulario de
@@ -2002,6 +2056,14 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 }
 
 provide(WORKSPACE_CONTEXT, {
+  caixaStatus,
+  caixaSalvando,
+  podeOperarCaixa,
+  podeOperarTransferenciaSemCaixa,
+  podeCriarTransferencia,
+  podeEditarTransferencia,
+  carregarStatusCaixa,
+  retornarSaldoOperacional,
   opcoesEmpresa,
   empresaId,
   modalOperacaoAberto,
@@ -2216,11 +2278,11 @@ const pageContext = computed(() => ({
   notificar,
   atualizarDiaEntradas,
   abrirCaixaOperacional,
-  retornarSaldoOperacional,
   executarPlanejamentoRetorno,
   cancelarPlanejamentoRetorno,
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
+  podeConferirFechamento: podeAcessarFolhaFechamento.value && temPermissao("fechamentos_caixa_conferir"),
   // R-200: o painel de mensagens mora no Monitor de caixas abertos e nao tem item de menu proprio.
   // O servidor exige as mesmas chaves; isto aqui so decide o que aparece.
   podeVerMensagensAdmin: temPermissao("mensagens_admin_visualizar"),
@@ -2331,16 +2393,20 @@ onBeforeUnmount(() => {
     v-else-if="sessao"
     :sessao="sessao"
     :telas="telasShell"
+    :estrutura-menu="estruturaMenuEmpresa"
     :tela-ativa="telaAtiva"
     :empresas="empresasDoShell"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
     :notificacoes="notificacoes"
+    :acoes-novo-ids="acoesNovo.map((acao) => acao.id)"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="selecionarEmpresa"
     @abrir-pendencias="router.push('/pendencias')"
+    @abrir-saidas="abrirAcaoNovaMobile('saidas')"
+    @abrir-transferencias="abrirAcaoNovaMobile('transferencias')"
     @verificar-notificacao="marcarNotificacaoComoVista"
     @verificar-todas-notificacoes="marcarTodasNotificacoesComoVistas"
   >
@@ -2405,8 +2471,7 @@ onBeforeUnmount(() => {
             Novo
           </v-btn>
         </template>
-        <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
-             abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
+        <!-- Saídas mantém as três categorias; Transferências reúne comum e retorno manual. -->
         <v-list min-width="288" class="fab-novo-list">
           <v-list-item
             v-for="acao in acoesNovo"

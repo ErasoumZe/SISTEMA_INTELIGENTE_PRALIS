@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PwaInstallButton from "~/components/PwaInstallButton.vue";
+
 const router = useRouter();
 const { apiUrl } = useApi();
 

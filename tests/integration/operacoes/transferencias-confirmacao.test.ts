@@ -54,6 +54,7 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
   }
 
   function payloadTransferencia(lacre: string, origem: string, destino: string, extras: Record<string, unknown> = {}) {
+    const destinoEhPdv = destino === idsTeste.contaCaixa || destino === idsTeste.contaLivre;
     return {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
@@ -63,6 +64,16 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       contaDestinoId: destino,
       nLacreDoc: lacre,
       tempoConfirmacao: "5min",
+      // Cofre -> PDV e o malote fisico da abertura: deve declarar sua composicao e levar o
+      // lacre que ficara reservado para o fechamento. Transferencias comuns mantem o contrato
+      // original, pois esses campos so sao validos nesse circuito.
+      ...(origem === idsTeste.contaCofre && destinoEhPdv
+        ? {
+            valorEspecieDeclarado: 100,
+            valorMoedasDeclarado: 0,
+            lacreFechamentoPlanejado: `${lacre}-FECHAMENTO`
+          }
+        : {}),
       ...extras
     };
   }
@@ -158,6 +169,16 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       confirmado.find((item) => item.id === destinoVencedor)!.saldoAtual -
         antes.find((item) => item.id === destinoVencedor)!.saldoAtual
     ).toBe(100);
+
+    const edicaoConferida = await request(
+      cookieAdmin,
+      "PUT",
+      `/api/transferencias/${transferenciaId}`,
+      payloadTransferencia("QA-DISPUTA-001", idsTeste.contaCofre, destinoVencedor, { tempoConfirmacao: null })
+    );
+    expect(edicaoConferida.statusCode, edicaoConferida.body).toBe(400);
+    // O lacre de fechamento reservado é a primeira guarda de imutabilidade.
+    expect(edicaoConferida.body).toMatch(/lacre de fechamento reservado/i);
   });
 
   it("permite prazo apenas na transferencia direta e persiste ausencia de prazo como null", async () => {

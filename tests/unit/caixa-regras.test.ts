@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   montarResumoCaixa,
   saldoCaixaCentavos,
+  saldoFisicoCaixaCentavos,
   saldoProprioCentavos,
   type TotaisCaixaCentavos
 } from "@padaria/shared/caixa";
@@ -9,6 +10,7 @@ import { centavosParaDecimalBanco, deCentavos, paraCentavos, somarCentavos } fro
 
 function totais(parcial: Partial<TotaisCaixaCentavos> = {}): TotaisCaixaCentavos {
   return {
+    vendasDinheiro: 0,
     entradas: 0,
     transferencias: 0,
     transferenciasEntrada: 0,
@@ -62,10 +64,50 @@ describe("saldoCaixaCentavos", () => {
   });
 });
 
+describe("saldoFisicoCaixaCentavos", () => {
+  it("Deve_ConsiderarApenasDinheiroNoFisico_E_ManterOutrasFormasNoRelatorio", () => {
+    const saldoFisico = saldoFisicoCaixaCentavos(
+      totais({
+        vendasDinheiro: 10000,
+        entradas: 23000,
+        transferenciasEntrada: 2000,
+        transferenciasSaida: 5000,
+        despesas: 1000,
+        mercadorias: 500,
+        retiradas: 500
+      })
+    );
+
+    // Crédito, débito, Pix e voucher estão em `entradas` (R$ 130), mas não na gaveta.
+    expect(saldoFisico).toBe(5000);
+  });
+});
+
 describe("montarResumoCaixa", () => {
+  it("Deve_ExibirSaldoFisicoSemCartaoPixOuVoucher", () => {
+    const resumo = montarResumoCaixa(
+      totais({
+        vendasDinheiro: 5000,
+        entradas: 13600,
+        porFormaPagamento: [
+          { formaPagamentoId: "dinheiro", formaPagamento: "Dinheiro", total: 5000, quantidade: 1 },
+          { formaPagamentoId: "pix", formaPagamento: "Pix", total: 2200, quantidade: 1 },
+          { formaPagamentoId: "debito", formaPagamento: "Débito", total: 1850, quantidade: 1 },
+          { formaPagamentoId: "credito", formaPagamento: "Crédito", total: 3150, quantidade: 1 },
+          { formaPagamentoId: "voucher", formaPagamento: "Voucher", total: 1400, quantidade: 1 }
+        ]
+      })
+    );
+
+    expect(resumo.totalEntradas).toBe(136);
+    expect(resumo.saldo).toBe(50);
+    expect(resumo.propostaRetorno).toBe(50);
+  });
+
   it("Deve_ConverterParaReais_E_CalcularSaldoPelaFormulaOficial", () => {
     const resumo = montarResumoCaixa(
       totais({
+        vendasDinheiro: 10000,
         entradas: 10000,
         transferencias: 8000,
         transferenciasEntrada: 5000,
@@ -130,17 +172,24 @@ describe("saldoProprioCentavos (divida sempre 0 na producao; parametro legado)",
 
   it("Deve_ContarSomenteOOperacional_Quando_HaVendasSobreOFundo", () => {
     // 490 de venda sobre 490 de fundo: o resultado do caixa e a venda, nao o fundo.
-    expect(saldoProprioCentavos(totais({ entradas: 49000, transferenciasEntrada: 49000 }), 0)).toBe(49000);
+    expect(
+      saldoProprioCentavos(totais({ vendasDinheiro: 49000, entradas: 49000, transferenciasEntrada: 49000 }), 0)
+    ).toBe(49000);
   });
 
   it("Deve_IgualarSaldoFisico_Quando_SemDivida_E_SemTransferencias", () => {
-    const semFundo = totais({ entradas: 30000, despesas: 5000 });
-    expect(saldoProprioCentavos(semFundo, 0)).toBe(saldoCaixaCentavos(semFundo));
+    const semFundo = totais({ vendasDinheiro: 30000, entradas: 30000, despesas: 5000 });
+    expect(saldoProprioCentavos(semFundo, 0)).toBe(saldoFisicoCaixaCentavos(semFundo));
   });
 
   it("Deve_NaoSerAfetado_Quando_HaSangria_ou_Retorno (M2)", () => {
     // Sangria/retorno so MOVEM dinheiro: nao entram no resultado operacional do caixa.
-    const comSangria = totais({ entradas: 49000, transferenciasEntrada: 49000, transferenciasSaida: 20000 });
+    const comSangria = totais({
+      vendasDinheiro: 49000,
+      entradas: 49000,
+      transferenciasEntrada: 49000,
+      transferenciasSaida: 20000
+    });
     expect(saldoProprioCentavos(comSangria, 0)).toBe(49000);
   });
 });

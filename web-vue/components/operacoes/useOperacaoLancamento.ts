@@ -240,6 +240,12 @@ export function useOperacaoLancamento() {
         form.value.grupoMercadoriaId = "";
         form.value.grupoRetiradaId = "";
         limparCredorIncompativel(form.value, c);
+        // Retirada nao aceita anexos. Limpar o estado, alem de esconder o bloco, impede que uma
+        // foto escolhida em Despesa/Mercadoria viaje se a pessoa trocar de categoria sem fechar.
+        if (c === "retirada") {
+          selecionarFotoDocumento(null);
+          selecionarFotoNota(null);
+        }
       }
       const primeiro = CREDORES[c][0];
       if (primeiro && !credoresOferecidos.value.includes(tipoCredor.value)) tipoCredor.value = primeiro;

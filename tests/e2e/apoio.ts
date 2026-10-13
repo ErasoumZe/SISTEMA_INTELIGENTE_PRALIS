@@ -68,10 +68,14 @@ export async function encerrarCaixaDeTeste(
 
 /** Larguras do Definition of Done (`16` §3) e do `67` §13.7. */
 export const LARGURAS = [
-  { nome: "desktop", largura: 1440, altura: 900 },
+  { nome: "desktop-amplo", largura: 1440, altura: 900 },
+  { nome: "desktop", largura: 1366, altura: 768 },
   { nome: "notebook", largura: 1024, altura: 768 },
   { nome: "tablet", largura: 768, altura: 900 },
-  { nome: "celular", largura: 390, altura: 844 }
+  { nome: "celular-360", largura: 360, altura: 800 },
+  { nome: "celular-390", largura: 390, altura: 844 },
+  { nome: "celular-412", largura: 412, altura: 915 },
+  { nome: "celular-paisagem", largura: 844, altura: 390 }
 ] as const;
 
 /** Prefixo dos dados criados pelos testes — permite achar e limpar sem tocar no resto. */
@@ -126,7 +130,12 @@ export function mensagemDoCampo(page: Page, campo: string) {
  */
 export function observarConsole(page: Page): string[] {
   const problemas: string[] = [];
-  const ignorar = [/Nuxt DevTools/i, /\[vite\]/i, /Download the Vue Devtools/i];
+  const ignorar = [
+    /Nuxt DevTools/i,
+    /\[vite\]/i,
+    /Download the Vue Devtools/i,
+    /Timer '\[nuxt-app\] (?:page:loading:start|page:loading:end|page:finish|link:prefetch)' already exists/i
+  ];
   page.on("console", (msg) => {
     if (msg.type() !== "error" && msg.type() !== "warning") return;
     const texto = msg.text();

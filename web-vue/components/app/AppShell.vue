@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
+import type { EstruturaMenuEmpresa } from "@padaria/shared";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppSidebar from "~/components/app/AppSidebar.vue";
+import AppMobileBottomNav from "~/components/app/AppMobileBottomNav.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
@@ -11,6 +13,7 @@ import { limitarNotificacoesDoSino } from "~/utils/notificacoes";
 const props = defineProps<{
   sessao: AuthSession;
   telas: ItemMenu[];
+  estruturaMenu?: EstruturaMenuEmpresa | null;
   telaAtiva: string;
   empresas: Opcao[];
   empresaId: string;
@@ -19,6 +22,7 @@ const props = defineProps<{
   motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
   notificacoes?: Notificacao[];
+  acoesNovoIds?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -26,7 +30,41 @@ const emit = defineEmits<{
   (event: "abrirPendencias"): void;
   (event: "verificarNotificacao", id: string): void;
   (event: "verificarTodasNotificacoes"): void;
+  (event: "abrirSaidas"): void;
+  (event: "abrirTransferencias"): void;
 }>();
+
+// `AppWorkspace` sempre entrega a estrutura, inclusive `null` quando a empresa ainda nao tem
+// personalizacao. Algumas paginas especializadas (Produtos, Pedidos e Integracoes) usam esta
+// casca diretamente. Sem esta carga local elas caiam silenciosamente no menu padrao ao navegar
+// para fora do Workspace, fazendo parecer que o sistema "voltou" para a configuracao antiga.
+// `undefined` significa que a pagina nao informou a estrutura; so nesse caso a casca a busca.
+// Assim nao duplicamos a requisicao nem sobrescrevemos o fallback controlado pelo Workspace.
+const { apiGet } = useApi();
+const estruturaMenuCarregada = ref<EstruturaMenuEmpresa | null>(null);
+const estruturaMenuResolvida = computed(() =>
+  props.estruturaMenu === undefined ? estruturaMenuCarregada.value : props.estruturaMenu
+);
+
+async function carregarEstruturaMenuDaEmpresa() {
+  if (props.estruturaMenu !== undefined || !props.empresaId) return;
+  try {
+    estruturaMenuCarregada.value = await apiGet<EstruturaMenuEmpresa | null>(
+      `/api/menu-empresa?empresaId=${encodeURIComponent(props.empresaId)}`
+    );
+  } catch (error) {
+    // Menu configuravel e uma melhoria de navegacao, nunca pode impedir a tela operacional.
+    // Sem estrutura a sidebar usa apenas o padrao filtrado pelas permissoes da sessao.
+    estruturaMenuCarregada.value = null;
+    console.error("Falha ao carregar a estrutura do menu", error);
+  }
+}
+
+onMounted(() => void carregarEstruturaMenuDaEmpresa());
+watch(
+  () => props.empresaId,
+  () => void carregarEstruturaMenuDaEmpresa()
+);
 
 const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
@@ -176,6 +214,7 @@ onMounted(() => {
          descompasso, e o 67 §13.1 documenta o preco disso. -->
     <AppSidebar
       :telas="telas"
+      :estrutura-menu="estruturaMenuResolvida"
       :tela-ativa="telaAtiva"
       :telas-desabilitadas="telasDesabilitadas"
       :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
@@ -190,7 +229,7 @@ onMounted(() => {
       <template #actions="{ rail: railAtual }"><slot name="actions" :rail="railAtual" /></template>
     </AppSidebar>
 
-    <v-main class="padaria-main">
+    <v-main class="padaria-main" :class="{ 'com-navegacao-mobile': viewportMobile }">
       <header class="padaria-topbar">
         <!-- ESQUERDA: no desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay)
              ainda e preciso um gatilho para abrir. -->
@@ -230,9 +269,9 @@ onMounted(() => {
 
                O AVISO DE CAIXA era um bloco no topo da sidebar ate hoje. Quem o preenche e o
                AppWorkspace, que e quem tem o status e a permissao — a casca so reserva o lugar. -->
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
+          <slot v-if="!viewportMobile" name="caixa" :caixa-aberto="caixaAberto" />
 
-          <v-menu v-if="empresas.length > 1" location="bottom end">
+          <v-menu v-if="!viewportMobile && empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">
               <button v-bind="menuProps" type="button" class="topbar-empresa" aria-label="Trocar de empresa">
                 <v-icon icon="mdi-domain" size="18" />
@@ -252,7 +291,7 @@ onMounted(() => {
               />
             </v-list>
           </v-menu>
-          <span v-else class="topbar-empresa estatica">
+          <span v-else-if="!viewportMobile" class="topbar-empresa estatica">
             <v-icon icon="mdi-domain" size="18" />
             <span>{{ nomeEmpresaCurto }}</span>
           </span>
@@ -269,6 +308,7 @@ onMounted(() => {
                sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
                `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
           <v-btn
+            v-if="!viewportMobile"
             to="/"
             variant="text"
             class="topbar-painel"
@@ -371,5 +411,15 @@ onMounted(() => {
         <slot />
       </div>
     </v-main>
+
+    <AppMobileBottomNav
+      v-if="viewportMobile"
+      :telas="telas"
+      :tela-ativa="telaAtiva"
+      :telas-desabilitadas="telasDesabilitadas"
+      :acoes-novo-ids="acoesNovoIds"
+      @abrir-saidas="emit('abrirSaidas')"
+      @abrir-transferencias="emit('abrirTransferencias')"
+    />
   </v-layout>
 </template>

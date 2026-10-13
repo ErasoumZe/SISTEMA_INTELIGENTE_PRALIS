@@ -86,6 +86,9 @@ export async function salvarFormaPagamento(
     ...(id ? { id } : {}),
     empresaId: dados.empresaId,
     nome: dados.nome.trim(),
+    ...(dados.categoriaFechamentoCaixa === undefined
+      ? {}
+      : { categoriaFechamentoCaixa: dados.categoriaFechamentoCaixa }),
     ...(mudouRoteamento ? { roteamento: alvo, atualizadoPor: contexto.usuarioId } : {})
   });
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { temPermissao as possuiPermissao, type AuthSession } from "@padaria/shared";
+import { ehAdministradorTotal, temPermissao as possuiPermissao, type AuthSession } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import CadastroTable from "~/components/cadastros/CadastroTable.vue";
 import { podeExecutarAcaoCadastro } from "~/utils/domain";
@@ -29,6 +29,9 @@ const props = defineProps<{
   // e levaria 403 no salvar — a tela oferecendo o que a rota recusa. Default `true` para as demais
   // telas continuarem exatamente como estavam.
   podeEditar?: boolean;
+  // Algumas telas possuem importacao util, mas nao fazem sentido exportar uma copia local.
+  // Mantem `true` como padrao para nao alterar os demais cadastros.
+  podeExportar?: boolean;
   excluindoId?: string;
   // #152: so o Admin com a permissao dedicada (R-176) enxerga a acao de roteamento.
   podeConfigurarRoteamento?: boolean;
@@ -53,16 +56,23 @@ const emit = defineEmits<{
 const acao = "Novo cadastro";
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+// A API sempre expande `usuario_admin` para todas as permissoes. Esta verificacao e o cinto de
+// seguranca da interface: se a lista em memoria ficou anterior a uma mudanca de perfil, o dono do
+// sistema ainda enxerga Editar e a API continua sendo a autoridade final da operacao.
+const ehAdminTotal = computed(() => Boolean(sessao.value?.perfil && ehAdministradorTotal(sessao.value.perfil)));
 const podeAdicionar = computed(() =>
-  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "criar") : false
+  ehAdminTotal.value ||
+  (props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "criar") : false)
 );
 const podeEditarPorPermissao = computed(() =>
-  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "editar") : false
+  ehAdminTotal.value ||
+  (props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "editar") : false)
 );
 // A prop e uma restricao adicional para telas cujo contrato permite criar, mas nao editar.
 // A permissao da sessao continua sendo a autoridade; a tela nunca consegue amplia-la.
 const podeEditar = computed(() => podeEditarPorPermissao.value && (props.podeEditar ?? true));
 const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
+const podeExportar = computed(() => podeCopia.value && (props.podeExportar ?? true));
 const acoesExtras = computed(() => {
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
   if (props.tela === "permissoes" && podeEditar.value)
@@ -101,7 +111,7 @@ const acoesExtras = computed(() => {
     :acao="acao"
     :pode-adicionar="podeAdicionar"
     :pode-editar="podeEditar"
-    :pode-exportar="podeCopia"
+    :pode-exportar="podeExportar"
     :pode-importar="podeCopia && podeAdicionar"
     :editar-carregando-id="editarCarregandoId"
     :modo-servidor="modoServidor"

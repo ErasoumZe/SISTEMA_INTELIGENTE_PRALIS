@@ -1,7 +1,8 @@
 import { inject, type ComputedRef, type Ref } from "vue";
 import type { TemaAplicacao } from "@padaria/shared";
 import type { secoesPermissoes } from "~/utils/domain";
-import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
+import type { RetornoSaldoPayload } from "~/utils/caixa-acoes";
+import type { CaixaStatus, CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
 // As formas de item vivem em utils/operacoes (junto do payload que as consome) e sao REEXPORTADAS
 // aqui. Antes o contexto declarava copias identicas: ao ganhar grupoPatrimonioId, os dois tipos se
@@ -24,6 +25,15 @@ import type {
 export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
+  caixaStatus: Ref<CaixaStatus | null>;
+  caixaSalvando: Ref<boolean>;
+  podeOperarCaixa: ComputedRef<boolean>;
+  /** Tesouraria/retaguarda pode registrar transferencia sem depender do caixa do PDV. */
+  podeOperarTransferenciaSemCaixa: ComputedRef<boolean>;
+  podeCriarTransferencia: ComputedRef<boolean>;
+  podeEditarTransferencia: ComputedRef<boolean>;
+  carregarStatusCaixa: () => Promise<void>;
+  retornarSaldoOperacional: (payload: RetornoSaldoPayload) => Promise<boolean>;
   opcoesEmpresa: ComputedRef<Opcoes>;
   empresaId: Ref<string>;
   modalOperacaoAberto: Ref<boolean>;

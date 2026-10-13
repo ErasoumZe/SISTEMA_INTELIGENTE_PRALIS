@@ -161,8 +161,8 @@ Colhidas perguntando uma a uma. **Fala dele entre aspas.**
 | Id            | Decisão                                                                                        | Detalhe                                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-032**     | Transferência sem caixa aberto: **só tesouraria, gerência, financeiro, diretor geral e admin** | O cargo **Caixa** continua precisando de caixa aberto. Mesma lógica de R-073/R-074. Some a regra atual que exige caixa para _todo mundo_                 |
-| **R-008**     | O retorno ao cofre é **lançado pela pessoa antes de fechar** — o sistema não cria sozinho      | E o sistema **recusa fechar se sobrar saldo**. Fiel ao que ela já faz na mão hoje                                                                        |
-| **R-033** 🆕  | Abrir caixa **sem lacre é permitido** — abre zerado e o fundo chega depois                     | Não trava o operador na correria da manhã                                                                                                                |
+| **R-008**     | 🚫 **Superada na referência Caixa B1 (08/10/2026):** o retorno final é atômico no fechamento  | O operador pode registrar sangrias/retornos durante o turno; saldo físico remanescente gera o retorno final na mesma transação do fechamento.          |
+| **R-033** 🆕  | 🚫 **Superada na referência Caixa B1 (08/10/2026):** abertura exige malote/lacre identificado | Não há abertura zerada: o lacre reivindica a transferência pendente e o fundo entra no mesmo ato de abertura.                                           |
 | **R-008b** 🆕 | O retorno do fechamento vai para o **COFRE PRINCIPAL**                                         | José, 31/07. A planilha tem **dois** cofres (`CNT CONTA - COFRE PRINCIPAL` e `CNT CONTA - COFRE TROCO`); o brain falava de "o cofre" no singular         |
 | **R-020** 🆕  | As contas nascem no sistema **com o saldo da planilha** como fundo                             | José, 31/07. É a foto do dia da virada: dali em diante cada movimento soma ou subtrai. Vale para **todas** as contas, não só os cofres                   |
 | **R-021** 🆕  | A quebra de caixa vive em **tabela própria**, nunca em `contas`                                | Decisão técnica minha, 31/07 (o José já tinha definido a REGRA em 30/07). Saldo por PESSOA não pode encostar no saldo das contas, que alimenta o ADR-001 |
@@ -232,7 +232,7 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 | **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa                                                 |
 | **R-037** 🆕 | Estourado o prazo opcional da transferência direta (R-035), o sistema trava/notifica quem enviou e os usuários de destino realmente aptos a confirmar: vínculo conta+empresa, acesso à empresa e permissão efetiva `transferencias_conferir` |
 | **R-038** 🆕 | O bloco **Transferência de retorno** da FOTO 1 contém retornos independentes do dia — cada linha é uma transferência própria, agrupada na mesma tela por comodidade                                                                          |
-| **R-039** 🆕 | **Maquininha de cartão tem cadastro próprio** (nº de série, apelido, empresa), escolhida na abertura de caixa. **Preencher é OPCIONAL** e continua assim. Vem da FOTO 5 — são os 3 `data-pendente` de `CaixaResumoPage.vue` (José, 31/07)    |
+| **R-039** 🆕 | 🚫 **Superada na referência Caixa B1 (08/10/2026):** maquininha cadastrada e vinculada é obrigatória na abertura. Os relatórios de manhã/tarde usam exclusivamente a maquininha escolhida. |
 
 ### §1-C · R-040 — abrir o caixa É confirmar (José, 31/07)
 
@@ -277,8 +277,8 @@ Estado confirmado no código e nos testes:
 | R-019          | ✅     | confirmação com valor divergente emite `transferencia_divergencia` para destinatário e Tesouraria                                         |
 | R-021 (quebra) | ✅     | quebra não altera `contas` e vive em tabela própria, com `empresa_id` e FK composta que impede cruzamento de tenant                       |
 | R-032          | ✅     | Tesouraria, Gerência/Gerente, Financeiro, Diretor Geral e admin transferem sem caixa; Caixa continua exigindo caixa aberto e conta do PDV |
-| R-033          | ✅     | abertura sem lacre continua permitida e pode começar zerada                                                                               |
-| R-039          | ✅     | cadastro de maquininha por empresa, série, apelido e estado; seleção opcional na abertura                                                 |
+| R-033          | 🚫     | superada no Caixa B1: abertura exige malote/lacre identificado e não existe abertura zerada                                               |
+| R-039          | 🚫     | superada no Caixa B1: maquininha cadastrada e vinculada é obrigatória na abertura e na conferência por turno                              |
 | R-025/R-027    | ✅     | transferência manual exige lacre novo; confirmação rompe o lacre atomicamente e impede reuso                                              |
 | R-028/R-030    | ✅     | só operador de conta destino confirma; disputa entre múltiplos destinos tem uma única atualização vencedora                               |
 | R-029/R-035    | ✅     | agendamento persiste; prazo opcional só é calculado na transferência direta quando explicitamente escolhido                               |
@@ -1131,6 +1131,8 @@ oficial.
 
 Retorno e sangria são o mesmo ato operacional e aparecem exclusivamente como **Transferência de retorno / sangria** dentro de um Caixa aberto. O modal genérico de transferências não cria novos retornos nem planejamentos. Linhas históricas já planejadas permanecem fatos auditáveis e podem somente ser executadas ou canceladas pelo fluxo existente até se encerrarem; não há apagamento, cancelamento silencioso ou reescrita histórica.
 
+**Localização visual supersedida por solicitação explícita do usuário em 02/10/2026:** o retorno manual passa a ser acessado exclusivamente em **+Novo → Transferências → Retorno / sangria**, no mesmo host da aba **Nova transferência**. Sai o CTA de retorno da tela Caixa. Apenas a localização muda: retorno exige Caixa aberto e `caixa_operar`, mantém a API `POST /api/caixa/:id/transferencia-cofre`, saldo livre, composição física, lacre, responsável e idempotência atuais. A aba comum mantém sua permissão própria. Não se reabre planejamento, não se altera fechamento nem regra financeira. **+Novo** oferece somente **Saídas** e **Transferências**; Entradas permanece como consulta no menu.
+
 ### R-205 — Composição e conferência física do malote na abertura (Rodrigo, 22/09/2026)
 
 Toda nova remessa Cofre → Caixa declara total, espécie e moedas, cuja soma precisa ser igual ao total. Ao abrir com lacre, o operador confere espécie e moedas. Se convergir, fica registrada a confirmação; se divergir, registra-se declarado, contado, diferença, relato obrigatório, operador e horário do servidor, notifica-se a Tesouraria e o Caixa abre com o total efetivamente contado. O valor declarado nunca é reescrito. A implementação deve definir e testar o efeito contábil antes da migration.
@@ -1142,6 +1144,36 @@ No fechamento, o operador informa espécie e moedas físicas. Se o total contado
 ### R-207 — Lacres do retorno manual e do fechamento (Rodrigo, 22/09/2026)
 
 O lacre é obrigatório para a Transferência de retorno / sangria manual. O campo separado **Lacre do retorno no fechamento** é removido: no fechamento automático, o único lacre solicitado é o lacre obrigatório de fechamento. O histórico anterior não é alterado.
+
+### R-208 — Consulta de vendas do turno nas Entradas do Caixa (Marco, 02/10/2026)
+
+Clicar em **Entradas** abre uma consulta **somente leitura** das vendas vinculadas ao **Caixa aberto atual**. O Saldo do caixa não abre esta consulta porque também compõe transferências e demais movimentos físicos. Ela não é o Relatório de Vendas: o servidor deriva empresa, PDV, Caixa e intervalo operacional da própria abertura; o navegador só pode refinar por produto, forma de pagamento e horário. Não existe seletor de outro PDV, outra empresa ou outro Caixa, nem ações de editar, cancelar, anexar ou criar.
+
+`caixa_operar` basta para o titular consultar o próprio Caixa aberto, mesmo sem `relatorio_vendas_visualizar`. `caixas_gerenciar` conserva a leitura administrativa permitida nas demais rotas de Caixa, sempre dentro da empresa autorizada. Vendas canceladas continuam na consulta de auditoria separada e não entram nesta lista nem no saldo. Venda manual vinculada ao Caixa aparece sem filtro de horário; quando o filtro de horário está ativo, ela fica fora porque não há instante real registrado para compará-la, e a tela deve avisar isso explicitamente.
+
+### R-209 — Relatório de fechamento usa o período operacional congelado (Rodrigo, 02/10/2026)
+
+O relatório do fechamento não consulta vendas por minuto nem deixa o operador escolher data, PDV ou intervalo. Ao confirmar a saída do Caixa, o servidor grava o corte; a etapa **Vendas do PDV** busca uma única vez as vendas e movimentações ocorridas entre a abertura já conferida e esse corte. Portanto, a primeira venda pertence ao Caixa somente depois de ele ter sido aberto no PDV, e a última pertence somente até o instante em que o operador inicia o fechamento.
+
+Totais, formas de pagamento, canceladas e movimentos são de leitura para conferência; o navegador não recalcula saldo nem altera os fatos financeiros. A consulta usa `caixaId`, `dataHoraAbertura` e `dataHoraFechamento` derivados pelo servidor. Não há atualização automática, segundo botão de busca que mude o período, nem entrada posterior ao corte.
+
+### R-210 — Relatório da maquininha é prova do turno, sem taxa financeira (Rodrigo, 02/10/2026)
+
+A etapa de maquininha reproduz o fluxo operacional da referência: foto do relatório, leitura assistida opcional, revisão humana, número de série, valores de crédito, débito, Pix e voucher, além dos valores de início/fim quando o turno usar contador acumulado. “Líquido” significa **valor apurado no turno**, não desconto de taxa nem recebível líquido: na Manhã, é o valor lido no próprio relatório; na Tarde, é o valor acumulado da Tarde menos o acumulado da Manhã, sempre por forma de pagamento.
+
+O relatório é evidência para conferência de cartões. Ele não compõe dinheiro físico, não credita o Cofre, não muda a fórmula canônica do Caixa e não autoriza inferir taxa, adquirente, liquidação ou disponibilidade bancária.
+
+### R-211 — Encerramento operacional envia malote pendente à Tesouraria (Rodrigo, 02/10/2026)
+
+Depois de informar físico, lacre, folha e eventuais divergências, o operador encerra as vendas e entrega o malote à Tesouraria. O retorno físico fica pendente de conferência: a Tesouraria recebe o dossiê e só confirma o valor contado no Cofre no seu próprio fluxo. O operador não volta ao Caixa aberto nem inclui vendas depois do corte.
+
+Falta ou sobra preserva a regra R-206: a divergência exige relato, autoria e horário do servidor; falta gera quebra auditada e notificação, e sobra não cria quebra positiva. O encerramento do operador não transforma cartão, Pix, voucher ou crediário em dinheiro físico.
+
+### R-212 — Cancelada é relato do CREARE, não uma segunda declaração no fechamento (Rodrigo, 02/10/2026)
+
+Toda venda cancelada já exige no CREARE login/autorização do gerente e motivo do cancelamento. O fechamento apenas consulta e apresenta esse fato no período operacional congelado: venda, horário, valor, gerente/autorizador e motivo/justificativa registrados no CREARE. O operador do Caixa não grava áudio, texto nem nova justificativa para a mesma venda no Pralis.
+
+O motivo aparece em modo somente leitura no relatório final e no dossiê da Tesouraria. Ausência de motivo no dado integrado é uma pendência de integração/auditoria visível, não uma oportunidade para reescrever o fato em outro sistema.
 
 ## §4 · Como isto deixa de ser mais um documento
 

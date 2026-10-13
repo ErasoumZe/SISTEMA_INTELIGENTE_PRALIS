@@ -10,14 +10,18 @@
    O slot `actions` e repassado pelo AppShell com a mesma assinatura. O slot `caixa` SAIU daqui em
    28/08/2026: o aviso de caixa subiu para a topbar por decisao do Marco, e com ele foram embora a
    prop `caixaAberto` e o escopo `caixa-aberto`, que nao tinham mais quem os consumisse. */
+import type { CorMenuGrupo, CorRgbMenu, EstruturaMenuEmpresa } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
 import { agruparTelasMenu } from "~/utils/menu";
+import { estruturaEfetiva } from "~/utils/menu-estrutura";
 import { CATEGORIA_POR_SECAO } from "~/utils/cores-categoria";
 import { gruposIniciais, idDoGrupo } from "~/utils/sanfona-menu";
+import { estiloCorRgbMenu } from "~/utils/menu-cor-rgb";
 
 const props = defineProps<{
   telas: ItemMenu[];
+  estruturaMenu?: EstruturaMenuEmpresa | null;
   telaAtiva: string;
   telasDesabilitadas?: string[];
   motivosTelasDesabilitadas?: Record<string, string>;
@@ -34,19 +38,28 @@ const emit = defineEmits<{
 }>();
 
 const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
-const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
+const telasAgrupadas = computed(() => {
+  const estrutura = estruturaEfetiva(props.estruturaMenu);
+  return agruparTelasMenu(props.telas, estrutura.secoes, estrutura.idsOcultos);
+});
 
 function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
 }
 
-// Custom property, como o `--item-cor` do AppMenuItem: a lista de quem tem cor continua sendo so o
-// `CATEGORIA_POR_SECAO`. Aponta para o TOKEN e nunca para o hex (licao do VIS-E2a: com hex a marca
-// ficava com a cor do claro tambem no escuro). Secao sem cor devolve `undefined` e o CSS cai no
-// neutro do `var(--grupo-cor, ...)` — mesma forma, mesmo tamanho, so a tinta muda.
-function estiloGrupo(titulo: string) {
-  const categoria = CATEGORIA_POR_SECAO[titulo];
-  return categoria ? { "--grupo-cor": `var(--cat-${categoria}-tinta)` } : undefined;
+// A cor configurada pertence somente ao titulo do grupo. Itens internos mantem a escala neutra,
+// inclusive quando o grupo esta aberto.
+function estiloGrupo(titulo: string, cor: CorMenuGrupo | undefined, corRgb: CorRgbMenu | undefined) {
+  if (corRgb) {
+    const estilo = estiloCorRgbMenu(corRgb, props.escuro);
+    return { "--grupo-cor": estilo.faixa, "--grupo-texto": estilo.texto };
+  }
+  const corEscolhida = cor && cor !== "neutro" ? cor : undefined;
+  const categoria = corEscolhida ?? CATEGORIA_POR_SECAO[titulo];
+  if (!categoria) return undefined;
+  return {
+    ...(corEscolhida ? { "--grupo-texto": `var(--cat-${categoria}-tinta)` } : {})
+  };
 }
 
 // Sanfona dos GRUPOS (Entradas, Saidas, Resultados...). O estado vive no `useGruposAbertos`, fora
@@ -167,7 +180,7 @@ useItemAtivoVisivel();
             v-for="grupo in telasAgrupadas"
             :key="grupo.titulo"
             class="sidebar-group"
-            :style="estiloGrupo(grupo.titulo)"
+            :style="estiloGrupo(grupo.titulo, grupo.cor, grupo.corRgb)"
           >
             <button
               type="button"

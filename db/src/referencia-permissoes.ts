@@ -178,6 +178,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
+      "relatorio_fechamento_visualizar",
+      "fechamentos_caixa_conferir",
       "transferencias_criar",
       // R-191: classifica posteriormente a saída pendente, sem operar caixa nem pagar/efetuar.
       "despesas_discriminar",
@@ -322,9 +324,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   "Diretor de Operacoes": permissoesDoCargo({
     ativas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
   }),
-  // Diretor Geral vira um cargo normal (sem "todas"): o acesso total do diretor vem do role
-  // usuario_admin (decisao de negocio: pergunta 3). Assim a tela de permissoes do cargo fica limpa.
-  "Diretor Geral": permissoesDoCargo({}),
+  // Diretor Geral acompanha e pode decidir a conferência final junto da Tesouraria. Quando for
+  // usuario_admin já recebe tudo; estas duas chaves também cobrem o Diretor Geral comum.
+  "Diretor Geral": permissoesDoCargo({
+    extras: ["relatorio_fechamento_visualizar", "fechamentos_caixa_conferir"]
+  }),
   Financeiro: permissoesDoCargo({
     ativas: [
       "relatorio_vendas",

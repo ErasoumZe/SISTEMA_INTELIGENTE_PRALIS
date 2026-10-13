@@ -22,18 +22,21 @@ describe("grade de permissões operacionais", () => {
     expect(representados).toHaveLength(new Set(representados).size);
   });
 
-  it("expõe D/Pago, efetuar, conferir e aprovar pelos sufixos reais", () => {
+  it("expõe D/Pago, conferir e aprovar apenas onde o catálogo realmente define", () => {
     const representados = new Set(
       gradeDoCatalogo().flatMap((linha) => linha.celulas.flatMap((celula) => (celula.codigo ? [celula.codigo] : [])))
     );
 
-    for (const dominio of ["transferencias", "despesas", "mercadorias", "retiradas"]) {
-      expect(representados.has(`${dominio}_efetuar`)).toBe(true);
-      expect(representados.has(`${dominio}_conferir`)).toBe(true);
+    for (const dominio of ["despesas", "mercadorias", "retiradas"]) {
       expect(representados.has(`${dominio}_visualizar_dpago`)).toBe(true);
       expect(representados.has(`${dominio}_editar_dpago`)).toBe(true);
       expect(representados.has(`${dominio}_excluir_dpago`)).toBe(true);
     }
+    expect(representados.has("transferencias_conferir")).toBe(true);
+    expect(representados.has("transferencias_efetuar")).toBe(false);
+    expect(representados.has("despesas_conferir")).toBe(false);
+    expect(representados.has("mercadorias_conferir")).toBe(false);
+    expect(representados.has("retiradas_conferir")).toBe(false);
     expect(representados.has("mercadorias_aprovar")).toBe(true);
   });
 
@@ -72,7 +75,7 @@ describe("save da grade com permissões ocultas", () => {
       usuariosPermissoes: []
     };
     const regrasDaGrade = {
-      despesas_efetuar: true,
+      despesas_pagar: true,
       transferencias_conferir: false,
       mercadorias_aprovar: true,
       retiradas_visualizar_dpago: true,

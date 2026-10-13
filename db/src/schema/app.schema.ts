@@ -208,6 +208,12 @@ export const formasPagamento = pgTable(
     id: idUuid,
     empresaId,
     nome: text("nome").notNull(),
+    // Classificacao explicita para o relatorio do Caixa. Uma forma nova entra em "outros",
+    // nunca em dinheiro/cartao por inferencia do nome recebido da integracao.
+    categoriaFechamentoCaixa: text("categoria_fechamento_caixa")
+      .notNull()
+      .$type<"dinheiro" | "credito" | "debito" | "pix" | "voucher" | "crediario" | "outros">()
+      .default("outros"),
     // Atributo da forma, nao chave: o payload do CREARE (`PagamentosVenda`) nao tem campo de
     // adquirente. Se um dia tiver, vira chave sem quebrar o que ja estiver gravado.
     adquirente: text("adquirente"),
@@ -247,6 +253,10 @@ export const formasPagamento = pgTable(
     check(
       "formas_pagamento_disponibilidade_check",
       sql`${table.disponibilidade} is null or ${table.disponibilidade} in ('imediata', 'por_evento')`
+    ),
+    check(
+      "formas_pagamento_categoria_fechamento_caixa_check",
+      sql`${table.categoriaFechamentoCaixa} in ('dinheiro', 'credito', 'debito', 'pix', 'voucher', 'crediario', 'outros')`
     ),
     // `is not distinct from`, e NAO `=`. Com `=`, uma coluna nulavel faz o ramo valer NULL, e CHECK
     // so recusa quando a expressao da FALSE — `FALSE or NULL or FALSE` e NULL e PASSA. O estado que
@@ -2067,7 +2077,7 @@ export const fechamentosCaixaAnexos = pgTable(
     id: idUuid,
     empresaId,
     fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
-    tipo: text("tipo").notNull().$type<"folha_fechamento" | "comprovante_cartao">(),
+    tipo: text("tipo").notNull().$type<"folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare">(),
     caminho: text("caminho").notNull(),
     nomeOriginal: text("nome_original").notNull(),
     nomeArquivo: text("nome_arquivo").notNull(),
@@ -2089,7 +2099,10 @@ export const fechamentosCaixaAnexos = pgTable(
       foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
       name: "fechamentos_caixa_anexos_fechamento_empresa_fk"
     }).onDelete("restrict"),
-    check("fechamentos_caixa_anexos_tipo_check", sql`${table.tipo} in ('folha_fechamento', 'comprovante_cartao')`),
+    check(
+      "fechamentos_caixa_anexos_tipo_check",
+      sql`${table.tipo} in ('folha_fechamento', 'comprovante_cartao', 'relatorio_vendas_creare')`
+    ),
     check("fechamentos_caixa_anexos_tamanho_check", sql`${table.tamanhoBytes} > 0`),
     check(
       "fechamentos_caixa_anexos_ia_status_check",
@@ -2110,6 +2123,26 @@ export const fechamentosCaixaRelatoriosMaquininha = pgTable(
     fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
     // Retrato do turno que abriu o caixa. O servidor o preenche; a IA nunca decide esse periodo.
     turnoNome: text("turno_nome").notNull(),
+    // V1 preserva o JSON dos fechamentos ja realizados. V2 guarda os dois cortes, para que o
+    // liquido seja sempre final - inicial por meio de pagamento.
+    versao: integer("versao").notNull().default(1),
+    numeroMaquininha: text("numero_maquininha"),
+    creditoInicial: valorMonetario("credito_inicial"),
+    debitoInicial: valorMonetario("debito_inicial"),
+    pixInicial: valorMonetario("pix_inicial"),
+    voucherInicial: valorMonetario("voucher_inicial"),
+    creditoFinal: valorMonetario("credito_final"),
+    debitoFinal: valorMonetario("debito_final"),
+    pixFinal: valorMonetario("pix_final"),
+    voucherFinal: valorMonetario("voucher_final"),
+    anexoInicialId: uuid("anexo_inicial_id").references(() => fechamentosCaixaAnexos.id, { onDelete: "restrict" }),
+    anexoFinalId: uuid("anexo_final_id").references(() => fechamentosCaixaAnexos.id, { onDelete: "restrict" }),
+    // V6: a leitura da tarde referencia explicitamente a leitura acumulada da manha do mesmo
+    // PDV/maquininha/dia operacional. A FK impede que a cadeia auditavel aponte para um relatorio removido.
+    leituraReferenciaRelatorioId: uuid("leitura_referencia_relatorio_id").references(
+      (): AnyPgColumn => fechamentosCaixaRelatoriosMaquininha.id,
+      { onDelete: "restrict" }
+    ),
     dadosRevisados: jsonb("dados_revisados").notNull(),
     criadoPor: text("criado_por")
       .notNull()
@@ -2124,7 +2157,36 @@ export const fechamentosCaixaRelatoriosMaquininha = pgTable(
       name: "fechamentos_caixa_relatorios_maquininha_fechamento_empresa_fk"
     }).onDelete("restrict"),
     unique("fechamentos_caixa_relatorios_maquininha_fechamento_unico").on(table.fechamentoCaixaId),
-    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm)
+    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm),
+    index("fechamentos_caixa_relatorios_maquininha_referencia_idx").on(table.leituraReferenciaRelatorioId)
+  ]
+);
+
+// O relatorio gerado e um retrato auditavel do intervalo que foi bloqueado no inicio do
+// fechamento. Mantemos as formas cruas, agrupamentos e cancelamentos no JSON para nenhuma
+// forma vinda do CREARE desaparecer por ainda nao ter categoria operacional.
+export const fechamentosCaixaRelatoriosVendas = pgTable(
+  "fechamentos_caixa_relatorios_vendas",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    periodoInicio: timestamp("periodo_inicio", { withTimezone: true }).notNull(),
+    periodoFim: timestamp("periodo_fim", { withTimezone: true }).notNull(),
+    dados: jsonb("dados").notNull(),
+    geradoPor: text("gerado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    geradoEm: timestamp("gerado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_relatorios_vendas_fechamento_empresa_fk"
+    }).onDelete("restrict"),
+    unique("fechamentos_caixa_relatorios_vendas_fechamento_unico").on(table.fechamentoCaixaId),
+    index("fechamentos_caixa_relatorios_vendas_empresa_idx").on(table.empresaId, table.geradoEm)
   ]
 );
 
@@ -2245,6 +2307,8 @@ export const fechamentosCaixa = pgTable(
     dataHoraAbertura: timestamp("data_hora_abertura", { withTimezone: true }),
     abertoEm: timestamp("aberto_em", { withTimezone: true }),
     dataHoraFechamento: timestamp("data_hora_fechamento", { withTimezone: true }),
+    fechamentoIniciadoEm: timestamp("fechamento_iniciado_em", { withTimezone: true }),
+    fechamentoIniciadoPor: text("fechamento_iniciado_por").references(() => perfisUsuarios.usuarioId),
     fechadoEm: timestamp("fechado_em", { withTimezone: true }),
     fechadoPor: text("fechado_por").references(() => perfisUsuarios.usuarioId),
     tokenEdicao: text("token_edicao"),
@@ -2282,7 +2346,7 @@ export const fechamentosCaixa = pgTable(
     criadoEm
   },
   (table) => [
-    check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
+    check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'em_fechamento', 'fechado', 'ajustado')`),
     check(
       "fechamentos_caixa_composicao_fechamento_check",
       sql`(${table.valorFisicoEsperadoFechamento} is null
@@ -2310,11 +2374,95 @@ export const fechamentosCaixa = pgTable(
     unique("fechamentos_caixa_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)
-      .where(sql`${table.status} = 'aberto'`),
+      .where(sql`${table.status} in ('aberto', 'em_fechamento')`),
     uniqueIndex("fechamentos_caixa_operador_aberto_unico_idx")
       .on(table.empresaId, table.usuarioCaixaId)
-      .where(sql`${table.status} = 'aberto' and ${table.usuarioCaixaId} is not null`),
+      .where(sql`${table.status} in ('aberto', 'em_fechamento') and ${table.usuarioCaixaId} is not null`),
     index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
+  ]
+);
+
+// Conferência final é uma trilha própria e append-only. Não reaproveita o status operacional do
+// Caixa nem a confirmação individual de transferência: Tesouraria pode registrar uma divergência
+// e, depois de resolvê-la no fluxo correto, fazer uma nova conferência sem apagar a anterior.
+export const fechamentosCaixaConferenciasTesouraria = pgTable(
+  "fechamentos_caixa_conferencias_tesouraria",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    resultado: text("resultado").notNull().$type<"conferido" | "divergente">(),
+    observacao: text("observacao"),
+    conferidoPor: text("conferido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    conferidoEm: timestamp("conferido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_conferencias_tesouraria_caixa_empresa_fk"
+    }).onDelete("restrict"),
+    check(
+      "fechamentos_caixa_conferencias_tesouraria_resultado_check",
+      sql`${table.resultado} in ('conferido', 'divergente')`
+    ),
+    check(
+      "fechamentos_caixa_conferencias_tesouraria_observacao_check",
+      sql`${table.resultado} = 'conferido'
+        or (${table.observacao} is not null and length(btrim(${table.observacao})) > 0)`
+    ),
+    index("fechamentos_caixa_conferencias_tesouraria_caixa_idx").on(table.fechamentoCaixaId, table.conferidoEm)
+  ]
+);
+
+// Registro operacional de parada do computador do PDV durante um Caixa aberto. Cada linha e um
+// intervalo imutavel: o servidor abre a ocorrencia e somente marca o retorno; nunca regrava o
+// instante ou os motivos informados pelo operador.
+export const caixaIndisponibilidades = pgTable(
+  "caixa_indisponibilidades",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    motivos: text("motivos").array().notNull(),
+    motivoOutro: text("motivo_outro"),
+    iniciadoEm: timestamp("iniciado_em", { withTimezone: true }).notNull().defaultNow(),
+    retornadoEm: timestamp("retornado_em", { withTimezone: true }),
+    registradoPor: text("registrado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    retornadoPor: text("retornado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "caixa_indisponibilidades_caixa_empresa_fk"
+    }).onDelete("restrict"),
+    check(
+      "caixa_indisponibilidades_motivos_check",
+      sql`cardinality(${table.motivos}) > 0
+        and ${table.motivos} <@ array[
+          'falta_energia', 'oscilacao_eletrica', 'internet_caiu', 'cabo_desconectado',
+          'computador_travou', 'limpeza_manutencao', 'atualizacao_sistema', 'outro'
+        ]::text[]`
+    ),
+    check(
+      "caixa_indisponibilidades_outro_check",
+      sql`(('outro' = any(${table.motivos}) and length(btrim(coalesce(${table.motivoOutro}, ''))) > 0)
+        or ('outro' <> all(${table.motivos}) and ${table.motivoOutro} is null))`
+    ),
+    check(
+      "caixa_indisponibilidades_periodo_check",
+      sql`${table.retornadoEm} is null or ${table.retornadoEm} >= ${table.iniciadoEm}`
+    ),
+    uniqueIndex("caixa_indisponibilidades_uma_aberta_por_caixa_idx")
+      .on(table.fechamentoCaixaId)
+      .where(sql`${table.retornadoEm} is null`),
+    index("caixa_indisponibilidades_caixa_inicio_idx").on(table.fechamentoCaixaId, table.iniciadoEm)
   ]
 );
 

@@ -1,14 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
-
-async function usuarioIdPorEmail(email: string) {
-  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email]);
-  if (!usuario) throw new Error(`Usuario nao encontrado para ${email}`);
-  return usuario.id;
-}
 
 describe("operacoes campos sensiveis integration", () => {
   let contexto: ContextoApiTeste;
@@ -28,7 +23,6 @@ describe("operacoes campos sensiveis integration", () => {
   it("Deve_ForcarComputarEDataPendente_Quando_ClienteComumTentaBurlar", async () => {
     // ADR-004: perfil caixa (sem caixas_gerenciar) nao esconde movimento do saldo
     // nem cria despesa/venda ja "paga" — o servidor decide os dois campos.
-    const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
@@ -46,19 +40,15 @@ describe("operacoes campos sensiveis integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieCaixa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId,
-        dataHoraAbertura: "2026-05-02T08:00",
-        observacao: "Caixa do operador"
-      }
+    await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Caixa campos sensiveis",
+      dataHoraAbertura: "2026-05-02T08:00",
+      contaId,
+      pdvId
     });
-    expect(abrir.statusCode, abrir.body).toBe(201);
 
     const venda = await contexto.app.inject({
       method: "POST",

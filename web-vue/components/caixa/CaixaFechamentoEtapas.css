@@ -1,0 +1,228 @@
+.fechamento-etapas {
+  display: grid;
+  gap: var(--cx-sp-4);
+  max-width: 1120px;
+  margin: 0 auto;
+  border: 1px solid var(--cx-line);
+  border-radius: 16px;
+  padding: clamp(16px, 3vw, 28px);
+  background: var(--cx-surface);
+}
+
+.fechamento-etapas__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+}
+
+.fechamento-etapas__sobretitulo,
+.fechamento-etapas__grupo-cabecalho > div > span {
+  display: block;
+  color: var(--cx-attention);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.fechamento-etapas__cabecalho h2,
+.fechamento-etapas__cabecalho h3,
+.fechamento-etapas__grupo-cabecalho h4 {
+  margin: 3px 0 0;
+  color: var(--cx-ink);
+}
+
+.fechamento-etapas__cabecalho p,
+.fechamento-etapas__grupo-cabecalho small {
+  color: var(--cx-ink-soft);
+}
+
+.fechamento-etapas__situacao {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--cx-sp-3);
+}
+
+.fechamento-etapas__saldo-esperado {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--cx-sp-3);
+  align-items: center;
+  min-width: 0;
+  padding: var(--cx-sp-4);
+  border: 1px solid color-mix(in srgb, var(--cat-resultado-base) 42%, var(--cx-line));
+  border-radius: var(--cx-r-md);
+  background: var(--cat-resultado-soft);
+}
+
+.fechamento-etapas__saldo-esperado :deep(.v-icon) {
+  grid-row: span 2;
+  color: var(--cat-resultado-tinta);
+}
+
+.fechamento-etapas__saldo-esperado span,
+.fechamento-etapas__saldo-esperado small {
+  color: var(--cx-ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.fechamento-etapas__saldo-esperado strong {
+  color: var(--cx-ink);
+  font-size: clamp(1.35rem, 3vw, 1.7rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.fechamento-etapas__saldo-esperado small {
+  grid-column: 1 / -1;
+  margin-top: var(--cx-sp-2);
+  font-weight: 500;
+}
+
+.fechamento-etapas__alerta-divergencia,
+.fechamento-etapas__alerta-retorno {
+  margin: 0;
+}
+
+.fechamento-etapas__travas:empty {
+  display: none;
+}
+
+.fechamento-abertura-responsavel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink);
+  font-size: 0.875rem;
+}
+
+.fechamento-etapas__documento :deep(.folha) {
+  margin: 0;
+  box-shadow: none;
+}
+
+.fechamento-etapas__grupo {
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-sunken);
+}
+
+.fechamento-etapas__grupo--contagem {
+  border-color: color-mix(in srgb, var(--cat-entradas-base) 38%, var(--cx-line));
+  background: color-mix(in srgb, var(--cat-entradas-base) 5%, var(--cx-surface));
+}
+
+.fechamento-etapas__grupo-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cx-sp-3);
+  margin-bottom: var(--cx-sp-4);
+}
+
+.fechamento-etapas__grupo-cabecalho > div > span {
+  color: var(--cx-brand-text);
+}
+
+.fechamento-etapas__grupo--contagem .fechamento-etapas__grupo-cabecalho > div > span {
+  color: var(--cat-entradas-tinta);
+}
+
+.fechamento-etapas__grupo-cabecalho small {
+  max-width: 310px;
+  text-align: end;
+}
+
+.fechamento-etapas__acao-final {
+  position: sticky;
+  bottom: var(--cx-sp-2);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-4);
+  padding: var(--cx-sp-3) var(--cx-sp-4);
+  border: 1px solid color-mix(in srgb, var(--cx-negative) 45%, var(--cx-line));
+  border-radius: var(--cx-r-md);
+  background: color-mix(in srgb, var(--cx-surface) 94%, var(--cx-canvas));
+  box-shadow: var(--cx-e-2);
+}
+
+.fechamento-etapas__acao-final > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.fechamento-etapas__acao-final span {
+  color: var(--cx-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.fechamento-etapas__acao-final strong {
+  color: var(--cx-ink);
+}
+
+.fechamento-etapas__acao-final--pronta {
+  border-color: color-mix(in srgb, var(--cx-positive) 45%, var(--cx-line));
+}
+
+.fechamento-etapas__acao-final :deep(.v-btn) {
+  min-height: 48px;
+  white-space: nowrap;
+}
+
+.botao-travado {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .fechamento-etapas__cabecalho {
+    flex-direction: column;
+  }
+
+  .fechamento-etapas {
+    gap: var(--cx-sp-3);
+    padding-bottom: var(--cx-sp-3);
+  }
+
+  .fechamento-etapas__situacao,
+  .fechamento-etapas__grupo-cabecalho,
+  .fechamento-etapas__acao-final {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .fechamento-etapas__grupo-cabecalho small {
+    max-width: none;
+    text-align: start;
+  }
+
+  .fechamento-etapas__acao-final {
+    position: static;
+    align-items: stretch;
+  }
+
+  .fechamento-etapas__acao-final > div:last-child {
+    width: 100%;
+  }
+
+  .fechamento-etapas :deep([data-teste="botao-fechar"]) {
+    width: 100%;
+    min-height: 48px;
+  }
+  .fechamento-etapas__acao-final :deep(.v-btn__content) {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+}

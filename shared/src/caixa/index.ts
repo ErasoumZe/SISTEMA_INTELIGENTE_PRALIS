@@ -2,7 +2,7 @@ import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { deCentavos, paraCentavos } from "../dinheiro/index.js";
 import {
-  saldoCaixaCentavos,
+  saldoFisicoCaixaCentavos,
   saldoProprioCentavos,
   type TotaisCaixaCentavos,
   type TotaisFormaPagamentoCentavos
@@ -26,8 +26,9 @@ export const abrirCaixaPayloadSchema = z
     // nao envia data/hora e, por isso, nao consegue retroagir ou antecipar o inicio do turno.
     // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
     turnoId: uuidSchema.optional().nullable(),
-    // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
-    maquininhaId: uuidSchema.optional().nullable(),
+    // R-039: o equipamento é escolhido na abertura e é a referência imutável do relatório final.
+    // Sem esse vínculo, seria possível fechar o turno com a foto de outra maquininha.
+    maquininhaId: uuidSchema,
     // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
     // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
     // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
@@ -35,7 +36,8 @@ export const abrirCaixaPayloadSchema = z
     // R-207: nomes livres declarados na folha; a identidade autenticada permanece nos IDs do ato.
     caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
     supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
-    // R-205: quando recebe malote, o caixa declara sua propria contagem fisica.
+    // R-205: a contagem física só é enviada quando o Caixa apontar divergência. Sem os campos,
+    // o servidor confirma exatamente a composição declarada pela Tesouraria.
     valorEspecieContado: z.coerce.number().nonnegative().optional(),
     valorMoedasContado: z.coerce.number().nonnegative().optional(),
     observacaoDivergencia: z.string().trim().max(500).optional().nullable(),
@@ -46,12 +48,13 @@ export const abrirCaixaPayloadSchema = z
     const informouContagem = dados.valorEspecieContado !== undefined || dados.valorMoedasContado !== undefined;
     if (
       temLacre &&
-      (!informouContagem || dados.valorEspecieContado === undefined || dados.valorMoedasContado === undefined)
+      informouContagem &&
+      (dados.valorEspecieContado === undefined || dados.valorMoedasContado === undefined)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["valorEspecieContado"],
-        message: "Informe especie e moedas conferidas"
+        message: "Informe especie e moedas juntas quando houver divergencia"
       });
     }
     if (!temLacre && informouContagem) {
@@ -66,6 +69,49 @@ export const abrirCaixaPayloadSchema = z
 export const caixaParamsSchema = z.object({
   caixaId: uuidSchema
 });
+export const iniciarFechamentoCaixaPayloadSchema = z.object({});
+
+export const motivoIndisponibilidadeCaixaSchema = z.enum([
+  "falta_energia",
+  "oscilacao_eletrica",
+  "internet_caiu",
+  "cabo_desconectado",
+  "computador_travou",
+  "limpeza_manutencao",
+  "atualizacao_sistema",
+  "outro"
+]);
+
+export const registrarIndisponibilidadeCaixaPayloadSchema = z
+  .object({
+    motivos: z.array(motivoIndisponibilidadeCaixaSchema).min(1).max(8),
+    motivoOutro: z.string().trim().max(500).optional().nullable()
+  })
+  .superRefine((dados, ctx) => {
+    const outro = dados.motivos.includes("outro");
+    if (outro && !dados.motivoOutro) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["motivoOutro"], message: "Descreva o outro motivo" });
+    }
+    if (!outro && dados.motivoOutro) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["motivoOutro"],
+        message: "Detalhe permitido somente para Outro"
+      });
+    }
+  });
+
+// Consulta operacional do turno atual. O cliente jamais escolhe empresa, PDV, caixa ou periodo:
+// a rota deriva tudo do caixa identificado no path e aceita somente os refinamentos de leitura.
+// `dataHora*` carregam fuso porque hora sem data/fuso nao prova em que lado da meia-noite ocorreu.
+export const vendasDoCaixaQuerySchema = z
+  .object({
+    produto: z.string().trim().min(1).max(200).optional(),
+    formaPagamentoId: uuidSchema.optional(),
+    dataHoraInicio: z.string().datetime({ offset: true }).optional(),
+    dataHoraFim: z.string().datetime({ offset: true }).optional()
+  })
+  .merge(paginationQuerySchema);
 
 // D6: o retorno final e o fechamento sao UM ato atomico. O cliente nao manda o VALOR do retorno —
 // o servidor usa a sobra que ele mesmo apurou sob trava, para que nao exista janela entre o que a
@@ -84,30 +130,64 @@ export const fecharCaixaPayloadSchema = z.object({
 // Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
 // no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
 const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable();
+const detalheRelatorioMaquininhaSchema = z.object({
+  nome: z.string().trim().min(1).max(160),
+  valor: z.coerce.number().nonnegative()
+});
+export const detalhesRelatorioMaquininhaSchema = z.object({
+  credito: z.array(detalheRelatorioMaquininhaSchema).max(80).default([]),
+  debito: z.array(detalheRelatorioMaquininhaSchema).max(80).default([]),
+  pix: z.array(detalheRelatorioMaquininhaSchema).max(80).default([]),
+  voucher: z.array(detalheRelatorioMaquininhaSchema).max(80).default([])
+});
 export const relatorioMaquininhaIaSchema = z.object({
   documentoLegivel: z.boolean(),
   numeroMaquininha: z.string().trim().max(160).nullable(),
   dataEmissao: z.string().trim().max(32).nullable(),
+  acumulador: valorRelatorioMaquininhaSchema,
   credito: valorRelatorioMaquininhaSchema,
   debito: valorRelatorioMaquininhaSchema,
   pix: valorRelatorioMaquininhaSchema,
   voucher: valorRelatorioMaquininhaSchema,
-  total: valorRelatorioMaquininhaSchema,
-  trocaInicial: valorRelatorioMaquininhaSchema,
-  saldoFinalDinheiro: valorRelatorioMaquininhaSchema,
+  detalhes: detalhesRelatorioMaquininhaSchema.default({ credito: [], debito: [], pix: [], voucher: [] }),
   camposDuvidosos: z.array(z.string().trim().max(100)).max(30).default([]),
   observacoes: z.array(z.string().trim().max(300)).max(20).default([])
 });
 export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 
-export const salvarRelatorioMaquininhaSchema = relatorioMaquininhaIaSchema.extend({
-  anexosConsiderados: z.array(uuidSchema).min(1).max(12)
+// O fechamento reproduz os dois relatórios da maquininha: leitura da manhã e leitura da tarde.
+// A maquininha continua sendo a escolhida na abertura; a foto apenas sugere valores revisáveis.
+export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
+  anexoId: uuidSchema,
+  leituraAcumulada: relatorioMaquininhaIaSchema
 });
+export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
+
+const valorRelatorioCreareSchema = z.coerce.number().nonnegative().nullable();
+export const relatorioVendasCreareSchema = z.object({
+  documentoLegivel: z.boolean(),
+  totalBruto: valorRelatorioCreareSchema,
+  dinheiro: valorRelatorioCreareSchema,
+  credito: valorRelatorioCreareSchema,
+  debito: valorRelatorioCreareSchema,
+  pix: valorRelatorioCreareSchema,
+  voucher: valorRelatorioCreareSchema,
+  despesasExcetoSangria: valorRelatorioCreareSchema,
+  resultadoFinal: valorRelatorioCreareSchema,
+  camposDuvidosos: z.array(z.string().trim().max(120)).max(30).default([]),
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+});
+export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
+export const gerarRelatorioVendasFechamentoSchema = z.object({
+  anexoId: uuidSchema,
+  leituraCreare: relatorioVendasCreareSchema
+});
+export type GerarRelatorioVendasFechamento = z.infer<typeof gerarRelatorioVendasFechamentoSchema>;
 
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
 // aceito pela constraint do banco e existe no seed, mas NENHUM fluxo o escreve — o acerto de saldo
 // cria despesa/debito/ajuste e mantem o caixa aberto. Quem quer "houve acerto" usa temAjuste.
-export const statusCaixaSchema = z.enum(["aberto", "fechado", "ajustado"]);
+export const statusCaixaSchema = z.enum(["aberto", "em_fechamento", "fechado", "ajustado"]);
 
 // Filtros do historico. Periodo e por data_movimento (a data contabil do caixa), nao por
 // data_hora_abertura: e ela que o operador enxerga como "o dia daquele caixa".
@@ -151,6 +231,7 @@ export const linhaHistoricoCaixaSchema = z.object({
   turnoNome: z.string().nullable(),
   dataHoraAbertura: z.string().nullable(),
   dataHoraFechamento: z.string().nullable(),
+  fechamentoIniciadoEm: z.string().nullable(),
   fechadoPor: z.string().nullable(),
   fechadoPorNome: z.string().nullable(),
   lacreAbertura: z.string().nullable(),
@@ -428,6 +509,7 @@ export const caixaOperacionalSchema = z.object({
   dataHoraAbertura: z.string(),
   abertoEm: z.string(),
   dataHoraFechamento: z.string().nullable(),
+  fechamentoIniciadoEm: z.string().nullable(),
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
@@ -442,10 +524,18 @@ export const caixaOperacionalSchema = z.object({
   status: z.string()
 });
 
+export const indisponibilidadeAbertaCaixaSchema = z.object({
+  id: uuidSchema,
+  motivos: z.array(motivoIndisponibilidadeCaixaSchema),
+  motivoOutro: z.string().nullable(),
+  iniciadoEm: z.string()
+});
+
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable(),
   lacreFechamentoReservado: z.string().nullable(),
+  indisponibilidadeAberta: indisponibilidadeAbertaCaixaSchema.nullable(),
   // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado
   // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
   // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".
@@ -456,6 +546,9 @@ export const caixaStatusSchema = z.object({
 export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
+export type IniciarFechamentoCaixaPayload = z.infer<typeof iniciarFechamentoCaixaPayloadSchema>;
+export type RegistrarIndisponibilidadeCaixaPayload = z.infer<typeof registrarIndisponibilidadeCaixaPayloadSchema>;
+export type VendasDoCaixaQuery = z.infer<typeof vendasDoCaixaQuerySchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type StatusCaixa = z.infer<typeof statusCaixaSchema>;
@@ -483,6 +576,7 @@ export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 // Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
 // do fechamento (valor do malote da abertura; 0 sem malote) e alimenta o saldo proprio derivado.
 export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentavos = 0): ResumoCaixa {
+  const saldoFisicoCentavos = saldoFisicoCaixaCentavos(totais);
   const resumo: ResumoCaixa = {
     totalEntradas: deCentavos(totais.entradas),
     totalTransferencias: deCentavos(totais.transferencias),
@@ -493,8 +587,8 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
     totalMercadorias: deCentavos(totais.mercadorias),
     dividaCofre: deCentavos(dividaCofreCentavos),
     saldoProprio: deCentavos(saldoProprioCentavos(totais, dividaCofreCentavos)),
-    propostaRetorno: deCentavos(Math.max(0, saldoCaixaCentavos(totais))),
-    saldo: deCentavos(saldoCaixaCentavos(totais))
+    propostaRetorno: deCentavos(Math.max(0, saldoFisicoCentavos)),
+    saldo: deCentavos(saldoFisicoCentavos)
   };
   if (totais.porFormaPagamento) {
     resumo.porFormaPagamento = totais.porFormaPagamento.map((item: TotaisFormaPagamentoCentavos) => ({

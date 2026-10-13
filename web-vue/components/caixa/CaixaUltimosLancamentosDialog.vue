@@ -57,8 +57,8 @@ watch(
 
 <template>
   <v-dialog v-model="dialogAberto" max-width="680" persistent no-click-animation>
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
+    <v-card class="caixa-lancamentos-dialog" :class="`caixa-lancamentos-dialog--${categoria}`">
+      <v-card-title class="caixa-lancamentos-dialog__titulo d-flex align-center justify-space-between">
         Últimas {{ titulo.toLocaleLowerCase("pt-BR") }} deste caixa
         <v-btn icon="mdi-close" variant="text" aria-label="Fechar últimos lançamentos" @click="dialogAberto = false" />
       </v-card-title>
@@ -80,8 +80,29 @@ watch(
         </v-list>
       </v-card-text>
       <v-card-actions class="px-6 pb-5"
-        ><v-spacer /><v-btn color="primary" @click="dialogAberto = false">Fechar</v-btn></v-card-actions
+        ><v-spacer /><v-btn class="caixa-lancamentos-dialog__acao" variant="text" @click="dialogAberto = false"
+          >Fechar</v-btn
+        ></v-card-actions
       >
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.caixa-lancamentos-dialog {
+  border-top: 4px solid var(--categoria-cor);
+}
+.caixa-lancamentos-dialog__titulo,
+.caixa-lancamentos-dialog__acao {
+  color: var(--categoria-cor);
+}
+.caixa-lancamentos-dialog--despesas {
+  --categoria-cor: var(--cat-despesas-faixa);
+}
+.caixa-lancamentos-dialog--mercadorias {
+  --categoria-cor: var(--cat-mercadorias-faixa);
+}
+.caixa-lancamentos-dialog--retiradas {
+  --categoria-cor: var(--cat-retiradas-faixa);
+}
+</style>

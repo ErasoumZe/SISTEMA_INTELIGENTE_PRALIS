@@ -3,7 +3,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -38,12 +38,6 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
 
   const empresaId = idsTeste.empresaA;
 
-  async function usuarioId(email: string) {
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email]);
-    if (!usuario) throw new Error(`Usuario nao encontrado: ${email}`);
-    return usuario.id;
-  }
-
   function post(cookie: string, url: string, payload: object) {
     return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
   }
@@ -52,28 +46,17 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
     return contexto.app.inject({ method: "PUT", url, headers: { cookie }, payload });
   }
 
-  async function criarComoAdmin(url: string, payload: object) {
-    const resposta = await post(cookieAdmin, url, payload);
-    expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
-    return json<{ data: { id: string } }>(resposta).data.id;
-  }
-
   // Abre um caixa proprio (conta + PDV frescos, criados pelo admin) para o usuario do cookie operar.
   async function abrirCaixa(cookie: string, email: string, nome: string, dataHora: string) {
-    // R-165: fundo para as despesas do ciclo de vida; o que o arquivo prova e a permissao de
-    // pagar/ver D-Pago, nao o saldo.
-    const contaId = await criarComoAdmin("/api/contas", { empresaId, nome: `Conta ${nome}`, saldoInicial: 100_000 });
-    const pdvId = await criarComoAdmin("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
-    const abrir = await post(cookie, "/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: await usuarioId(email),
-      dataHoraAbertura: dataHora
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookie,
+      emailOperador: email,
+      nome,
+      dataHoraAbertura: dataHora,
+      empresaId
     });
-    expect(abrir.statusCode, abrir.body).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
-    return { contaId, caixaId };
+    return { contaId: abertura.contaId, caixaId: abertura.caixaId };
   }
 
   function despesaPayload(contaId: string, extra: Record<string, unknown> = {}) {

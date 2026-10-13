@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -22,6 +23,7 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
   let cookieCaixa = "";
+  let cookieTesouraria = "";
   let caixaId = "";
   let contaDoPdv = "";
   let pdvId = "";
@@ -29,50 +31,24 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieCaixa] = await Promise.all([
+    [cookieAdmin, cookieCaixa, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "caixa")
+      cookieSessao(contexto.app, "caixa"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
 
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.caixa.email
-    ]);
-    if (!usuario) throw new Error("Usuario caixa nao encontrado");
-
-    // Conta + PDV proprios: o pdvA do seed ja tem caixa aberto e o periodo colidiria.
-    const conta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/contas",
-      headers: { cookie: cookieAdmin },
-      // R-165: fundo para as saidas do operador; o que o arquivo prova e o CAMPO gravado
-      // (conta/caixa_id), nao o saldo.
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV CX-M06", saldoInicial: 100_000 }
+    // Conta + PDV proprios e abertura fisica: a operacao exige malote, lacre e maquininha.
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "CX-M06",
+      registrarLimpeza: false
     });
-    expect(conta.statusCode, conta.body).toBe(201);
-    contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
-
-    const pdv = await contexto.app.inject({
-      method: "POST",
-      url: "/api/pdvs",
-      headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "PDV CX-M06", contaId: contaDoPdv, ativo: true }
-    });
-    expect(pdv.statusCode, pdv.body).toBe(201);
-    pdvId = json<{ data: { id: string } }>(pdv).data.id;
-
-    const abertura = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieCaixa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: usuario.id,
-        dataHoraAbertura: "2026-07-31T08:00"
-      }
-    });
-    expect(abertura.statusCode, abertura.body).toBe(201);
-    caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    caixaId = abertura.caixaId;
+    contaDoPdv = abertura.contaId;
+    pdvId = abertura.pdvId;
 
     // Conta da empresa B: o seed nao tem nenhuma, e ela e a fixture do teste cross-tenant. Vai por
     // SQL para nao depender de o admin ter acesso de escrita na outra empresa.

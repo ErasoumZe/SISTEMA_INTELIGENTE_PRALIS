@@ -33,6 +33,9 @@ export const vendasQuerySchema = z
 export const totalPorFormaPagamentoSchema = z.object({
   formaPagamentoId: z.string().nullable(),
   formaPagamento: z.string(),
+  categoriaFechamentoCaixa: z
+    .enum(["dinheiro", "credito", "debito", "pix", "voucher", "crediario", "outros"])
+    .nullable(),
   total: z.number(),
   quantidade: z.number()
 });

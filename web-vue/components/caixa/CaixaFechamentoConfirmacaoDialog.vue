@@ -3,7 +3,7 @@ import { dinheiro } from "~/utils/domain";
 
 type AnexoFechamento = {
   id: string;
-  tipo: "folha_fechamento" | "comprovante_cartao";
+  tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
   nomeOriginal: string;
   relatorio: unknown;
 };
@@ -30,6 +30,7 @@ const totalContado = computed(() => props.valorTotal);
 const diferenca = computed(() => totalContado.value - props.saldoEsperado);
 const folhas = computed(() => props.anexos.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoes = computed(() => props.anexos.filter((anexo) => anexo.tipo === "comprovante_cartao"));
+const relatoriosCreare = computed(() => props.anexos.filter((anexo) => anexo.tipo === "relatorio_vendas_creare"));
 const relatorioMaquininha = computed(() => cartoes.value.find((anexo) => anexo.relatorio)?.relatorio ?? null);
 
 function campoRelatorio(campo: string) {
@@ -55,9 +56,8 @@ function dinheiroRelatorio(campo: string) {
         <v-sheet class="pa-3 mb-4" rounded border>
           <div class="text-overline">Conferência física</div>
           <v-row dense>
-            <v-col cols="12" sm="4"><strong>Esperado:</strong> {{ dinheiro(saldoEsperado) }}</v-col>
-            <v-col cols="12" sm="4"><strong>Total declarado:</strong> {{ dinheiro(totalContado) }}</v-col>
-            <v-col cols="12" sm="4" :class="diferenca ? 'text-error' : 'text-success'">
+            <v-col cols="12" sm="6"><strong>Total contado:</strong> {{ dinheiro(totalContado) }}</v-col>
+            <v-col cols="12" sm="6" :class="diferenca ? 'text-error' : 'text-success'">
               <strong>{{ diferenca ? "Diferença:" : "Conferência:" }}</strong>
               {{ diferenca ? dinheiro(Math.abs(diferenca)) : "bateu" }}
             </v-col>
@@ -89,14 +89,19 @@ function dinheiroRelatorio(campo: string) {
         <v-divider class="mb-3" />
         <div class="text-subtitle-2">Anexos que ficarão no fechamento</div>
         <div class="text-body-2 mt-1">
-          Folha: <strong>{{ folhas.length }}</strong> · Comprovantes de cartão: <strong>{{ cartoes.length }}</strong>
+          Folha: <strong>{{ folhas.length }}</strong> · CREARE: <strong>{{ relatoriosCreare.length }}</strong> ·
+          Comprovantes de cartão: <strong>{{ cartoes.length }}</strong>
         </div>
         <v-chip-group v-if="anexos.length" class="mt-2">
           <v-chip
             v-for="anexo in anexos"
             :key="anexo.id"
             size="small"
-            :prepend-icon="anexo.tipo === 'folha_fechamento' ? 'mdi-file-document-outline' : 'mdi-credit-card-outline'"
+            :prepend-icon="
+              anexo.tipo === 'folha_fechamento' || anexo.tipo === 'relatorio_vendas_creare'
+                ? 'mdi-file-document-outline'
+                : 'mdi-credit-card-outline'
+            "
           >
             {{ anexo.nomeOriginal }}
           </v-chip>

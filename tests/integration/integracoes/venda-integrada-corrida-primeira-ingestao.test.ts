@@ -30,7 +30,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
@@ -116,29 +116,27 @@ function payloadDividido(idVenda: string, dataHoraVenda: string) {
 describe("#41 · corrida na primeira ingestao da venda integrada", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
   let caixaId: string;
   let dataHoraVenda: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
-
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
     ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
-
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta R41 corrida" });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-
-    const pdv = await criar("/api/pdvs", {
-      empresaId: idsTeste.empresaA,
-      nome: "PDV R41 corrida",
-      contaId,
-      ativo: true
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieRemetente: cookieTesouraria,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "R41 corrida",
+      registrarLimpeza: false
     });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const pdvId = abertura.pdvId;
+    caixaId = abertura.caixaId;
 
     const vinculo = await contexto.app.inject({
       method: "PUT",
@@ -155,13 +153,6 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
 
-    const abertura = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: usuario.id,
-      observacao: "Caixa R41 corrida"
-    });
-    caixaId = json<{ data: { id: string } }>(abertura).data.id;
     // A abertura é carimbada no servidor; use um instante posterior para a venda
     // integrada poder pertencer ao turno em qualquer data em que a suíte rode.
     dataHoraVenda = new Date().toISOString();
@@ -178,12 +169,6 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
   afterAll(async () => {
     await contexto.fechar();
   });
-
-  async function criar(url: string, payload: object) {
-    const resposta = await contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
-    expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
-    return resposta;
-  }
 
   function enviar(payload: object): Promise<Resposta> {
     return contexto.app.inject({

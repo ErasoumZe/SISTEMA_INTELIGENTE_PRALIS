@@ -5,6 +5,7 @@ import {
   exigirRecorrenciaDeRetaguarda,
   podeLancarSemCaixa
 } from "../../api/src/lancamentos/lancamentos.dominio.js";
+import { podeAcessarRelatorioFechamento } from "@padaria/shared";
 
 function perfil(
   cargo: string,
@@ -45,6 +46,18 @@ describe("podeLancarSemCaixa - quem lanca sem estar preso a um caixa", () => {
   it("ignora acento e caixa alta do nome do cargo", () => {
     expect(podeLancarSemCaixa(perfil("gerência de loja"))).toBe(true);
     expect(podeLancarSemCaixa(perfil("GERENCIA"))).toBe(true);
+  });
+});
+
+describe("podeAcessarRelatorioFechamento", () => {
+  it.each(["Tesouraria", "Diretor Geral", "diretor geral regional"])("libera %s", (cargo) => {
+    expect(podeAcessarRelatorioFechamento(perfil(cargo))).toBe(true);
+  });
+
+  it("libera administrador total e mantém Caixa e Gerência fora", () => {
+    expect(podeAcessarRelatorioFechamento(perfil("Outro", "usuario_admin"))).toBe(true);
+    expect(podeAcessarRelatorioFechamento(perfil("Caixa"))).toBe(false);
+    expect(podeAcessarRelatorioFechamento(perfil("Gerência"))).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 import { diaNegocio } from "@padaria/shared/datas";
@@ -306,13 +306,15 @@ describe("campanhas de bonificacao", () => {
     });
     expect(atualizacao.statusCode, atualizacao.body).toBe(204);
 
-    const abertura = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: await cookieSessao(contexto.app, "caixa") },
-      payload: { empresaId, pdvId, usuarioCaixaId }
+    await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: await cookieSessao(contexto.app, "caixa"),
+      emailOperador: "caixa.integracao@padaria.local",
+      nome: "Caixa campanha abertura posterior",
+      empresaId,
+      contaId,
+      pdvId
     });
-    expect(abertura.statusCode, abertura.body).toBe(201);
 
     const notificacoes = await consultarTodos<{ id: string }>(
       `select id from notificacoes

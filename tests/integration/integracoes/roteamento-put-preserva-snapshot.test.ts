@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -24,14 +24,6 @@ type PagamentoGravado = {
   adquirente: string | null;
   total_pago: string;
 };
-
-async function usuarioAdminId() {
-  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-    usuariosTeste.admin.email
-  ]);
-  if (!usuario) throw new Error("Usuario admin nao encontrado");
-  return usuario.id;
-}
 
 describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   let contexto: ContextoApiTeste;
@@ -114,20 +106,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // seu ja era recusado antes da #152. Para provar a preservacao do snapshot num PUT REAL, o admin
     // precisa ter esse caixa aberto — senao o teste morre na regra de caixa e nao chega a olhar o
     // roteamento, que e o que ele existe para verificar.
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: await usuarioAdminId(),
-        observacao: `Caixa put ${sufixo}`
-      }
+    await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: `Caixa put ${sufixo}`,
+      contaId,
+      pdvId
     });
-    expect(abrir.statusCode, abrir.body).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
     // O servidor é a autoridade da abertura. A venda precisa nascer depois dela,
     // como acontece quando o CREARE envia uma venda do turno corrente.
     const dataHoraVenda = new Date().toISOString();
@@ -171,7 +157,17 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     const venda = await consultarUm<{ id: string }>("select id from vendas where identificador_externo = $1", [
       idVenda
     ]);
-    return { contaId, identificadorExterno, idVenda, vendaId: venda?.id ?? "", dataHoraVenda };
+    const saldoAbertura = await saldo(contaId);
+    if (saldoAbertura === null) throw new Error("Conta roteada sem saldo inicial");
+
+    return {
+      contaId,
+      identificadorExterno,
+      idVenda,
+      vendaId: venda?.id ?? "",
+      dataHoraVenda,
+      saldoAbertura
+    };
   }
 
   async function pagamentos(vendaId: string) {
@@ -240,13 +236,13 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   }
 
   it("venda ROTEADA: o PUT permitido preserva conta, disponibilidade e o credito no saldo", async () => {
-    const { contaId, vendaId } = await montar("roteada", true);
+    const { contaId, vendaId, saldoAbertura } = await montar("roteada", true);
 
     const antes = await pagamentos(vendaId);
     expect(antes[0]?.roteamento_status).toBe("roteado");
     expect(antes[0]?.conta_final_id).toBe(contaId);
     expect(antes[0]?.disponivel_em).not.toBeNull();
-    expect(await saldo(contaId), "ponto de partida: 250 creditados").toBe(250);
+    expect(await saldo(contaId), "ponto de partida: fundo fisico + 250 creditados").toBe(saldoAbertura);
 
     const resposta = await editarObservacao(vendaId, `revisado ${carimbo}`);
     // Status EXATO. O teste antigo aceitava qualquer coisa que nao fosse codigo da R-177 — e por isso
@@ -266,7 +262,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     expect(depois[0]?.total_pago).toBe(antes[0]?.total_pago);
 
     // O que importa para a padaria: o dinheiro continua na conta.
-    expect(await saldo(contaId), "o credito nao pode sumir por causa de uma observacao").toBe(250);
+    expect(await saldo(contaId), "o credito nao pode sumir por causa de uma observacao").toBe(saldoAbertura);
 
     // E o campo permitido realmente mudou.
     const venda = await consultarUm<{ observacao: string | null; conta_origem_id: string | null }>(
@@ -278,7 +274,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   });
 
   it("venda PENDENTE: o PUT permitido preserva a pendencia, sem rebaixar para historica", async () => {
-    const { contaId, vendaId } = await montar("pendente", false);
+    const { contaId, vendaId, saldoAbertura } = await montar("pendente", false);
 
     expect((await pagamentos(vendaId))[0]?.roteamento_status).toBe("pendente");
 
@@ -290,11 +286,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // poderia ser roteada, porque passaria a ser lida como anterior ao roteamento.
     expect(depois[0]?.roteamento_status, "pendente tem de continuar pendente").toBe("pendente");
     expect(depois[0]?.conta_final_id).toBeNull();
-    expect(await saldo(contaId)).toBe(0);
+    expect(await saldo(contaId)).toBe(saldoAbertura);
   });
 
   it("reingestao DEPOIS do PUT permitido nao reclassifica a venda como historica", async () => {
-    const { contaId, identificadorExterno, idVenda, vendaId, dataHoraVenda } = await montar("reingestao", true);
+    const { contaId, identificadorExterno, idVenda, vendaId, dataHoraVenda, saldoAbertura } = await montar(
+      "reingestao",
+      true
+    );
 
     const resposta = await editarObservacao(vendaId, `antes do reenvio ${carimbo}`);
     expect(resposta.statusCode, resposta.body).toBe(200);
@@ -314,7 +313,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // historica — ficaria assim para sempre.
     expect(depois[0]?.roteamento_status, "a venda continua sendo do codigo novo").toBe("roteado");
     expect(depois[0]?.conta_final_id).toBe(contaId);
-    expect(await saldo(contaId), "o reenvio recalcula sobre o valor novo").toBe(400);
+    expect(await saldo(contaId), "o reenvio recalcula sobre o valor novo").toBe(saldoAbertura + 150);
   });
 
   it("usuario de outra empresa nao descobre existencia, integracao nem pagamentos", async () => {

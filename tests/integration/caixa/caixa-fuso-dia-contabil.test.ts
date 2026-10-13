@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm } from "../../setup/integracao.js";
 
 // Fuso do DIA CONTABIL: um instante as 22:00 BRT ja e 01:00Z do dia SEGUINTE. O dia contabil
 // gravado tem de ser o dia LOCAL (America/Sao_Paulo), nao o de UTC. Cobre data_movimento do caixa
@@ -14,24 +13,20 @@ import { consultarUm, json } from "../../setup/integracao.js";
 describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
+    ]);
   }, 120_000);
 
   afterAll(async () => {
     await contexto.fechar();
   });
-
-  async function usuarioAdminId() {
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
-    ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
-    return usuario.id;
-  }
 
   function post(url: string, payload: object) {
     return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
@@ -43,14 +38,6 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
     return resposta;
   }
 
-  async function criarContaEPdv(nome: string) {
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: `Conta ${nome}` });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-    const pdv = await criar("/api/pdvs", { empresaId: idsTeste.empresaA, nome: `PDV ${nome}`, contaId, ativo: true });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
-    return { contaId, pdvId };
-  }
-
   const INSTANTE_22H_BRT = "2026-07-17T01:00:00Z"; // 22:00 de 16/07 em Sao Paulo
   const DIA_LOCAL = "2026-07-16";
 
@@ -59,14 +46,16 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
     vi.setSystemTime(new Date(INSTANTE_22H_BRT));
     let caixaId: string;
     try {
-      const { pdvId } = await criarContaEPdv("fuso-abertura");
-      const abrir = await criar("/api/caixa/abrir", {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: await usuarioAdminId()
+      const abertura = await abrirCaixaDoOperador(contexto.app, {
+        cookieAdmin,
+        cookieRemetente: cookieTesouraria,
+        cookieOperador: cookieAdmin,
+        emailOperador: usuariosTeste.admin.email,
+        nome: "fuso-abertura",
+        dataHoraAbertura: INSTANTE_22H_BRT,
+        valorAbertura: 100
       });
-      caixaId = json<{ data: { id: string } }>(abrir).data.id;
-      registrarEncerramentoCaixaParaTeste(caixaId);
+      caixaId = abertura.caixaId;
     } finally {
       vi.useRealTimers();
     }
@@ -85,14 +74,16 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
     let pdvId: string;
     let caixaId: string;
     try {
-      ({ contaId, pdvId } = await criarContaEPdv("fuso-acerto"));
-      const abrir = await criar("/api/caixa/abrir", {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: await usuarioAdminId()
+      const abertura = await abrirCaixaDoOperador(contexto.app, {
+        cookieAdmin,
+        cookieRemetente: cookieTesouraria,
+        cookieOperador: cookieAdmin,
+        emailOperador: usuariosTeste.admin.email,
+        nome: "fuso-acerto",
+        dataHoraAbertura: INSTANTE_22H_BRT,
+        valorAbertura: 100
       });
-      caixaId = json<{ data: { id: string } }>(abrir).data.id;
-      registrarEncerramentoCaixaParaTeste(caixaId);
+      ({ contaId, pdvId, caixaId } = abertura);
     } finally {
       vi.useRealTimers();
     }
@@ -112,12 +103,7 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
       ],
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 50 }]
     });
-    const respostaRetorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      valor: 50,
-      observacao: "Retorno fuso",
-      idempotenciaChave: randomUUID()
-    });
-    expect(respostaRetorno.statusCode, respostaRetorno.body).toBe(200);
+    await criarRetornoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId, valor: 50 });
 
     const retorno = await consultarUm<{ data_referencia: string }>(
       `select to_char(data_referencia, 'YYYY-MM-DD') as data_referencia

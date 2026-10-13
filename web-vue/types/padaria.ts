@@ -292,6 +292,7 @@ export type CaixaOperacional = {
   dataHoraAbertura: string;
   abertoEm: string;
   dataHoraFechamento: string | null;
+  fechamentoIniciadoEm?: string | null;
   fechadoEm: string | null;
   tokenEdicao: string | null;
   turnoId: string | null;
@@ -333,6 +334,12 @@ export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
   lacreFechamentoReservado: string | null;
+  indisponibilidadeAberta?: {
+    id: string;
+    motivos: string[];
+    motivoOutro: string | null;
+    iniciadoEm: string;
+  } | null;
   // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];

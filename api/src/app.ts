@@ -9,6 +9,7 @@ import { codigoPostgresDoErro, ErroDominio, type ErroEncadeado } from "./erros.j
 import { capturarErro, iniciarObservabilidade } from "./observabilidade.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
+import { registrarRotasRelatorioFechamento } from "./relatorios/relatorio-fechamento.controller.js";
 import { registrarRotasCampanhas } from "./campanhas/campanhas.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
@@ -22,6 +23,7 @@ import { registrarRotasRetiradas } from "./retiradas/retiradas.controller.js";
 import { registrarRotasRoteamento } from "./roteamento/roteamento.controller.js";
 import { registrarRotasSaude } from "./saude/saude.controller.js";
 import { registrarRotasTema } from "./tema/tema.controller.js";
+import { registrarRotasMenuEmpresa } from "./menu-empresa/menu-empresa.controller.js";
 import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
 import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
@@ -234,6 +236,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasSaude(app);
   await registrarRotasAuth(app);
   await registrarRotasTema(app);
+  await registrarRotasMenuEmpresa(app);
   await registrarRotasVendas(app);
   await registrarRotasVendasComprovantes(app);
   await registrarRotasDespesas(app);
@@ -245,6 +248,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasRecorrencias(app);
   await registrarRotasTransferencias(app);
   await registrarRotasCaixa(app);
+  await registrarRotasRelatorioFechamento(app);
   await registrarRotasEmpresas(app);
   await registrarRotasContas(app);
   await registrarRotasContasUsuarios(app);

@@ -18,6 +18,35 @@ const DialogoCancelamentoStub = defineComponent({
   }
 });
 
+const ListaTransferenciasStub = defineComponent({
+  props: {
+    operacoes: { type: Array as () => OperacaoResumo[], required: true },
+    podeEditar: Boolean,
+    podeConferir: Boolean,
+    podeCancelarPlanejamento: Boolean
+  },
+  emits: ["editar", "conferir", "cancelar-planejamento"],
+  setup(props, { emit }) {
+    return () =>
+      h(
+        "div",
+        props.operacoes.map((operacao) =>
+          h("article", { "data-operacao-id": operacao.id }, [
+            props.podeEditar && !operacao.possuiPlanejamentoRetorno && !operacao.ehPlanejamentoRetorno
+              ? h("button", { "data-teste": "botao-editar", onClick: () => emit("editar", operacao) })
+              : null,
+            props.podeConferir && operacao.status === "pendente" && !operacao.possuiPlanejamentoRetorno
+              ? h("button", { "data-teste": "botao-conferir", onClick: () => emit("conferir", operacao) })
+              : null,
+            props.podeCancelarPlanejamento && operacao.ehPlanejamentoRetorno && operacao.status === "agendada"
+              ? h("button", { "data-teste": "cancelar-planejamento-retorno", onClick: () => emit("cancelar-planejamento", operacao) })
+              : null
+          ])
+        )
+      );
+  }
+});
+
 const base: OperacaoResumo = {
   id: "base",
   empresaId: "empresa-1",
@@ -82,7 +111,8 @@ function montar(podeCancelarPlanejamento: boolean, comumOverrides: Partial<Opera
         "v-card": { template: "<section><slot /></section>" },
         "v-btn": { template: '<button v-bind="$attrs"><slot /></button>' },
         "v-icon": true,
-        "v-select": true
+        "v-select": true,
+        TransferenciasLista: ListaTransferenciasStub
       }
     }
   });

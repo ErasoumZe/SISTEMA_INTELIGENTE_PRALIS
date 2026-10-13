@@ -221,10 +221,12 @@ describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () =>
   });
 
   // Anti-falso-verde: se `SECOES_MENU` vier vazio (import quebrado, renome de arquivo), o teste
-  // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as cinco secoes.
-  it("achou as cinco secoes declaradas — o teste acima nao passou no vazio", () => {
-    expect(titulosDasSecoes).toHaveLength(5);
+  // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as seis secoes.
+  // Departamento pessoal tem eixo proprio e nao pode sumir sem este contrato acusar a mudanca.
+  it("achou as seis secoes declaradas — o teste acima nao passou no vazio", () => {
+    expect(titulosDasSecoes).toHaveLength(6);
     expect(titulosDasSecoes).toContain("Saidas");
+    expect(titulosDasSecoes).toContain("Departamento pessoal");
     expect(titulosDasSecoes).toContain("Configuração");
   });
 

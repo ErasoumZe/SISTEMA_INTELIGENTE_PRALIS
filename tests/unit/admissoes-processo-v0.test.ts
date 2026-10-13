@@ -172,10 +172,14 @@ describe("as permissoes do processo sao concedidas pelo catalogo", () => {
     expect(blocoGerencia).not.toContain("admissoes_processos_editar_internos");
   });
 
-  it("o cargo Diretor Geral continua vazio", () => {
-    // O acesso total do diretor vem do ROLE `usuario_admin`, nao do cargo. Conceder aqui sujaria a
-    // tela de permissoes do cargo, que e mantida vazia de proposito.
-    expect(referencia).toContain('"Diretor Geral": permissoesDoCargo({})');
+  it("o cargo Diretor Geral recebe somente a conferencia de fechamento", () => {
+    // O cargo continua sem acesso ao fluxo de admissoes. A excecao e intencional: Diretor Geral
+    // acompanha e decide a conferencia final do caixa junto da Tesouraria.
+    const inicio = referencia.indexOf('"Diretor Geral": permissoesDoCargo(');
+    const bloco = referencia.slice(inicio, referencia.indexOf("}),", inicio));
+    expect(bloco).toContain('"relatorio_fechamento_visualizar"');
+    expect(bloco).toContain('"fechamentos_caixa_conferir"');
+    expect(bloco).not.toContain("admissoes_processos");
   });
 
   it("a unica permissao de criacao e a da admissao DIRETA", () => {

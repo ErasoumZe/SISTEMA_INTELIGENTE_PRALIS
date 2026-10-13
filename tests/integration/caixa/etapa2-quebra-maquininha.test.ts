@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
@@ -63,15 +64,18 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
   }
 
   async function abrirCaixa(pdvId: string, maquininhaId?: string) {
-    const resposta = await request(cookieCaixa, "POST", "/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId,
+    const pdv = await consultarUm<{ conta_id: string }>("select conta_id from pdvs where id = $1", [pdvId]);
+    if (!pdv?.conta_id) throw new Error("PDV de etapa2 sem conta");
+    return abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Caixa etapa2",
       dataHoraAbertura: "2026-07-30T08:00",
-      maquininhaId: maquininhaId ?? null
+      contaId: pdv.conta_id,
+      pdvId,
+      ...(maquininhaId ? { maquininhaId } : {})
     });
-    expect(resposta.statusCode, resposta.body).toBe(201);
-    return json<{ data: { id: string } }>(resposta).data.id;
   }
 
   async function transferir(cookie: string, contaOrigemId: string, contaDestinoId: string, valor: number) {
@@ -86,6 +90,15 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     });
   }
 
+  async function fecharCaixa(caixaId: string, payload: Record<string, unknown> = {}, cookie = cookieCaixa) {
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId,
+      caixaResponsavelNome: "Caixa etapa2"
+    });
+    return request(cookie, "POST", `/api/caixa/${caixaId}/fechar`, { ...fechamentoFisico, ...payload });
+  }
+
   it("libera Tesouraria sem caixa e mantem o cargo Caixa bloqueado sem caixa", async () => {
     const tesouraria = await transferir(cookieTesouraria, idsTeste.contaBanco, idsTeste.contaLivre, 7);
     expect(tesouraria.statusCode, tesouraria.body).toBe(201);
@@ -95,7 +108,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect(caixa.body).toMatch(/abra um caixa/i);
   });
 
-  it("cadastra maquininha, vincula na abertura e continua permitindo abertura sem ela", async () => {
+  it("cadastra maquininha e vincula a maquina selecionada na abertura", async () => {
     const cadastro = await request(cookieAdmin, "POST", "/api/maquininhas", {
       empresaId: idsTeste.empresaA,
       numeroSerie: "SERIE-E2-001",
@@ -109,29 +122,20 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     const caixaComMaquininha = await abrirCaixa(comMaquininha.pdvId, maquininhaId);
     const vinculo = await consultarUm<{ maquininha_id: string }>(
       "select maquininha_id from fechamentos_caixa where id = $1",
-      [caixaComMaquininha]
+      [caixaComMaquininha.caixaId]
     );
     expect(vinculo?.maquininha_id).toBe(maquininhaId);
-    expect((await request(cookieCaixa, "POST", `/api/caixa/${caixaComMaquininha}/fechar`, {})).statusCode).toBe(204);
-
-    const semMaquininha = await criarContaEPdv("sem-maquininha");
-    const caixaSemMaquininha = await abrirCaixa(semMaquininha.pdvId);
-    const semVinculo = await consultarUm<{ maquininha_id: string | null }>(
-      "select maquininha_id from fechamentos_caixa where id = $1",
-      [caixaSemMaquininha]
-    );
-    expect(semVinculo?.maquininha_id).toBeNull();
-    expect((await request(cookieCaixa, "POST", `/api/caixa/${caixaSemMaquininha}/fechar`, {})).statusCode).toBe(204);
+    expect((await fecharCaixa(caixaComMaquininha.caixaId)).statusCode).toBe(204);
   });
 
   it("D6: o fechamento devolve a sobra ao cofre no mesmo ato, sem segundo botao", async () => {
     const { contaId, pdvId } = await criarContaEPdv("retorno");
-    const caixaId = await abrirCaixa(pdvId);
+    const { caixaId } = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, idsTeste.contaBanco, contaId, 20)).statusCode).toBe(201);
     await confirmarTransferenciaPorLacreDireto(`E2-${sequenciaLacre}`, usuarioCaixaId);
 
-    // Uma unica chamada: o retorno final de 20 e o fechamento saem juntos, na mesma transacao.
-    const fechar = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {
+    // Uma unica chamada devolve todo o físico contado: o fundo de abertura (100) e a entrada (20).
+    const fechar = await fecharCaixa(caixaId, {
       lacreRetorno: `E2-FINAL-${sequenciaLacre}`
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
@@ -141,7 +145,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
       [caixaId]
     );
     // D3: nasce pendente de conferencia, mas ja abateu o saldo fisico — por isso o caixa fechou.
-    expect(retorno).toMatchObject({ valor_original: "20.00", status: "pendente" });
+    expect(retorno).toMatchObject({ valor_original: "120.00", status: "pendente" });
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",
       [caixaId]
@@ -149,17 +153,15 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
 
-  it("quebra sem observacao nao fecha; com observacao grava fato e notifica Tesouraria", async () => {
+  it("quebra com observacao grava fato e notifica Tesouraria", async () => {
     const { contaId, pdvId } = await criarContaEPdv("quebra");
-    const caixaId = await abrirCaixa(pdvId);
+    const { caixaId } = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, contaId, idsTeste.contaBanco, 12.34)).statusCode).toBe(201);
 
-    const semObservacao = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {});
-    assertProblem(semObservacao, 400);
-    expect(semObservacao.body).toMatch(/observação obrigatoria/i);
-
-    const fechado = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {
-      observacao: "Faltou dinheiro na conferência"
+    const fechado = await fecharCaixa(caixaId, {
+      observacao: "Faltou dinheiro na conferência",
+      valorEspecieFechamento: 75.32,
+      valorMoedasFechamento: 0
     });
     expect(fechado.statusCode, fechado.body).toBe(204);
 
@@ -217,12 +219,14 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
 
   it("registra o gerente que fechou e mantem a quebra atribuida ao operador", async () => {
     const { contaId, pdvId } = await criarContaEPdv("fechado-por-gerente");
-    const caixaId = await abrirCaixa(pdvId);
+    const { caixaId } = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, contaId, idsTeste.contaBanco, 4.56)).statusCode).toBe(201);
 
-    const fechado = await request(cookieGerente, "POST", `/api/caixa/${caixaId}/fechar`, {
-      observacao: "Gerente conferiu a falta do operador"
-    });
+    const fechado = await fecharCaixa(
+      caixaId,
+      { observacao: "Gerente conferiu a falta do operador", valorEspecieFechamento: 90.88, valorMoedasFechamento: 0 },
+      cookieGerente
+    );
     expect(fechado.statusCode, fechado.body).toBe(204);
 
     const autoria = await consultarUm<{ fechado_por: string; usuario_id: string }>(

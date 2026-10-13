@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, universoDoCaixa } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, prepararPayloadFechamentoValido, universoDoCaixa } from "../../setup/caixa.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -132,12 +132,16 @@ describe("P0 - lancamento x fechamento do caixa", () => {
     return json<{ data: { id: string } }>(venda).data.id;
   }
 
-  function fecharCaixaInject(caixaId: string, payload: object = {}) {
+  async function fecharCaixaInject(caixaId: string, payload: object = {}) {
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId
+    });
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieCaixa },
-      payload: { lacreFechamento: `FCH-LANCAMENTO-${caixaId}`, ...payload }
+      payload: { ...fechamentoFisico, ...payload }
     });
   }
 
@@ -570,7 +574,10 @@ describe("P0 - lancamento x fechamento do caixa", () => {
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
       // O fechamento chega depois e tem de ENTRAR NA FILA atras do lancamento em voo.
-      const fechamento = fecharCaixaInject(fx.caixaId, { observacao: "quebra do cenario A" });
+      const fechamento = fecharCaixaInject(fx.caixaId, {
+        observacao: "contagem apos a despesa concorrente",
+        valorEspecieFechamento: 45
+      });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
       await bloqueador.cliente.query("commit");
@@ -584,8 +591,8 @@ describe("P0 - lancamento x fechamento do caixa", () => {
     expect(await universoDoCaixa(fx.caixaId)).toMatchObject({
       status: "fechado",
       total_despesas: "55.00",
-      saldo: "-55.00",
-      quebras: 1
+      saldo: "0.00",
+      quebras: 0
     });
   });
 
@@ -643,7 +650,10 @@ describe("P0 - lancamento x fechamento do caixa", () => {
       );
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
-      const fechamento = fecharCaixaInject(fx.caixaId, { observacao: "quebra do cenario E2" });
+      const fechamento = fecharCaixaInject(fx.caixaId, {
+        observacao: "contagem apos a despesa editada",
+        valorEspecieFechamento: 45
+      });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
       await bloqueador.cliente.query("commit");
@@ -656,7 +666,7 @@ describe("P0 - lancamento x fechamento do caixa", () => {
     expect(await universoDoCaixa(fx.caixaId)).toMatchObject({
       status: "fechado",
       total_despesas: "55.00",
-      saldo: "-55.00"
+      saldo: "0.00"
     });
   });
 

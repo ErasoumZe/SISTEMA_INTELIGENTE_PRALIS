@@ -59,6 +59,11 @@
       "development": "./src/schema/mercadoria/mercadoria.schema.ts",
       "default": "./dist/src/schema/mercadoria/mercadoria.schema.js"
     },
+    "./schema/menu": {
+      "types": "./dist/src/schema/menu/menu.schema.d.ts",
+      "development": "./src/schema/menu/menu.schema.ts",
+      "default": "./dist/src/schema/menu/menu.schema.js"
+    },
     "./schema/nota-fiscal": {
       "types": "./dist/src/schema/nota-fiscal/nota-fiscal.schema.d.ts",
       "development": "./src/schema/nota-fiscal/nota-fiscal.schema.ts",

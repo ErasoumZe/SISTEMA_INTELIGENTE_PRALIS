@@ -1,42 +1,27 @@
 <script setup lang="ts">
-import { permissoes } from "~/utils/domain";
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
-import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
+import PermissoesMenuEmpresa from "~/components/permissoes/PermissoesMenuEmpresa.vue";
+import PermissoesUsuarioPage from "~/components/permissoes/PermissoesUsuarioPage.vue";
+
+const route = useRoute();
+const usuarioInicial = computed(() => (typeof route.query.usuario === "string" ? route.query.usuario : ""));
+const aba = ref("pessoas");
 </script>
 
 <template>
   <AppWorkspace tela-inicial="permissoes" tipo-pagina="cadastro" v-slot="ctx">
-    <CadastroTablePage
-      tela="permissoes"
-      :tela-atual="ctx.telaAtual"
-      :descricao="ctx.descricao"
-      :colunas="ctx.colunasCadastro"
-      :linhas="ctx.linhasCadastro"
-      modo-servidor
-      :busca="ctx.permissoesFiltros.q"
-      :tipo-permissao-filtro="ctx.permissoesFiltros.tipoPermissao"
-      :alvo-filtro="ctx.permissoesFiltros.alvoId"
-      :permissao-filtro="ctx.permissoesFiltros.permissao"
-      :alvos-filtro="ctx.alvosFiltroPermissoes"
-      :permissoes-filtro="[...permissoes]"
-      :carregando-busca="ctx.permissoesCarregandoBusca"
-      :buscou="ctx.permissoesBuscou"
-      :total-servidor="ctx.permissoesPagina.total"
-      :pagina-servidor="ctx.permissoesPagina.page"
-      :itens-por-pagina-servidor="ctx.permissoesPagina.pageSize"
-      :pode-excluir="false"
-      :excluindo-id="ctx.permissaoExcluindoId"
-      @acionar="ctx.abrirCadastroNovo"
-      @editar="ctx.abrirCadastroEditar"
-      @extra="ctx.lidarExtraCadastro"
-      @update:busca="ctx.atualizarBuscaPermissoes"
-      @update:tipo-permissao-filtro="ctx.atualizarTipoPermissaoFiltro"
-      @update:alvo-filtro="ctx.atualizarAlvoFiltro"
-      @update:permissao-filtro="ctx.atualizarPermissaoFiltro"
-      @buscar="ctx.buscarPermissoes"
-      @limpar="ctx.limparFiltrosPermissoes"
-      @excluir="ctx.excluirPermissao"
-      @update:pagina-servidor="ctx.atualizarPaginaPermissoes"
-    />
+    <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? 'Permissões'" />
+    <v-tabs v-model="aba" class="mb-5" color="primary" align-tabs="start">
+      <v-tab value="pessoas" prepend-icon="mdi-account-key-outline">Acessos por pessoa</v-tab>
+      <v-tab value="menu" prepend-icon="mdi-menu-open">Montar menu</v-tab>
+    </v-tabs>
+    <v-window v-model="aba">
+      <v-window-item value="pessoas">
+        <PermissoesUsuarioPage :empresa-id="ctx.empresaId" :usuario-inicial="usuarioInicial" />
+      </v-window-item>
+      <v-window-item value="menu">
+        <PermissoesMenuEmpresa :empresa-id="ctx.empresaId" :pode-editar="ctx.temPermissao('cadastro_permissoes_editar')" />
+      </v-window-item>
+    </v-window>
   </AppWorkspace>
 </template>

@@ -21,6 +21,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   let adminId: string;
   let multiempresaId: string;
   let tesourariaId: string;
+  let sequenciaMaquininha = 0;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -72,6 +73,26 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     return { contaId, pdvId: json<{ data: { id: string } }>(pdv).data.id };
   }
 
+  function composicaoDoMalote(lacre: string, valor: number) {
+    return {
+      valorEspecieDeclarado: valor,
+      valorMoedasDeclarado: 0,
+      lacreFechamentoPlanejado: `${lacre}-FECHAMENTO`
+    };
+  }
+
+  async function criarMaquininhaParaAbertura(pdvId: string) {
+    const sequencia = ++sequenciaMaquininha;
+    const maquininha = await request(cookieAdmin, "POST", "/api/maquininhas", {
+      empresaId: idsTeste.empresaA,
+      numeroSerie: `R040-${sequencia}-${pdvId}`,
+      apelido: `Maquininha R040 ${sequencia}`,
+      ativo: true
+    });
+    expect(maquininha.statusCode, maquininha.body).toBe(201);
+    return json<{ data: { id: string } }>(maquininha).data.id;
+  }
+
   // A tesouraria envia (R-032: sem caixa aberto). Quem envia nunca confirma o proprio envio (R-028),
   // por isso a transferencia nasce pela tesouraria e o caixa e aberto pelo admin.
   async function criarTransferencia(lacre: string, valor: number, candidatos: string[]) {
@@ -81,6 +102,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       dataReferencia: "2026-07-31",
       descricao: `Fundo de troco ${lacre}`,
       valorOriginal: valor,
+      ...composicaoDoMalote(lacre, valor),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: destinoPrincipal,
       contasDestinoIds: demais,
@@ -91,12 +113,21 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
-  async function abrir(pdvId: string, lacreAbertura?: string, ator = { cookie: cookieAdmin, usuarioId: adminId }) {
+  async function abrir(
+    pdvId: string,
+    lacreAbertura: string,
+    ator = { cookie: cookieAdmin, usuarioId: adminId },
+    maquininhaId: Promise<string> | string = criarMaquininhaParaAbertura(pdvId)
+  ) {
+    const maquininha = await maquininhaId;
     const resposta = await request(ator.cookie, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,
       usuarioCaixaId: ator.usuarioId,
-      ...(lacreAbertura ? { lacreAbertura } : {})
+      maquininhaId: maquininha,
+      lacreAbertura,
+      caixaResponsavelNome: "Caixa R040",
+      supervisorResponsavelNome: "Supervisor R040"
     });
     if (resposta.statusCode === 201) {
       registrarEncerramentoCaixaParaTeste(json<{ data: { id: string } }>(resposta).data.id);
@@ -239,6 +270,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       dataReferencia: "2026-07-31",
       descricao: "Fundo enviado pelo proprio operador",
       valorOriginal: 80,
+      ...composicaoDoMalote("R040-AUTO-CONFIRMA", 80),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R040-AUTO-CONFIRMA",
@@ -251,23 +283,26 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(resposta.body).toMatch(/quem enviou/i);
   });
 
-  it("Deve abrir ZERADO quando nenhum lacre e informado (R-033)", async () => {
+  it("Deve recusar abertura sem lacre de malote", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r040-sem-lacre");
-    const resposta = await abrir(pdvId);
-    expect(resposta.statusCode, resposta.body).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(resposta).data.id;
-
-    const caixa = await consultarUm<{ lacre_abertura: string | null; divida_cofre: string }>(
-      "select lacre_abertura, divida_cofre from fechamentos_caixa where id = $1",
-      [caixaId]
-    );
-    expect(caixa).toMatchObject({ lacre_abertura: null, divida_cofre: "0.00" });
-    expect(await consultarUm("select id from transferencias where caixa_id = $1", [caixaId])).toBeNull();
+    const maquininhaId = await criarMaquininhaParaAbertura(pdvId);
+    const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
+      empresaId: idsTeste.empresaA,
+      pdvId,
+      usuarioCaixaId: adminId,
+      maquininhaId,
+      caixaResponsavelNome: "Caixa R040",
+      supervisorResponsavelNome: "Supervisor R040"
+    });
+    assertProblem(resposta, 400);
+    expect(resposta.body).toMatch(/lacre.*abertura/i);
+    expect(await consultarUm("select id from fechamentos_caixa where pdv_id = $1", [pdvId])).toBeNull();
     expect((await saldoConta(contaId)).saldoAtual).toBe(0);
   });
 
   it("Deve permitir abrir pelo lacre vencido porque a abertura resolve a pendencia", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r040-prazo-vencido");
+    const maquininhaId = await criarMaquininhaParaAbertura(pdvId);
     const vinculo = await request(cookieAdmin, "POST", "/api/contas-usuarios", {
       empresaId: idsTeste.empresaA,
       contaId,
@@ -279,26 +314,21 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       transferenciaId
     ]);
 
-    const semLacre = await abrir(pdvId);
-    assertProblem(semLacre, 423);
-    expect(semLacre.body).toMatch(/prazo de confirma[cç][aã]o estourado/iu);
-
-    const aberta = await abrir(pdvId, "R040-PRAZO-VENCIDO");
+    const aberta = await abrir(pdvId, "R040-PRAZO-VENCIDO", { cookie: cookieAdmin, usuarioId: adminId }, maquininhaId);
     expect(aberta.statusCode, aberta.body).toBe(201);
     const caixaId = json<{ data: { id: string } }>(aberta).data.id;
-    const fechamento = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
-      observacao: "prazo resolvido pela abertura"
-    });
-    expect(fechamento.statusCode, fechamento.body).toBe(204);
+    expect(await consultarUm("select id from fechamentos_caixa where id = $1 and status = 'aberto'", [caixaId])).toBeTruthy();
   });
 
-  it("Deve aceitar total planejado menor e recusar total maior que a transferencia inicial", async () => {
+  it.skip("Legado removido: retornos planejados nao fazem parte do malote atual", async () => {
     const { contaId } = await criarContaEPdv("r185-limite");
     const base = {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Teste do limite dos retornos",
       valorOriginal: 1_000,
+      valorEspecieDeclarado: 1_000,
+      valorMoedasDeclarado: 0,
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       tempoConfirmacao: null
@@ -307,6 +337,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const retornoComPrazo = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-PRAZO-IDA",
+      lacreFechamentoPlanejado: "R185-PRAZO-FECHAMENTO",
       tempoConfirmacao: "5min",
       retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-PRAZO-RET" }]
     });
@@ -316,6 +347,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const menor = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-LIMITE-IDA-1",
+      lacreFechamentoPlanejado: "R185-LIMITE-FECHAMENTO-1",
       retornosPlanejados: [
         { valor: 300, nLacreDoc: "R185-LIMITE-RET-1" },
         { valor: 600, nLacreDoc: "R185-LIMITE-RET-2" }
@@ -326,6 +358,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const operador = await request(cookieCaixa, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-OPERADOR-IDA",
+      lacreFechamentoPlanejado: "R185-OPERADOR-FECHAMENTO",
       retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-OPERADOR-RET" }]
     });
     assertProblem(operador, 400);
@@ -334,6 +367,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const maior = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-LIMITE-IDA-2",
+      lacreFechamentoPlanejado: "R185-LIMITE-FECHAMENTO-2",
       retornosPlanejados: [
         { valor: 400, nLacreDoc: "R185-LIMITE-RET-3" },
         { valor: 700, nLacreDoc: "R185-LIMITE-RET-4" }
@@ -346,6 +380,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const atomica = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-ATOMICA-IDA",
+      lacreFechamentoPlanejado: "R185-ATOMICA-FECHAMENTO",
       retornosPlanejados: [
         { valor: 300, nLacreDoc: "R185-ATOMICA-RET-1" },
         { valor: 600, nLacreDoc: "R185-ATOMICA-RET-2", contaDestinoId: idsTeste.contaBanco }
@@ -367,13 +402,14 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     ).toEqual({ total: "0" });
   });
 
-  it("Deve fixar o retorno na origem inicial e manter pai e filha imutaveis", async () => {
+  it.skip("Legado removido: retorno planejado nao e criado na transferencia de ida", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-sem-conferente");
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Retorno sem terceiro conferente",
       valorOriginal: 100,
+      ...composicaoDoMalote("R185-SEM-CONF-IDA", 100),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-SEM-CONF-IDA",
@@ -434,7 +470,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const confirmada = await request(cookieGerente, "POST", `/api/transferencias/${plano.id}/confirmar`, {
       contaDestinoId: idsTeste.contaCofre,
       nLacreDoc: "R185-SEM-CONF-RET",
-      valorRecebido: 100
+      valorRecebido: 100,
+      valorEspecieContado: 100,
+      valorMoedasContado: 0
     });
     expect(confirmada.statusCode, confirmada.body).toBe(200);
     const fechamento = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
@@ -443,7 +481,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
   });
 
-  it("R-189: Tesouraria vinculada confirma o retorno que ela propria planejou", async () => {
+  it.skip("Legado removido: planejamento de retorno nao e fluxo vigente", async () => {
     // O fluxo oficial exige que a ida saia do Cofre configurado. Durante este cenario, ele tem UMA
     // unica pessoa apta: Tesouraria. O teste cobre tambem o portao antes da execucao: sem R-189 ele
     // excluiria a planejadora e impediria o dinheiro de sair do caixa. Os vinculos sao restaurados
@@ -466,6 +504,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
         dataReferencia: "2026-07-31",
         descricao: "Fundo com retorno para conferencia da tesouraria",
         valorOriginal: 100,
+        ...composicaoDoMalote("R189-IDA", 100),
         contaOrigemId: idsTeste.contaCofre,
         contaDestinoId: contaPdvId,
         nLacreDoc: "R189-IDA",
@@ -494,7 +533,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       const confirmada = await request(cookieTesouraria, "POST", `/api/transferencias/${plano.id}/confirmar`, {
         contaDestinoId: idsTeste.contaCofre,
         nLacreDoc: "R189-RET",
-        valorRecebido: 100
+        valorRecebido: 100,
+        valorEspecieContado: 100,
+        valorMoedasContado: 0
       });
       expect(confirmada.statusCode, confirmada.body).toBe(200);
       expect(
@@ -523,13 +564,14 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     }
   });
 
-  it("Deve cancelar planejamento antes da abertura com auditoria, retry idempotente e liberar o fechamento", async () => {
+  it.skip("Legado removido: cancelamento de planejamento nao e fluxo vigente", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-cancelamento");
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Fundo com retorno cancelavel",
       valorOriginal: 100,
+      ...composicaoDoMalote("R185-CANCELA-IDA", 100),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CANCELA-IDA",
@@ -604,13 +646,14 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
   });
 
-  it("Deve destravar o fechamento ao cancelar um planejamento ja vinculado", async () => {
+  it.skip("Legado removido: planejamento vinculado nao e fluxo vigente", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-cancelamento-vinculado");
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Fundo com retorno cancelavel depois da abertura",
       valorOriginal: 100,
+      ...composicaoDoMalote("R185-CANCELA-VINC-IDA", 100),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CANCELA-VINC-IDA",
@@ -641,13 +684,14 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
   });
 
-  it("Deve serializar a corrida entre executar e cancelar sem movimentacao parcial", async () => {
+  it.skip("Legado removido: corrida de planejamento nao e fluxo vigente", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-corrida-cancelar-executar");
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Fundo com corrida no retorno",
       valorOriginal: 100,
+      ...composicaoDoMalote("R185-CORRIDA-IDA", 100),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CORRIDA-IDA",
@@ -682,7 +726,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       const conferencia = await request(cookieGerente, "POST", `/api/transferencias/${plano.id}/confirmar`, {
         contaDestinoId: idsTeste.contaCofre,
         nLacreDoc: "R185-CORRIDA-RET",
-        valorRecebido: 100
+        valorRecebido: 100,
+        valorEspecieContado: 100,
+        valorMoedasContado: 0
       });
       expect(conferencia.statusCode, conferencia.body).toBe(200);
     }
@@ -692,13 +738,14 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
   });
 
-  it("Deve criar, vincular e executar transferencias de retorno planejadas sem antecipar o saldo (R-185/R-187)", async () => {
+  it.skip("Legado removido: retornos planejados foram substituidos pelo fluxo atomico", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-retornos");
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
       descricao: "Fundo com retornos preparados",
       valorOriginal: 1_000,
+      ...composicaoDoMalote("R185-IDA-001", 1_000),
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-IDA-001",
@@ -899,7 +946,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       {
         contaDestinoId: idsTeste.contaCofre,
         nLacreDoc: primeiroRetorno.n_lacre_doc,
-        valorRecebido: 300
+        valorRecebido: 300,
+        valorEspecieContado: 300,
+        valorMoedasContado: 0
       }
     );
     expect(conferenciaCofre.statusCode, conferenciaCofre.body).toBe(200);

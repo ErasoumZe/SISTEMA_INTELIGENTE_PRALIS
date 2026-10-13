@@ -1,6 +1,9 @@
 // Formula oficial de saldo do caixa (ADR-001 — fechamento unico por caixaId).
 // Toda a aritmetica acontece em centavos inteiros; conversao para reais so na borda.
 export type TotaisCaixaCentavos = {
+  /** Vendas pagas em dinheiro físico, apuradas a partir das parcelas da venda. */
+  vendasDinheiro: number;
+  /** Todas as vendas aprovadas, independentemente da forma de pagamento. */
   entradas: number;
   transferencias: number;
   transferenciasEntrada: number;
@@ -30,6 +33,24 @@ export function saldoCaixaCentavos(totais: TotaisCaixaCentavos): number {
   );
 }
 
+/**
+ * Dinheiro que deve existir fisicamente na gaveta.
+ *
+ * Cartão, Pix, voucher e crediário seguem sendo vendas do turno, mas não são
+ * cédulas/moedas do PDV. Eles são conferidos no CREARE e na maquininha; nunca
+ * elevam o valor que o operador deve contar no fechamento ou pode entregar ao cofre.
+ */
+export function saldoFisicoCaixaCentavos(totais: TotaisCaixaCentavos): number {
+  return (
+    totais.vendasDinheiro +
+    totais.transferenciasEntrada -
+    totais.transferenciasSaida -
+    totais.despesas -
+    totais.retiradas -
+    totais.mercadorias
+  );
+}
+
 // "Saldo proprio" do caixa sob a otica da divida do malote (R8). NAO altera a formula canonica acima
 // (ADR-001 intacto); e um valor DERIVADO para o cockpit.
 //
@@ -44,7 +65,7 @@ export function saldoCaixaCentavos(totais: TotaisCaixaCentavos): number {
 //   - excedente vira resultado do caixa (> 0).
 // Sem malote (dividaCofre = 0) e sem transferencias, saldoProprio == saldoFisico (retrocompativel).
 export function saldoProprioCentavos(totais: TotaisCaixaCentavos, dividaCofreCentavos: number): number {
-  const operacionalCentavos = totais.entradas - totais.despesas - totais.retiradas - totais.mercadorias;
+  const operacionalCentavos = totais.vendasDinheiro - totais.despesas - totais.retiradas - totais.mercadorias;
   return operacionalCentavos - dividaCofreCentavos;
 }
 

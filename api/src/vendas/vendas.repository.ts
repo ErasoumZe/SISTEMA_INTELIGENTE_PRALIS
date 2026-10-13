@@ -4,6 +4,7 @@ import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { ResultadoPaginado } from "@padaria/shared/api";
 import type { TotaisVendas, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
+import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import {
   centavosParaDecimalBanco,
   deCentavos,
@@ -258,6 +259,7 @@ export async function totaisVendasRepository(
     .select({
       formaPagamentoId: vendasPagamentos.formaPagamentoId,
       formaPagamento: formasPagamento.nome,
+      categoriaFechamentoCaixa: formasPagamento.categoriaFechamentoCaixa,
       formaPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
       total: sum(vendasPagamentos.totalPago),
       quantidade: count()
@@ -266,11 +268,22 @@ export async function totaisVendasRepository(
     .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
     .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
     .where(where)
-    .groupBy(vendasPagamentos.formaPagamentoId, formasPagamento.nome, vendasPagamentos.tipoPagamentoAutomacao);
+    .groupBy(
+      vendasPagamentos.formaPagamentoId,
+      formasPagamento.nome,
+      formasPagamento.categoriaFechamentoCaixa,
+      vendasPagamentos.tipoPagamentoAutomacao
+    );
 
   const porFormaAgrupada = new Map<
     string,
-    { formaPagamentoId: string | null; formaPagamento: string; total: number; quantidade: number }
+    {
+      formaPagamentoId: string | null;
+      formaPagamento: string;
+      categoriaFechamentoCaixa: "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "crediario" | "outros" | null;
+      total: number;
+      quantidade: number;
+    }
   >();
   for (const linha of porForma) {
     const formaPagamento = linha.formaPagamento?.trim() || linha.formaPagamentoAutomacao?.trim() || "Sem forma";
@@ -278,6 +291,14 @@ export async function totaisVendasRepository(
     const atual = porFormaAgrupada.get(chave) ?? {
       formaPagamentoId: linha.formaPagamentoId,
       formaPagamento,
+      // A migration introduziu a coluna com DEFAULT "outros" para nao reclassificar historico
+      // silenciosamente. Para os nomes padrao ja usados pelo PDV (Dinheiro, Pix, Credito etc.),
+      // esse default nao pode esconder a categoria obvia no relatorio: a classificacao pelo nome
+      // prevalece. Uma forma nao reconhecida continua em "outros".
+      categoriaFechamentoCaixa:
+        linha.categoriaFechamentoCaixa && linha.categoriaFechamentoCaixa !== "outros"
+          ? linha.categoriaFechamentoCaixa
+          : categoriaFechamentoPorNome(linha.formaPagamento?.trim() || linha.formaPagamentoAutomacao?.trim() || ""),
       total: 0,
       quantidade: 0
     };
@@ -296,6 +317,7 @@ export async function totaisVendasRepository(
     porFormaPagamento: [...porFormaAgrupada.values()].map((linha) => ({
       formaPagamentoId: linha.formaPagamentoId,
       formaPagamento: linha.formaPagamento,
+      categoriaFechamentoCaixa: linha.categoriaFechamentoCaixa,
       total: numeroDecimal(linha.total),
       quantidade: linha.quantidade
     }))

@@ -351,6 +351,55 @@
       "when": 1790428631219,
       "tag": "0049_keen_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790971927399,
+      "tag": "0050_stiff_justin_hammer",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790973370788,
+      "tag": "0051_stormy_mach_iv",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791054109520,
+      "tag": "0052_petite_tarot",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791289193013,
+      "tag": "0053_empty_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791315671982,
+      "tag": "0054_fechamento_creare_maquininha_v6",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791392408105,
+      "tag": "0055_serious_husk",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791900848733,
+      "tag": "0056_configuracoes_menu_atualizado_em",
+      "breakpoints": true
     }
   ]
 }
