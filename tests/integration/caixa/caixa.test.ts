@@ -1144,7 +1144,8 @@ describe("caixa integration", () => {
     const inicio = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixa.caixaId}/iniciar-fechamento`,
-      headers: { cookie: cookieCaixa }
+      headers: { cookie: cookieCaixa },
+      payload: {}
     });
 
     assertOk(inicio);
