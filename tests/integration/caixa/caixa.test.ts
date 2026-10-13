@@ -6,6 +6,7 @@ import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import {
   abrirCaixaDoOperador,
+  criarRetornoValido,
   prepararPayloadFechamentoValido,
   registrarEncerramentoCaixaParaTeste
 } from "../../setup/caixa.js";
@@ -976,7 +977,7 @@ describe("caixa integration", () => {
     await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-SAIDA", usuarioAdminId);
 
     // Formula oficial: entradas + transf entrada - transf saida - despesas - retiradas - mercadorias
-    // 100 + 50 - 30 - 20 - 10 - 15 = 75
+    // Fundo físico 100 + venda 100 + entrada 50 - saída 30 - despesas 20 - retirada 10 - mercadoria 15 = 175.
     const statusAntes = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -988,12 +989,12 @@ describe("caixa integration", () => {
         caixaAberto: { id: caixaId },
         resumo: {
           totalEntradas: 100,
-          totalTransferenciasEntrada: 50,
+          totalTransferenciasEntrada: 150,
           totalTransferenciasSaida: 30,
           totalDespesas: 20,
           totalRetiradas: 10,
           totalMercadorias: 15,
-          saldo: 75
+          saldo: 175
         }
       }
     });
@@ -1011,40 +1012,34 @@ describe("caixa integration", () => {
         {
           id: caixaId,
           totalEntradas: 100,
-          totalTransferenciasEntrada: 50,
+          totalTransferenciasEntrada: 150,
           totalTransferenciasSaida: 30,
           totalDespesas: 20,
           totalRetiradas: 10,
           totalMercadorias: 15,
-          saldo: 75
+          saldo: 175
         }
       ],
       meta: {
         totais: {
           totalEntradas: 100,
-          totalTransferenciasEntrada: 50,
+          totalTransferenciasEntrada: 150,
           totalTransferenciasSaida: 30,
           totalDespesas: 20,
           totalRetiradas: 10,
           totalMercadorias: 15,
-          saldo: 75,
+          saldo: 175,
           caixas: 1
         }
       }
     });
 
-    const retorno = await contexto.app.inject({
-      method: "POST",
-      url: `/api/caixa/${caixaId}/transferencia-cofre`,
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        valor: 75,
-        lacre: "CAIXA-CICLO-RETORNO",
-        observacao: "Retorno ciclo",
-        idempotenciaChave: randomUUID()
-      }
+    await criarRetornoValido(contexto.app, {
+      cookieOperador: cookieMultiempresa,
+      caixaId,
+      valor: 175,
+      responsavelNome: "Ciclo operacional"
     });
-    expect(retorno.statusCode, retorno.body).toBe(200);
 
     // O retorno e transferencia caixa -> cofre e zera o saldo sem criar despesa/debito artificial.
     const statusDepois = await contexto.app.inject({
@@ -1054,19 +1049,19 @@ describe("caixa integration", () => {
     });
     assertOk(statusDepois);
     expect(statusDepois.json()).toMatchObject({
-      data: { caixaAberto: { id: caixaId }, resumo: { totalTransferenciasSaida: 105, totalDespesas: 20, saldo: 0 } }
+      data: { caixaAberto: { id: caixaId }, resumo: { totalTransferenciasSaida: 205, totalDespesas: 20, saldo: 0 } }
     });
 
-    // G1/R-171: o retorno saiu do caixa e esta `pendente` — dinheiro na rua trava o fechamento
-    // comum. Este teste e sobre a FORMULA do ciclo, nao sobre a conferencia, entao a entrega e
-    // dada por conferida pelo mesmo atalho direto que as duas transferencias acima ja usam.
-    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-RETORNO", usuarioAdminId);
-
+    // O retorno pendente continua auditável; a contagem e o dossiê são a porta de fechamento.
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieMultiempresa,
+      caixaId
+    });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieMultiempresa },
-      payload: { observacao: "Fechado apos retorno", lacreFechamento: "FCH-CICLO-001" }
+      payload: { ...fechamentoFisico, observacao: "Fechado apos retorno" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
@@ -1078,12 +1073,7 @@ describe("caixa integration", () => {
   });
 
   it("Deve_ConsultarSomenteAsVendasDoCaixaAbertoDoOperador", async () => {
-    const caixa = await abrirCaixaDoOperador(contexto.app, {
-      cookieAdmin,
-      cookieOperador: cookieCaixa,
-      emailOperador: usuariosTeste.caixa.email,
-      nome: "Corte de relatório"
-    });
+    const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
     const vendaDoCaixa = randomUUID();
     const vendaDeOutroCaixa = randomUUID();
     const produtoVinculado = randomUUID();
@@ -1145,7 +1135,12 @@ describe("caixa integration", () => {
   });
 
   it("Deve_ConsultarRelatorioDoCaixaEmFechamentoComOCorteDoServidor", async () => {
-    const cookieOperadorEntradas = await cookieSessao(contexto.app, "operadorEntradas");
+    const caixa = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Corte de relatório"
+    });
     const inicio = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixa.caixaId}/iniciar-fechamento`,
