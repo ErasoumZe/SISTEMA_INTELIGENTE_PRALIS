@@ -157,13 +157,16 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     const venda = await consultarUm<{ id: string }>("select id from vendas where identificador_externo = $1", [
       idVenda
     ]);
+    const saldoAbertura = await saldo(contaId);
+    if (saldoAbertura === null) throw new Error("Conta roteada sem saldo inicial");
+
     return {
       contaId,
       identificadorExterno,
       idVenda,
       vendaId: venda?.id ?? "",
       dataHoraVenda,
-      saldoAbertura: await saldo(contaId)
+      saldoAbertura
     };
   }
 

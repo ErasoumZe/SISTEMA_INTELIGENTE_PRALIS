@@ -74,7 +74,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
       dataHoraAbertura: "2026-07-30T08:00",
       contaId: pdv.conta_id,
       pdvId,
-      maquininhaId
+      ...(maquininhaId ? { maquininhaId } : {})
     });
   }
 
