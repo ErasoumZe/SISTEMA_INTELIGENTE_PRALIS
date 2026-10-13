@@ -8,6 +8,8 @@ import { expect, request, type APIRequestContext, type Page } from "@playwright/
 export const USUARIOS = {
   /** Enxerga e edita tudo — `usuario_admin` do seed de desenvolvimento. */
   admin: { email: "diretor@email.com", senha: "123456" },
+  /** Opera o fluxo completo de compras sem privilegio administrativo global. */
+  compras: { email: "compras@email.com", senha: "123456" },
   /** Opera caixa e mercadorias, mas NAO tem `cadastro_produtos_visualizar`. */
   semProdutos: { email: "caixa@email.com", senha: "123456" },
   /** Confere retornos e divergencias nas contas de destino do seed de desenvolvimento. */

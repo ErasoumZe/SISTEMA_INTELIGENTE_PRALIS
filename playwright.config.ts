@@ -48,6 +48,17 @@ export default defineConfig({
       // ADM-003 V5: a revisao da ficha pelo DP. Sem camera, sem permissao extra — e so navegador.
       // Roda contra um banco ISOLADO com dados sinteticos (E2E_BASE_URL / E2E_API_URL), nunca em
       // producao: os testes criam processo, convite e ficha por API a cada rodada.
+      // Projeto de auditoria funcional do modulo Compras no navegador real.
+      name: "compras",
+      testMatch: /compras-.*\.spec\.ts/u,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        launchOptions: { args: ["--disable-popup-blocking"] }
+      }
+    },
+    {
+      // ADM-003: revisao da ficha pelo DP no banco isolado de E2E.
       name: "admissoes",
       // Duas familias no mesmo projeto: a admissao e o catalogo que ela consome. Sao a mesma stack,
       // o mesmo banco isolado e o mesmo navegador — separar em dois projetos so dobraria o setup.
