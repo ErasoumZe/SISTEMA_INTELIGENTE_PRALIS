@@ -214,8 +214,9 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
       saldo: "0.00",
       total_entradas: "85.00",
       total_transferencias: "0.00",
-      total_transferencias_entrada: "0.00",
-      total_transferencias_saida: "0.00",
+      // Fundo de abertura e retorno final são físicos e auditáveis; não alteram as saídas do cenário.
+      total_transferencias_entrada: "100.00",
+      total_transferencias_saida: "100.00",
       total_despesas: "40.00",
       total_retiradas: "30.00",
       total_mercadorias: "15.00"
