@@ -165,19 +165,28 @@ export async function opcoesDeProdutoRepository(entrada: {
     : undefined;
   const selecionados = entrada.ids.length ? inArray(produtos.id, entrada.ids) : undefined;
 
-  return banco
-    .select({
-      id: produtos.id,
-      descricao: produtos.descricao,
-      codigoInterno: produtos.codigoInterno,
-      codigoBarras: produtos.codigoBarras,
-      marca: produtos.marca,
-      status: produtos.status
-    })
-    .from(produtos)
-    .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
-    .orderBy(asc(produtos.descricao))
-    .limit(entrada.limite);
+  return (
+    banco
+      .select({
+        id: produtos.id,
+        descricao: produtos.descricao,
+        codigoInterno: produtos.codigoInterno,
+        codigoBarras: produtos.codigoBarras,
+        marca: produtos.marca,
+        status: produtos.status,
+        unidade: unidadesMedida.sigla,
+        quantidadeEstoque: produtos.quantidadeEstoque,
+        estoqueMin: produtos.estoqueMin,
+        estoqueMax: produtos.estoqueMax
+      })
+      .from(produtos)
+      // `leftJoin`: produto sem unidade cadastrada continua aparecendo no seletor; perder a linha
+      // seria pior que mostrar a quantidade sem sigla.
+      .leftJoin(unidadesMedida, eq(unidadesMedida.id, produtos.unidadeIndividualId))
+      .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
+      .orderBy(asc(produtos.descricao))
+      .limit(entrada.limite)
+  );
 }
 
 /** Valores existentes para montar os filtros da tela, dentro do escopo do ator. */

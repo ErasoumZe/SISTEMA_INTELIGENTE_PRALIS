@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import type { PedidoRecorrencia } from "@padaria/shared";
+/**
+ * Compositor do pedido de compra.
+ *
+ * Tres coisas que a versao anterior nao fazia e custavam caro na operacao:
+ *
+ * 1. O campo de produto nao resolvia (faltava o import) e a linha aparecia so com "Quantidade".
+ * 2. Nao havia resumo: o comprador nao via quantos itens nem quanto estava pedindo.
+ * 3. O teto de estoque so era checado no servidor — o pedido inteiro voltava como erro seco.
+ *
+ * Agora o cabecalho e o rodape ficam fixos, os itens rolam no meio, e salvar fica bloqueado com
+ * motivo visivel enquanto houver linha incompleta ou acima do maximo.
+ */
+import type { PedidoRecorrencia, ProdutoOpcao } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
-// O auto-import do Nuxt chamaria este componente de `ProdutosProdutoAutocomplete` (pasta + nome).
-// Sem o import explicito, `<ProdutoAutocomplete>` nao resolve e o item do pedido fica sem o campo
-// de produto — o operador abre o formulario e nao consegue escolher o que comprar.
-import ProdutoAutocomplete from "~/components/produtos/ProdutoAutocomplete.vue";
+import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
 
 export type PedidoFormEdicao = {
   fornecedorId: string;
@@ -23,69 +32,264 @@ const props = defineProps<{
   salvando: boolean;
 }>();
 const emit = defineEmits<{ salvar: []; adicionar: []; remover: [indice: number] }>();
+
 const recorrencias: Array<{ value: PedidoRecorrencia; label: string }> = [
   { value: "nenhuma", label: "Sem recorrência" },
   { value: "semanal", label: "Semanal" },
   { value: "quinzenal", label: "Quinzenal" },
   { value: "mensal", label: "Mensal" }
 ];
+
+/** Produto escolhido por linha, para o resumo e para a trava do maximo. */
+const produtosPorIndice = reactive<Record<number, ProdutoOpcao | null>>({});
+
 const fornecedorSelecionado = computed(() =>
   props.fornecedores.find((fornecedor) => fornecedor.id === props.form.fornecedorId)
 );
+// `whatsapp` so vem no contrato completo de fornecedores. Quando a chave nem existe no objeto, a
+// tela nao sabe e nao deve afirmar que falta cadastro.
+const whatsappConhecido = computed(() => fornecedorSelecionado.value && "whatsapp" in fornecedorSelecionado.value);
+const semWhatsapp = computed(() => whatsappConhecido.value && !fornecedorSelecionado.value?.whatsapp);
+
+const linhasValidas = computed(() => props.form.itens.filter((item) => item.produtoId && Number(item.quantidade) > 0));
+const totalUnidades = computed(() => linhasValidas.value.reduce((soma, item) => soma + Number(item.quantidade), 0));
+const linhasIncompletas = computed(() => props.form.itens.length - linhasValidas.value.length);
+const produtoRepetido = computed(() => {
+  const ids = linhasValidas.value.map((item) => item.produtoId);
+  return new Set(ids).size !== ids.length;
+});
+const linhasAcimaDoMaximo = computed(() =>
+  props.form.itens.filter((item, indice) => {
+    const produto = produtosPorIndice[indice];
+    if (!produto || produto.estoqueMax === null) return false;
+    return Number(produto.quantidadeEstoque) + Number(item.quantidade) > Number(produto.estoqueMax);
+  })
+);
+
+const impedimento = computed(() => {
+  if (!props.form.fornecedorId) return "Escolha o fornecedor do pedido.";
+  if (!linhasValidas.value.length) return "Adicione ao menos um produto com quantidade.";
+  if (produtoRepetido.value) return "O mesmo produto aparece duas vezes: junte as quantidades.";
+  if (linhasAcimaDoMaximo.value.length) return "Há item acima do estoque máximo configurado.";
+  return "";
+});
+
+function aoEscolherProduto(indice: number, produto: ProdutoOpcao | null) {
+  produtosPorIndice[indice] = produto;
+}
+
+function remover(indice: number) {
+  // O mapa e indexado por posicao: ao remover uma linha, as de baixo sobem.
+  const total = props.form.itens.length;
+  for (let i = indice; i < total - 1; i += 1) produtosPorIndice[i] = produtosPorIndice[i + 1] ?? null;
+  delete produtosPorIndice[total - 1];
+  emit("remover", indice);
+}
+
+const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="900" persistent>
-    <v-card>
-      <v-card-title>{{ titulo }}</v-card-title>
-      <v-card-text class="d-grid ga-2">
+  <v-dialog v-model="aberto" max-width="1000" scrollable persistent>
+    <v-card class="pedido-form">
+      <div class="pedido-form__topo">
+        <div class="pedido-form__titulo">
+          <h2 class="text-h6">{{ titulo }}</h2>
+          <p class="text-caption text-medium-emphasis">
+            Um pedido, um fornecedor. O estoque só muda no recebimento físico.
+          </p>
+        </div>
+        <v-chip size="small" variant="tonal" label
+          >{{ linhasValidas.length }} item(ns) · {{ formatar(totalUnidades) }}</v-chip
+        >
+      </div>
+
+      <div class="pedido-form__fornecedor">
         <v-select
           v-model="form.fornecedorId"
           :items="fornecedores"
           item-title="nome"
           item-value="id"
           label="Fornecedor *"
+          density="comfortable"
+          hide-details="auto"
+          prepend-inner-icon="mdi-truck-outline"
         />
+        <v-alert v-if="semWhatsapp" type="warning" density="compact" variant="tonal" class="pedido-form__aviso">
+          Sem WhatsApp cadastrado: dá para salvar, mas não dá para enviar por WhatsApp.
+        </v-alert>
+      </div>
+
+      <v-card-text class="pedido-form__itens">
+        <div class="pedido-form__secao">
+          <span class="pedido-form__secao-titulo">Itens do pedido</span>
+          <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="emit('adicionar')">Adicionar item</v-btn>
+        </div>
+
+        <PedidoItemLinha
+          v-for="(item, indice) in form.itens"
+          :key="`item-${indice}`"
+          v-model:produto-id="item.produtoId"
+          v-model:quantidade="item.quantidade"
+          :empresa-id="empresaId"
+          :indice="indice"
+          :pode-remover="form.itens.length > 1"
+          @produto="(produto) => aoEscolherProduto(indice, produto)"
+          @remover="remover(indice)"
+        />
+
         <v-alert
-          v-if="fornecedorSelecionado && !fornecedorSelecionado.whatsapp"
-          type="warning"
+          v-if="linhasIncompletas > 0 && linhasValidas.length"
+          type="info"
           density="compact"
           variant="tonal"
+          class="mt-1"
         >
-          Este fornecedor ainda não tem WhatsApp cadastrado; o pedido pode ser salvo, mas não enviado por WhatsApp.
+          {{ linhasIncompletas }} linha(s) sem produto ou sem quantidade não entram no pedido.
         </v-alert>
-        <v-row v-for="(item, indice) in form.itens" :key="`item-${indice}`" dense align="center">
-          <v-col cols="12" md="8"><ProdutoAutocomplete v-model="item.produtoId" :empresa-id="empresaId" /></v-col>
-          <v-col cols="9" md="3"
-            ><v-text-field v-model="item.quantidade" type="number" min="0.001" step="0.001" label="Quantidade"
-          /></v-col>
-          <v-col cols="3" md="1" class="d-flex justify-end"
-            ><v-btn icon="mdi-delete" variant="text" aria-label="Remover item" @click="emit('remover', indice)"
-          /></v-col>
-        </v-row>
-        <v-btn variant="text" prepend-icon="mdi-plus" class="align-self-start" @click="emit('adicionar')"
-          >Adicionar item</v-btn
-        >
-        <v-row dense
-          ><v-col cols="12" md="4"
-            ><v-select
-              v-model="form.recorrencia"
-              :items="recorrencias"
-              item-title="label"
-              item-value="value"
-              label="Agendador" /></v-col
-          ><v-col cols="12" md="4"
-            ><v-text-field v-model="form.dataAgendada" type="datetime-local" label="Revisar em" /></v-col
-          ><v-col cols="12" md="4"><v-textarea v-model="form.observacao" rows="1" auto-grow label="Observação" /></v-col
-        ></v-row>
-        <p class="text-caption text-medium-emphasis">
+
+        <v-divider class="my-2" />
+
+        <div class="pedido-form__secao">
+          <span class="pedido-form__secao-titulo">Agendamento</span>
+        </div>
+        <div class="pedido-form__agenda">
+          <v-select
+            v-model="form.recorrencia"
+            :items="recorrencias"
+            item-title="label"
+            item-value="value"
+            label="Agendador"
+            density="comfortable"
+            hide-details
+          />
+          <v-text-field
+            v-model="form.dataAgendada"
+            type="datetime-local"
+            label="Revisar em"
+            density="comfortable"
+            hide-details
+          />
+          <v-textarea
+            v-model="form.observacao"
+            rows="1"
+            auto-grow
+            label="Observação"
+            density="comfortable"
+            hide-details
+          />
+        </div>
+        <p class="text-caption text-medium-emphasis mt-2">
           O agendador apenas lembra o comprador de revisar a sugestão; não envia pedido sozinho.
         </p>
       </v-card-text>
-      <v-card-actions
-        ><v-spacer /><v-btn variant="text" @click="aberto = false">Cancelar</v-btn
-        ><v-btn color="primary" :loading="salvando" @click="emit('salvar')">Salvar pedido</v-btn></v-card-actions
-      >
+
+      <div class="pedido-form__rodape">
+        <span v-if="impedimento" class="pedido-form__impedimento" data-campo="impedimento">{{ impedimento }}</span>
+        <span v-else class="pedido-form__pronto"
+          >Pronto para salvar: {{ linhasValidas.length }} item(ns), {{ formatar(totalUnidades) }} no total.</span
+        >
+        <v-spacer />
+        <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
+        <v-btn color="primary" :loading="salvando" :disabled="Boolean(impedimento)" @click="emit('salvar')"
+          >Salvar pedido</v-btn
+        >
+      </div>
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.pedido-form {
+  border-radius: var(--cx-r-xl, 22px);
+}
+
+.pedido-form__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cx-sp-3, 12px);
+  padding: var(--cx-sp-5, 20px) var(--cx-sp-6, 24px) var(--cx-sp-3, 12px);
+}
+
+.pedido-form__titulo h2 {
+  line-height: 1.2;
+}
+
+.pedido-form__fornecedor {
+  display: grid;
+  gap: var(--cx-sp-2, 8px);
+  padding: 0 var(--cx-sp-6, 24px) var(--cx-sp-3, 12px);
+  border-bottom: 1px solid var(--cx-line-soft, #eef1f6);
+}
+
+.pedido-form__aviso {
+  margin: 0;
+}
+
+.pedido-form__itens {
+  display: grid;
+  gap: var(--cx-sp-2, 8px);
+  padding: var(--cx-sp-4, 16px) var(--cx-sp-6, 24px);
+}
+
+.pedido-form__secao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-2, 8px);
+}
+
+.pedido-form__secao-titulo {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cx-ink-soft, #5b6675);
+}
+
+.pedido-form__agenda {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cx-sp-3, 12px);
+}
+
+.pedido-form__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cx-sp-2, 8px);
+  padding: var(--cx-sp-3, 12px) var(--cx-sp-6, 24px) var(--cx-sp-4, 16px);
+  border-top: 1px solid var(--cx-line-soft, #eef1f6);
+}
+
+.pedido-form__impedimento {
+  font-size: 0.8125rem;
+  color: rgb(var(--v-theme-warning));
+}
+
+.pedido-form__pronto {
+  font-size: 0.8125rem;
+  color: var(--cx-ink-soft, #5b6675);
+}
+
+@media (max-width: 959px) {
+  .pedido-form__agenda {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 599px) {
+  .pedido-form__topo,
+  .pedido-form__fornecedor,
+  .pedido-form__itens,
+  .pedido-form__rodape {
+    padding-left: var(--cx-sp-4, 16px);
+    padding-right: var(--cx-sp-4, 16px);
+  }
+
+  .pedido-form__rodape {
+    justify-content: stretch;
+  }
+}
+</style>

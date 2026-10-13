@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
+import { mascararWhatsapp } from "~/utils/formatacao";
 
 const props = defineProps<{ pedidos: PedidoDto[] }>();
 const emit = defineEmits<{ abrir: [id: string] }>();
@@ -45,6 +46,15 @@ function corStatus(status: PedidoStatus) {
   if (status === "retornado") return "warning";
   return "secondary";
 }
+/** O contador tambem FILTRA: clicar em "3 Enviado" mostra so os enviados; clicar de novo solta. */
+function alternarSituacao(status: PedidoStatus) {
+  situacaoSelecionada.value = situacaoSelecionada.value === status ? "" : status;
+}
+
+function telefone(valor: string | null) {
+  return valor ? mascararWhatsapp(valor) : "Sem WhatsApp";
+}
+
 function quando(valor: string | null) {
   return valor
     ? new Date(valor).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
@@ -64,8 +74,12 @@ function quando(valor: string | null) {
           v-for="contagem in contagens"
           :key="contagem.status"
           :color="corStatus(contagem.status)"
+          :variant="situacaoSelecionada === contagem.status ? 'flat' : 'tonal'"
           size="small"
           label
+          link
+          :aria-pressed="situacaoSelecionada === contagem.status"
+          @click="alternarSituacao(contagem.status)"
           >{{ contagem.total }} {{ rotulosStatus[contagem.status] }}</v-chip
         >
       </div>
@@ -106,7 +120,7 @@ function quando(valor: string | null) {
             <tr v-for="pedido in pedidosExibidos" :key="pedido.id">
               <td>
                 <div class="font-weight-medium">{{ pedido.fornecedorNome ?? "Histórico sem fornecedor" }}</div>
-                <div class="text-caption text-medium-emphasis">{{ pedido.fornecedorWhatsapp ?? "Sem WhatsApp" }}</div>
+                <div class="text-caption text-medium-emphasis">{{ telefone(pedido.fornecedorWhatsapp) }}</div>
               </td>
               <td>{{ pedido.tipo === "automatico" ? "Sugestão" : "Manual" }}</td>
               <td>

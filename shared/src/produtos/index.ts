@@ -190,6 +190,13 @@ export interface ProdutoOpcao {
   codigoBarras: string | null;
   marca: string | null;
   status: string;
+  // Contexto de compra. O comprador precisa ver saldo, minimo e maximo NA HORA de montar o pedido:
+  // sem isto ele digita a quantidade as cegas e so descobre o teto no erro do servidor. A unidade
+  // entra junto porque "12" sozinho nao diz se sao 12 quilos ou 12 caixas.
+  unidade: string | null;
+  quantidadeEstoque: string;
+  estoqueMin: string | null;
+  estoqueMax: string | null;
 }
 
 /** Valores existentes para montar os filtros da tela, dentro do escopo do ator. */
