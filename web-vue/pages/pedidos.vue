@@ -88,13 +88,32 @@ function payloadDoForm() {
       .map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade) }))
   };
 }
+/**
+ * Traz TODOS os fornecedores da empresa para o seletor.
+ *
+ * `/api/fornecedores` pagina em 10 por padrao e aceita no maximo 100 por pagina. Sem paginar, do
+ * 11o fornecedor em diante o cadastro existia e simplesmente nao aparecia na hora de montar o
+ * pedido — o comprador nao tinha como escolher e nada na tela dizia por que.
+ */
+async function carregarFornecedores(): Promise<Opcao[]> {
+  const todos: Opcao[] = [];
+  // Teto de seguranca: 20 paginas de 100. Mais que isso e cadastro fora da realidade da operacao e
+  // viraria laco infinito se a API mudasse de contrato.
+  for (let pagina = 1; pagina <= 20; pagina += 1) {
+    const lote = await apiGet<Opcao[]>(`/api/fornecedores${query()}&page=${pagina}&pageSize=100`);
+    todos.push(...lote);
+    if (lote.length < 100) break;
+  }
+  return todos;
+}
+
 async function carregarDados() {
   if (!empresaId.value) return;
   empresaCarregando.value = true;
   try {
     [pedidos.value, fornecedores.value] = await Promise.all([
       apiGet<PedidoDto[]>(`/api/pedidos${query()}`),
-      apiGet<Opcao[]>(`/api/fornecedores${query()}`)
+      carregarFornecedores()
     ]);
   } catch (causa) {
     notificar(mensagemErro(causa), "error");
