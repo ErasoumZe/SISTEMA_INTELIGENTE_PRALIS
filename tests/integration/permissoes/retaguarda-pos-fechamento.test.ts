@@ -129,7 +129,9 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
       nome: "Caixa pos-fechamento",
       dataHoraAbertura: `${dataReferencia}T08:00`,
       contaId: contaDoPdv,
-      pdvId
+      pdvId,
+      // O ciclo nasce no beforeAll e fecha pela rota neste mesmo hook; onTestFinished só existe dentro de it.
+      registrarLimpeza: false
     });
     caixaFechado = abertura.caixaId;
     lacreFechamento = abertura.lacreFechamento;
