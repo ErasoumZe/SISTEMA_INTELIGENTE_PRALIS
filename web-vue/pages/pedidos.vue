@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { AuthSession, PedidoDto, PedidoStatus } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
-import type { PedidoFormEdicao } from "~/components/pedidos/PedidoFormDialog.vue";
 import AppShell from "~/components/app/AppShell.vue";
+import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
+import PedidoFormDialog, { type PedidoFormEdicao } from "~/components/pedidos/PedidoFormDialog.vue";
+import PedidoRecebimentoDialog from "~/components/pedidos/PedidoRecebimentoDialog.vue";
+import PedidosFila from "~/components/pedidos/PedidosFila.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { itemPorTela, mensagemErro } from "~/utils/domain";
 import { normalizarWhatsappParaLink } from "~/utils/formatacao";
@@ -246,7 +249,7 @@ onMounted(async () => {
     sessao.value = await carregarSessao();
     if (!sessao.value) return void (await router.push("/login"));
     if (!temPermissao("pedidos_visualizar")) return void (erro.value = "Sem permissão para acessar pedidos.");
-    empresas.value = await apiGet<Opcao[]>("/api/empresas");
+    empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
     empresaId.value =
       sessao.value.perfil?.empresaId ?? sessao.value.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
     await carregarDados();

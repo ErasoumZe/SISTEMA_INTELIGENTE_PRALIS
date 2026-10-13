@@ -78,7 +78,7 @@ const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "curr
         class="cx-num secao__previa"
         :hint="dica('quantidadeEstoque')"
       />
-      <v-select
+      <v-combobox
         v-model="form.setorEstoque"
         :items="setores"
         label="Local de estoque"

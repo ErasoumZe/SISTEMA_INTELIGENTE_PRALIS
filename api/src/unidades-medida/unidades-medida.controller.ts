@@ -7,7 +7,7 @@ import {
   unidadesMedidaQuerySchema as empresaQuerySchema
 } from "@padaria/shared/unidades-medida";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import {
@@ -20,7 +20,15 @@ import {
 export async function registrarRotasUnidadesMedida(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/unidades_medida",
-    { preHandler: exigirPermissao("cadastro_unidades_medida_visualizar") },
+    {
+      // A mesma lista reduzida alimenta o formulario de Produto. Consultar id/nome/sigla para
+      // criar ou editar um produto nao concede acesso ao cadastro administrativo de unidades.
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_unidades_medida_visualizar",
+        "cadastro_produtos_criar",
+        "cadastro_produtos_editar"
+      ])
+    },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {

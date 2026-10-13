@@ -2,6 +2,7 @@
 import type { AuthSession, ConferenciaEstoqueDto, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import ConferenciasAgenda from "~/components/compras/ConferenciasAgenda.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 
@@ -121,7 +122,7 @@ onMounted(async () => {
     if (!sessao.value) return void (await router.push("/login"));
     if (!temPermissao("conferencias_estoque_visualizar"))
       return void (erro.value = "Sem permissão para conferir estoque.");
-    empresas.value = await apiGet<Opcao[]>("/api/empresas");
+    empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
     empresaId.value =
       sessao.value.perfil?.empresaId ?? sessao.value.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
     await carregarDados();
