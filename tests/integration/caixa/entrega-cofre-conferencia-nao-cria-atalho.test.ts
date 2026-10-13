@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -67,7 +66,8 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
       empresaId,
       dataReferencia: DIA,
       descricao: "Venda do turno",
-      valorOriginal: valor
+      valorOriginal: valor,
+      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valor }]
     });
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
@@ -117,9 +117,10 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
     assertProblem(resposta, 400);
     expect(resposta.body).toMatch(/cofre/iu);
     expect(
-      await consultarUm<{ total: string }>("select count(*)::text as total from transferencias where caixa_id = $1", [
-        fx.caixaId
-      ])
+      await consultarUm<{ total: string }>(
+        "select count(*)::text as total from transferencias where caixa_id = $1 and tipo <> 'abertura'",
+        [fx.caixaId]
+      )
     ).toMatchObject({ total: "0" });
   });
 
@@ -173,14 +174,7 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
   it("Deve_PermitirAConferencia_Quando_ElaEhDaEntregaCanonicaAoCofre", async () => {
     const fx = await novoCaixa("P1 conferencia canonica");
     await venda(500);
-    const lacre = `P1-CANON-CONF-${sequencia}`;
-
-    const entrega = await inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
-      valor: 200,
-      lacre,
-      idempotenciaChave: randomUUID()
-    });
-    expect(entrega.statusCode, entrega.body).toBe(200);
+    const entrega = await criarRetornoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId, valor: 200 });
     const movimento = await consultarUm<{ id: string }>(
       "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [fx.caixaId]
@@ -189,7 +183,9 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
     const conferencia = await inject("POST", `/api/transferencias/${movimento!.id}/confirmar`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
       valorRecebido: 200,
-      nLacreDoc: lacre
+      valorEspecieContado: 200,
+      valorMoedasContado: 0,
+      nLacreDoc: entrega.lacre.numero
     });
 
     expect(conferencia.statusCode, conferencia.body).toBe(200);
