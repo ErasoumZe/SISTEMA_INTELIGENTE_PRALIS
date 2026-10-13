@@ -157,7 +157,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     const venda = await consultarUm<{ id: string }>("select id from vendas where identificador_externo = $1", [
       idVenda
     ]);
-    return { contaId, identificadorExterno, idVenda, vendaId: venda?.id ?? "", dataHoraVenda };
+    return {
+      contaId,
+      identificadorExterno,
+      idVenda,
+      vendaId: venda?.id ?? "",
+      dataHoraVenda,
+      saldoAbertura: await saldo(contaId)
+    };
   }
 
   async function pagamentos(vendaId: string) {
@@ -226,13 +233,13 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   }
 
   it("venda ROTEADA: o PUT permitido preserva conta, disponibilidade e o credito no saldo", async () => {
-    const { contaId, vendaId } = await montar("roteada", true);
+    const { contaId, vendaId, saldoAbertura } = await montar("roteada", true);
 
     const antes = await pagamentos(vendaId);
     expect(antes[0]?.roteamento_status).toBe("roteado");
     expect(antes[0]?.conta_final_id).toBe(contaId);
     expect(antes[0]?.disponivel_em).not.toBeNull();
-    expect(await saldo(contaId), "ponto de partida: 250 creditados").toBe(250);
+    expect(await saldo(contaId), "ponto de partida: fundo fisico + 250 creditados").toBe(saldoAbertura);
 
     const resposta = await editarObservacao(vendaId, `revisado ${carimbo}`);
     // Status EXATO. O teste antigo aceitava qualquer coisa que nao fosse codigo da R-177 — e por isso
@@ -252,7 +259,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     expect(depois[0]?.total_pago).toBe(antes[0]?.total_pago);
 
     // O que importa para a padaria: o dinheiro continua na conta.
-    expect(await saldo(contaId), "o credito nao pode sumir por causa de uma observacao").toBe(250);
+    expect(await saldo(contaId), "o credito nao pode sumir por causa de uma observacao").toBe(saldoAbertura);
 
     // E o campo permitido realmente mudou.
     const venda = await consultarUm<{ observacao: string | null; conta_origem_id: string | null }>(
@@ -264,7 +271,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   });
 
   it("venda PENDENTE: o PUT permitido preserva a pendencia, sem rebaixar para historica", async () => {
-    const { contaId, vendaId } = await montar("pendente", false);
+    const { contaId, vendaId, saldoAbertura } = await montar("pendente", false);
 
     expect((await pagamentos(vendaId))[0]?.roteamento_status).toBe("pendente");
 
@@ -276,11 +283,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // poderia ser roteada, porque passaria a ser lida como anterior ao roteamento.
     expect(depois[0]?.roteamento_status, "pendente tem de continuar pendente").toBe("pendente");
     expect(depois[0]?.conta_final_id).toBeNull();
-    expect(await saldo(contaId)).toBe(0);
+    expect(await saldo(contaId)).toBe(saldoAbertura);
   });
 
   it("reingestao DEPOIS do PUT permitido nao reclassifica a venda como historica", async () => {
-    const { contaId, identificadorExterno, idVenda, vendaId, dataHoraVenda } = await montar("reingestao", true);
+    const { contaId, identificadorExterno, idVenda, vendaId, dataHoraVenda, saldoAbertura } = await montar(
+      "reingestao",
+      true
+    );
 
     const resposta = await editarObservacao(vendaId, `antes do reenvio ${carimbo}`);
     expect(resposta.statusCode, resposta.body).toBe(200);
@@ -300,7 +310,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // historica — ficaria assim para sempre.
     expect(depois[0]?.roteamento_status, "a venda continua sendo do codigo novo").toBe("roteado");
     expect(depois[0]?.conta_final_id).toBe(contaId);
-    expect(await saldo(contaId), "o reenvio recalcula sobre o valor novo").toBe(400);
+    expect(await saldo(contaId), "o reenvio recalcula sobre o valor novo").toBe(saldoAbertura + 150);
   });
 
   it("usuario de outra empresa nao descobre existencia, integracao nem pagamentos", async () => {

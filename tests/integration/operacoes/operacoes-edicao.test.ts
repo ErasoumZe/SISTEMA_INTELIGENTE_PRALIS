@@ -270,11 +270,12 @@ describe("operacoes edicao integration", () => {
         caixaAberto: { id: caixaId },
         resumo: {
           totalEntradas: 20,
+          totalTransferenciasEntrada: 100,
           totalTransferenciasSaida: 9,
           totalDespesas: 5,
           totalRetiradas: 7,
           totalMercadorias: 6,
-          saldo: -7
+          saldo: 93
         }
       }
     });
@@ -289,7 +290,7 @@ describe("operacoes edicao integration", () => {
         lacreFechamento,
         caixaResponsavelNome: "Caixa edicao",
         supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 0,
+        valorEspecieFechamento: 93,
         valorMoedasFechamento: 0
       }
     });

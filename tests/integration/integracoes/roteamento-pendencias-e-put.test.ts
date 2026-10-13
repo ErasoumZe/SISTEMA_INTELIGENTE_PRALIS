@@ -10,7 +10,7 @@ import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { json } from "../../setup/integracao.js";
+import { consultarUm, json } from "../../setup/integracao.js";
 
 type Pendencias = {
   formasSemRoteamento: Array<{ id: string; nome: string }> | null;
