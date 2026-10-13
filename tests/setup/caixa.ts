@@ -83,6 +83,8 @@ export async function abrirCaixaDoOperador(
     lacresRetorno?: string[];
     lacreRetorno?: string;
     lacreFechamento?: string;
+    // Alguns cenarios verificam o vinculo de uma maquininha previamente cadastrada.
+    maquininhaId?: string;
     // Suites que compartilham um unico caixa no beforeAll deixam o container
     // descartar o estado ao final; onTestFinished so e valido dentro de um it.
     registrarLimpeza?: boolean;
@@ -134,19 +136,22 @@ export async function abrirCaixaDoOperador(
   // pendente identificado por lacre. A fixture precisa montar esse estado pelo mesmo contrato
   // publico: sem isso, todos os testes que dependem de um caixa proprio falham antes de provar
   // a regra que vieram testar.
-  const maquininha = await app.inject({
-    method: "POST",
-    url: "/api/maquininhas",
-    headers: { cookie: entrada.cookieAdmin },
-    payload: {
-      empresaId,
-      numeroSerie: `TESTE-ABERTURA-${pdvId}`,
-      apelido: `Maquininha ${entrada.nome}`,
-      ativo: true
-    }
-  });
-  expect(maquininha.statusCode, maquininha.body).toBe(201);
-  const maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
+  let maquininhaId = entrada.maquininhaId;
+  if (!maquininhaId) {
+    const maquininha = await app.inject({
+      method: "POST",
+      url: "/api/maquininhas",
+      headers: { cookie: entrada.cookieAdmin },
+      payload: {
+        empresaId,
+        numeroSerie: `TESTE-ABERTURA-${pdvId}`,
+        apelido: `Maquininha ${entrada.nome}`,
+        ativo: true
+      }
+    });
+    expect(maquininha.statusCode, maquininha.body).toBe(201);
+    maquininhaId = json<{ data: { id: string } }>(maquininha).data.id;
+  }
 
   const lacreAbertura = `TESTE-ABERTURA-${pdvId}`;
   const lacresRetorno = entrada.lacresRetorno ?? [entrada.lacreRetorno ?? `TESTE-RETORNO-${pdvId}`];

@@ -8,9 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { json } from "../../setup/integracao.js";
 
 type Pendencias = {
   formasSemRoteamento: Array<{ id: string; nome: string }> | null;
@@ -22,14 +22,6 @@ type Pendencias = {
     itens: Array<{ vendaId: string; valor: number; formaPagamento: string | null }>;
   } | null;
 };
-
-async function usuarioAdminId() {
-  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-    usuariosTeste.admin.email
-  ]);
-  if (!usuario) throw new Error("Usuario admin nao encontrado");
-  return usuario.id;
-}
 
 describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", () => {
   let contexto: ContextoApiTeste;
@@ -214,18 +206,14 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
 
     // Sem o caixa aberto do admin, o PUT morre na regra de caixa antes de chegar na R-177 — e o
     // teste provaria a regra errada.
-    const abrirCaixa = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: await usuarioAdminId(),
-        observacao: "Caixa R177"
-      }
+    await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "Caixa R177",
+      contaId,
+      pdvId
     });
-    expect(abrirCaixa.statusCode, abrirCaixa.body).toBe(201);
 
     const idVenda = `R177-${carimbo}`;
     const nomeForma = `Forma R177 ${carimbo}`;

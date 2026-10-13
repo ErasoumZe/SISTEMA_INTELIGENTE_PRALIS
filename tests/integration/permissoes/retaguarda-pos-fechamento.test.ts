@@ -3,6 +3,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { abrirCaixaDoOperador, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json, snapshotDoLancamento, universoDeLancamentos } from "../../setup/integracao.js";
 
@@ -24,6 +25,7 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
   let cookieGerente = "";
   let cookieMultiempresa = "";
   let caixaFechado = "";
+  let lacreFechamento = "";
   let contaDoPdv = "";
   // POSTERIOR ao caixa aberto do seed (2026-06-30): o desempate de `buscarCaixaAbertoUsuario` e por
   // `criado_em desc`, mas manter tambem a data de abertura mais recente tira o cenario da dependencia
@@ -107,11 +109,6 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
 
     // Caixa proprio de um segundo operador: o admin conserva o caixa seed aberto para o contraste
     // de retaguarda abaixo, enquanto este ciclo temporario e aberto e fechado pela rota real.
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.multiempresa.email
-    ]);
-    if (!usuario) throw new Error("Usuario multiempresa nao encontrado");
-
     const criar = async (url: string, payload: object, cookie = cookieAdmin) => {
       const resposta = await contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
       expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
@@ -125,16 +122,17 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
       contaId: contaDoPdv,
       ativo: true
     });
-    caixaFechado = await criar(
-      "/api/caixa/abrir",
-      {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: usuario.id,
-        dataHoraAbertura: `${dataReferencia}T08:00`
-      },
-      cookieMultiempresa
-    );
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieMultiempresa,
+      emailOperador: usuariosTeste.multiempresa.email,
+      nome: "Caixa pos-fechamento",
+      dataHoraAbertura: `${dataReferencia}T08:00`,
+      contaId: contaDoPdv,
+      pdvId
+    });
+    caixaFechado = abertura.caixaId;
+    lacreFechamento = abertura.lacreFechamento;
 
     // Uma VENDA de 85 equilibra as tres saidas (40+15+30) para o caixa fechar com saldo zero — sem
     // quebra e sem retorno, que nao sao o assunto deste arquivo.
@@ -183,11 +181,20 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
     }
 
     // FECHAMENTO PELA ROTA REAL. 204, dentro da mesma transacao que congela os totais.
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieMultiempresa,
+      caixaId: caixaFechado,
+      caixaResponsavelNome: "Caixa pos-fechamento"
+    });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaFechado}/fechar`,
       headers: { cookie: cookieMultiempresa },
-      payload: { observacao: "Fechamento do cenario pos-fechamento", lacreFechamento: "FCH-RETAGUARDA-001" }
+      payload: {
+        ...fechamentoFisico,
+        lacreFechamento,
+        observacao: "Fechamento do cenario pos-fechamento"
+      }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
 

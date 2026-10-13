@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -24,14 +24,6 @@ type PagamentoGravado = {
   adquirente: string | null;
   total_pago: string;
 };
-
-async function usuarioAdminId() {
-  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-    usuariosTeste.admin.email
-  ]);
-  if (!usuario) throw new Error("Usuario admin nao encontrado");
-  return usuario.id;
-}
 
 describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   let contexto: ContextoApiTeste;
@@ -114,20 +106,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     // seu ja era recusado antes da #152. Para provar a preservacao do snapshot num PUT REAL, o admin
     // precisa ter esse caixa aberto — senao o teste morre na regra de caixa e nao chega a olhar o
     // roteamento, que e o que ele existe para verificar.
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: await usuarioAdminId(),
-        observacao: `Caixa put ${sufixo}`
-      }
+    await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: `Caixa put ${sufixo}`,
+      contaId,
+      pdvId
     });
-    expect(abrir.statusCode, abrir.body).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
     // O servidor é a autoridade da abertura. A venda precisa nascer depois dela,
     // como acontece quando o CREARE envia uma venda do turno corrente.
     const dataHoraVenda = new Date().toISOString();

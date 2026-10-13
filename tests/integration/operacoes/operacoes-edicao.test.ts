@@ -2,17 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, prepararFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
-
-async function usuarioAdminId() {
-  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-    usuariosTeste.admin.email
-  ]);
-  if (!usuario) throw new Error("Usuario admin nao encontrado");
-  return usuario.id;
-}
 
 describe("operacoes edicao integration", () => {
   let contexto: ContextoApiTeste;
@@ -30,7 +22,6 @@ describe("operacoes edicao integration", () => {
   });
 
   it("Deve_EditarOsCincoTiposDeLancamento_Quando_CaixaAberto", async () => {
-    const adminId = await usuarioAdminId();
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
@@ -50,20 +41,15 @@ describe("operacoes edicao integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId: adminId,
-        dataHoraAbertura: "2026-04-01T08:00",
-        observacao: "Caixa edicao"
-      }
+    const { caixaId, lacreFechamento } = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "Caixa edicao",
+      dataHoraAbertura: "2026-04-01T08:00",
+      contaId: contaPdvId,
+      pdvId
     });
-    expect(abrir.statusCode).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
     const dataRef = "2026-04-01";
 
     async function criar(url: string, payload: object): Promise<string> {
@@ -293,11 +279,19 @@ describe("operacoes edicao integration", () => {
       }
     });
 
+    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Fechado apos edicoes", lacreFechamento: "FCH-OPERACOES-001" }
+      payload: {
+        observacao: "Fechado apos edicoes",
+        lacreFechamento,
+        caixaResponsavelNome: "Caixa edicao",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 0,
+        valorMoedasFechamento: 0
+      }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });

@@ -21,6 +21,9 @@ type LinhaDespesa = {
 };
 
 const PAGO_EM = diaNegocio(new Date());
+// O cancelamento alcanca somente parcelas futuras. A data fixa de 2026-07 fazia a prova mudar
+// conforme o calendario: depois daquele mes ja nao existiam duas parcelas futuras para remover.
+const DATA_RECURRENCIA_FUTURA = diaNegocio(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000));
 
 describe("recorrencia de lancamento (D3) integration", () => {
   let contexto: ContextoApiTeste;
@@ -235,6 +238,8 @@ describe("recorrencia de lancamento (D3) integration", () => {
   it("R-063 cancela so futuras nao pagas e preserva uma paga no meio", async () => {
     const resposta = await criarDespesa(cookieAdmin, {
       descricao: "Serie a cancelar",
+      dataReferencia: DATA_RECURRENCIA_FUTURA,
+      dataVencimento: DATA_RECURRENCIA_FUTURA,
       recorrencia: { frequencia: "mes", repeticoes: 4 }
     });
     const criada = json<{ data: { id: string } }>(resposta).data;
