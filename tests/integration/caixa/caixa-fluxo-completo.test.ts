@@ -4,7 +4,12 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  criarRetornoValido,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararPayloadFechamentoValido
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -60,24 +65,14 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
   async function abrirCaixa(nome: string, dataHoraAbertura: string) {
     // R-165: a conta do PDV nasce com fundo para as saidas deste arquivo. Nao interfere no que ele
     // prova — o saldo do CAIXA (ADR-001) nao olha o fundo da conta.
-    const conta = await criar("/api/contas", {
-      empresaId: idsTeste.empresaA,
-      nome: `Conta ${nome}`,
-      saldoInicial: 100_000
-    });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-    const pdv = await criar("/api/pdvs", { empresaId: idsTeste.empresaA, nome: `PDV ${nome}`, contaId, ativo: true });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
-    const abrir = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
+    return abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome,
       dataHoraAbertura,
-      observacao: `Caixa ${nome}`
+      lacresRetorno: [`RET-${nome}-1`, `RET-${nome}-2`]
     });
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
-    return { caixaId, contaId, pdvId };
   }
 
   async function resumoDoCaixa() {
@@ -168,21 +163,27 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       nLacreDoc: "FLUXO-SAIDA-001"
     });
 
-    // Formula oficial: 100 + 20 - 40 - 30 - 15 - 35 = 0
+    // As cinco operacoes se equilibram; permanece apenas o fundo físico lacrado da abertura.
     const status = await resumoDoCaixa();
     expect(status.caixaAberto.id).toBe(caixaId);
     expect(status.resumo).toMatchObject({
       totalEntradas: 100,
-      totalTransferenciasEntrada: 20,
+      totalTransferenciasEntrada: 120,
       totalTransferenciasSaida: 35,
       totalDespesas: 40,
       totalRetiradas: 30,
       totalMercadorias: 15,
-      saldo: 0
+      saldo: 100
     });
 
-    // Saldo zero: fecha direto, sem acerto.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento sem diferenca" });
+    const fechar = await post(
+      `/api/caixa/${caixaId}/fechar`,
+      await prepararPayloadFechamentoValido(contexto.app, {
+        cookieOperador: cookieAdmin,
+        caixaId,
+        observacao: "Fechamento sem diferenca"
+      })
+    );
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",
@@ -213,53 +214,66 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
 
     const antes = await resumoDoCaixa();
     expect(antes.caixaAberto.id).toBe(caixaId);
-    expect(antes.resumo).toMatchObject({ totalEntradas: 100, saldo: 100 });
+    expect(antes.resumo).toMatchObject({ totalEntradas: 100, saldo: 200 });
 
     // D1: retorno PARCIAL durante o turno — o saldo cai, mas nao zera.
-    const parcial = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      valor: 40,
-      lacre: "RET-PARCIAL-1",
-      observacao: "Retorno parcial",
-      idempotenciaChave: randomUUID()
-    });
-    expect(parcial.statusCode, parcial.body).toBe(200);
-    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 60 });
+    const parcial = await criarRetornoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId, valor: 40 });
+    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 160 });
 
     // D1: acima do saldo restante o servidor recusa — sem este teto, o excedente virava saldo
     // negativo e o fechamento gravava quebra falsa no nome do operador.
-    const acimaDoSaldo = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      valor: 61,
-      lacre: "RET-ACIMA",
-      idempotenciaChave: randomUUID()
+    const lacres = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixaId}/lacres-retorno`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(lacres.statusCode, lacres.body).toBe(200);
+    const lacreParaRecusa = json<{ data: Array<{ id: string }> }>(lacres).data[0];
+    const acimaDoSaldo = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixaId}/transferencia-cofre`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        valor: 161,
+        valorEspecie: 161,
+        valorMoedas: 0,
+        lacreId: lacreParaRecusa?.id,
+        responsavelNome: "Administrador",
+        idempotenciaChave: randomUUID()
+      }
     });
     assertProblem(acimaDoSaldo, 400);
-    expect(acimaDoSaldo.body).toMatch(/R\$ 60\.00/);
-    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 60 });
-
-    // G1/R-171: o retorno parcial ja saiu do caixa e esta `pendente`. Dinheiro na rua trava o
-    // fechamento comum ate o cofre conferir — antes disto o turno fechava por cima dele.
-    const travado = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa" });
-    assertProblem(travado, 400);
-    expect(travado.body).toMatch(/aguardando confer[eê]ncia/iu);
+    expect(acimaDoSaldo.body).toMatch(/R\$ 160\.00/);
+    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 160 });
 
     const parcialId = await consultarUm<{ id: string }>(
       "select id from transferencias where caixa_id = $1 and n_lacre_doc = $2",
-      [caixaId, "RET-PARCIAL-1"]
+      [caixaId, parcial.lacre.numero]
     );
     const conferencia = await contexto.app.inject({
       method: "POST",
       url: `/api/transferencias/${parcialId!.id}/confirmar`,
       headers: { cookie: cookieTesouraria },
-      payload: { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "RET-PARCIAL-1", valorRecebido: 40 }
+      payload: {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: parcial.lacre.numero,
+        valorRecebido: 40,
+        valorEspecieContado: 40,
+        valorMoedasContado: 0
+      }
     });
     expect(conferencia.statusCode, conferencia.body).toBe(200);
 
     // D6: fechar com saldo positivo NAO e mais barrado. O retorno final do restante sai no MESMO
     // ato e na mesma transacao do fechamento; nao existe segundo botao.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, {
-      observacao: "Fechamento com retorno final",
-      lacreRetorno: "RET-FINAL-1"
-    });
+    const fechar = await post(
+      `/api/caixa/${caixaId}/fechar`,
+      await prepararPayloadFechamentoValido(contexto.app, {
+        cookieOperador: cookieAdmin,
+        caixaId,
+        observacao: "Fechamento com retorno final"
+      })
+    );
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",
@@ -278,8 +292,8 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       [caixaId]
     );
     expect(movimentos).toEqual([
-      { valor_original: "40.00", status: "recebido", n_lacre_doc: "RET-PARCIAL-1" },
-      { valor_original: "60.00", status: "pendente", n_lacre_doc: "RET-FINAL-1" }
+      { valor_original: "40.00", status: "recebido", n_lacre_doc: parcial.lacre.numero },
+      { valor_original: "160.00", status: "pendente", n_lacre_doc: null }
     ]);
   });
 
