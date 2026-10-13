@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
@@ -134,14 +134,17 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
 
     // A abertura usa o instante real do servidor (R-184). A venda abaixo tambem usa o relogio
     // real, para que a prova nao envelheca quando o calendario avancar.
-    const abrir = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: usuarioAdmin,
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "venda integrada",
       dataHoraAbertura: "2026-06-29T08:00",
-      observacao: "Caixa demo venda integrada"
+      contaId,
+      pdvId,
+      registrarLimpeza: false
     });
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    const caixaId = abertura.caixaId;
     caixaDoCenarioCompleto = caixaId;
 
     const dataReferencia = "2026-06-30";
@@ -210,7 +213,7 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     expect(status.resumo).toMatchObject({
       totalDespesas: 30,
       totalRetiradas: 20,
-      totalTransferenciasEntrada: 50,
+      totalTransferenciasEntrada: 150,
       totalMercadorias: 15
     });
 
@@ -221,8 +224,8 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     expect(status.resumo.porFormaPagamento).toEqual(
       expect.arrayContaining([expect.objectContaining({ formaPagamento: "Cartao", total: 200, quantidade: 1 })])
     );
-    // saldo = 200 (entrada integrada) + 50 - 0 - 30 - 20 - 15 = 185
-    expect(status.resumo["saldo"]).toBe(185);
+    // O cartão integra a venda, mas não entra na gaveta; o físico parte do fundo lacrado de 100.
+    expect(status.resumo["saldo"]).toBe(85);
   });
 
   it("venda integrada de OUTRO periodo/PDV NAO entra no caixa (so entra a do periodo certo)", async () => {
@@ -241,7 +244,10 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
 
     // R-186: o proximo caso usa o mesmo operador e precisa iniciar sem um segundo caixa aberto.
     if (!caixaDoCenarioCompleto) throw new Error("Caixa do cenario completo nao foi criado");
-    const fechamento = await post(`/api/caixa/${caixaDoCenarioCompleto}/fechar`, {});
+    const fechamento = await post(
+      `/api/caixa/${caixaDoCenarioCompleto}/fechar`,
+      await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: caixaDoCenarioCompleto })
+    );
     expect(fechamento.statusCode, fechamento.body).toBe(204);
     caixaDoCenarioCompleto = null;
   });
@@ -275,19 +281,25 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
 
-    const abertura = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieAdmin,
+      emailOperador: usuariosTeste.admin.email,
+      nome: "venda tardia",
+      contaId,
       pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      observacao: "Caixa para provar venda tardia"
+      registrarLimpeza: false
     });
-    const caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    const caixaId = abertura.caixaId;
     const caixa = await consultarUm<{ data_hora_abertura: Date }>(
       "select data_hora_abertura from fechamentos_caixa where id = $1",
       [caixaId]
     );
     if (!caixa?.data_hora_abertura) throw new Error("Caixa aberto sem horario de abertura");
-    const fechamento = await post(`/api/caixa/${caixaId}/fechar`, {});
+    const fechamento = await post(
+      `/api/caixa/${caixaId}/fechar`,
+      await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId })
+    );
     expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const venda = await post(

@@ -75,6 +75,10 @@ export async function abrirCaixaDoOperador(
     nome: string;
     dataHoraAbertura?: string;
     empresaId?: string;
+    // Integrações que testam um vínculo externo precisam criar o PDV antes da abertura.
+    // Os dois IDs são sempre informados juntos para não montar uma conta/PDV incoerente.
+    contaId?: string;
+    pdvId?: string;
     valorAbertura?: number;
     lacresRetorno?: string[];
     lacreRetorno?: string;
@@ -92,6 +96,9 @@ export async function abrirCaixaDoOperador(
   lacreFechamento: string;
 }> {
   const empresaId = entrada.empresaId ?? idsTeste.empresaA;
+  if (Boolean(entrada.contaId) !== Boolean(entrada.pdvId)) {
+    throw new Error("Fixture de abertura exige contaId e pdvId juntos");
+  }
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
     entrada.emailOperador
   ]);
@@ -101,23 +108,27 @@ export async function abrirCaixaDoOperador(
   // ela (despesa, retirada, mercadoria, transferencia). O fundo nao interfere no que eles provam —
   // eles medem a corrida contra o FECHAMENTO, e o saldo do caixa (ADR-001) e apurado por
   // entradas - saidas do fechamento, sem olhar o fundo da conta.
-  const conta = await app.inject({
-    method: "POST",
-    url: "/api/contas",
-    headers: { cookie: entrada.cookieAdmin },
-    payload: { empresaId, nome: `Conta ${entrada.nome}`, saldoInicial: 100_000, usuariosIds: [usuario.id] }
-  });
-  expect(conta.statusCode, conta.body).toBe(201);
-  const contaId = json<{ data: { id: string } }>(conta).data.id;
+  let contaId = entrada.contaId;
+  let pdvId = entrada.pdvId;
+  if (!contaId || !pdvId) {
+    const conta = await app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: entrada.cookieAdmin },
+      payload: { empresaId, nome: `Conta ${entrada.nome}`, saldoInicial: 100_000, usuariosIds: [usuario.id] }
+    });
+    expect(conta.statusCode, conta.body).toBe(201);
+    contaId = json<{ data: { id: string } }>(conta).data.id;
 
-  const pdv = await app.inject({
-    method: "POST",
-    url: "/api/pdvs",
-    headers: { cookie: entrada.cookieAdmin },
-    payload: { empresaId, nome: `PDV ${entrada.nome}`, contaId, ativo: true }
-  });
-  expect(pdv.statusCode, pdv.body).toBe(201);
-  const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const pdv = await app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: entrada.cookieAdmin },
+      payload: { empresaId, nome: `PDV ${entrada.nome}`, contaId, ativo: true }
+    });
+    expect(pdv.statusCode, pdv.body).toBe(201);
+    pdvId = json<{ data: { id: string } }>(pdv).data.id;
+  }
 
   // A abertura da referencia 5174 sempre registra a maquininha vinculada e consome um malote
   // pendente identificado por lacre. A fixture precisa montar esse estado pelo mesmo contrato
