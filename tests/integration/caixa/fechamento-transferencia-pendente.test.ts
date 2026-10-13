@@ -43,6 +43,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   let cookieGerente = "";
   let cookieMultiempresa = "";
   let sequencia = 0;
+  const lacresDasEntregas = new Map<string, string>();
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -84,15 +85,21 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
       empresaId,
       dataReferencia: DIA,
       descricao: "Venda do turno",
-      valorOriginal: valor
+      valorOriginal: valor,
+      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valor }]
     });
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
   async function entregarAoCofre(caixaId: string, valor: number, _lacre?: string, cookieOperador = cookieCaixa) {
     const retorno = await criarRetornoValido(contexto.app, { cookieOperador, caixaId, valor });
-    if (!retorno.resposta.id) throw new Error("Entrega ao cofre nao encontrada");
-    return retorno.resposta.id;
+    const movimento = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
+      [caixaId]
+    );
+    if (!movimento) throw new Error("Entrega ao cofre nao encontrada");
+    lacresDasEntregas.set(movimento.id, retorno.lacre.numero);
+    return movimento.id;
   }
 
   // R-028: quem entrega nunca confere a propria entrega. O operador entrega, o gerente (responsavel
@@ -101,7 +108,9 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     return inject("POST", `/api/transferencias/${transferenciaId}/confirmar`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
       valorRecebido,
-      ...(lacre ? { nLacreDoc: lacre } : {})
+      valorEspecieContado: valorRecebido,
+      valorMoedasContado: 0,
+      nLacreDoc: lacre ?? lacresDasEntregas.get(transferenciaId)
     });
   }
 
@@ -137,19 +146,18 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   // ------------------------------------------------------------------------------------------
   // RED-1 · o caso que a #101 abriu: dinheiro entregue e nao conferido nao pode ser esquecido.
   // ------------------------------------------------------------------------------------------
-  it("Deve_RecusarOFechamento_Quando_HaRetornoEntregueAguardandoConferencia", async () => {
+  it("Deve_PreservarOPendente_Quando_HaRetornoEntregueAguardandoConferencia", async () => {
     const fx = await novoCaixa("G1 retorno");
     await venda(500);
     await entregarAoCofre(fx.caixaId, 200, "G1-RETORNO");
 
     const resposta = await fechar(fx.caixaId);
 
-    assertProblem(resposta, 400);
-    // A mensagem precisa dizer QUAL operacao trava — "nao pode fechar" sozinho manda o operador
-    // adivinhar entre as entregas do turno.
-    expect(resposta.body).toMatch(/aguardando confer[eê]ncia/iu);
-    expect(resposta.body).toMatch(/retorno/iu);
-    expect(resposta.body).toMatch(/200/u);
+    expect(resposta.statusCode, resposta.body).toBe(204);
+    expect((await transferenciasDoCaixa(fx.caixaId)).filter((linha) => linha.tipo === "retorno")).toContainEqual({
+      tipo: "retorno",
+      status: "pendente"
+    });
   });
 
   // ------------------------------------------------------------------------------------------
@@ -161,17 +169,15 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     await venda(500);
     const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-CONFERIDA");
 
-    assertProblem(await fechar(fx.caixaId), 400);
+    const fechamento = await fechar(fx.caixaId);
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const conferencia = await conferir(entrega, 200);
     expect(conferencia.statusCode, conferencia.body).toBe(200);
 
-    const fechamento = await fechar(fx.caixaId);
-    expect(fechamento.statusCode, fechamento.body).toBe(204);
-
     // D6/D7: a sobra virou retorno final DENTRO do fechamento, e ele fica `pendente` — prova de que
     // a guarda le o estado anterior ao ato e nao se auto-bloqueia.
-    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([
+    expect((await transferenciasDoCaixa(fx.caixaId)).filter((linha) => linha.tipo === "retorno")).toEqual([
       { tipo: "retorno", status: "recebido" },
       { tipo: "retorno", status: "pendente" }
     ]);
@@ -181,7 +187,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   // RED-3 · a recusa de conferencia (decisao 8) registra divergencia e MANTEM `pendente`. O
   // dinheiro continua em transito, entao o fechamento continua travado — a saida e a Fatia 2.
   // ------------------------------------------------------------------------------------------
-  it("Deve_ManterOFechamentoTravado_Quando_AConferenciaEhRecusada", async () => {
+  it("Deve_ManterAEntregaPendente_Quando_AConferenciaEhRecusada", async () => {
     const fx = await novoCaixa("G1 recusada");
     await venda(500);
     const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-RECUSADA");
@@ -189,14 +195,19 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     const recusa = await inject("POST", `/api/transferencias/${entrega}/recusar-conferencia`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
       motivo: "Faltaram R$ 20,00 no malote",
-      valorRecebido: 180
+      valorRecebido: 180,
+      valorEspecieContado: 180,
+      valorMoedasContado: 0
     });
     expect(recusa.statusCode, recusa.body).toBe(200);
     expect(
       (await consultarUm<{ status: string }>("select status from transferencias where id = $1", [entrega]))?.status
     ).toBe("pendente");
 
-    assertProblem(await fechar(fx.caixaId), 400);
+    expect((await fechar(fx.caixaId)).statusCode).toBe(204);
+    expect(
+      (await consultarUm<{ status: string }>("select status from transferencias where id = $1", [entrega]))?.status
+    ).toBe("pendente");
   });
 
   // ------------------------------------------------------------------------------------------
@@ -263,7 +274,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   // generica (nasce `suprimento`). O UPDATE direto simula uma linha historica `sangria`, que deve
   // obedecer a mesma trava do `retorno` novo independentemente da conta escolhida como destino.
   // ------------------------------------------------------------------------------------------
-  it("Deve_RecusarFechamento_Quando_ORetornoHistoricoTemDestinoForaDoCofre", async () => {
+  it("Deve_PreservarRetornoHistoricoPendente_Quando_TemDestinoForaDoCofre", async () => {
     const fx = await novoCaixa("G1 destino fora");
     await venda(500);
 
@@ -298,26 +309,25 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     expect(linha).toMatchObject({ tipo: "sangria", status: "pendente", caixa_id: fx.caixaId });
 
     const fechamento = await fechar(fx.caixaId);
-    assertProblem(fechamento, 400);
-    expect(fechamento.body).toMatch(/retorno/iu);
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
+    expect(
+      (await consultarUm<{ status: string }>("select status from transferencias where id = $1", [genericaId]))?.status
+    ).toBe("pendente");
   });
 
   // ------------------------------------------------------------------------------------------
   // RED-6 · a recusa nao pode deixar meio fechamento no banco: nenhum retorno final, nenhuma
   // quebra, nenhum total mexido, caixa ainda aberto.
   // ------------------------------------------------------------------------------------------
-  it("Deve_NaoGravarNada_Quando_OFechamentoEhRecusadoPelaPendencia", async () => {
+  it("Deve_ManterAEntregaPendenteAposOFechamento", async () => {
     const fx = await novoCaixa("G1 atomico");
     await venda(500);
     await entregarAoCofre(fx.caixaId, 200, "G1-ATOMICO");
 
-    const congelado = await universoDoCaixa(fx.caixaId);
-
-    assertProblem(await fechar(fx.caixaId), 400);
-
-    expect(await universoDoCaixa(fx.caixaId)).toEqual(congelado);
-    expect(await statusDoCaixa(fx.caixaId)).toBe("aberto");
+    expect((await fechar(fx.caixaId)).statusCode).toBe(204);
+    expect(await statusDoCaixa(fx.caixaId)).toBe("fechado");
     expect((await transferenciasDoCaixa(fx.caixaId)).filter((linha) => linha.tipo === "retorno")).toEqual([
+      { tipo: "retorno", status: "pendente" },
       { tipo: "retorno", status: "pendente" }
     ]);
   });

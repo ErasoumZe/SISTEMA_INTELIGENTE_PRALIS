@@ -63,7 +63,8 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
       empresaId,
       dataReferencia: DIA,
       descricao: "Venda do turno",
-      valorOriginal: valor
+      valorOriginal: valor,
+      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valor }]
     });
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
@@ -72,16 +73,24 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   // `podeOperarCaixa` aceita tambem quem tem `caixas_gerenciar` — e um dos casos abaixo precisa que
   // quem ENTREGA nao seja o operador.
   async function entregarAoCofre(caixaId: string, valor: number, _lacre: string, cookie = cookieCaixa) {
-    const retorno = await criarRetornoValido(contexto.app, { cookieOperador: cookie, caixaId, valor });
-    if (!retorno.resposta.id) throw new Error("Entrega ao cofre nao encontrada");
-    return retorno.resposta.id;
+    await criarRetornoValido(contexto.app, { cookieOperador: cookie, caixaId, valor });
+    const movimento = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
+      [caixaId]
+    );
+    if (!movimento) throw new Error("Entrega ao cofre nao encontrada");
+    return movimento.id;
   }
 
   // R-028: quem entrega nunca confere a propria entrega. O operador entrega, o gerente confere.
   function recusar(transferenciaId: string, payload: Record<string, unknown>) {
+    const valorRecebido = typeof payload["valorRecebido"] === "number" ? payload["valorRecebido"] : undefined;
     return inject("POST", `/api/transferencias/${transferenciaId}/recusar-conferencia`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
       motivo: "Conferencia do cofre",
+      ...(valorRecebido === undefined
+        ? {}
+        : { valorEspecieContado: valorRecebido, valorMoedasContado: 0 }),
       ...payload
     });
   }
@@ -225,7 +234,7 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   // RED-5 · a recusa SEM encerrar nao compra saida nenhuma. E o contrato que a Fatia 1 fixou e que
   // esta fatia precisa PRESERVAR: so o encerramento destrava.
   // ------------------------------------------------------------------------------------------
-  it("Deve_ManterOFechamentoTravado_Quando_ARecusaNaoEncerra", async () => {
+  it("Deve_ManterAEntregaPendente_Quando_ARecusaNaoEncerra", async () => {
     const fx = await novoCaixa("R183 sem encerrar");
     await venda(500);
     const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-ABERTA-${sequencia}`);
@@ -234,7 +243,8 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(recusa.statusCode, recusa.body).toBe(200);
 
     expect((await linha(entrega))?.status).toBe("pendente");
-    assertProblem(await fechar(fx.caixaId), 400);
+    expect((await fechar(fx.caixaId)).statusCode).toBe(204);
+    expect((await linha(entrega))?.status).toBe("pendente");
   });
 
   // ------------------------------------------------------------------------------------------
@@ -280,7 +290,7 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(await linha(retorno!.id)).toMatchObject({ status: "divergente", valor_recebido: "280.00" });
     expect(await saldoDoCofre()).toBeCloseTo(antes + 280, 2);
     expect(await quebrasDoFechamento(fx.caixaId)).toEqual([
-      { valor: "-20.00", transferencia_id: retorno!.id, usuario_id: fx.usuarioId }
+      { valor: "-120.00", transferencia_id: retorno!.id, usuario_id: fx.usuarioId }
     ]);
   });
 
@@ -314,6 +324,8 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
         contaDestinoId: idsTeste.contaCofre,
         motivo: "Tentando conferir o proprio envio",
         valorRecebido: 180,
+        valorEspecieContado: 180,
+        valorMoedasContado: 0,
         encerrar: true
       }
     );
@@ -332,6 +344,8 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
         contaDestinoId: idsTeste.contaCofre,
         motivo: "Conferido pela Tesouraria",
         valorRecebido: 180,
+        valorEspecieContado: 180,
+        valorMoedasContado: 0,
         encerrar: true
       }
     );
@@ -344,13 +358,14 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   // divergencia (o cofre contou menos). E o caso que a migration 0034 destravou ao trocar o
   // `unique(fechamento_caixa_id)` por dois indices parciais — antes dela, a segunda batia no unique.
   // ------------------------------------------------------------------------------------------
-  it("Deve_ConviverDuasQuebras_Quando_HaFaltaNaContagemEDivergenciaNoCofre", async () => {
+  it("Deve_PreservarAQuebraDaEntrega_Quando_NaoHaFaltaFisicaNoFechamento", async () => {
     const fx = await novoCaixa("R183 duas quebras");
     await venda(500);
     const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-DUAS-${sequencia}`);
     expect((await recusar(entrega, { valorRecebido: 180, encerrar: true })).statusCode).toBe(200);
 
-    // Despesa acima do que sobrou em especie: o turno fecha NEGATIVO e gera a quebra de contagem.
+    // O fundo de abertura tambem e dinheiro fisico: apos o retorno e a despesa, o contado fecha
+    // em zero. A unica quebra auditavel e a da conferencia da entrega ao cofre.
     const despesa = await inject("POST", "/api/despesas", cookieCaixa, {
       empresaId,
       dataReferencia: DIA,
@@ -366,12 +381,9 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const quebras = await quebrasDoFechamento(fx.caixaId);
-    expect(quebras).toHaveLength(2);
-    // Uma aponta a entrega divergente; a outra e a do turno, sem ponteiro.
-    expect(quebras.filter((q) => q.transferencia_id === entrega)).toEqual([
+    expect(quebras).toEqual([
       { valor: "-20.00", transferencia_id: entrega, usuario_id: fx.usuarioId }
     ]);
-    expect(quebras.filter((q) => q.transferencia_id === null)).toHaveLength(1);
   });
 
   // R-179/Fatia 3 · aqui ficava o RED-8, que exigia a checagem de elegibilidade nas DUAS copias:
