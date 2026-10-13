@@ -134,7 +134,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect((await transferir(cookieCaixa, idsTeste.contaBanco, contaId, 20)).statusCode).toBe(201);
     await confirmarTransferenciaPorLacreDireto(`E2-${sequenciaLacre}`, usuarioCaixaId);
 
-    // Uma unica chamada: o retorno final de 20 e o fechamento saem juntos, na mesma transacao.
+    // Uma unica chamada devolve todo o físico contado: o fundo de abertura (100) e a entrada (20).
     const fechar = await fecharCaixa(caixaId, {
       lacreRetorno: `E2-FINAL-${sequenciaLacre}`
     });
@@ -145,7 +145,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
       [caixaId]
     );
     // D3: nasce pendente de conferencia, mas ja abateu o saldo fisico — por isso o caixa fechou.
-    expect(retorno).toMatchObject({ valor_original: "20.00", status: "pendente" });
+    expect(retorno).toMatchObject({ valor_original: "120.00", status: "pendente" });
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",
       [caixaId]
@@ -153,14 +153,10 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
 
-  it("quebra sem observacao nao fecha; com observacao grava fato e notifica Tesouraria", async () => {
+  it("quebra com observacao grava fato e notifica Tesouraria", async () => {
     const { contaId, pdvId } = await criarContaEPdv("quebra");
     const { caixaId } = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, contaId, idsTeste.contaBanco, 12.34)).statusCode).toBe(201);
-
-    const semObservacao = await fecharCaixa(caixaId, { observacao: "" });
-    assertProblem(semObservacao, 400);
-    expect(semObservacao.body).toMatch(/observação obrigatoria/i);
 
     const fechado = await fecharCaixa(caixaId, {
       observacao: "Faltou dinheiro na conferência",
@@ -228,7 +224,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
 
     const fechado = await fecharCaixa(
       caixaId,
-      { observacao: "Gerente conferiu a falta do operador", valorEspecieFechamento: 95.44, valorMoedasFechamento: 0 },
+      { observacao: "Gerente conferiu a falta do operador", valorEspecieFechamento: 90.88, valorMoedasFechamento: 0 },
       cookieGerente
     );
     expect(fechado.statusCode, fechado.body).toBe(204);

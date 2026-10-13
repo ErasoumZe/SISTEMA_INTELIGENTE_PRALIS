@@ -4,6 +4,11 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import {
+  abrirCaixaDoOperador,
+  prepararPayloadFechamentoValido,
+  registrarEncerramentoCaixaParaTeste
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -41,6 +46,53 @@ describe("caixa integration", () => {
   afterAll(async () => {
     await contexto.fechar();
   });
+
+  async function prepararAberturaFisica(pdvId: string, contaId: string, usuarioCaixaId: string, nome: string) {
+    const sufixo = randomUUID();
+    const maquininha = await contexto.app.inject({
+      method: "POST",
+      url: "/api/maquininhas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        numeroSerie: `CONCORRENCIA-${sufixo}`,
+        apelido: `Maquininha ${nome}`,
+        ativo: true
+      }
+    });
+    expect(maquininha.statusCode, maquininha.body).toBe(201);
+    const lacreAbertura = `ABERTURA-${sufixo}`;
+    const lacreFechamento = `FECHAMENTO-${sufixo}`;
+    const malote = await contexto.app.inject({
+      method: "POST",
+      url: "/api/transferencias",
+      headers: { cookie: await cookieSessao(contexto.app, "tesouraria") },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: "2026-07-31",
+        descricao: `Fundo de abertura ${nome}`,
+        valorOriginal: 100,
+        valorEspecieDeclarado: 100,
+        valorMoedasDeclarado: 0,
+        contaOrigemId: idsTeste.contaCofre,
+        contaDestinoId: contaId,
+        nLacreDoc: lacreAbertura,
+        lacresRetorno: [`RETORNO-${sufixo}`],
+        lacreFechamentoPlanejado: lacreFechamento
+      }
+    });
+    expect(malote.statusCode, malote.body).toBe(201);
+    return {
+      empresaId: idsTeste.empresaA,
+      pdvId,
+      usuarioCaixaId,
+      maquininhaId: json<{ data: { id: string } }>(maquininha).data.id,
+      lacreAbertura,
+      caixaResponsavelNome: nome,
+      supervisorResponsavelNome: "Supervisor de teste",
+      lacreFechamento
+    };
+  }
 
   it("Deve_RetornarStatusDoCaixaAberto_Quando_UsuarioTemCaixa", async () => {
     const resposta = await contexto.app.inject({
@@ -380,12 +432,11 @@ describe("caixa integration", () => {
     expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(
       vendaId
     );
-    expect(
-      json<{ data: Array<{ id: string; pagamentos: Array<{ formaPagamento: string; valor: number }> }> }>(
-        canceladasOperacionais
-      ).data
-    ).toContainEqual(
-      expect.objectContaining({ id: vendaId, pagamentos: [{ formaPagamento: "Cartão de débito", valor: 120 }] })
+    const canceladaOperacional = json<{
+      data: Array<{ id: string; pagamentos: Array<{ formaPagamento: string; valor: number }> }>;
+    }>(canceladasOperacionais).data.find((venda) => venda.id === vendaId);
+    expect(canceladaOperacional?.pagamentos).toEqual(
+      expect.arrayContaining([expect.objectContaining({ formaPagamento: "Cartão de débito", valor: 120 })])
     );
 
     await executarSql("delete from vendas where id = $1", [vendaId]);
@@ -440,7 +491,6 @@ describe("caixa integration", () => {
   });
 
   it("Deve_AbrirComHorarioDoServidorERecusarRotaLegada_Quando_PdvDisponivel", async () => {
-    const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
@@ -459,23 +509,19 @@ describe("caixa integration", () => {
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
     const antesDaAbertura = new Date();
-    const abrir = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId,
-        usuarioCaixaId,
-        // R-184: tentativa deliberada de forjar uma abertura antiga. O schema descarta este campo
-        // legado e o servico precisa persistir o instante atual do servidor.
-        dataHoraAbertura: "2026-01-15T10:43",
-        observacao: "Caixa aberto por teste"
-      }
+    const abertura = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Caixa aberto por teste",
+      contaId,
+      pdvId,
+      // R-184: tentativa deliberada de forjar uma abertura antiga. O schema descarta este campo
+      // legado e o servico precisa persistir o instante atual do servidor.
+      dataHoraAbertura: "2026-01-15T10:43"
     });
     const depoisDaAbertura = new Date();
-    expect(abrir.statusCode).toBe(201);
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    const { caixaId } = abertura;
     const statusAposAbertura = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -509,11 +555,12 @@ describe("caixa integration", () => {
     });
     assertProblem(semLacre, 400);
 
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
-      headers: { cookie: cookieAdmin },
-      payload: { observacao: "Caixa fechado por teste", lacreFechamento: "FCH-CAIXA-TESTE-001" }
+      headers: { cookie: cookieCaixa },
+      payload: { ...fechamentoFisico, observacao: "Caixa fechado por teste" }
     });
     expect(fechar.statusCode).toBe(204);
     await expect(
@@ -521,7 +568,7 @@ describe("caixa integration", () => {
         "select lacre_fechamento from fechamentos_caixa where id = $1 and status = 'fechado'",
         [caixaId]
       )
-    ).resolves.toMatchObject({ lacre_fechamento: "FCH-CAIXA-TESTE-001" });
+    ).resolves.toMatchObject({ lacre_fechamento: abertura.lacreFechamento });
 
     const historico = await contexto.app.inject({
       method: "GET",
@@ -530,7 +577,7 @@ describe("caixa integration", () => {
     });
     assertOk(historico);
     expect(json<{ data: Array<{ id: string; lacreFechamento: string | null }> }>(historico).data).toContainEqual(
-      expect.objectContaining({ id: caixaId, lacreFechamento: "FCH-CAIXA-TESTE-001" })
+      expect.objectContaining({ id: caixaId, lacreFechamento: abertura.lacreFechamento })
     );
   });
 
@@ -551,13 +598,25 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${inexistente}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { lacreFechamento: "FCH-INEXISTENTE" }
+      payload: {
+        lacreFechamento: "FCH-INEXISTENTE",
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 0,
+        valorMoedasFechamento: 0
+      }
     });
     const fecharFechado = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaFechado}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { lacreFechamento: "FCH-JA-FECHADO" }
+      payload: {
+        lacreFechamento: "FCH-JA-FECHADO",
+        caixaResponsavelNome: "Administrador de teste",
+        supervisorResponsavelNome: "Supervisor de teste",
+        valorEspecieFechamento: 0,
+        valorMoedasFechamento: 0
+      }
     });
 
     assertProblem(fecharInexistente, 404);
@@ -623,23 +682,19 @@ describe("caixa integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const abertura = (usuarioCaixaId: string, observacao: string) =>
+    const payloadCaixa = await prepararAberturaFisica(pdvId, contaId, usuarioCaixaId, "Abertura A");
+    const payloadGerente = await prepararAberturaFisica(pdvId, contaId, usuarioGerenteId, "Abertura B");
+    const abertura = (payload: Record<string, unknown>) =>
       contexto.app.inject({
         method: "POST",
         url: "/api/caixa/abrir",
         headers: { cookie: cookieAdmin },
-        payload: {
-          empresaId: idsTeste.empresaA,
-          pdvId,
-          usuarioCaixaId,
-          dataHoraAbertura: "2026-02-10T08:00",
-          observacao
-        }
+        payload
       });
 
     const [primeira, segunda] = await Promise.all([
-      abertura(usuarioCaixaId, "Abertura A"),
-      abertura(usuarioGerenteId, "Abertura B")
+      abertura(payloadCaixa),
+      abertura(payloadGerente)
     ]);
 
     const statuses = [primeira.statusCode, segunda.statusCode].sort();
@@ -665,13 +720,8 @@ describe("caixa integration", () => {
       "select id from fechamentos_caixa where pdv_id = $1 and status = 'aberto'",
       [pdvId]
     );
-    const fechar = await contexto.app.inject({
-      method: "POST",
-      url: `/api/caixa/${caixaAberto?.id}/fechar`,
-      headers: { cookie: cookieAdmin },
-      payload: { observacao: "Limpeza do teste de concorrencia por PDV", lacreFechamento: "FCH-CONC-PDV" }
-    });
-    expect(fechar.statusCode, fechar.body).toBe(204);
+    if (!caixaAberto?.id) throw new Error("Corrida por PDV terminou sem caixa aberto");
+    registrarEncerramentoCaixaParaTeste(caixaAberto.id);
   });
 
   it("Deve_AbrirApenasUmCaixa_Quando_MesmoOperadorConcorreEmPdvsDiferentes", async () => {
@@ -693,19 +743,23 @@ describe("caixa integration", () => {
         payload: { empresaId: idsTeste.empresaA, nome: `PDV operador concorrente ${sufixo}`, contaId, ativo: true }
       });
       expect(pdv.statusCode, pdv.body).toBe(201);
-      return json<{ data: { id: string } }>(pdv).data.id;
+      return { contaId, pdvId: json<{ data: { id: string } }>(pdv).data.id };
     };
 
     const [pdvA, pdvB] = await Promise.all([criarPdv("A"), criarPdv("B")]);
-    const abrir = (pdvId: string) =>
+    const [payloadA, payloadB] = await Promise.all([
+      prepararAberturaFisica(pdvA.pdvId, pdvA.contaId, usuarioGerenteId, "Operador concorrente A"),
+      prepararAberturaFisica(pdvB.pdvId, pdvB.contaId, usuarioGerenteId, "Operador concorrente B")
+    ]);
+    const abrir = (payload: Record<string, unknown>) =>
       contexto.app.inject({
         method: "POST",
         url: "/api/caixa/abrir",
         headers: { cookie: cookieAdmin },
-        payload: { empresaId: idsTeste.empresaA, pdvId, usuarioCaixaId: usuarioGerenteId }
+        payload
       });
 
-    const respostas = await Promise.all([abrir(pdvA), abrir(pdvB)]);
+    const respostas = await Promise.all([abrir(payloadA), abrir(payloadB)]);
     expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([201, 400]);
     const perdedor = respostas.find((resposta) => resposta.statusCode === 400);
     expect(perdedor?.json()).toMatchObject({ title: "Usuário do caixa ja possui um caixa aberto" });
@@ -717,13 +771,8 @@ describe("caixa integration", () => {
       [idsTeste.empresaA, usuarioGerenteId]
     );
     expect(aberto?.total).toBe(1);
-    const fechar = await contexto.app.inject({
-      method: "POST",
-      url: `/api/caixa/${aberto?.id}/fechar`,
-      headers: { cookie: cookieAdmin },
-      payload: { observacao: "Limpeza do teste de concorrencia por operador", lacreFechamento: "FCH-CONC-OPERADOR" }
-    });
-    expect(fechar.statusCode, fechar.body).toBe(204);
+    if (!aberto?.id) throw new Error("Corrida por operador terminou sem caixa aberto");
+    registrarEncerramentoCaixaParaTeste(aberto.id);
   });
 
   // D6 substituiu a regra antiga ("fechar com saldo positivo e barrado, 400"): hoje o fechamento
@@ -737,11 +786,26 @@ describe("caixa integration", () => {
       [idsTeste.caixaAberto]
     );
 
+    const lacres = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/lacres-retorno`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(lacres);
+    const lacre = json<{ data: Array<{ id: string }> }>(lacres).data[0];
+    if (!lacre) throw new Error("Caixa seed sem lacre retornável para provar o teto físico");
     const resposta = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { valor: 999999, idempotenciaChave: randomUUID() }
+      payload: {
+        valor: 999999,
+        valorEspecie: 999999,
+        valorMoedas: 0,
+        lacreId: lacre.id,
+        responsavelNome: "Administrador de teste",
+        idempotenciaChave: randomUUID()
+      }
     });
 
     assertProblem(resposta, 400);
