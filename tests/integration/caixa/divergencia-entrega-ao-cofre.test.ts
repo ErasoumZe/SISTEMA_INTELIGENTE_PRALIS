@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -72,19 +71,10 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   // Caminho canonico: o unico escritor de `retorno`. `cookie` e parametrizavel porque
   // `podeOperarCaixa` aceita tambem quem tem `caixas_gerenciar` — e um dos casos abaixo precisa que
   // quem ENTREGA nao seja o operador.
-  async function entregarAoCofre(caixaId: string, valor: number, lacre: string, cookie = cookieCaixa) {
-    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookie, {
-      valor,
-      lacre,
-      idempotenciaChave: randomUUID()
-    });
-    expect(resposta.statusCode, resposta.body).toBe(200);
-    const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
-      [caixaId]
-    );
-    if (!movimento) throw new Error("Entrega ao cofre nao encontrada");
-    return movimento.id;
+  async function entregarAoCofre(caixaId: string, valor: number, _lacre: string, cookie = cookieCaixa) {
+    const retorno = await criarRetornoValido(contexto.app, { cookieOperador: cookie, caixaId, valor });
+    if (!retorno.resposta.id) throw new Error("Entrega ao cofre nao encontrada");
+    return retorno.resposta.id;
   }
 
   // R-028: quem entrega nunca confere a propria entrega. O operador entrega, o gerente confere.
@@ -96,11 +86,19 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     });
   }
 
-  function fechar(caixaId: string, observacao = "Fechamento do turno") {
-    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, {
-      observacao,
-      lacreFechamento: `FCH-R183-${caixaId}`
-    });
+  const payloadsFechamento = new Map<string, Awaited<ReturnType<typeof prepararPayloadFechamentoValido>>>();
+
+  async function fechar(caixaId: string, observacao = "Fechamento do turno") {
+    let payload = payloadsFechamento.get(caixaId);
+    if (!payload) {
+      payload = await prepararPayloadFechamentoValido(contexto.app, {
+        cookieOperador: cookieCaixa,
+        caixaId,
+        observacao
+      });
+      payloadsFechamento.set(caixaId, payload);
+    }
+    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, { ...payload, observacao });
   }
 
   function linha(transferenciaId: string) {

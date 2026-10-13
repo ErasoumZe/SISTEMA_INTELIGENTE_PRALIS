@@ -1,9 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador, universoDoCaixa } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  criarRetornoValido,
+  prepararPayloadFechamentoValido,
+  universoDoCaixa
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
@@ -85,19 +89,10 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
-  async function entregarAoCofre(caixaId: string, valor: number, lacre?: string, cookieOperador = cookieCaixa) {
-    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieOperador, {
-      valor,
-      ...(lacre ? { lacre } : {}),
-      idempotenciaChave: randomUUID()
-    });
-    expect(resposta.statusCode, resposta.body).toBe(200);
-    const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
-      [caixaId]
-    );
-    if (!movimento) throw new Error("Entrega ao cofre nao encontrada");
-    return movimento.id;
+  async function entregarAoCofre(caixaId: string, valor: number, _lacre?: string, cookieOperador = cookieCaixa) {
+    const retorno = await criarRetornoValido(contexto.app, { cookieOperador, caixaId, valor });
+    if (!retorno.resposta.id) throw new Error("Entrega ao cofre nao encontrada");
+    return retorno.resposta.id;
   }
 
   // R-028: quem entrega nunca confere a propria entrega. O operador entrega, o gerente (responsavel
@@ -110,11 +105,19 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     });
   }
 
-  function fechar(caixaId: string, observacao = "Fechamento do turno") {
-    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, {
-      observacao,
-      lacreFechamento: `FCH-R171-${caixaId}`
-    });
+  const payloadsFechamento = new Map<string, Awaited<ReturnType<typeof prepararPayloadFechamentoValido>>>();
+
+  async function fechar(caixaId: string, observacao = "Fechamento do turno") {
+    let payload = payloadsFechamento.get(caixaId);
+    if (!payload) {
+      payload = await prepararPayloadFechamentoValido(contexto.app, {
+        cookieOperador: cookieCaixa,
+        caixaId,
+        observacao
+      });
+      payloadsFechamento.set(caixaId, payload);
+    }
+    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, { ...payload, observacao });
   }
 
   async function statusDoCaixa(caixaId: string) {
@@ -160,7 +163,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
 
     assertProblem(await fechar(fx.caixaId), 400);
 
-    const conferencia = await conferir(entrega, 200, "G1-CONFERIDA");
+    const conferencia = await conferir(entrega, 200);
     expect(conferencia.statusCode, conferencia.body).toBe(200);
 
     const fechamento = await fechar(fx.caixaId);
@@ -328,6 +331,11 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     const fx = await novoCaixa("G1 corrida");
     await venda(500);
     const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-CORRIDA");
+    const payloadFechamento = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: fx.caixaId
+    });
+    payloadsFechamento.set(fx.caixaId, payloadFechamento);
 
     const bloqueador = await abrirBloqueador();
     try {
@@ -340,7 +348,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
 
       // Enquanto o fechamento espera, a conferencia entra pelo fio real — e tambem espera, por
       // causa do FOR SHARE na mesma linha. Soltar o bloqueador resolve as duas na ordem do banco.
-      const conferencia = conferir(entrega, 200, "G1-CORRIDA");
+      const conferencia = conferir(entrega, 200);
       await bloqueador.cliente.query("commit");
 
       const [resposta, conferida] = await Promise.all([fechamento, conferencia]);
