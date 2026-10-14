@@ -143,6 +143,20 @@ export async function escolherProduto(raiz: Locator, page: Page, descricao: stri
 }
 
 /**
+ * Espera o overlay do Vuetify sair de cena por completo.
+ *
+ * Nao basta a lista sumir: o `.v-overlay__scrim` continua no DOM durante a animacao de saida e
+ * INTERCEPTA o proximo clique. O sintoma e cruel: o Playwright repete o clique ate o timeout e o
+ * relatorio acusa "botao nao clicavel", como se a tela estivesse quebrada.
+ *
+ * Use SO depois de fechar um dialogo, nunca dentro de um. Um modal aberto tem scrim por direito, e
+ * esperar zero aqui dentro trava para sempre.
+ */
+export async function esperarOverlayFechar(page: Page) {
+  await expect(page.locator(".v-overlay-container .v-overlay__scrim")).toHaveCount(0);
+}
+
+/**
  * Escolhe uma opcao num `v-select` de filtro pelo rotulo EXATO.
  *
  * `getByLabel(..., { exact: false })` casa por substring e sem diferenciar maiusculas: procurar

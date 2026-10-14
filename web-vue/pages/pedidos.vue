@@ -190,7 +190,16 @@ function editarPedido(pedido: PedidoDto) {
     observacao: pedido.observacao ?? "",
     itens: (pedido.itens ?? []).map((item) => ({ produtoId: item.produtoId ?? "", quantidade: item.quantidade }))
   });
+  // Fecha o detalhe antes de abrir o formulario. Dois modais empilhados deixam o operador sem saber
+  // em qual esta, e o de tras segue interceptando clique. Ao salvar, o detalhe reabre sozinho.
+  dialogDetalhe.value = false;
   dialogForm.value = true;
+}
+
+/** Mesma razao do `editarPedido`: a conferencia substitui o detalhe em vez de cobri-lo. */
+function abrirRecebimento() {
+  dialogDetalhe.value = false;
+  dialogRecebimento.value = true;
 }
 async function mudarSituacao(status: "enviado" | "retornado" | "confirmado" | "cancelado") {
   if (!detalhe.value) return false;
@@ -377,7 +386,7 @@ onMounted(async () => {
       @editar="editarPedido"
       @enviar-whatsapp="enviarWhatsapp"
       @situacao="mudarSituacao"
-      @receber="dialogRecebimento = true"
+      @receber="abrirRecebimento"
     />
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>

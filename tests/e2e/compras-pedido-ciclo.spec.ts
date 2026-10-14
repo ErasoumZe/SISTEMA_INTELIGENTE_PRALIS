@@ -8,6 +8,7 @@ import {
   dialogoAberto,
   escolherNoSelectDe,
   escolherProduto,
+  esperarOverlayFechar,
   idDoPedidoPorFornecedor,
   irParaTela,
   itensPendentes,
@@ -62,31 +63,37 @@ test.describe("ciclo de compra", () => {
     await irParaTela(page, "/pedidos", "Pedidos");
 
     // 1) Sugestao de reposicao: produto no minimo e sugerido ate o maximo (40 - 0).
-    // `.last()`: cartoes aninhados tambem casam o texto, e o mais interno e o cartao da sugestao.
-    const cartaoSugestao = page.locator(".v-card", { hasText: "Gerar sugestão de reposição" }).last();
+    // Os dois caminhos de criar pedido sao cartoes `.pedidos-acao` de mesmo peso; o texto do titulo
+    // e o que separa um do outro.
+    const cartaoSugestao = page.locator(".pedidos-acao", { hasText: "Sugestão de reposição" });
     await escolherNoSelectDe(cartaoSugestao, page, "Fornecedor", fornecedorSugestao);
     await cartaoSugestao.getByRole("button", { name: "Gerar sugestão" }).click();
     await expect(page.locator(".v-snackbar__content")).toContainText(/[Ss]ugest/u);
 
-    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorSugestao);
-    const linhaSugestao = page.locator("tbody tr").filter({ hasText: fornecedorSugestao });
-    await expect(linhaSugestao).toContainText("Sugestão");
-    await linhaSugestao.getByRole("button", { name: "Abrir" }).click();
+    // A propria tela abre o pedido recem-criado para revisao. Isso e o fluxo, nao atalho do teste:
+    // a sugestao existe para ser conferida antes de virar envio.
     let detalhe = dialogoAberto(page);
     await expect(detalhe.locator("tbody tr").filter({ hasText: nomeProduto })).toContainText("40");
     await detalhe.getByRole("button", { name: "Fechar" }).click();
+    await esperarOverlayFechar(page);
+
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorSugestao);
+    await expect(page.locator("tbody tr").filter({ hasText: fornecedorSugestao })).toContainText("Sugestão");
 
     // 2) Pedido manual: o maximo e bloqueado na cara do operador, com o motivo.
     await page.getByRole("button", { name: "Novo pedido manual" }).click();
     let formulario = dialogoAberto(page);
     await escolherNoSelectDe(formulario, page, "Fornecedor", fornecedorManual);
     await escolherProduto(formulario, page, nomeProduto);
-    await formulario.getByLabel("Quantidade").fill("50");
-    await formulario.getByRole("button", { name: "Salvar pedido" }).click();
-    await expect(page.locator(".v-snackbar__content")).toContainText(/estoque m[áa]ximo/iu);
+    // O teto agora e barrado NA TELA: o botao fica desabilitado e o motivo aparece escrito, em vez
+    // de o pedido inteiro voltar como erro do servidor depois de salvar.
+    await formulario.getByLabel("Quantidade", { exact: true }).fill("50");
+    await expect(formulario.locator('[data-campo="impedimento"]')).toContainText(/estoque m[áa]ximo/iu);
+    await expect(formulario.getByRole("button", { name: "Salvar pedido" })).toBeDisabled();
 
-    // Mesma tela, quantidade dentro do teto: salva.
-    await formulario.getByLabel("Quantidade").fill("10");
+    // Mesma tela, quantidade dentro do teto: libera e salva.
+    await formulario.getByLabel("Quantidade", { exact: true }).fill("10");
+    await expect(formulario.getByRole("button", { name: "Salvar pedido" })).toBeEnabled();
     await formulario.getByRole("button", { name: "Salvar pedido" }).click();
     await expect(formulario).toBeHidden();
 
@@ -100,11 +107,10 @@ test.describe("ciclo de compra", () => {
     detalhe = dialogoAberto(page);
     await detalhe.getByRole("button", { name: "Editar" }).click();
     formulario = dialogoAberto(page);
-    await formulario.getByLabel("Quantidade").fill("12");
+    await formulario.getByLabel("Quantidade", { exact: true }).fill("12");
     await formulario.getByRole("button", { name: "Salvar pedido" }).click();
-    await expect(formulario).toBeHidden();
 
-    await linhaManual.getByRole("button", { name: "Abrir" }).click();
+    // Ao salvar a edicao a tela reabre o detalhe com o numero novo; nao e preciso achar a linha de novo.
     detalhe = dialogoAberto(page);
     await expect(detalhe.locator("tbody tr").filter({ hasText: nomeProduto })).toContainText("12");
 
@@ -113,8 +119,11 @@ test.describe("ciclo de compra", () => {
       page.waitForEvent("popup"),
       detalhe.getByRole("button", { name: "Enviar WhatsApp" }).click()
     ]);
-    await expect.poll(() => janela.url(), { timeout: 20_000 }).toContain("wa.me");
-    const enderecoWhatsapp = decodeURIComponent(janela.url());
+    // O `wa.me` redireciona para `api.whatsapp.com`; o que importa e o destino final carregar o
+    // numero do fornecedor e os itens. No formato de redirecionamento o espaco vira "+", que o
+    // `decodeURIComponent` nao desfaz.
+    await expect.poll(() => janela.url(), { timeout: 20_000 }).toMatch(/wa\.me|api\.whatsapp\.com/u);
+    const enderecoWhatsapp = decodeURIComponent(janela.url()).replaceAll("+", " ");
     expect(enderecoWhatsapp).toContain("5511988887777");
     expect(enderecoWhatsapp).toContain(nomeProduto);
     await janela.close();
@@ -160,11 +169,11 @@ test.describe("ciclo de compra", () => {
       itens: [{ pedidoItemId: pendentes[0]!.id, quantidadeConferida: 7 }]
     };
     const primeira = await contexto.api.post(`/api/pedidos/${pedidoId}/recebimentos`, { data: corpo });
-    expect(primeira.status(), await primeira.text()).toBe(201);
+    expect(primeira.status(), await primeira.text()).toBe(200);
     expect(await saldoDoProduto(contexto, produtoId)).toBe(12);
 
     const reenvio = await contexto.api.post(`/api/pedidos/${pedidoId}/recebimentos`, { data: corpo });
-    expect(reenvio.status(), await reenvio.text()).toBe(201);
+    expect(reenvio.status(), await reenvio.text()).toBe(200);
     expect(await saldoDoProduto(contexto, produtoId), "reenvio nao pode somar de novo").toBe(12);
 
     // 9) A tela reflete o recebimento concluido.

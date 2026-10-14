@@ -25,7 +25,9 @@ test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page })
 
   await page.reload();
   linha = page.locator("tbody tr").filter({ hasText: nome });
-  await expect(linha).toBeVisible();
+  // Teto alto: depois do reload a rota volta a ser montada e a listagem so chega depois da sessao;
+  // com o servidor de desenvolvimento frio isso passa dos 15s padrao do expect.
+  await expect(linha).toBeVisible({ timeout: 60_000 });
   await linha.getByRole("button", { name: "Editar" }).click();
   dialogo = page.locator(".v-dialog.v-overlay--active");
   await expect(dialogo.getByLabel("Nome", { exact: true })).toHaveValue(nome);
@@ -34,6 +36,8 @@ test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page })
   await dialogo.getByRole("button", { name: "Salvar", exact: true }).click();
 
   await page.reload();
-  await expect(page.locator("tbody tr").filter({ hasText: nomeEditado })).toContainText("(11) 98765-4321");
+  await expect(page.locator("tbody tr").filter({ hasText: nomeEditado })).toContainText("(11) 98765-4321", {
+    timeout: 60_000
+  });
   expect(problemas).toEqual([]);
 });

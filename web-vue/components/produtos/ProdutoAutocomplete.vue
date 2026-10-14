@@ -63,7 +63,15 @@ function aoDigitar(valor: string) {
   debounce = setTimeout(() => void buscar({ busca: valor }), 300);
 }
 
-function rotulo(produto: ProdutoOpcao) {
+/**
+ * Rotulo do item na lista e no campo.
+ *
+ * A guarda de tipo nao e preciosismo: quando o v-model esta vazio, o Vuetify chama `item-title`
+ * com o PROPRIO valor ("" ou null) em vez de um produto. Sem a guarda, `produto.descricao` vira
+ * `undefined` e o campo de um pedido novo abre escrito "undefined" na cara do comprador.
+ */
+function rotulo(produto: ProdutoOpcao | string | null | undefined) {
+  if (!produto || typeof produto !== "object") return "";
   const codigo = produto.codigoInterno ? `${produto.codigoInterno} · ` : "";
   const marca = produto.marca ? ` (${produto.marca})` : "";
   return `${codigo}${produto.descricao}${marca}`;
