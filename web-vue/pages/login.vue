@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PwaInstallButton from "~/components/PwaInstallButton.vue";
+import { agendarTransicaoEntrada } from "~/composables/useTransicaoEntrada";
 
 const router = useRouter();
 const { apiUrl } = useApi();
@@ -40,6 +41,9 @@ async function login() {
       // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
       // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
       limparEstadoWorkspace(useNuxtApp().payload.state);
+      // A marca é consumida no painel, depois que a casca autenticada estiver renderizada. Não
+      // espera aqui: segurar a rota manteria o formulário visível atrás da animação.
+      agendarTransicaoEntrada();
       await router.push("/");
     } else {
       error.value = "E-mail ou senha inválidos.";
