@@ -20,10 +20,6 @@ const props = defineProps<{
 
 const modelo = defineModel<string>({ default: "" });
 
-// Quem monta um pedido precisa do produto INTEIRO, nao so do id: saldo, minimo, maximo e unidade
-// vem na mesma consulta que ja alimenta o seletor, entao avisamos o pai em vez de ele buscar de novo.
-const emit = defineEmits<{ selecionado: [produto: ProdutoOpcao | null] }>();
-
 const { apiGet } = useApi();
 
 const itens = ref<ProdutoOpcao[]>([]);
@@ -86,12 +82,6 @@ watch(
   () => props.empresaId,
   () => void buscar(modelo.value ? { ids: modelo.value } : {})
 );
-
-// Avisa o pai sempre que a escolha mudar OU quando a lista chegar com o item ja gravado (edicao de
-// pedido antigo): nos dois casos o produto completo so existe depois que `itens` carrega.
-watch([modelo, itens], ([id, lista]) => {
-  emit("selecionado", lista.find((produto) => produto.id === id) ?? null);
-});
 
 onBeforeUnmount(() => {
   if (debounce) clearTimeout(debounce);

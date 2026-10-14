@@ -173,16 +173,13 @@ export async function opcoesDeProdutoRepository(entrada: {
         codigoInterno: produtos.codigoInterno,
         codigoBarras: produtos.codigoBarras,
         marca: produtos.marca,
-        status: produtos.status,
-        unidade: unidadesMedida.sigla,
-        quantidadeEstoque: produtos.quantidadeEstoque,
-        estoqueMin: produtos.estoqueMin,
-        estoqueMax: produtos.estoqueMax
+        status: produtos.status
       })
       .from(produtos)
-      // `leftJoin`: produto sem unidade cadastrada continua aparecendo no seletor; perder a linha
-      // seria pior que mostrar a quantidade sem sigla.
-      .leftJoin(unidadesMedida, eq(unidadesMedida.id, produtos.unidadeIndividualId))
+      // NAO acrescente campo aqui sem decidir o limite de novo. Esta projecao e compartilhada com
+      // quem tem apenas `mercadorias_visualizar`, e `produtos-listagem.test.ts` fixa exatamente
+      // estas seis chaves para nao vazar custo, margem e preco. Contexto de estoque para montar
+      // pedido vem de `/api/compras/estoque`, que exige `estoque_produtos_visualizar`.
       .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
       .orderBy(asc(produtos.descricao))
       .limit(entrada.limite)

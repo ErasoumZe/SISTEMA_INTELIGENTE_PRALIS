@@ -49,6 +49,9 @@ export type ProdutoEstoqueDto = {
   localVenda: string[];
   localEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  // Sigla da unidade individual. "12" sozinho nao diz se sao 12 quilos ou 12 caixas, e quem monta
+  // pedido decide pela unidade. Esta rota ja exige `estoque_produtos_visualizar`.
+  unidade: string | null;
 };
 
 export type ConferenciaEstoqueDto = {

@@ -11,7 +11,7 @@
  * Agora o cabecalho e o rodape ficam fixos, os itens rolam no meio, e salvar fica bloqueado com
  * motivo visivel enquanto houver linha incompleta ou acima do maximo.
  */
-import type { PedidoRecorrencia, ProdutoOpcao } from "@padaria/shared";
+import type { PedidoRecorrencia, ProdutoEstoqueDto } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
 
@@ -30,6 +30,12 @@ const props = defineProps<{
   fornecedores: Opcao[];
   form: PedidoFormEdicao;
   salvando: boolean;
+  /**
+   * Posicao de estoque por id de produto. Vazio quando o ator nao tem `estoque_produtos_visualizar`:
+   * nesse caso a tela continua salvando pedido, so nao mostra saldo nem antecipa o teto, que o
+   * servidor valida de qualquer jeito.
+   */
+  estoquePorProduto: Record<string, ProdutoEstoqueDto>;
 }>();
 const emit = defineEmits<{ salvar: []; adicionar: []; remover: [indice: number] }>();
 
@@ -39,9 +45,6 @@ const recorrencias: Array<{ value: PedidoRecorrencia; label: string }> = [
   { value: "quinzenal", label: "Quinzenal" },
   { value: "mensal", label: "Mensal" }
 ];
-
-/** Produto escolhido por linha, para o resumo e para a trava do maximo. */
-const produtosPorIndice = reactive<Record<number, ProdutoOpcao | null>>({});
 
 const fornecedorSelecionado = computed(() =>
   props.fornecedores.find((fornecedor) => fornecedor.id === props.form.fornecedorId)
@@ -59,8 +62,8 @@ const produtoRepetido = computed(() => {
   return new Set(ids).size !== ids.length;
 });
 const linhasAcimaDoMaximo = computed(() =>
-  props.form.itens.filter((item, indice) => {
-    const produto = produtosPorIndice[indice];
+  props.form.itens.filter((item) => {
+    const produto = props.estoquePorProduto[item.produtoId];
     if (!produto || produto.estoqueMax === null) return false;
     return Number(produto.quantidadeEstoque) + Number(item.quantidade) > Number(produto.estoqueMax);
   })
@@ -73,18 +76,6 @@ const impedimento = computed(() => {
   if (linhasAcimaDoMaximo.value.length) return "Há item acima do estoque máximo configurado.";
   return "";
 });
-
-function aoEscolherProduto(indice: number, produto: ProdutoOpcao | null) {
-  produtosPorIndice[indice] = produto;
-}
-
-function remover(indice: number) {
-  // O mapa e indexado por posicao: ao remover uma linha, as de baixo sobem.
-  const total = props.form.itens.length;
-  for (let i = indice; i < total - 1; i += 1) produtosPorIndice[i] = produtosPorIndice[i + 1] ?? null;
-  delete produtosPorIndice[total - 1];
-  emit("remover", indice);
-}
 
 const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 </script>
@@ -134,8 +125,8 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
           :empresa-id="empresaId"
           :indice="indice"
           :pode-remover="form.itens.length > 1"
-          @produto="(produto) => aoEscolherProduto(indice, produto)"
-          @remover="remover(indice)"
+          :estoque="estoquePorProduto[item.produtoId] ?? null"
+          @remover="emit('remover', indice)"
         />
 
         <v-alert

@@ -5,7 +5,8 @@ import {
   gruposMercadorias,
   pedidosRecebimentos,
   perfisUsuarios,
-  produtos
+  produtos,
+  unidadesMedida
 } from "@padaria/db/schema";
 import type {
   ConferenciaEstoqueDto,
@@ -82,10 +83,14 @@ export async function listarEstoqueProdutosRepository(
       localVenda1: produtos.localVenda1,
       localVenda2: produtos.localVenda2,
       localEstoque: produtos.setorEstoque,
-      curvaAbc: produtos.curvaAbc
+      curvaAbc: produtos.curvaAbc,
+      unidade: unidadesMedida.sigla
     })
     .from(produtos)
     .leftJoin(gruposMercadorias, eq(gruposMercadorias.id, produtos.grupoMercadoriaId))
+    // `leftJoin`: produto sem unidade cadastrada continua na listagem; perder a linha seria pior
+    // que mostrar a quantidade sem sigla.
+    .leftJoin(unidadesMedida, eq(unidadesMedida.id, produtos.unidadeIndividualId))
     .where(and(...condicoes))
     .orderBy(asc(produtos.descricao));
   return linhas.map((linha) => ({
@@ -99,7 +104,8 @@ export async function listarEstoqueProdutosRepository(
     areaEstoque: linha.areaEstoque,
     localVenda: [linha.localVenda1, linha.localVenda2].filter((local): local is string => Boolean(local)),
     localEstoque: linha.localEstoque,
-    curvaAbc: linha.curvaAbc
+    curvaAbc: linha.curvaAbc,
+    unidade: linha.unidade
   }));
 }
 

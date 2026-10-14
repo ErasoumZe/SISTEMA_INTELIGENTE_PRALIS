@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AuthSession, PedidoDto, PedidoStatus } from "@padaria/shared";
+import type { AuthSession, PedidoDto, PedidoStatus, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
@@ -34,6 +34,7 @@ const transicionando = ref(false);
 const recebendo = ref(false);
 const tentativaRecebimento = ref<TentativaRecebimento | null>(null);
 const sugestaoFornecedorId = ref("");
+const estoquePorProduto = ref<Record<string, ProdutoEstoqueDto>>({});
 
 function formVazio(): PedidoFormEdicao {
   return {
@@ -107,13 +108,30 @@ async function carregarFornecedores(): Promise<Opcao[]> {
   return todos;
 }
 
+/**
+ * Posicao de estoque por produto, para o formulario mostrar saldo, minimo e maximo e antecipar o
+ * teto. Vem da rota de Compras, que exige `estoque_produtos_visualizar`; quem nao tem a permissao
+ * segue criando pedido normalmente, so sem o contexto na tela. O servidor valida o teto de todo jeito.
+ */
+async function carregarEstoque(): Promise<Record<string, ProdutoEstoqueDto>> {
+  if (!temPermissao("estoque_produtos_visualizar")) return {};
+  try {
+    const linhas = await apiGet<ProdutoEstoqueDto[]>(`/api/compras/estoque${query()}`);
+    return Object.fromEntries(linhas.map((linha) => [linha.id, linha]));
+  } catch {
+    // Falha aqui nao pode derrubar a tela de Pedidos: o contexto e um apoio, nao um pre-requisito.
+    return {};
+  }
+}
+
 async function carregarDados() {
   if (!empresaId.value) return;
   empresaCarregando.value = true;
   try {
-    [pedidos.value, fornecedores.value] = await Promise.all([
+    [pedidos.value, fornecedores.value, estoquePorProduto.value] = await Promise.all([
       apiGet<PedidoDto[]>(`/api/pedidos${query()}`),
-      carregarFornecedores()
+      carregarFornecedores(),
+      carregarEstoque()
     ]);
   } catch (causa) {
     notificar(mensagemErro(causa), "error");
@@ -367,6 +385,7 @@ onMounted(async () => {
       :fornecedores="fornecedores"
       :form="form"
       :salvando="salvando"
+      :estoque-por-produto="estoquePorProduto"
       @salvar="salvarPedido"
       @adicionar="adicionarItem"
       @remover="removerItem"

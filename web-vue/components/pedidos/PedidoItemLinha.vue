@@ -6,24 +6,25 @@
  * contra minimo e maximo e avisa que a quantidade estourou o teto ANTES de salvar. Antes disso o
  * comprador digitava as cegas e descobria o limite no erro do servidor, com o pedido inteiro perdido.
  */
-import type { ProdutoOpcao } from "@padaria/shared";
+import type { ProdutoEstoqueDto } from "@padaria/shared";
 import ProdutoAutocomplete from "~/components/produtos/ProdutoAutocomplete.vue";
 
 const props = defineProps<{
   empresaId: string;
   indice: number;
   podeRemover: boolean;
+  /**
+   * Posicao de estoque do produto escolhido, quando o ator tem permissao para ler estoque. Vem de
+   * `/api/compras/estoque`, nao do seletor de produto: a projecao do seletor e compartilhada com
+   * quem so lanca mercadoria e tem lista de campos fechada por teste.
+   */
+  estoque: ProdutoEstoqueDto | null;
 }>();
 const produtoId = defineModel<string>("produtoId", { required: true });
 const quantidade = defineModel<string>("quantidade", { required: true });
-const emit = defineEmits<{ remover: []; produto: [produto: ProdutoOpcao | null] }>();
+const emit = defineEmits<{ remover: [] }>();
 
-const produto = ref<ProdutoOpcao | null>(null);
-
-function aoEscolher(escolhido: ProdutoOpcao | null) {
-  produto.value = escolhido;
-  emit("produto", escolhido);
-}
+const produto = computed(() => props.estoque);
 
 const numero = (valor: string | null | undefined) => (valor === null || valor === undefined ? null : Number(valor));
 const saldo = computed(() => numero(produto.value?.quantidadeEstoque) ?? 0);
@@ -66,12 +67,7 @@ function completarAteOMaximo() {
 <template>
   <div class="item-linha" :class="{ 'item-linha--alerta': estouraMaximo }" :data-item="indice">
     <div class="item-linha__produto">
-      <ProdutoAutocomplete
-        v-model="produtoId"
-        :empresa-id="empresaId"
-        densidade="comfortable"
-        @selecionado="aoEscolher"
-      />
+      <ProdutoAutocomplete v-model="produtoId" :empresa-id="empresaId" densidade="comfortable" />
       <div v-if="produto" class="item-linha__contexto">
         <v-chip size="x-small" variant="tonal" :color="abaixoDoMinimo ? 'warning' : undefined" label>
           Em estoque {{ formatar(saldo) }} {{ unidade }}
