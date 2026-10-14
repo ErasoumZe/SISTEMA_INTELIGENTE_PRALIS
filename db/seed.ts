@@ -792,29 +792,6 @@ await banco.delete(cargos).where(and(eq(cargos.empresaId, empresaId), inArray(ca
 // Area e setor podem ser referenciados por colaboradores criados durante testes locais.
 // O seed deve ser repetivel sem apagar esses colaboradores: reutiliza os registros base em
 // vez de removê-los e recriá-los a cada execução.
-await banco.delete(unidadesMedida).where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")));
-await banco
-  .delete(gruposRetiradas)
-  .where(
-    and(
-      eq(gruposRetiradas.empresaId, empresaId),
-      inArray(gruposRetiradas.nome, ["Sangria", "Retiradas operacionais", "Retirada operacional"])
-    )
-  );
-await banco
-  .delete(gruposMercadorias)
-  .where(and(eq(gruposMercadorias.empresaId, empresaId), inArray(gruposMercadorias.nome, ["Farinhas", "Insumos"])));
-await banco
-  .delete(gruposDespesas)
-  .where(
-    and(
-      eq(gruposDespesas.empresaId, empresaId),
-      inArray(gruposDespesas.nome, ["Pecas de maquina", "Manutencao", "Operacional", "Quebra de caixa"])
-    )
-  );
-await banco
-  .delete(gruposVendas)
-  .where(and(eq(gruposVendas.empresaId, empresaId), inArray(gruposVendas.nome, ["Vendas balcão", "Vendas delivery"])));
 await banco
   .delete(fornecedores)
   .where(and(eq(fornecedores.empresaId, empresaId), eq(fornecedores.nome, "Fornecedor Exemplo")));
@@ -928,40 +905,108 @@ const formasPagamentoSeed = await banco
   .returning({ id: formasPagamento.id, nome: formasPagamento.nome });
 const formaPagamentoIds = new Map(formasPagamentoSeed.map((forma) => [forma.nome, forma.id]));
 
-const grupoDespesaPai = (
-  await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
-)[0];
+const [grupoDespesaPaiExistente] = await banco
+  .select({ id: gruposDespesas.id })
+  .from(gruposDespesas)
+  .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, "Operacional")))
+  .limit(1);
+const grupoDespesaPai =
+  grupoDespesaPaiExistente ??
+  (
+    await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
+  )[0];
 if (!grupoDespesaPai) throw new Error("Grupo de despesa pai nao foi criado");
-const grupoDespesaSub = (
-  await banco
-    .insert(gruposDespesas)
-    .values({ empresaId, nome: "Manutencao", grupoPaiId: grupoDespesaPai.id })
-    .returning({ id: gruposDespesas.id })
-)[0];
+const [grupoDespesaSubExistente] = await banco
+  .select({ id: gruposDespesas.id })
+  .from(gruposDespesas)
+  .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, "Manutencao")))
+  .limit(1);
+const grupoDespesaSub =
+  grupoDespesaSubExistente ??
+  (
+    await banco
+      .insert(gruposDespesas)
+      .values({ empresaId, nome: "Manutencao", grupoPaiId: grupoDespesaPai.id })
+      .returning({ id: gruposDespesas.id })
+  )[0];
 if (!grupoDespesaSub) throw new Error("Grupo de despesa filho nao foi criado");
-await banco.insert(gruposDespesas).values({ empresaId, nome: "Quebra de caixa" });
-await banco.insert(gruposDespesas).values({ empresaId, nome: "Pecas de maquina", grupoPaiId: grupoDespesaSub.id });
+await banco
+  .update(gruposDespesas)
+  .set({ grupoPaiId: grupoDespesaPai.id })
+  .where(eq(gruposDespesas.id, grupoDespesaSub.id));
+for (const [nome, grupoPaiId] of [
+  ["Quebra de caixa", null],
+  ["Pecas de maquina", grupoDespesaSub.id]
+] as const) {
+  const [existente] = await banco
+    .select({ id: gruposDespesas.id })
+    .from(gruposDespesas)
+    .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, nome)))
+    .limit(1);
+  if (existente) {
+    await banco.update(gruposDespesas).set({ grupoPaiId }).where(eq(gruposDespesas.id, existente.id));
+  } else {
+    await banco.insert(gruposDespesas).values({ empresaId, nome, grupoPaiId });
+  }
+}
 
-const grupoMercadoriaPai = (
-  await banco.insert(gruposMercadorias).values({ empresaId, nome: "Insumos" }).returning({ id: gruposMercadorias.id })
-)[0];
+const [grupoMercadoriaPaiExistente] = await banco
+  .select({ id: gruposMercadorias.id })
+  .from(gruposMercadorias)
+  .where(and(eq(gruposMercadorias.empresaId, empresaId), eq(gruposMercadorias.nome, "Insumos")))
+  .limit(1);
+const grupoMercadoriaPai =
+  grupoMercadoriaPaiExistente ??
+  (
+    await banco.insert(gruposMercadorias).values({ empresaId, nome: "Insumos" }).returning({ id: gruposMercadorias.id })
+  )[0];
 if (!grupoMercadoriaPai) throw new Error("Grupo de mercadoria pai nao foi criado");
-const grupoMercadoria = (
-  await banco
-    .insert(gruposMercadorias)
-    .values({ empresaId, nome: "Farinhas", grupoPaiId: grupoMercadoriaPai.id })
-    .returning({ id: gruposMercadorias.id })
-)[0];
+const [grupoMercadoriaExistente] = await banco
+  .select({ id: gruposMercadorias.id })
+  .from(gruposMercadorias)
+  .where(and(eq(gruposMercadorias.empresaId, empresaId), eq(gruposMercadorias.nome, "Farinhas")))
+  .limit(1);
+const grupoMercadoria =
+  grupoMercadoriaExistente ??
+  (
+    await banco
+      .insert(gruposMercadorias)
+      .values({ empresaId, nome: "Farinhas", grupoPaiId: grupoMercadoriaPai.id })
+      .returning({ id: gruposMercadorias.id })
+  )[0];
 if (!grupoMercadoria) throw new Error("Grupo de mercadoria nao foi criado");
+await banco
+  .update(gruposMercadorias)
+  .set({ grupoPaiId: grupoMercadoriaPai.id })
+  .where(eq(gruposMercadorias.id, grupoMercadoria.id));
 
-const grupoRetiradaPai = (
-  await banco
-    .insert(gruposRetiradas)
-    .values({ empresaId, nome: "Retiradas operacionais" })
-    .returning({ id: gruposRetiradas.id })
-)[0];
+const [grupoRetiradaPaiExistente] = await banco
+  .select({ id: gruposRetiradas.id })
+  .from(gruposRetiradas)
+  .where(and(eq(gruposRetiradas.empresaId, empresaId), eq(gruposRetiradas.nome, "Retiradas operacionais")))
+  .limit(1);
+const grupoRetiradaPai =
+  grupoRetiradaPaiExistente ??
+  (
+    await banco
+      .insert(gruposRetiradas)
+      .values({ empresaId, nome: "Retiradas operacionais" })
+      .returning({ id: gruposRetiradas.id })
+  )[0];
 if (!grupoRetiradaPai) throw new Error("Grupo de retirada pai nao foi criado");
-await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
+const [grupoSangriaExistente] = await banco
+  .select({ id: gruposRetiradas.id })
+  .from(gruposRetiradas)
+  .where(and(eq(gruposRetiradas.empresaId, empresaId), eq(gruposRetiradas.nome, "Sangria")))
+  .limit(1);
+if (grupoSangriaExistente) {
+  await banco
+    .update(gruposRetiradas)
+    .set({ grupoPaiId: grupoRetiradaPai.id })
+    .where(eq(gruposRetiradas.id, grupoSangriaExistente.id));
+} else {
+  await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
+}
 
 // Grupos de patrimonio (D2): as seis siglas da aba PATRIMONIO da planilha. Idempotente pela
 // unica (empresa_id, sig) — rodar o seed de novo nao duplica.
@@ -970,18 +1015,42 @@ await banco
   .values(gruposPatrimonioPadrao.map((grupo) => ({ empresaId, sig: grupo.sig, nome: grupo.nome })))
   .onConflictDoNothing();
 
-const grupoVendaPai = (
-  await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id })
-)[0];
+const [grupoVendaPaiExistente] = await banco
+  .select({ id: gruposVendas.id })
+  .from(gruposVendas)
+  .where(and(eq(gruposVendas.empresaId, empresaId), eq(gruposVendas.nome, "Vendas balcão")))
+  .limit(1);
+const grupoVendaPai =
+  grupoVendaPaiExistente ??
+  (await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id }))[0];
 if (!grupoVendaPai) throw new Error("Grupo de venda pai nao foi criado");
-await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas delivery", grupoPaiId: grupoVendaPai.id });
-
-const unidade = (
+const [grupoVendaDeliveryExistente] = await banco
+  .select({ id: gruposVendas.id })
+  .from(gruposVendas)
+  .where(and(eq(gruposVendas.empresaId, empresaId), eq(gruposVendas.nome, "Vendas delivery")))
+  .limit(1);
+if (grupoVendaDeliveryExistente) {
   await banco
-    .insert(unidadesMedida)
-    .values({ empresaId, nome: "Unidade", sigla: "un" })
-    .returning({ id: unidadesMedida.id })
-)[0];
+    .update(gruposVendas)
+    .set({ grupoPaiId: grupoVendaPai.id })
+    .where(eq(gruposVendas.id, grupoVendaDeliveryExistente.id));
+} else {
+  await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas delivery", grupoPaiId: grupoVendaPai.id });
+}
+
+const [unidadeExistente] = await banco
+  .select({ id: unidadesMedida.id })
+  .from(unidadesMedida)
+  .where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")))
+  .limit(1);
+const unidade =
+  unidadeExistente ??
+  (
+    await banco
+      .insert(unidadesMedida)
+      .values({ empresaId, nome: "Unidade", sigla: "un" })
+      .returning({ id: unidadesMedida.id })
+  )[0];
 if (!unidade) throw new Error("Unidade de medida nao foi criada");
 
 const [areaExistente] = await banco
