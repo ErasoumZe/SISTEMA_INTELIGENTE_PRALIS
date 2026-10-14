@@ -1,6 +1,6 @@
 import "dotenv/config";
 import pg from "pg";
-import { and, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
@@ -24,6 +24,7 @@ import {
   despesasItens,
   edicoesCaixa,
   empresas,
+  estoqueMovimentos,
   fechamentosCaixa,
   fechamentosCaixaAnexos,
   fechamentosCaixaRelatoriosMaquininha,
@@ -44,6 +45,9 @@ import {
   mercadoriasItens,
   notificacoes,
   pdvs,
+  pedidos,
+  pedidosEventos,
+  pedidosRecebimentos,
   permissoesCargos,
   permissoesSetores,
   permissoesTabela,
@@ -548,6 +552,37 @@ async function removerUsuariosSeed() {
   console.info(`[seed] OK Usuarios seed antigos removidos: ${ids.length}`);
 }
 
+/**
+ * O seed de desenvolvimento apaga os fatos de Compras antes dos perfis que os assinaram.
+ * Como R-213 deixa o saldo materializado ser escrito apenas pelo recebimento, cada produto volta
+ * ao saldo anterior ao seu primeiro movimento antes de o livro ser descartado.
+ */
+async function limparComprasDaEmpresa(empresaId: string) {
+  await banco.transaction(async (tx) => {
+    const movimentos = await tx
+      .select({ produtoId: estoqueMovimentos.produtoId, saldoAnterior: estoqueMovimentos.saldoAnterior })
+      .from(estoqueMovimentos)
+      .where(eq(estoqueMovimentos.empresaId, empresaId))
+      .orderBy(asc(estoqueMovimentos.criadoEm));
+    const saldoInicialPorProduto = new Map<string, string>();
+    for (const movimento of movimentos) {
+      if (!saldoInicialPorProduto.has(movimento.produtoId)) {
+        saldoInicialPorProduto.set(movimento.produtoId, movimento.saldoAnterior);
+      }
+    }
+    for (const [produtoId, saldoAnterior] of saldoInicialPorProduto) {
+      await tx
+        .update(produtos)
+        .set({ quantidadeEstoque: saldoAnterior, atualizadoEm: new Date() })
+        .where(and(eq(produtos.id, produtoId), eq(produtos.empresaId, empresaId)));
+    }
+    await tx.delete(estoqueMovimentos).where(eq(estoqueMovimentos.empresaId, empresaId));
+    await tx.delete(pedidosEventos).where(eq(pedidosEventos.empresaId, empresaId));
+    await tx.delete(pedidosRecebimentos).where(eq(pedidosRecebimentos.empresaId, empresaId));
+    await tx.delete(pedidos).where(eq(pedidos.empresaId, empresaId));
+  });
+}
+
 console.info("[seed] Aplicando seed de desenvolvimento");
 console.info(`[seed] Banco: ${bancoSemSenha(databaseUrl)}`);
 console.info(`[seed] Permissoes: ${permissoes.length}`);
@@ -635,6 +670,7 @@ if (despesaIds.length) {
 if (mercadoriaIds.length) {
   await banco.delete(mercadoriasItens).where(inArray(mercadoriasItens.mercadoriaId, mercadoriaIds));
 }
+await limparComprasDaEmpresa(empresaId);
 // `notificacoes` e dado OPERACIONAL (R-017/R-019/R-037) e sai junto com o resto do movimento.
 // Precisa morrer ANTES de `removerUsuariosSeed()`: `destinatario_usuario_id` tem ON DELETE CASCADE,
 // mas `verificado_por` NAO tem — entao bastava alguem clicar "Marcar como verificada" uma vez para

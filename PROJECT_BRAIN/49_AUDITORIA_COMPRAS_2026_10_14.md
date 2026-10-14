@@ -39,7 +39,7 @@ Foram feitos **11 commits**, das 16:14 às 22:15. A sequência mostra que a roda
 | 21:28 | `2e5946f` | Registro das decisões operacionais ainda bloqueadas no documento 48.                        |
 | 22:15 | `6c633d7` | Restrição do contrato reduzido de produtos ao seu limite.                                   |
 
-Os 13 commits anteriores desta branch, de 08 a 09/10, estabeleceram R-208/R-209, criaram recebimento auditado, lista de estoque, agenda de conferência, extrato, WhatsApp e o menu único de Compras.
+Os 13 commits anteriores desta branch, de 08 a 09/10, estabeleceram R-213/R-214, criaram recebimento auditado, lista de estoque, agenda de conferência, extrato, WhatsApp e o menu único de Compras.
 
 ## 4. Fluxo efetivamente implementado
 
@@ -68,7 +68,7 @@ Os 13 commits anteriores desta branch, de 08 a 09/10, estabeleceram R-208/R-209,
 
 ### Estoque e conferência
 
-- A tela de Estoque filtra grupo, área, local de venda, local de estoque e Curva ABC, conforme R-210.
+- A tela de Estoque filtra grupo, área, local de venda, local de estoque e Curva ABC, conforme R-215.
 - Curva ABC é classificação manual A/B/C; não há cálculo inventado.
 - Conferência agenda escopo, data e observação. Criar/listar agenda não cria movimento nem altera saldo.
 

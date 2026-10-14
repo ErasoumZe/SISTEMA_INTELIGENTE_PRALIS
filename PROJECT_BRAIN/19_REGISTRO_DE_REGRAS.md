@@ -161,8 +161,8 @@ Colhidas perguntando uma a uma. **Fala dele entre aspas.**
 | Id            | Decisão                                                                                        | Detalhe                                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-032**     | Transferência sem caixa aberto: **só tesouraria, gerência, financeiro, diretor geral e admin** | O cargo **Caixa** continua precisando de caixa aberto. Mesma lógica de R-073/R-074. Some a regra atual que exige caixa para _todo mundo_                 |
-| **R-008**     | 🚫 **Superada na referência Caixa B1 (08/10/2026):** o retorno final é atômico no fechamento  | O operador pode registrar sangrias/retornos durante o turno; saldo físico remanescente gera o retorno final na mesma transação do fechamento.          |
-| **R-033** 🆕  | 🚫 **Superada na referência Caixa B1 (08/10/2026):** abertura exige malote/lacre identificado | Não há abertura zerada: o lacre reivindica a transferência pendente e o fundo entra no mesmo ato de abertura.                                           |
+| **R-008**     | 🚫 **Superada na referência Caixa B1 (08/10/2026):** o retorno final é atômico no fechamento   | O operador pode registrar sangrias/retornos durante o turno; saldo físico remanescente gera o retorno final na mesma transação do fechamento.            |
+| **R-033** 🆕  | 🚫 **Superada na referência Caixa B1 (08/10/2026):** abertura exige malote/lacre identificado  | Não há abertura zerada: o lacre reivindica a transferência pendente e o fundo entra no mesmo ato de abertura.                                            |
 | **R-008b** 🆕 | O retorno do fechamento vai para o **COFRE PRINCIPAL**                                         | José, 31/07. A planilha tem **dois** cofres (`CNT CONTA - COFRE PRINCIPAL` e `CNT CONTA - COFRE TROCO`); o brain falava de "o cofre" no singular         |
 | **R-020** 🆕  | As contas nascem no sistema **com o saldo da planilha** como fundo                             | José, 31/07. É a foto do dia da virada: dali em diante cada movimento soma ou subtrai. Vale para **todas** as contas, não só os cofres                   |
 | **R-021** 🆕  | A quebra de caixa vive em **tabela própria**, nunca em `contas`                                | Decisão técnica minha, 31/07 (o José já tinha definido a REGRA em 30/07). Saldo por PESSOA não pode encostar no saldo das contas, que alimenta o ADR-001 |
@@ -232,7 +232,7 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 | **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa                                                 |
 | **R-037** 🆕 | Estourado o prazo opcional da transferência direta (R-035), o sistema trava/notifica quem enviou e os usuários de destino realmente aptos a confirmar: vínculo conta+empresa, acesso à empresa e permissão efetiva `transferencias_conferir` |
 | **R-038** 🆕 | O bloco **Transferência de retorno** da FOTO 1 contém retornos independentes do dia — cada linha é uma transferência própria, agrupada na mesma tela por comodidade                                                                          |
-| **R-039** 🆕 | 🚫 **Superada na referência Caixa B1 (08/10/2026):** maquininha cadastrada e vinculada é obrigatória na abertura. Os relatórios de manhã/tarde usam exclusivamente a maquininha escolhida. |
+| **R-039** 🆕 | 🚫 **Superada na referência Caixa B1 (08/10/2026):** maquininha cadastrada e vinculada é obrigatória na abertura. Os relatórios de manhã/tarde usam exclusivamente a maquininha escolhida.                                                   |
 
 ### §1-C · R-040 — abrir o caixa É confirmar (José, 31/07)
 
@@ -1181,7 +1181,7 @@ Somente o ato de marcar um pedido como **Recebido**, depois da conferência fís
 
 Esta regra não define ainda recebimento parcial, saída por venda/produção/perda, ajuste de inventário ou o gatilho automático de reposição. Esses atos exigem decisão própria antes de qualquer implementação.
 
-### R-209 — Pedido de Compra: fornecedor único e recebimento parcial auditável (José, 08/10/2026)
+### R-214 — Pedido de Compra: fornecedor único e recebimento parcial auditável (José, 08/10/2026)
 
 Todo **novo** pedido pertence a um único fornecedor. Itens destinados a fornecedores diferentes formam pedidos distintos; assim, envio por WhatsApp/formulário, negociação e estado do pedido continuam tendo uma única verdade. O `fornecedor_id` por item fica apenas como fato histórico dos pedidos antigos e deixa de ser caminho de escrita.
 
@@ -1191,7 +1191,7 @@ O ciclo novo é **A fazer → Enviado → Retornado → Confirmado → Recebido 
 
 O gerador `máximo − atual` é, por enquanto, uma **sugestão de reposição** acionada pelo Compras. Ele só poderá disparar sozinho quando venda, produção, perda e inventário também gerarem movimentos de estoque rastreáveis.
 
-### R-210 — Módulo Compras: filtros e agenda de conferência (José, 08/10/2026)
+### R-215 — Módulo Compras: filtros e agenda de conferência (José, 08/10/2026)
 
 O módulo **Compras** concentra Estoque, Conferências, Pedidos e Fornecedores no menu; Mercadorias e NF-e continuam sendo lançamentos/financeiro e não ganham uma segunda tela de compra. A listagem de estoque filtra por grupo, área, local de venda, local de estoque e Curva ABC.
 

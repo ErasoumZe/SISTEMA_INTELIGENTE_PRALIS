@@ -2,7 +2,7 @@
 /**
  * Conferencia fisica do recebimento.
  *
- * E o unico ato que aumenta estoque (R-208), entao a tela precisa deixar obvio o que vai entrar:
+ * E o unico ato que aumenta estoque (R-213), entao a tela precisa deixar obvio o que vai entrar:
  * por item, quanto foi pedido, quanto ja chegou e quanto ainda falta. A quantidade comeca no
  * pendente, mas o conferente abaixa o numero quando chega menos — e o resumo no rodape mostra o
  * total que sera somado ao saldo antes de ele confirmar.

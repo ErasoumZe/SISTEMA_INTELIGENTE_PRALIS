@@ -152,7 +152,7 @@ export async function atualizarPedido(
 
 const transicoesPermitidas: Record<string, PedidoStatusNovo[]> = {
   a_fazer: ["enviado", "cancelado"],
-  enviado: ["retornado", "confirmado", "cancelado"],
+  enviado: ["retornado", "cancelado"],
   retornado: ["confirmado", "cancelado"],
   confirmado: ["cancelado"],
   recebido_parcial: ["cancelado"],

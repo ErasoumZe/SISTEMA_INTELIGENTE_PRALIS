@@ -185,4 +185,27 @@ describe("pedidos integration (Compras)", () => {
     });
     assertProblem(criar, 400);
   });
+
+  it("recusa saltar Enviado para Confirmado e receber antes da confirmacao", async () => {
+    const criar = await post("/api/pedidos", {
+      empresaId: idsTeste.empresaA,
+      fornecedorId: idsTeste.fornecedor,
+      itens: [{ produtoId: idsTeste.produto, quantidade: 1 }]
+    });
+    expect(criar.statusCode, criar.body).toBe(201);
+    const pedidoId = json<{ data: { id: string } }>(criar).data.id;
+    const itemId = json<{ data: { itens: Array<{ id: string }> } }>(
+      await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
+    ).data.itens[0]!.id;
+
+    const antes = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: "00000000-0000-4000-8000-000000000903",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
+    });
+    assertProblem(antes, 400, "PEDIDO_NAO_RECEBIVEL");
+
+    expect((await post(`/api/pedidos/${pedidoId}/situacao`, { status: "enviado" })).statusCode).toBe(204);
+    const salto = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
+    assertProblem(salto, 400, "TRANSICAO_PEDIDO_INVALIDA");
+  });
 });

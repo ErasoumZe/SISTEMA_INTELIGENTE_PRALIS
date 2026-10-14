@@ -16,7 +16,7 @@ afetar custo e financeiro. Implementar por conta própria aqui seria inventar n�
 
 ## 2. Conferência de estoque: hoje só agenda
 
-R-210 definiu que agendar ou concluir a agenda **não altera saldo**. Isso está implementado e
+R-215 definiu que agendar ou concluir a agenda **não altera saldo**. Isso está implementado e
 provado. Para a conferência virar operação completa, falta decidir:
 
 | Pergunta                                                            | Por que trava                                                           |
@@ -32,7 +32,7 @@ Enquanto isso não for decidido, a tela continua agendando e dizendo que agendar
 
 ## 3. Curva ABC: hoje é classificação manual
 
-R-210 definiu ABC como `A`, `B` ou `C` digitado à mão, visível e filtrável. Foi uma decisão
+R-215 definiu ABC como `A`, `B` ou `C` digitado à mão, visível e filtrável. Foi uma decisão
 consciente para não fingir cálculo. Para virar automática falta:
 
 - **Critério**: giro em quantidade, faturamento, margem, ou uma combinação.
@@ -59,7 +59,7 @@ o que acontece quando a data passa sem ação, e se a recorrência gera uma nova
 ## 6. Compras ↔ Mercadorias/NF-e: vínculo ainda não existe
 
 Hoje os dois fluxos convivem no menu sem laço operacional. O comportamento pretendido é claro e
-não conflita com R-208: **uma mercadoria ou NF-e pode ser relacionada ao pedido sem alterar
+não conflita com R-213: **uma mercadoria ou NF-e pode ser relacionada ao pedido sem alterar
 estoque**; o recebimento físico segue sendo o único ato que altera saldo.
 
 O que falta é persistência: uma coluna `pedido_id` em `mercadorias`, com chave estrangeira. Isso é

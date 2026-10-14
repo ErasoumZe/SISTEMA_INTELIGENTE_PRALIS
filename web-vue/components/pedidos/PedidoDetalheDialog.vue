@@ -123,7 +123,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           >Marcar retornado</v-btn
         >
         <v-btn
-          v-if="podeEditar && ['enviado', 'retornado'].includes(pedido.status)"
+          v-if="podeEditar && pedido.status === 'retornado'"
           color="primary"
           :loading="transicionando"
           @click="emit('situacao', 'confirmado')"

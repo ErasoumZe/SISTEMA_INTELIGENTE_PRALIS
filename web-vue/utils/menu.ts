@@ -27,7 +27,12 @@ export type NoMenu<T extends ItemMenu> =
   | ({ tipo: "tela" } & T)
   | { tipo: "categoria"; id: string; titulo: string; icone: string; itens: T[] };
 
-export type GrupoMenu<T extends ItemMenu> = { titulo: string; cor?: CorMenuGrupo; corRgb?: CorRgbMenu; itens: NoMenu<T>[] };
+export type GrupoMenu<T extends ItemMenu> = {
+  titulo: string;
+  cor?: CorMenuGrupo;
+  corRgb?: CorRgbMenu;
+  itens: NoMenu<T>[];
+};
 
 // Grupos do menu na nomenclatura do Xmind V2 (PROJECT_BRAIN/10): as grandes categorias viram
 // Entradas / Transferencias / Saidas / Resultados / Configuracao. Isto e SO o esqueleto de grupos
@@ -54,7 +59,7 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "perdas_sobras"]
   },
   {
-    // R-210: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
+    // R-215: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
     titulo: "Compras",
     ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "fornecedores"]
   },
@@ -62,7 +67,14 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     // Resultados – Relatorios + Diferenca de fechamento.
     titulo: "Resultados",
     cor: "resultado",
-    ids: ["fechamento", "relatorio_fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
+    ids: [
+      "fechamento",
+      "relatorio_fechamento",
+      "relatorio_vendas",
+      "relatorio_produtos",
+      "relatorio_dre",
+      "relatorio_fiscal"
+    ]
   },
   {
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
@@ -126,7 +138,12 @@ function noTela<T extends ItemMenu>(tela: T): NoMenu<T> {
 // agora vale sobre a estrutura salva em vez de sobre a constante.
 export function agruparTelasMenu<T extends ItemMenu>(
   telas: readonly T[],
-  estrutura: readonly { titulo: string; ids: readonly string[]; cor?: CorMenuGrupo; corRgb?: CorRgbMenu }[] = SECOES_MENU,
+  estrutura: readonly {
+    titulo: string;
+    ids: readonly string[];
+    cor?: CorMenuGrupo;
+    corRgb?: CorRgbMenu;
+  }[] = SECOES_MENU,
   idsOcultos: readonly string[] = []
 ): GrupoMenu<T>[] {
   const ocultos = new Set(idsOcultos);
