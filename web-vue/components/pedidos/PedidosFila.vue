@@ -5,7 +5,7 @@ import { mascararWhatsapp } from "~/utils/formatacao";
 const props = defineProps<{ pedidos: PedidoDto[] }>();
 const emit = defineEmits<{ abrir: [id: string] }>();
 const busca = ref("");
-const situacaoSelecionada = ref<PedidoStatus | "">("");
+const situacaoSelecionada = ref<PedidoStatus>("a_fazer");
 const rotulosStatus: Record<PedidoStatus, string> = {
   rascunho: "Legado: rascunho",
   aprovado: "Legado: aprovado",
@@ -30,7 +30,7 @@ const pedidosExibidos = computed(() => {
   return props.pedidos.filter((pedido) => {
     const atendeTexto =
       !termo || `${pedido.fornecedorNome ?? ""} ${pedido.tipo}`.toLocaleLowerCase("pt-BR").includes(termo);
-    return atendeTexto && (!situacaoSelecionada.value || pedido.status === situacaoSelecionada.value);
+    return atendeTexto && pedido.status === situacaoSelecionada.value;
   });
 });
 const contagens = computed(() =>
@@ -46,15 +46,9 @@ function corStatus(status: PedidoStatus) {
   if (status === "retornado") return "warning";
   return "secondary";
 }
-/** O contador tambem FILTRA: clicar em "3 Enviado" mostra so os enviados; clicar de novo solta. */
-function alternarSituacao(status: PedidoStatus) {
-  situacaoSelecionada.value = situacaoSelecionada.value === status ? "" : status;
-}
-
 function telefone(valor: string | null) {
   return valor ? mascararWhatsapp(valor) : "Sem WhatsApp";
 }
-
 function quando(valor: string | null) {
   return valor
     ? new Date(valor).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
@@ -64,46 +58,26 @@ function quando(valor: string | null) {
 
 <template>
   <v-card>
-    <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2"
-      ><span>Fila de pedidos</span
-      ><span class="text-body-2 text-medium-emphasis">{{ pedidosExibidos.length }} exibido(s)</span></v-card-title
-    >
+    <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2">
+      <span>Fila de pedidos</span>
+      <span class="text-body-2 text-medium-emphasis">{{ pedidosExibidos.length }} exibido(s)</span>
+    </v-card-title>
     <v-card-text class="d-grid ga-4">
-      <div class="d-flex flex-wrap ga-2">
-        <v-chip
-          v-for="contagem in contagens"
-          :key="contagem.status"
-          :color="corStatus(contagem.status)"
-          :variant="situacaoSelecionada === contagem.status ? 'flat' : 'tonal'"
-          size="small"
-          label
-          link
-          :aria-pressed="situacaoSelecionada === contagem.status"
-          @click="alternarSituacao(contagem.status)"
-          >{{ contagem.total }} {{ rotulosStatus[contagem.status] }}</v-chip
-        >
-      </div>
-      <v-row dense>
-        <v-col cols="12" sm="7"
-          ><v-text-field
-            v-model="busca"
-            label="Buscar fornecedor"
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            hide-details
-        /></v-col>
-        <v-col cols="12" sm="5"
-          ><v-select
-            v-model="situacaoSelecionada"
-            :items="situacoesOperacionais.map((status) => ({ title: rotulosStatus[status], value: status }))"
-            label="Situação"
-            clearable
-            hide-details
-        /></v-col>
-      </v-row>
+      <v-tabs
+        v-model="situacaoSelecionada"
+        class="pedidos-fila__abas"
+        color="primary"
+        show-arrows
+        aria-label="Etapas do ciclo de pedido"
+      >
+        <v-tab v-for="contagem in contagens" :key="contagem.status" :value="contagem.status">
+          {{ rotulosStatus[contagem.status] }} ({{ contagem.total }})
+        </v-tab>
+      </v-tabs>
+      <v-text-field v-model="busca" label="Buscar fornecedor" prepend-inner-icon="mdi-magnify" clearable hide-details />
       <div class="d-none d-md-block">
-        <v-table density="comfortable"
-          ><thead>
+        <v-table density="comfortable">
+          <thead>
             <tr>
               <th>Fornecedor</th>
               <th>Origem</th>
@@ -134,16 +108,16 @@ function quando(valor: string | null) {
                 >
               </td>
             </tr>
-          </tbody></v-table
-        >
+          </tbody>
+        </v-table>
       </div>
       <div class="d-md-none d-grid ga-3">
-        <v-card v-if="!pedidosExibidos.length" variant="tonal"
-          ><v-card-text class="text-center text-medium-emphasis">Nenhum pedido encontrado.</v-card-text></v-card
-        >
-        <v-card v-for="pedido in pedidosExibidos" :key="pedido.id" variant="outlined"
-          ><v-card-text class="d-grid ga-2"
-            ><div class="d-flex justify-space-between ga-2">
+        <v-card v-if="!pedidosExibidos.length" variant="tonal">
+          <v-card-text class="text-center text-medium-emphasis">Nenhum pedido encontrado.</v-card-text>
+        </v-card>
+        <v-card v-for="pedido in pedidosExibidos" :key="pedido.id" variant="outlined">
+          <v-card-text class="d-grid ga-2">
+            <div class="d-flex justify-space-between ga-2">
               <div>
                 <div class="font-weight-bold">{{ pedido.fornecedorNome ?? "Histórico sem fornecedor" }}</div>
                 <div class="text-caption text-medium-emphasis">
@@ -155,12 +129,16 @@ function quando(valor: string | null) {
             <div class="d-flex justify-space-between text-body-2">
               <span>{{ pedido.totalItens }} item(ns)</span><span>{{ quando(pedido.dataAgendada) }}</span>
             </div>
-            <v-btn block variant="tonal" prepend-icon="mdi-eye" @click="emit('abrir', pedido.id)"
-              >Ver pedido</v-btn
-            ></v-card-text
-          ></v-card
-        >
+            <v-btn block variant="tonal" prepend-icon="mdi-eye" @click="emit('abrir', pedido.id)">Ver pedido</v-btn>
+          </v-card-text>
+        </v-card>
       </div>
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.pedidos-fila__abas {
+  max-width: 100%;
+}
+</style>

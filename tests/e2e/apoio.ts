@@ -136,7 +136,7 @@ export function observarConsole(page: Page): string[] {
     /Nuxt DevTools/i,
     /\[vite\]/i,
     /Download the Vue Devtools/i,
-    /Timer '\[nuxt-app\] (?:page:loading:start|page:loading:end|page:finish|link:prefetch)' already exists/i,
+    /Timer '\[nuxt-app\] (?:page:start|page:loading:start|page:loading:end|page:finish|link:prefetch)' already exists/i,
     // Ruido do ripple do Vuetify sob clique sintetico rapido: ele calcula a origem da onda pelo
     // retangulo do alvo e, quando o clique cai enquanto o overlay ainda anima, o retangulo vem
     // zerado e o keyframe sai com NaN. Reproduzido a mao na mesma tela, com clique humano, o

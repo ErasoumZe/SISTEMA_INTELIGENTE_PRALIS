@@ -178,6 +178,7 @@ test.describe("ciclo de compra", () => {
 
     // 9) A tela reflete o recebimento concluido.
     await page.reload();
+    await page.getByRole("tab", { name: /^Recebido \(/u }).click();
     await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorManual);
     const linhaFinal = page.locator("tbody tr").filter({ hasText: fornecedorManual });
     await expect(linhaFinal).toContainText("Recebido");
