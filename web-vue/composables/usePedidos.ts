@@ -1,7 +1,7 @@
 import type { AuthSession, PedidoDto, PedidoStatus, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
-import type { PedidoFormEdicao } from "~/components/pedidos/PedidoFormDialog.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
+import type { PedidoFormEdicao } from "~/types/pedidos";
 import { mensagemErro } from "~/utils/domain";
 import { normalizarWhatsappParaLink } from "~/utils/formatacao";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";

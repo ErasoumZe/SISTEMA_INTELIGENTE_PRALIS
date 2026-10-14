@@ -13,15 +13,8 @@
  */
 import type { PedidoRecorrencia, ProdutoEstoqueDto } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
+import type { PedidoFormEdicao } from "~/types/pedidos";
 import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
-
-export type PedidoFormEdicao = {
-  fornecedorId: string;
-  recorrencia: PedidoRecorrencia;
-  dataAgendada: string;
-  observacao: string;
-  itens: Array<{ produtoId: string; quantidade: string }>;
-};
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{
