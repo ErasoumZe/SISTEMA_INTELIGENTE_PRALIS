@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   cargos,
   colaboradores,
   colaboradoresCargos,
+  colaboradoresVinculos,
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
   setores,
@@ -38,11 +39,27 @@ export async function listarColaboradoresRepository(escopoEmpresas: string[]) {
       empresaId: colaboradores.empresaId,
       nome: colaboradores.nome,
       cpf: colaboradores.cpf,
+      vinculoAtivoId: colaboradoresVinculos.id,
+      temVinculoHistorico: sql<boolean>`exists (
+        select 1 from ${colaboradoresVinculos}
+        where ${colaboradoresVinculos.colaboradorId} = ${colaboradores.id}
+          and ${colaboradoresVinculos.empresaId} = ${colaboradores.empresaId}
+      )`,
+      matricula: colaboradoresVinculos.matricula,
+      funcaoNome: colaboradoresVinculos.funcaoNome,
       setorId: setores.id,
       turnoPadraoId: turnos.id,
       usuarioId: colaboradores.usuarioId
     })
     .from(colaboradores)
+    .leftJoin(
+      colaboradoresVinculos,
+      and(
+        eq(colaboradoresVinculos.colaboradorId, colaboradores.id),
+        eq(colaboradoresVinculos.empresaId, colaboradores.empresaId),
+        eq(colaboradoresVinculos.status, "ativo")
+      )
+    )
     .leftJoin(setores, and(eq(setores.id, colaboradores.setorId), eq(setores.empresaId, colaboradores.empresaId)))
     .leftJoin(turnos, and(eq(turnos.id, colaboradores.turnoPadraoId), eq(turnos.empresaId, colaboradores.empresaId)))
     .where(inArray(colaboradores.empresaId, escopoEmpresas))

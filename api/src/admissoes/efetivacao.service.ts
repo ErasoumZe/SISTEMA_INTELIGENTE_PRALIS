@@ -8,6 +8,7 @@ import {
   registrarEventoProcessoRepository
 } from "./processos.repository.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
+import { criarOnboardingDoVinculoRepository } from "../colaboradores/perfil.repository.js";
 import {
   bloquearVinculoAtivoRepository,
   bloquearVinculoMaisRecenteRepository,
@@ -125,6 +126,10 @@ export async function efetivarProcesso(id: string, perfil?: PerfilUsuario) {
       },
       tx
     );
+
+    // O onboarding pertence ao vinculo criado nesta efetivacao. Insercao idempotente dentro da
+    // mesma transacao evita tanto uma ficha sem jornada quanto uma segunda ficha em retry.
+    await criarOnboardingDoVinculoRepository({ empresaId, vinculoId: criado.id }, tx);
 
     // A trilha do colaborador e a do processo nascem no mesmo commit. Se uma falhar, nao existe
     // vinculo “sem historia” e tampouco processo dito efetivado sem cadastro real.

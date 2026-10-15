@@ -39,6 +39,7 @@ import {
   listarJornadasColaborador,
   salvarColaborador
 } from "./colaboradores.service.js";
+import { obterPerfilColaborador, salvarPerfilCadastralDoColaborador } from "./perfil.service.js";
 import { statusErroValidacao } from "../utils.js";
 
 async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
@@ -156,6 +157,25 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
+    }
+  );
+
+  app.get(
+    "/api/colaboradores/:id/perfil",
+    { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
+    async (request) => {
+      const { id } = idParamsSchema.parse(request.params);
+      return obterPerfilColaborador(id, request.perfilUsuario);
+    }
+  );
+
+  app.put(
+    "/api/colaboradores/:id/perfil",
+    { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      await salvarPerfilCadastralDoColaborador(id, request.body, request.perfilUsuario);
+      return semConteudo(reply);
     }
   );
 

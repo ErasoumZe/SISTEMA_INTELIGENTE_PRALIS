@@ -7,6 +7,10 @@ import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@pa
 export type Opcao = {
   id: string;
   nome?: string;
+  vinculoAtivoId?: string | null;
+  temVinculoHistorico?: boolean;
+  matricula?: string | null;
+  funcaoNome?: string | null;
   email?: string;
   descricao?: string;
   apelido?: string;
