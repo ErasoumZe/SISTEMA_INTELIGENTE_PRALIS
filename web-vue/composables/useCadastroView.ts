@@ -83,7 +83,9 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.nome,
         vinculoAtivoId: item.vinculoAtivoId ?? undefined,
-        temVinculoHistorico: item.temVinculoHistorico ?? false,
+        // LinhaCadastro e a grade generica usam valores textuais. O dominio continua booleano
+        // na API; esta e somente a serializacao de apresentacao da tela DP.
+        temVinculoHistorico: item.temVinculoHistorico ? "sim" : "nao",
         matricula: item.matricula ?? "",
         funcaoNome: item.funcaoNome ?? ""
       }));

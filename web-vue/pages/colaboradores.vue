@@ -8,9 +8,9 @@ const colunas = [
   { title: "Matrícula", key: "matricula" },
   { title: "Ação", key: "acoes", sortable: false, align: "end" as const }
 ];
-function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistorico?: boolean }) {
+function situacaoDoColaborador(item: { vinculoAtivoId?: string; temVinculoHistorico?: string }) {
   if (item.vinculoAtivoId) return { texto: "Ativo", cor: "success" };
-  if (item.temVinculoHistorico) return { texto: "Inativo", cor: "default" };
+  if (item.temVinculoHistorico === "sim") return { texto: "Inativo", cor: "default" };
   return { texto: "Histórico a conciliar", cor: "warning" };
 }
 </script>
