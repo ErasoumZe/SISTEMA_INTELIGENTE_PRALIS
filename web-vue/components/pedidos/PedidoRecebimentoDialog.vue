@@ -8,6 +8,7 @@
  * total que sera somado ao saldo antes de ele confirmar.
  */
 import type { PedidoDto } from "@padaria/shared";
+import { formatarQuantidade, normalizarQuantidadeEditavel } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{ pedido: PedidoDto | null; salvando: boolean }>();
@@ -26,7 +27,7 @@ watch(
   () => {
     observacao.value = "";
     for (const chave of Object.keys(quantidades)) delete quantidades[chave];
-    for (const item of itens.value) quantidades[item.id] = item.quantidadePendente;
+    for (const item of itens.value) quantidades[item.id] = normalizarQuantidadeEditavel(item.quantidadePendente);
   },
   { immediate: true }
 );
@@ -56,10 +57,8 @@ const impedimento = computed(() => {
   return "";
 });
 
-const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-
 function receberTudo() {
-  for (const item of pendentes.value) quantidades[item.id] = item.quantidadePendente;
+  for (const item of pendentes.value) quantidades[item.id] = normalizarQuantidadeEditavel(item.quantidadePendente);
 }
 
 function zerarTudo() {
@@ -81,7 +80,9 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
           <h2 class="text-h6">Conferir recebimento</h2>
           <p class="text-caption text-medium-emphasis mb-0">{{ pedido.fornecedorNome ?? "Pedido histórico" }}</p>
         </div>
-        <v-chip size="small" color="success" variant="tonal" label>+{{ formatar(totalConferido) }} no estoque</v-chip>
+        <v-chip size="small" color="success" variant="tonal" label
+          >+{{ formatarQuantidade(totalConferido) }} no estoque</v-chip
+        >
       </div>
 
       <v-card-text class="recebimento__corpo">
@@ -99,9 +100,9 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
             <div class="font-weight-medium">{{ item.descricaoProduto }}</div>
             <v-progress-linear :model-value="progresso(item)" color="success" height="4" rounded class="my-2" />
             <div class="recebimento__numeros">
-              <span>Pedido {{ formatar(Number(item.quantidade)) }}</span>
-              <span>Já recebido {{ formatar(Number(item.quantidadeRecebida)) }}</span>
-              <strong>Falta {{ formatar(Number(item.quantidadePendente)) }}</strong>
+              <span>Pedido {{ formatarQuantidade(item.quantidade) }}</span>
+              <span>Já recebido {{ formatarQuantidade(item.quantidadeRecebida) }}</span>
+              <strong>Falta {{ formatarQuantidade(item.quantidadePendente) }}</strong>
             </div>
           </div>
           <v-text-field
@@ -117,7 +118,7 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
             :error="excedeu(item.id, item.quantidadePendente)"
             :error-messages="
               excedeu(item.id, item.quantidadePendente)
-                ? `Falta apenas ${formatar(Number(item.quantidadePendente))}.`
+                ? `Falta apenas ${formatarQuantidade(item.quantidadePendente)}.`
                 : undefined
             "
           />
@@ -138,7 +139,8 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
       <div class="recebimento__rodape">
         <span v-if="impedimento" class="recebimento__impedimento">{{ impedimento }}</span>
         <span v-else class="recebimento__resumo"
-          >{{ conferidos.length }} item(ns) conferido(s) · entra {{ formatar(totalConferido) }} no estoque</span
+          >{{ conferidos.length }} item(ns) conferido(s) · entra {{ formatarQuantidade(totalConferido) }} no
+          estoque</span
         >
         <v-spacer />
         <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
@@ -157,37 +159,51 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 
 <style scoped>
 .recebimento {
-  border-radius: var(--cx-r-xl, 22px);
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-3);
 }
 
 .recebimento__topo {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--cx-sp-3, 12px);
-  padding: var(--cx-sp-5, 20px) var(--cx-sp-6, 24px) var(--cx-sp-3, 12px);
-  border-bottom: 1px solid var(--cx-line-soft, #eef1f6);
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-6) var(--cx-sp-6) var(--cx-sp-4);
+  border-bottom: 1px solid var(--cx-line-soft);
+}
+
+.recebimento__topo h2 {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
 }
 
 .recebimento__corpo {
   display: grid;
-  gap: var(--cx-sp-3, 12px);
-  padding: var(--cx-sp-4, 16px) var(--cx-sp-6, 24px);
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-5) var(--cx-sp-6);
+  background: var(--cx-surface-sunken);
 }
 
 .recebimento__atalhos {
   display: flex;
-  gap: var(--cx-sp-2, 8px);
+  gap: var(--cx-sp-2);
 }
 
 .recebimento__item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px;
-  gap: var(--cx-sp-4, 16px);
+  gap: var(--cx-sp-4);
   align-items: center;
-  padding: var(--cx-sp-3, 12px);
-  border: 1px solid var(--cx-line-soft, #eef1f6);
-  border-radius: var(--cx-r-md, 12px);
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
 }
 
 .recebimento__produto {
@@ -197,24 +213,25 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 .recebimento__numeros {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cx-sp-3, 12px);
+  gap: var(--cx-sp-3);
   font-size: 0.75rem;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 .recebimento__vazio {
-  padding: var(--cx-sp-6, 24px);
+  padding: var(--cx-sp-6);
   text-align: center;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
 }
 
 .recebimento__rodape {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cx-sp-2, 8px);
-  padding: var(--cx-sp-3, 12px) var(--cx-sp-6, 24px) var(--cx-sp-4, 16px);
-  border-top: 1px solid var(--cx-line-soft, #eef1f6);
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-4) var(--cx-sp-6) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line-soft);
 }
 
 .recebimento__impedimento {
@@ -224,7 +241,8 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 
 .recebimento__resumo {
   font-size: 0.8125rem;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 599px) {
@@ -235,8 +253,8 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
   .recebimento__topo,
   .recebimento__corpo,
   .recebimento__rodape {
-    padding-left: var(--cx-sp-4, 16px);
-    padding-right: var(--cx-sp-4, 16px);
+    padding-left: var(--cx-sp-4);
+    padding-right: var(--cx-sp-4);
   }
 }
 </style>

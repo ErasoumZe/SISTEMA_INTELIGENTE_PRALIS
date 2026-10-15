@@ -3,7 +3,7 @@ import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { usePermissoes } from "~/composables/usePermissoes";
 import type { PedidoFormEdicao } from "~/types/pedidos";
 import { mensagemErro } from "~/utils/domain";
-import { normalizarWhatsappParaLink } from "~/utils/formatacao";
+import { formatarQuantidade, normalizarQuantidadeEditavel, normalizarWhatsappParaLink } from "~/utils/formatacao";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 function formVazio(): PedidoFormEdicao {
@@ -186,7 +186,10 @@ export function usePedidos() {
       recorrencia: pedido.recorrencia,
       dataAgendada: pedido.dataAgendada ? pedido.dataAgendada.slice(0, 16) : "",
       observacao: pedido.observacao ?? "",
-      itens: (pedido.itens ?? []).map((item) => ({ produtoId: item.produtoId ?? "", quantidade: item.quantidade }))
+      itens: (pedido.itens ?? []).map((item) => ({
+        produtoId: item.produtoId ?? "",
+        quantidade: normalizarQuantidadeEditavel(item.quantidade)
+      }))
     });
     dialogDetalhe.value = false;
     dialogForm.value = true;
@@ -218,7 +221,7 @@ export function usePedidos() {
     if (numero.length < 12 || numero.length > 15)
       return notificar("WhatsApp do fornecedor invalido. Informe DDD e numero.", "error");
     const itens = (detalhe.value.itens ?? [])
-      .map((item) => `• ${item.descricaoProduto}: ${item.quantidade}`)
+      .map((item) => `• ${item.descricaoProduto}: ${formatarQuantidade(item.quantidade)}`)
       .join("\n");
     const url = `https://wa.me/${numero}?text=${encodeURIComponent(`Pedido Pralis\n${itens}`)}`;
     const janela = window.open("about:blank", "_blank");

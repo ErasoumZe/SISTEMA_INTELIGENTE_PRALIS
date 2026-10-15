@@ -8,6 +8,7 @@
  */
 import type { ProdutoEstoqueDto } from "@padaria/shared";
 import ProdutoAutocomplete from "~/components/produtos/ProdutoAutocomplete.vue";
+import { formatarQuantidade, normalizarQuantidadeEditavel } from "~/utils/formatacao";
 
 const props = defineProps<{
   empresaId: string;
@@ -44,23 +45,19 @@ const abaixoDoMinimo = computed(() => minimo.value !== null && saldo.value <= mi
 const mensagemDaQuantidade = computed(() => {
   if (!produto.value) return undefined;
   if (pedida.value <= 0) return "Informe uma quantidade maior que zero.";
-  if (estouraMaximo.value) return `Cabe no máximo ${formatar(sobraAteOMaximo.value ?? 0)} ${unidade.value}.`;
+  if (estouraMaximo.value) return `Cabe no máximo ${formatarQuantidade(sobraAteOMaximo.value ?? 0)} ${unidade.value}.`;
   return undefined;
 });
 
-function formatar(valor: number) {
-  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-}
-
 function somar(passo: number) {
   const proxima = Math.max(pedida.value + passo, 0);
-  quantidade.value = String(Number(proxima.toFixed(3)));
+  quantidade.value = normalizarQuantidadeEditavel(proxima);
 }
 
 /** Completa exatamente o que falta para o maximo — o atalho que o comprador mais usa. */
 function completarAteOMaximo() {
   if (sobraAteOMaximo.value === null) return;
-  quantidade.value = String(sobraAteOMaximo.value);
+  quantidade.value = normalizarQuantidadeEditavel(sobraAteOMaximo.value);
 }
 </script>
 
@@ -70,10 +67,10 @@ function completarAteOMaximo() {
       <ProdutoAutocomplete v-model="produtoId" :empresa-id="empresaId" densidade="comfortable" />
       <div v-if="produto" class="item-linha__contexto">
         <v-chip size="x-small" variant="tonal" :color="abaixoDoMinimo ? 'warning' : undefined" label>
-          Em estoque {{ formatar(saldo) }} {{ unidade }}
+          Em estoque {{ formatarQuantidade(saldo) }} {{ unidade }}
         </v-chip>
-        <v-chip v-if="minimo !== null" size="x-small" variant="text" label>mín {{ formatar(minimo) }}</v-chip>
-        <v-chip v-if="maximo !== null" size="x-small" variant="text" label>máx {{ formatar(maximo) }}</v-chip>
+        <v-chip v-if="minimo !== null" size="x-small" variant="text" label>mín {{ formatarQuantidade(minimo) }}</v-chip>
+        <v-chip v-if="maximo !== null" size="x-small" variant="text" label>máx {{ formatarQuantidade(maximo) }}</v-chip>
         <v-btn
           v-if="sobraAteOMaximo !== null && sobraAteOMaximo > 0"
           size="x-small"
@@ -81,7 +78,7 @@ function completarAteOMaximo() {
           class="item-linha__atalho"
           @click="completarAteOMaximo"
         >
-          Completar {{ formatar(sobraAteOMaximo) }}
+          Completar {{ formatarQuantidade(sobraAteOMaximo) }}
         </v-btn>
       </div>
       <div v-else class="item-linha__contexto item-linha__contexto--vazio">
@@ -127,13 +124,23 @@ function completarAteOMaximo() {
 .item-linha {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--cx-sp-4, 16px);
+  gap: var(--cx-sp-4);
   align-items: start;
-  padding: var(--cx-sp-3, 12px);
-  border: 1px solid var(--cx-line-soft, #eef1f6);
-  border-radius: var(--cx-r-md, 12px);
-  background: var(--cx-surface, #fff);
-  transition: border-color var(--cx-dur-1, 120ms) var(--cx-ease, ease);
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+  transition:
+    border-color var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-1) var(--cx-ease);
+}
+
+.item-linha:focus-within {
+  border-color: var(--cx-focus);
+  box-shadow:
+    var(--cx-e-2),
+    0 0 0 3px var(--cx-brand-ring);
 }
 
 .item-linha--alerta {
@@ -148,14 +155,14 @@ function completarAteOMaximo() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cx-sp-1, 4px);
-  margin-top: var(--cx-sp-1, 4px);
+  gap: var(--cx-sp-1);
+  margin-top: var(--cx-sp-2);
   min-height: 24px;
 }
 
 .item-linha__contexto--vazio {
   font-size: 0.75rem;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
 }
 
 .item-linha__atalho {
@@ -165,7 +172,8 @@ function completarAteOMaximo() {
 .item-linha__quantidade {
   display: flex;
   align-items: center;
-  gap: var(--cx-sp-1, 4px);
+  gap: var(--cx-sp-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .item-linha__quantidade :deep(.v-input) {

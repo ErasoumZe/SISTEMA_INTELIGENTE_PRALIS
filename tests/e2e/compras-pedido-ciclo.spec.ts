@@ -73,7 +73,8 @@ test.describe("ciclo de compra", () => {
     // A propria tela abre o pedido recem-criado para revisao. Isso e o fluxo, nao atalho do teste:
     // a sugestao existe para ser conferida antes de virar envio.
     let detalhe = dialogoAberto(page);
-    await expect(detalhe.locator("tbody tr").filter({ hasText: nomeProduto })).toContainText("40");
+    const linhaSugestao = detalhe.locator("tbody tr").filter({ hasText: nomeProduto });
+    await expect(linhaSugestao.locator("td").nth(1), "inteiro nao exibe zeros decimais").toHaveText("40");
     await detalhe.getByRole("button", { name: "Fechar" }).click();
     await esperarOverlayFechar(page);
 
@@ -107,6 +108,7 @@ test.describe("ciclo de compra", () => {
     detalhe = dialogoAberto(page);
     await detalhe.getByRole("button", { name: "Editar" }).click();
     formulario = dialogoAberto(page);
+    await expect(formulario.getByLabel("Quantidade", { exact: true }), "campo remove .000 do banco").toHaveValue("10");
     await formulario.getByLabel("Quantidade", { exact: true }).fill("12");
     await formulario.getByRole("button", { name: "Salvar pedido" }).click();
 
@@ -178,7 +180,7 @@ test.describe("ciclo de compra", () => {
 
     // 9) A tela reflete o recebimento concluido.
     await page.reload();
-    await page.getByRole("tab", { name: /^Recebido \(/u }).click();
+    await page.getByRole("tab", { name: /^Recebido \d+$/u }).click();
     await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorManual);
     const linhaFinal = page.locator("tbody tr").filter({ hasText: fornecedorManual });
     await expect(linhaFinal).toContainText("Recebido");

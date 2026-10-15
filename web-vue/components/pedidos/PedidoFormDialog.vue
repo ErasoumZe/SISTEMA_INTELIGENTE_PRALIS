@@ -15,6 +15,7 @@ import type { PedidoRecorrencia, ProdutoEstoqueDto } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import type { PedidoFormEdicao } from "~/types/pedidos";
 import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
+import { formatarQuantidade } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{
@@ -69,8 +70,6 @@ const impedimento = computed(() => {
   if (linhasAcimaDoMaximo.value.length) return "Há item acima do estoque máximo configurado.";
   return "";
 });
-
-const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 </script>
 
 <template>
@@ -83,8 +82,8 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
             Um pedido, um fornecedor. O estoque só muda no recebimento físico.
           </p>
         </div>
-        <v-chip size="small" variant="tonal" label
-          >{{ linhasValidas.length }} item(ns) · {{ formatar(totalUnidades) }}</v-chip
+        <v-chip class="pedido-form__resumo" size="small" variant="tonal" label
+          >{{ linhasValidas.length }} item(ns) · {{ formatarQuantidade(totalUnidades) }}</v-chip
         >
       </div>
 
@@ -171,7 +170,8 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
       <div class="pedido-form__rodape">
         <span v-if="impedimento" class="pedido-form__impedimento" data-campo="impedimento">{{ impedimento }}</span>
         <span v-else class="pedido-form__pronto"
-          >Pronto para salvar: {{ linhasValidas.length }} item(ns), {{ formatar(totalUnidades) }} no total.</span
+          >Pronto para salvar: {{ linhasValidas.length }} item(ns), {{ formatarQuantidade(totalUnidades) }} no
+          total.</span
         >
         <v-spacer />
         <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
@@ -185,26 +185,45 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
 
 <style scoped>
 .pedido-form {
-  border-radius: var(--cx-r-xl, 22px);
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-3);
 }
 
 .pedido-form__topo {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--cx-sp-3, 12px);
-  padding: var(--cx-sp-5, 20px) var(--cx-sp-6, 24px) var(--cx-sp-3, 12px);
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-6) var(--cx-sp-6) var(--cx-sp-4);
 }
 
 .pedido-form__titulo h2 {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
   line-height: 1.2;
+}
+
+.pedido-form__titulo p {
+  margin-top: var(--cx-sp-1);
+  color: var(--cx-ink-soft);
+  line-height: 1.5;
+}
+
+.pedido-form__resumo {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .pedido-form__fornecedor {
   display: grid;
-  gap: var(--cx-sp-2, 8px);
-  padding: 0 var(--cx-sp-6, 24px) var(--cx-sp-3, 12px);
-  border-bottom: 1px solid var(--cx-line-soft, #eef1f6);
+  gap: var(--cx-sp-2);
+  padding: 0 var(--cx-sp-6) var(--cx-sp-4);
+  border-bottom: 1px solid var(--cx-line-soft);
 }
 
 .pedido-form__aviso {
@@ -213,15 +232,16 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
 
 .pedido-form__itens {
   display: grid;
-  gap: var(--cx-sp-2, 8px);
-  padding: var(--cx-sp-4, 16px) var(--cx-sp-6, 24px);
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-5) var(--cx-sp-6);
+  background: var(--cx-surface-sunken);
 }
 
 .pedido-form__secao {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--cx-sp-2, 8px);
+  gap: var(--cx-sp-2);
 }
 
 .pedido-form__secao-titulo {
@@ -229,22 +249,23 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
 }
 
 .pedido-form__agenda {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--cx-sp-3, 12px);
+  gap: var(--cx-sp-3);
 }
 
 .pedido-form__rodape {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cx-sp-2, 8px);
-  padding: var(--cx-sp-3, 12px) var(--cx-sp-6, 24px) var(--cx-sp-4, 16px);
-  border-top: 1px solid var(--cx-line-soft, #eef1f6);
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-4) var(--cx-sp-6) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line-soft);
+  background: var(--cx-surface-raised);
 }
 
 .pedido-form__impedimento {
@@ -254,7 +275,8 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
 
 .pedido-form__pronto {
   font-size: 0.8125rem;
-  color: var(--cx-ink-soft, #5b6675);
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 959px) {
@@ -268,8 +290,8 @@ const formatar = (valor: number) => valor.toLocaleString("pt-BR", { maximumFract
   .pedido-form__fornecedor,
   .pedido-form__itens,
   .pedido-form__rodape {
-    padding-left: var(--cx-sp-4, 16px);
-    padding-right: var(--cx-sp-4, 16px);
+    padding-left: var(--cx-sp-4);
+    padding-right: var(--cx-sp-4);
   }
 
   .pedido-form__rodape {

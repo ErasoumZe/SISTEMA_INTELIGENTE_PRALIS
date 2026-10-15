@@ -12,6 +12,25 @@ export function formatarDataHora(valor: Date | string) {
   return new Date(valor).toLocaleString("pt-BR");
 }
 
+/**
+ * Exibe quantidades sem zeros decimais artificiais vindos de colunas `numeric(14, 3)`.
+ * Exemplos: `40.000` -> `40`, `4.500` -> `4,5`, `4.010` -> `4,01`.
+ */
+export function formatarQuantidade(valor: number | string | null | undefined) {
+  if (valor === null || valor === undefined || valor === "") return "-";
+  const numero = Number(typeof valor === "string" ? valor.replace(",", ".") : valor);
+  if (!Number.isFinite(numero)) return "-";
+  return numero.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
+/** Mesma regra de quantidade em formato aceito por `<input type="number">` (separador ponto). */
+export function normalizarQuantidadeEditavel(valor: number | string | null | undefined) {
+  if (valor === null || valor === undefined || valor === "") return "";
+  const numero = Number(typeof valor === "string" ? valor.replace(",", ".") : valor);
+  if (!Number.isFinite(numero)) return "";
+  return String(Number(numero.toFixed(3)));
+}
+
 // UNICA forma de exibir campo date-only (coluna `date` do Postgres: data_referencia, data_movimento,
 // data_vencimento, data_pagamento, data_nascimento...). Chega como "yyyy-MM-dd" e NAO tem hora.
 //

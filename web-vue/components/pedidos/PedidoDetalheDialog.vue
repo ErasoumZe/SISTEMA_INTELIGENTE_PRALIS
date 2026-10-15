@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
+import { formatarQuantidade } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ default: false });
 defineProps<{
@@ -42,17 +43,23 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="850">
-    <v-card v-if="pedido">
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span>{{ pedido.fornecedorNome ?? "Pedido histórico" }}</span>
+  <v-dialog v-model="aberto" max-width="900" scrollable>
+    <v-card v-if="pedido" class="pedido-detalhe">
+      <v-card-title class="pedido-detalhe__topo">
+        <div>
+          <h2 class="pedido-detalhe__titulo">{{ pedido.fornecedorNome ?? "Pedido histórico" }}</h2>
+          <p class="pedido-detalhe__subtitulo">
+            {{ pedido.totalItens }} item(ns) ·
+            {{ pedido.tipo === "automatico" ? "Sugestão de reposição" : "Pedido manual" }}
+          </p>
+        </div>
         <v-chip :color="corStatus(pedido.status)" size="small">{{ rotulosStatus[pedido.status] }}</v-chip>
       </v-card-title>
-      <v-card-text class="d-grid ga-3">
+      <v-card-text class="pedido-detalhe__corpo">
         <v-alert v-if="pedido.status === 'rascunho' || pedido.status === 'aprovado'" type="warning" variant="tonal">
           Pedido histórico: leitura preservada; não entra no novo fluxo sem migração de dados aprovada.
         </v-alert>
-        <div v-else class="d-flex flex-wrap ga-1">
+        <div v-else class="pedido-detalhe__etapas">
           <v-chip
             v-for="etapa in etapas"
             :key="etapa"
@@ -62,7 +69,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             >{{ rotulosStatus[etapa] }}</v-chip
           >
         </div>
-        <div class="d-none d-sm-block">
+        <div class="pedido-detalhe__tabela d-none d-sm-block">
           <v-table density="compact">
             <thead>
               <tr>
@@ -75,28 +82,33 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             <tbody>
               <tr v-for="item in pedido.itens ?? []" :key="item.id">
                 <td>{{ item.descricaoProduto }}</td>
-                <td class="text-right">{{ item.quantidade }}</td>
-                <td class="text-right">{{ item.quantidadeRecebida }}</td>
-                <td class="text-right">{{ item.quantidadePendente }}</td>
+                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidade) }}</td>
+                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeRecebida) }}</td>
+                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadePendente) }}</td>
               </tr>
             </tbody>
           </v-table>
         </div>
         <div class="d-sm-none d-grid ga-2">
-          <v-card v-for="item in pedido.itens ?? []" :key="item.id" variant="tonal">
+          <v-card v-for="item in pedido.itens ?? []" :key="item.id" class="pedido-detalhe__item-mobile">
             <v-card-text class="py-3"
               ><div class="font-weight-medium">{{ item.descricaoProduto }}</div>
               <div class="d-flex justify-space-between text-body-2 mt-2">
-                <span>Pedido {{ item.quantidade }}</span
-                ><span>Recebido {{ item.quantidadeRecebida }}</span>
+                <span>Pedido {{ formatarQuantidade(item.quantidade) }}</span
+                ><span>Recebido {{ formatarQuantidade(item.quantidadeRecebida) }}</span>
               </div>
               <div class="text-caption text-medium-emphasis mt-1">
-                Pendente: {{ item.quantidadePendente }}
+                Pendente: {{ formatarQuantidade(item.quantidadePendente) }}
               </div></v-card-text
             >
           </v-card>
         </div>
-        <v-list v-if="pedido.eventos?.length" density="compact" data-secao="historico-pedido">
+        <v-list
+          v-if="pedido.eventos?.length"
+          class="pedido-detalhe__historico"
+          density="compact"
+          data-secao="historico-pedido"
+        >
           <v-list-subheader>Histórico</v-list-subheader>
           <v-list-item
             v-for="evento in pedido.eventos"
@@ -107,7 +119,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           />
         </v-list>
       </v-card-text>
-      <v-card-actions class="flex-wrap">
+      <v-card-actions class="pedido-detalhe__acoes flex-wrap">
         <v-btn v-if="podeEditar && pedido.status === 'a_fazer'" @click="emit('editar', pedido)">Editar</v-btn>
         <v-btn
           v-if="podeEditar && pedido.status === 'a_fazer'"
@@ -149,3 +161,105 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.pedido-detalhe {
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-3);
+}
+
+.pedido-detalhe__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cx-sp-4);
+  padding: var(--cx-sp-6);
+  border-bottom: 1px solid var(--cx-line-soft);
+}
+
+.pedido-detalhe__titulo {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
+  line-height: 1.25;
+}
+
+.pedido-detalhe__subtitulo {
+  margin: var(--cx-sp-1) 0 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 400;
+}
+
+.pedido-detalhe__corpo {
+  display: grid;
+  gap: var(--cx-sp-4);
+  padding: var(--cx-sp-5) var(--cx-sp-6);
+}
+
+.pedido-detalhe__etapas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-3);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-sunken);
+}
+
+.pedido-detalhe__tabela {
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+}
+
+.pedido-detalhe__tabela :deep(th) {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+
+.pedido-detalhe__numero {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pedido-detalhe__item-mobile {
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface-sunken);
+  box-shadow: none;
+}
+
+.pedido-detalhe__historico {
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface);
+}
+
+.pedido-detalhe__acoes {
+  gap: var(--cx-sp-1);
+  padding: var(--cx-sp-3) var(--cx-sp-6) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line-soft);
+}
+
+@media (max-width: 599px) {
+  .pedido-detalhe__topo,
+  .pedido-detalhe__corpo,
+  .pedido-detalhe__acoes {
+    padding-left: var(--cx-sp-4);
+    padding-right: var(--cx-sp-4);
+  }
+
+  .pedido-detalhe__topo {
+    flex-direction: column;
+  }
+}
+</style>

@@ -57,25 +57,37 @@ function quando(valor: string | null) {
 </script>
 
 <template>
-  <v-card>
-    <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2">
-      <span>Fila de pedidos</span>
-      <span class="text-body-2 text-medium-emphasis">{{ pedidosExibidos.length }} exibido(s)</span>
+  <v-card class="pedidos-fila">
+    <v-card-title class="pedidos-fila__topo">
+      <div>
+        <h2 class="pedidos-fila__titulo">Fila de pedidos</h2>
+        <p class="pedidos-fila__subtitulo">Acompanhe cada compra da criação ao recebimento.</p>
+      </div>
+      <v-chip size="small" variant="tonal" label>{{ pedidosExibidos.length }} exibido(s)</v-chip>
     </v-card-title>
-    <v-card-text class="d-grid ga-4">
-      <v-tabs
-        v-model="situacaoSelecionada"
-        class="pedidos-fila__abas"
-        color="primary"
-        show-arrows
-        aria-label="Etapas do ciclo de pedido"
-      >
-        <v-tab v-for="contagem in contagens" :key="contagem.status" :value="contagem.status">
-          {{ rotulosStatus[contagem.status] }} ({{ contagem.total }})
-        </v-tab>
-      </v-tabs>
-      <v-text-field v-model="busca" label="Buscar fornecedor" prepend-inner-icon="mdi-magnify" clearable hide-details />
-      <div class="d-none d-md-block">
+    <v-card-text class="pedidos-fila__corpo">
+      <div class="pedidos-fila__trilha">
+        <v-tabs
+          v-model="situacaoSelecionada"
+          class="pedidos-fila__abas"
+          color="primary"
+          show-arrows
+          aria-label="Etapas do ciclo de pedido"
+        >
+          <v-tab v-for="contagem in contagens" :key="contagem.status" :value="contagem.status">
+            {{ rotulosStatus[contagem.status] }} <span class="pedidos-fila__contagem">{{ contagem.total }}</span>
+          </v-tab>
+        </v-tabs>
+      </div>
+      <v-text-field
+        v-model="busca"
+        class="pedidos-fila__busca"
+        label="Buscar fornecedor"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        hide-details
+      />
+      <div class="pedidos-fila__tabela d-none d-md-block">
         <v-table density="comfortable">
           <thead>
             <tr>
@@ -111,11 +123,11 @@ function quando(valor: string | null) {
           </tbody>
         </v-table>
       </div>
-      <div class="d-md-none d-grid ga-3">
+      <div class="pedidos-fila__mobile d-md-none d-grid ga-3">
         <v-card v-if="!pedidosExibidos.length" variant="tonal">
           <v-card-text class="text-center text-medium-emphasis">Nenhum pedido encontrado.</v-card-text>
         </v-card>
-        <v-card v-for="pedido in pedidosExibidos" :key="pedido.id" variant="outlined">
+        <v-card v-for="pedido in pedidosExibidos" :key="pedido.id" class="pedidos-fila__cartao-mobile">
           <v-card-text class="d-grid ga-2">
             <div class="d-flex justify-space-between ga-2">
               <div>
@@ -138,7 +150,120 @@ function quando(valor: string | null) {
 </template>
 
 <style scoped>
+.pedidos-fila {
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+}
+
+.pedidos-fila__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-6) var(--cx-sp-6) var(--cx-sp-4);
+}
+
+.pedidos-fila__titulo {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
+  line-height: 1.2;
+}
+
+.pedidos-fila__subtitulo {
+  margin: var(--cx-sp-1) 0 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 400;
+}
+
+.pedidos-fila__corpo {
+  display: grid;
+  gap: var(--cx-sp-4);
+  padding: 0 var(--cx-sp-6) var(--cx-sp-6);
+}
+
+.pedidos-fila__trilha {
+  overflow: hidden;
+  padding: var(--cx-sp-1);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-sunken);
+}
+
 .pedidos-fila__abas {
   max-width: 100%;
+}
+
+.pedidos-fila__abas :deep(.v-tab) {
+  min-height: 42px;
+  border-radius: var(--cx-r-md);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pedidos-fila__abas :deep(.v-tab--selected) {
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+}
+
+.pedidos-fila__contagem {
+  min-width: 20px;
+  margin-left: var(--cx-sp-2);
+  padding: 1px var(--cx-sp-1);
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-hover);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.pedidos-fila__busca {
+  max-width: 440px;
+}
+
+.pedidos-fila__tabela {
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+}
+
+.pedidos-fila__tabela :deep(th) {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+
+.pedidos-fila__tabela :deep(tbody tr) {
+  transition: background var(--cx-dur-1) var(--cx-ease);
+}
+
+.pedidos-fila__tabela :deep(tbody tr:hover) {
+  background: var(--cx-hover);
+}
+
+.pedidos-fila__cartao-mobile {
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+}
+
+@media (max-width: 599px) {
+  .pedidos-fila__topo {
+    padding: var(--cx-sp-5) var(--cx-sp-4) var(--cx-sp-3);
+  }
+
+  .pedidos-fila__corpo {
+    padding: 0 var(--cx-sp-4) var(--cx-sp-4);
+  }
 }
 </style>

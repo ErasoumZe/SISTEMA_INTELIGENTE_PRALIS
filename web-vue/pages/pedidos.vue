@@ -66,17 +66,17 @@ const {
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-4">
+    <div class="pedidos-page d-grid ga-5">
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos?.titulo ?? ''"
         subtitulo="Fluxo único: sugestão, pedido, fornecedor, negociação e recebimento físico."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <div v-if="podeCriar" class="pedidos-acoes">
-        <v-card class="pedidos-acao" variant="outlined">
+        <v-card class="pedidos-acao pedidos-acao--sugestao">
           <v-card-text class="pedidos-acao__corpo">
             <div class="pedidos-acao__cabecalho">
-              <v-avatar color="primary" variant="tonal" size="36"><v-icon icon="mdi-auto-fix" /></v-avatar>
+              <v-avatar color="primary" variant="tonal" size="44"><v-icon icon="mdi-auto-fix" /></v-avatar>
               <div>
                 <h3 class="text-subtitle-1 font-weight-medium">Sugestão de reposição</h3>
                 <p class="text-caption text-medium-emphasis mb-0">
@@ -99,10 +99,10 @@ const {
           </v-card-text>
         </v-card>
 
-        <v-card class="pedidos-acao" variant="outlined">
+        <v-card class="pedidos-acao pedidos-acao--manual">
           <v-card-text class="pedidos-acao__corpo">
             <div class="pedidos-acao__cabecalho">
-              <v-avatar color="primary" variant="tonal" size="36"><v-icon icon="mdi-playlist-plus" /></v-avatar>
+              <v-avatar color="primary" variant="tonal" size="44"><v-icon icon="mdi-playlist-plus" /></v-avatar>
               <div>
                 <h3 class="text-subtitle-1 font-weight-medium">Pedido manual</h3>
                 <p class="text-caption text-medium-emphasis mb-0">
@@ -161,20 +161,58 @@ const {
 }
 
 .pedidos-acao {
-  border-radius: var(--cx-r-lg, 16px);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+  transition:
+    transform var(--cx-dur-2) var(--cx-ease-out),
+    box-shadow var(--cx-dur-2) var(--cx-ease-out),
+    border-color var(--cx-dur-2) var(--cx-ease-out);
+}
+
+.pedidos-acao::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--cx-brand-gradiente);
+  content: "";
+  opacity: 0.9;
+}
+
+.pedidos-acao:hover {
+  transform: translateY(-2px);
+  border-color: var(--cx-line);
+  box-shadow: var(--cx-e-2);
 }
 
 .pedidos-acao__corpo {
   display: flex;
   flex-direction: column;
-  gap: var(--cx-sp-4, 16px);
+  gap: var(--cx-sp-5);
   height: 100%;
+  padding: var(--cx-sp-6);
 }
 
 .pedidos-acao__cabecalho {
   display: flex;
   align-items: flex-start;
-  gap: var(--cx-sp-3, 12px);
+  gap: var(--cx-sp-4);
+}
+
+.pedidos-acao__cabecalho h3 {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-lead);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
+}
+
+.pedidos-acao__cabecalho p {
+  max-width: 46ch;
+  color: var(--cx-ink-soft);
+  line-height: 1.55;
 }
 
 .pedidos-acao__controles {
