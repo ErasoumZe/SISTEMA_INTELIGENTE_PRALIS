@@ -6,7 +6,7 @@
 
 ## 1. Decisão desta leitura
 
-O material recebido aponta o **Questor/Zen** como candidato para receber admissões e importar eventos variáveis. Isto **não substitui automaticamente** a referência histórica a Conplus: a contabilidade precisa confirmar se o Questor/Zen é o destino definitivo, intermediário ou somente uma etapa do processo.
+O **Questor/Zen** é o sistema técnico que recebe ou troca os dados de admissão e de eventos variáveis. **Conplus é a contabilidade responsável pelo processo**, não um sistema concorrente. Portanto, o fluxo esperado é Pralis ↔ Questor/Zen, operado e validado junto da Conplus.
 
 Não existe autorização para enviar dados reais, não foram fornecidos endpoint, autenticação, credenciais, ambiente sandbox, tabela de códigos por empresa nem contrato de resposta da API. Consequentemente, esta descoberta **não autoriza** migration, criação de integração ativa, backfill, exportação com dados reais, deploy ou mudança de cálculo de folha.
 
@@ -90,7 +90,7 @@ O artefato local precisa de identificador, hash de conteúdo, empresa e competê
 
 | Fase | Entrega vertical | Gate obrigatório |
 | --- | --- | --- |
-| 0 | Confirmar sistema destino, versão, sandbox, política de dados, responsáveis e catálogo de códigos. | Resposta formal da contabilidade/Questor. |
+| 0 | Confirmar versão do Questor/Zen, sandbox, política de dados, responsáveis e catálogo de códigos. | Resposta formal da Conplus/Questor. |
 | 1 | Mapeador puro + validador com fixtures sintéticas e relatório de campos faltantes. | Layout homologado; sem banco novo e sem rede externa. |
 | 2 | Prévia do DP e exportação de admissão de teste, com permissões, hash e auditoria mínima. | Teste conjunto em sandbox e decisão de retenção. |
 | 3 | Adaptador da API, retries controlados, idempotência e reconciliação de resposta. | Especificação de API, credenciais segregadas e aprovação explícita para escrita externa. |
@@ -100,15 +100,14 @@ Cada fase deve ser uma PR pequena e completa (tela, API quando houver, testes e 
 
 ## 8. Perguntas que bloqueiam o início técnico
 
-1. Questor/Zen é o destino final da integração ou substitui/complementa o Conplus citado anteriormente?
-2. Qual endpoint, versão, autenticação, IP allowlist, limites e ambiente sandbox da API SYN?
-3. Qual é o identificador idempotente aceito pelo Questor e como consultar/corrigir uma transmissão parcial?
-4. Quais catálogos, códigos e vigências serão fornecidos por empresa (estabelecimento, contrato, sindicato, função/CBO, município, organograma, jornada, banco e empregado)?
-5. Quais campos são obrigatórios por categoria de contratação e quais podem ser omitidos legalmente?
-6. Confirmar o marcador do registro de dependente diante da inconsistência da documentação e homologar um arquivo sintético A–D.
-7. Quem aprova a transmissão, qual prazo de retorno e como registrar recusa/correção sem alterar histórico?
-8. Para eventos: qual competência, formato decimal, regra de hora centesimal e catálogo de código/unidade por empresa?
-9. Qual política de retenção, mascaramento, acesso e descarte dos arquivos e respostas que contêm dados pessoais?
+1. Qual endpoint, versão, autenticação, IP allowlist, limites e ambiente sandbox da API SYN do Questor/Zen?
+2. Qual é o identificador idempotente aceito pelo Questor e como consultar/corrigir uma transmissão parcial?
+3. Quais catálogos, códigos e vigências serão fornecidos por empresa (estabelecimento, contrato, sindicato, função/CBO, município, organograma, jornada, banco e empregado)?
+4. Quais campos são obrigatórios por categoria de contratação e quais podem ser omitidos legalmente?
+5. Confirmar o marcador do registro de dependente diante da inconsistência da documentação e homologar um arquivo sintético A–D.
+6. Quem aprova a transmissão na Conplus, qual prazo de retorno e como registrar recusa/correção sem alterar histórico?
+7. Para eventos: qual competência, formato decimal, regra de hora centesimal e catálogo de código/unidade por empresa?
+8. Qual política de retenção, mascaramento, acesso e descarte dos arquivos e respostas que contêm dados pessoais?
 
 ## 9. Critérios de aceite futuros
 
