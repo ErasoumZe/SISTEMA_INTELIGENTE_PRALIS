@@ -367,8 +367,7 @@ export const telasCrudDiretoria = [
   "unidades",
   "areas_setores",
   "usuarios",
-  "permissoes",
-  "colaboradores"
+  "permissoes"
 ];
 
 export function permissaoMenuMostrar(telaId: string) {

@@ -3707,6 +3707,132 @@ export const colaboradoresVinculos = pgTable(
   ]
 );
 
+// Dados privados ficam fora da tabela raiz de colaboradores, que tambem e consumida por
+// operacoes de Caixa. Cada tabela usa a FK composta para impedir que uma ficha de uma empresa
+// aponte para o colaborador de outra.
+export const colaboradoresDadosPessoais = pgTable(
+  "colaboradores_dados_pessoais",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    nomeSocial: text("nome_social"),
+    nascimento: date("nascimento"),
+    sexo: text("sexo").$type<"Masculino" | "Feminino">(),
+    estadoCivil: text("estado_civil"),
+    racaCor: text("raca_cor"),
+    grauInstrucao: text("grau_instrucao"),
+    nacionalidade: text("nacionalidade"),
+    naturalidade: text("naturalidade"),
+    nomeMae: text("nome_mae"),
+    nomePai: text("nome_pai"),
+    rgNumero: text("rg_numero"),
+    rgOrgao: text("rg_orgao"),
+    rgUf: text("rg_uf"),
+    rgEmissao: date("rg_emissao"),
+    tituloEleitor: text("titulo_eleitor"),
+    tituloZona: text("titulo_zona"),
+    tituloSecao: text("titulo_secao"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_dados_pessoais_colaborador_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_dados_pessoais_colaborador_unico").on(table.colaboradorId),
+    check(
+      "colaboradores_dados_pessoais_sexo_check",
+      sql`${table.sexo} is null or ${table.sexo} in ('Masculino', 'Feminino')`
+    ),
+    check("colaboradores_dados_pessoais_rg_uf_check", sql`${table.rgUf} is null or ${table.rgUf} ~ '^[A-Z]{2}$'`)
+  ]
+);
+
+export const colaboradoresEnderecos = pgTable(
+  "colaboradores_enderecos",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    municipio: text("municipio"),
+    uf: text("uf"),
+    telefone: text("telefone"),
+    email: text("email"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_enderecos_colaborador_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_enderecos_colaborador_unico").on(table.colaboradorId),
+    check("colaboradores_enderecos_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
+    check("colaboradores_enderecos_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
+    check(
+      "colaboradores_enderecos_telefone_check",
+      sql`${table.telefone} is null or ${table.telefone} ~ '^[0-9]{10,11}$'`
+    )
+  ]
+);
+
+export const colaboradoresDadosBancarios = pgTable(
+  "colaboradores_dados_bancarios",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    banco: text("banco"),
+    agencia: text("agencia"),
+    conta: text("conta"),
+    contaDigito: text("conta_digito"),
+    contaTipo: text("conta_tipo"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_dados_bancarios_colaborador_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_dados_bancarios_colaborador_unico").on(table.colaboradorId)
+  ]
+);
+
+export const colaboradoresOnboarding = pgTable(
+  "colaboradores_onboarding",
+  {
+    id: idUuid,
+    empresaId,
+    vinculoId: uuid("vinculo_id").notNull(),
+    etapa: text("etapa").$type<"em_cadastro">().notNull().default("em_cadastro"),
+    versao: integer("versao").notNull().default(1),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.vinculoId, table.empresaId],
+      foreignColumns: [colaboradoresVinculos.id, colaboradoresVinculos.empresaId],
+      name: "colaboradores_onboarding_vinculo_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_onboarding_vinculo_unico").on(table.vinculoId),
+    check("colaboradores_onboarding_etapa_check", sql`${table.etapa} = 'em_cadastro'`),
+    check("colaboradores_onboarding_versao_check", sql`${table.versao} > 0`),
+    index("colaboradores_onboarding_empresa_etapa_idx").on(table.empresaId, table.etapa, table.atualizadoEm)
+  ]
+);
+
 /**
  * Histórico próprio do colaborador. Só guarda o tipo do ato e nomes de campos, nunca os valores
  * pessoais anteriores/depois. Assim a linha do tempo é auditável sem virar uma segunda cópia de PII.

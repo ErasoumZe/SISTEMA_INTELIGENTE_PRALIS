@@ -139,9 +139,9 @@ export async function listarCargos(escopoDados: string[]) {
 //
 // Entregar CPF de todo o quadro a quem so opera caixa e minimizacao de dados que nunca existiu, e o
 // `usuarioId` de cada colega e um identificador reaproveitavel em outras rotas. Quem cadastra
-// colaborador ou edita usuario continua recebendo os 7 campos — retirar qualquer um deles apagaria
-// dado no proximo PUT, porque o payload de cadastro e substituicao total
-// (shared/src/cadastros/index.ts:405-413).
+// colaborador ou edita usuario continua recebendo o contrato completo: os campos legados sao
+// necessarios ao PUT de substituicao total (shared/src/cadastros/index.ts:405-413) e os campos de
+// vinculo sao necessarios para o resumo somente-leitura da lista de DP.
 const PERMISSOES_CONTRATO_COMPLETO = ["cadastro_colaboradores_visualizar", "cadastro_usuarios_visualizar"] as const;
 
 export async function listarColaboradores(escopoDados: string[], perfil?: PerfilUsuario) {

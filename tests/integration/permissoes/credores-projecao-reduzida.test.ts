@@ -26,7 +26,21 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 // O oraculo e o CONJUNTO DE CHAVES, nao os valores: um campo que chega nulo por acaso no seed passaria
 // despercebido numa comparacao de valores, e e justamente o campo que nao pode existir.
 const CONTRATO_REDUZIDO = ["id", "empresaId", "nome"];
-const CONTRATO_COMPLETO_COLABORADOR = ["id", "empresaId", "nome", "cpf", "setorId", "turnoPadraoId", "usuarioId"];
+// Os quatro campos de vinculo pertencem ao resumo da lista DP. A projecao operacional continua
+// estritamente reduzida a id/empresa/nome no teste abaixo.
+const CONTRATO_COMPLETO_COLABORADOR = [
+  "id",
+  "empresaId",
+  "nome",
+  "cpf",
+  "setorId",
+  "turnoPadraoId",
+  "usuarioId",
+  "vinculoAtivoId",
+  "temVinculoHistorico",
+  "matricula",
+  "funcaoNome"
+];
 const CONTRATO_COMPLETO_FORNECEDOR = ["id", "empresaId", "nome", "documento"];
 
 // Dados que NAO podem sair na resposta operacional. Sao gravados por SQL direto de proposito: o

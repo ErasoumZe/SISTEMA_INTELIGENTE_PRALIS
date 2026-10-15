@@ -82,12 +82,12 @@ export function useCadastroView(params: {
       return listas.colaboradores.map((item) => ({
         id: item.id,
         nome: item.nome,
-        cpf: item.cpf,
-        setor: item.setorNome ?? item.descricao,
-        setorId: item.setorId ?? undefined,
-        turnoPadraoId: item.turnoPadraoId ?? undefined,
-        cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
-        cargoId: item.cargoIds?.[0] ?? item.cargoId ?? ""
+        vinculoAtivoId: item.vinculoAtivoId ?? undefined,
+        // LinhaCadastro e a grade generica usam valores textuais. O dominio continua booleano
+        // na API; esta e somente a serializacao de apresentacao da tela DP.
+        temVinculoHistorico: item.temVinculoHistorico ? "sim" : "nao",
+        matricula: item.matricula ?? "",
+        funcaoNome: item.funcaoNome ?? ""
       }));
     if (tela === "unidades")
       return listas.unidadesMedida.map((item) => ({ id: item.id, nome: item.nome, sigla: item.sigla }));
@@ -222,7 +222,7 @@ export function useCadastroView(params: {
       areas_setores: "Áreas e setores organizacionais.",
       usuarios: "Usuários e acessos do sistema.",
       permissoes: "Perfis de acesso compartilhados por cargo ou setor.",
-      colaboradores: "Cadastro de colaboradores.",
+      colaboradores: "Perfis de colaboradores efetivados e seus vínculos.",
       fornecedores: "Cadastro de fornecedores.",
       socios_gestores: "Cadastro de sócios e gestores que podem ser credores de retiradas.",
       maquininhas: "Equipamentos de cartão disponíveis para vínculo opcional na abertura do caixa.",
@@ -247,7 +247,7 @@ export function useCadastroView(params: {
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Perfil", "Setor", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
-      colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
+      colaboradores: ["Colaborador", "Situação", "Função atual", "Matrícula"],
       fornecedores: ["Nome", "Documento"],
       socios_gestores: ["Nome", "Ativo"],
       maquininhas: ["Apelido", "Número de série", "Ativo"],
