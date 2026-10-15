@@ -16,7 +16,7 @@ import { mascararCnpj } from "~/utils/formatacao";
 import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import { rotaRevisaoDaFicha } from "~/utils/admissoes";
+import { rotaEfetivacaoDoProcesso, rotaRevisaoDaFicha } from "~/utils/admissoes";
 import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
@@ -367,7 +367,7 @@ function revisarFicha() {
 function abrirEfetivacao() {
   if (!processo.value || !podeEfetivar.value) return;
   fecharDetalhe();
-  void router.push(`/admissoes_processos/${encodeURIComponent(processo.value.id)}/efetivar`);
+  void router.push(rotaEfetivacaoDoProcesso(processo.value.id));
 }
 
 async function cancelarProcesso() {
