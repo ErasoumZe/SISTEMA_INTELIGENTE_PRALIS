@@ -1221,17 +1221,22 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     const resposta = await listarColaboradores(contexto, cookieAdmin);
     const alvo = dadosDaLista(resposta).find((item) => item.id === colaboradorALegitimo);
 
-    // Os 7 campos da projecao completa. Retirar qualquer um deles apaga dado em silencio no
-    // proximo PUT, porque o payload de cadastro e substituicao total
-    // (shared/src/cadastros/index.ts:405-413).
+    // O contrato completo preserva os campos do cadastro legado e acrescenta o contexto
+    // somente-leitura do DP. Retirar os campos legados apaga dado em silencio no proximo PUT,
+    // porque o payload de cadastro e substituicao total
+    // (shared/src/cadastros/index.ts:405-413); retirar os quatro novos quebra a lista do perfil DP.
     expect(Object.keys(alvo ?? {}).sort()).toEqual([
       "cpf",
       "empresaId",
+      "funcaoNome",
       "id",
+      "matricula",
       "nome",
       "setorId",
+      "temVinculoHistorico",
       "turnoPadraoId",
-      "usuarioId"
+      "usuarioId",
+      "vinculoAtivoId"
     ]);
     expect(alvo?.cpf).toBe("11144477735");
     expect(alvo?.setorId).toBe(idsTeste.setorA);
