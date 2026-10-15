@@ -112,7 +112,9 @@ export const acoesHistoricoProcesso = [
   "convite_revogado",
   "ficha_enviada",
   "ficha_devolvida",
-  "ficha_aprovada"
+  "ficha_aprovada",
+  // A efetivação é comprovada pelo vínculo único; o processo não recebe um segundo status gravado.
+  "efetivado"
 ] as const;
 export const acaoHistoricoProcessoSchema = z.enum(acoesHistoricoProcesso);
 export type AcaoHistoricoProcesso = z.infer<typeof acaoHistoricoProcessoSchema>;
@@ -323,6 +325,10 @@ export const processoDetalheDtoSchema = z.object({
    * qual turno da empresa aquele texto era.
    */
   jornadaHorario: z.string().nullable(),
+  // A efetivação é provada pelo vínculo único; o processo não ganha um segundo status gravado.
+  fichaSituacao: situacaoFichaSchema.nullable(),
+  efetivado: z.boolean(),
+  dataEfetivacao: z.string().nullable(),
   internos: dadosInternosDtoSchema,
   // SO o nome. E-mail nunca entra na projecao — e identificador reaproveitavel em outras rotas.
   criadoPorNome: z.string().nullable(),

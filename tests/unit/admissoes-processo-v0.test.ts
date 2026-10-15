@@ -38,7 +38,7 @@ function fontesDoProcesso(): { nome: string; codigo: string }[] {
     .map((n) => ({ nome: n, codigo: semComentarios(readFileSync(join(MODULO, n), "utf8")) }));
 }
 
-describe("a V0 nao cresce para fora do escopo", () => {
+describe("o fluxo de processo nao cresce para fora do escopo", () => {
   const fontes = fontesDoProcesso();
 
   it("varre arquivos de verdade", () => {
@@ -49,14 +49,13 @@ describe("a V0 nao cresce para fora do escopo", () => {
     ]);
   });
 
-  it("nao existe rota de iniciar admissao", () => {
-    // Escrito em pedacos para este arquivo nao ser o unico culpado da propria varredura.
-    for (const verbo of ["iniciar", "efetivar"]) {
-      const proibido = "/api/admissoes/" + "processos/:id/" + verbo;
-      for (const { nome, codigo } of fontes) {
-        expect(codigo, `${nome} (${verbo})`).not.toContain(proibido);
-      }
-    }
+  it("nao existe rota de iniciar admissao e a efetivacao tem rota unica", () => {
+    const proibido = "/api/admissoes/" + "processos/:id/iniciar";
+    for (const { nome, codigo } of fontes) expect(codigo, nome).not.toContain(proibido);
+
+    const controller = fontes.find((f) => f.nome === "processos.controller.ts");
+    expect(controller?.codigo).toContain('"/api/admissoes/processos/:id/efetivar"');
+    expect(controller?.codigo).toContain('exigirPermissao("admissoes_processos_efetivar")');
   });
 
   it("existe UMA rota de criacao, e ela e a admissao direta", () => {
@@ -103,6 +102,7 @@ describe("a V0 nao cresce para fora do escopo", () => {
       readFileSync(join(RAIZ, "web-vue", "components", "admissoes", "AdmissoesProcessosPage.vue"), "utf8")
     );
     for (const verbo of ["Iniciar admissão", "Efetivar", "Iniciar processo"]) {
+      if (verbo === "Efetivar") continue;
       expect(tela, verbo).not.toContain(verbo);
     }
     // Um unico BOTAO de criacao. Conta o gatilho, nao a palavra: o estado vazio tambem menciona
@@ -110,13 +110,16 @@ describe("a V0 nao cresce para fora do escopo", () => {
     // caminho.
     expect([...tela.matchAll(/@click="novoAberto = true"/gu)]).toHaveLength(1);
     expect(tela).toContain("+ Novo cadastro");
+    expect(tela).toContain("podeEfetivar");
+    expect([...tela.matchAll(/@efetivar="abrirEfetivacao"/gu)]).toHaveLength(1);
   });
 
-  it("o modulo do processo nao referencia colaborador", () => {
-    // O vinculo com o cadastro operacional e escopo inteiro da V7, incluindo a coluna.
+  it("somente a efetivacao cria colaborador; o processo apenas consulta o vinculo", () => {
     for (const { nome, codigo } of fontes) {
-      expect(codigo.toLowerCase(), nome).not.toContain("colaborador");
+      expect(codigo, nome).not.toContain("insert(colaboradores)");
     }
+    const efetivacao = readFileSync(join(MODULO, "efetivacao.repository.ts"), "utf8");
+    expect(efetivacao).toContain("insert(colaboradores)");
   });
 
   it("motivo estruturado de cancelamento nao existe em lugar nenhum", () => {
@@ -142,7 +145,7 @@ describe("a V0 nao cresce para fora do escopo", () => {
     expect(paginas).toEqual(["admissoes_processos"]);
     const pasta = join(RAIZ, "web-vue", "pages", "admissoes_processos");
     expect(readdirSync(pasta).sort()).toEqual(["[id]", "index.vue"]);
-    expect(readdirSync(join(pasta, "[id]"))).toEqual(["ficha.vue"]);
+    expect(readdirSync(join(pasta, "[id]")).sort()).toEqual(["efetivar.vue", "ficha.vue"]);
   });
 });
 
@@ -267,10 +270,12 @@ describe("a V0 e puramente aditiva", () => {
     expect(destinos).not.toContain(colaboradores);
   });
 
-  it("colaboradores continua sem unique novo", () => {
+  it("colaboradores tem a UNIQUE composta que protege as FKs do vinculo", () => {
     // A V0 nao pode ter tocado a tabela. `colaboradores_usuario_id_unico` e indice parcial, nao
     // unique constraint — a lista de uniques da tabela tem de continuar vazia.
-    expect(getTableConfig(colaboradores).uniqueConstraints.map((u) => u.name)).toEqual([]);
+    expect(getTableConfig(colaboradores).uniqueConstraints.map((u) => u.name)).toContain(
+      "colaboradores_id_empresa_unica"
+    );
   });
 
   it("a migration nova nao altera tabela existente", () => {
@@ -344,6 +349,9 @@ describe("a origem e o vinculo com o teste", () => {
       // — inventar identidade para preencher o vazio e exatamente o que a vertical recusou.
       testeId: null,
       nomeCompleto: "Pessoa Sintetica",
+      fichaSituacao: null,
+      efetivado: false,
+      dataEfetivacao: null,
       cpfMascarado: "•••.•••.•••-••",
       funcaoNome: "Balconista",
       turnoEtiqueta: "M",

@@ -72,6 +72,10 @@ describe("db/seed.ts usa a referencia de permissoes, e nao uma copia", () => {
     // O bloco interno e do DP. A Gerencia carrega o processo, mas nao o ASO.
     expect(permissoesPorCargo["DP"]).toContain("admissoes_processos_editar_internos");
     expect(permissoesPorCargo["Gerencia"]).not.toContain("admissoes_processos_editar_internos");
+    // Efetivar cria vínculo e matrícula: permanece ato exclusivo do DP, inclusive na referência
+    // usada pelo seed, para não virar uma permissão só de interface.
+    expect(permissoesPorCargo["DP"]).toContain("admissoes_processos_efetivar");
+    expect(permissoesPorCargo["Gerencia"]).not.toContain("admissoes_processos_efetivar");
     // Diretor Geral nao participa de admissoes, mas acompanha e decide a conferencia final do
     // caixa junto da Tesouraria. A excecao precisa continuar limitada a essas duas chaves.
     expect(permissoesPorCargo["Diretor Geral"]).toEqual([

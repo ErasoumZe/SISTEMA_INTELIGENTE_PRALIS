@@ -24,6 +24,7 @@ export type Opcao = {
   cidade?: string;
   estado?: string;
   cnpj?: string | null;
+  matriculaPrefixo?: string;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
   // Conta com fundo (D8), vindo de /api/contas/saldos. saldoAtual e DERIVADO dos movimentos —

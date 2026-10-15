@@ -134,7 +134,8 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   convite_revogado: "Convite revogado",
   ficha_enviada: "Ficha enviada pelo candidato",
   ficha_devolvida: "Ficha devolvida para correção",
-  ficha_aprovada: "Ficha aprovada"
+  ficha_aprovada: "Ficha aprovada",
+  efetivado: "Colaborador efetivado"
 };
 
 /**
@@ -345,4 +346,12 @@ export const iconeSituacaoFicha: Record<SituacaoFicha, string> = {
  */
 export function rotaRevisaoDaFicha(processoId: string): string {
   return `/admissoes_processos/${encodeURIComponent(processoId)}/ficha`;
+}
+
+/**
+ * O caminho da conferencia final que efetiva a admissao. Assim como a ficha, a rota pertence ao
+ * modulo de admissoes: a tela dona apenas pede o destino, sem duplicar o formato da URL.
+ */
+export function rotaEfetivacaoDoProcesso(processoId: string): string {
+  return `/admissoes_processos/${encodeURIComponent(processoId)}/efetivar`;
 }

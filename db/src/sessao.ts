@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQLWrapper } from "drizzle-orm";
 
 // Tetos POR TRANSACAO da API (P0 lancamento x fechamento do caixa). `set_config(..., true)` e
 // LOCAL: vale so ate o commit/rollback da transacao que o executa — migrations, better-auth e um
@@ -43,4 +43,14 @@ export function sqlTravarCadastroDeProdutosDaEmpresa(empresaId: string) {
  */
 export function sqlTravarAdmissaoDaPessoa(empresaId: string, cpf: string) {
   return sql`select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext(${empresaId}::text || ':' || ${cpf}::text))`;
+}
+
+/** Serializa a escolha da próxima matrícula dentro de uma empresa. */
+export function sqlTravarMatriculaDaEmpresa(empresaId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('dp:matricula'), hashtext(${empresaId}::text))`;
+}
+
+/** Expressao unica para comparar CPF com ou sem mascara nas consultas do dominio. */
+export function sqlCpfNormalizado(cpf: SQLWrapper) {
+  return sql`regexp_replace(${cpf}, '\\D', '', 'g')`;
 }

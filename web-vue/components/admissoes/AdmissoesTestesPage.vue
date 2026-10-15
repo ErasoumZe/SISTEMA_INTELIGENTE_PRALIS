@@ -487,6 +487,7 @@ onMounted(async () => {
     :historico="historicoProcesso"
     :carregando="processoCarregando"
     :pode-cancelar="podeCancelarProcesso"
+    :pode-efetivar="false"
     :pode-editar-internos="false"
     :processando="processoProcessando"
     :pode-ver-teste="true"

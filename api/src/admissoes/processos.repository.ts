@@ -7,7 +7,7 @@ import {
   admissoesProcessosInternos,
   admissoesTestes
 } from "@padaria/db/schema/admissoes";
-import { funcoesOperacionais, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
+import { colaboradoresVinculos, funcoesOperacionais, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
 import { sqlTravarAdmissaoDaPessoa } from "@padaria/db/sessao";
 import type {
   AcaoHistoricoProcesso,
@@ -71,6 +71,9 @@ export type ProcessoLinha = {
   /** ADM-003 V6 — a situacao da ficha, ou `null` quando o candidato ainda nao abriu o link. */
   fichaSituacao: SituacaoFicha | null;
   fichaEnviadoEm: Date | null;
+  /** A efetivação é provada pelo vínculo único, não por um segundo status no processo. */
+  vinculoId: string | null;
+  dataEfetivacao: string | null;
 };
 
 /**
@@ -268,6 +271,16 @@ export async function bloquearInternosRepository(processoId: string, empresaId: 
     )
     .limit(1)
     .for("no key update");
+  return linha ?? null;
+}
+
+/** A linha do processo já está travada por quem chama; esta leitura preserva a data histórica após efetivar. */
+export async function obterVinculoEfetivadoRepository(processoId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ admitidoEm: colaboradoresVinculos.admitidoEm })
+    .from(colaboradoresVinculos)
+    .where(and(eq(colaboradoresVinculos.processoId, processoId), eq(colaboradoresVinculos.empresaId, empresaId)))
+    .limit(1);
   return linha ?? null;
 }
 
@@ -469,7 +482,9 @@ function selecaoProcesso() {
      */
     fichaSituacao: sql<SituacaoFicha | null>`${admissoesProcessosFicha.situacao}`,
     /** So para ORDENAR a fila. Nao vai para o contrato: a lista nao mostra data de envio. */
-    fichaEnviadoEm: admissoesProcessosFicha.enviadoEm
+    fichaEnviadoEm: admissoesProcessosFicha.enviadoEm,
+    vinculoId: colaboradoresVinculos.id,
+    dataEfetivacao: colaboradoresVinculos.admitidoEm
   };
 }
 
@@ -508,6 +523,13 @@ function consultaProcesso() {
       and(
         eq(admissoesProcessosInternos.processoId, admissoesProcessos.id),
         eq(admissoesProcessosInternos.empresaId, admissoesProcessos.empresaId)
+      )
+    )
+    .leftJoin(
+      colaboradoresVinculos,
+      and(
+        eq(colaboradoresVinculos.processoId, admissoesProcessos.id),
+        eq(colaboradoresVinculos.empresaId, admissoesProcessos.empresaId)
       )
     )
     .leftJoin(perfilCriador, eq(perfilCriador.usuarioId, admissoesProcessos.criadoPor))

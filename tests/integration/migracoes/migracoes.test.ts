@@ -303,6 +303,7 @@ describe("migracoes integration", () => {
       "admissoes_processos_ficha",
       "admissoes_processos_internos",
       "admissoes_testes",
+      "colaboradores_vinculos",
       "configuracoes_menu_empresas",
       "funcoes_operacionais"
     ]);
