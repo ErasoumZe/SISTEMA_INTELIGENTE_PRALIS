@@ -43,6 +43,7 @@ import {
   obterFuncaoAtivaRepository,
   obterProcessoPorTesteRepository,
   obterProcessoRepository,
+  obterVinculoEfetivadoRepository,
   registrarEventoProcessoRepository,
   type ProcessoLinha
 } from "./processos.repository.js";
@@ -76,6 +77,9 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
     turnoHoraFim: linha.turnoHoraFim,
     turnoDiasSemana: linha.turnoDiasSemana,
     jornadaHorario: linha.jornadaHorario,
+    fichaSituacao: linha.fichaSituacao,
+    efetivado: linha.vinculoId !== null,
+    dataEfetivacao: linha.dataEfetivacao,
     internos: {
       versao: linha.internosVersao,
       dataAdmissao: linha.internosDataAdmissao,
@@ -341,6 +345,13 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
     if (!internos) processoNaoEncontrado();
     if (internos.versao !== dados.versao) {
       throw conflito("Alguem alterou estes dados enquanto voce editava", "VERSAO_CONFLITANTE");
+    }
+    const vinculo = await obterVinculoEfetivadoRepository(id, empresaId, tx);
+    if (vinculo && dados.dataAdmissao !== vinculo.admitidoEm) {
+      throw conflito(
+        "A data de efetivacao e historica e nao pode ser alterada apos efetivar o colaborador",
+        "DATA_EFETIVACAO_IMUTAVEL"
+      );
     }
 
     const atualizado = await atualizarInternosRepository(

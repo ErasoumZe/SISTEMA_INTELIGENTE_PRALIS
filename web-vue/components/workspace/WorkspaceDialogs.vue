@@ -220,6 +220,20 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               @update:model-value="formCadastro.cnpj = mascararCnpj(String($event || ''))"
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'empresas'" cols="12" md="6">
+            <v-text-field
+              :model-value="formCadastro.matriculaPrefixo"
+              label="Prefixo da matrícula"
+              hint="Ex.: TNP ou LISB. A numeração é automática por empresa."
+              maxlength="8"
+              persistent-hint
+              @update:model-value="
+                formCadastro.matriculaPrefixo = String($event || '')
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, '')
+              "
+            />
+          </v-col>
           <v-col v-if="cadastroTela === 'fornecedores' || cadastroTela === 'clientes'" cols="12" md="6">
             <v-text-field
               :model-value="formCadastro.documento"

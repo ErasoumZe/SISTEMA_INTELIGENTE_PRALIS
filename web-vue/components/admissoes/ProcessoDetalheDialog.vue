@@ -38,6 +38,8 @@ const props = defineProps<{
   processo: ProcessoDetalheDto | null;
   historico: HistoricoProcessoDto[];
   podeCancelar: boolean;
+  /** A efetivação é permissão própria do DP; o servidor ainda valida todos os fatos. */
+  podeEfetivar: boolean;
   podeEditarInternos: boolean;
   /**
    * Se ESTA tela tem para onde levar o "Ver o teste". NAO e permissao — as duas acima sao.
@@ -99,6 +101,7 @@ const emit = defineEmits<{
   // A UNICA porta para a tela de revisao. O modal nao carrega ficha nem dependente, e nao aprova
   // nem devolve: quem navega e a pagina, para onde este evento vai.
   (event: "revisarFicha"): void;
+  (event: "efetivar"): void;
 }>();
 
 const dialogCancelar = ref(false);
@@ -200,6 +203,14 @@ const cancelavel = computed(() => {
   const status = props.processo?.status;
   return status !== undefined && processoCancelavel(status);
 });
+
+const efetivavel = computed(
+  () =>
+    props.podeEfetivar &&
+    props.processo?.status === "iniciado" &&
+    props.processo.internos.exameSituacao === "aso_apto" &&
+    Boolean(props.processo.internos.dataAdmissao)
+);
 
 /**
  * Devolver o foco a quem abriu.
@@ -509,11 +520,20 @@ function confirmarCancelar() {
 
       <!-- Rodape so quando ha o que fazer. Fechar mora no X, e um segundo botao para o mesmo ato
            seria a duplicidade que o AGENTS.md proibe. -->
-      <v-card-actions v-if="processo && cancelavel && podeCancelar">
-        <v-btn color="error" variant="text" :disabled="processando" @click="dialogCancelar = true">
+      <v-card-actions v-if="processo && ((cancelavel && podeCancelar) || efetivavel)">
+        <v-btn
+          v-if="cancelavel && podeCancelar"
+          color="error"
+          variant="text"
+          :disabled="processando"
+          @click="dialogCancelar = true"
+        >
           Cancelar e arquivar
         </v-btn>
         <v-spacer />
+        <v-btn v-if="efetivavel" color="success" variant="flat" :disabled="processando" @click="emit('efetivar')">
+          Efetivar colaborador
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

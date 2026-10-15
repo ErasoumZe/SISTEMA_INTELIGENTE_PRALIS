@@ -64,6 +64,9 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
     versao: 3,
     testeId: "teste-1",
     nomeCompleto: "Maria Aparecida da Silva",
+    fichaSituacao: null,
+    efetivado: false,
+    dataEfetivacao: null,
     cpfMascarado: "•••.•••.•••-••",
     funcaoNome: "PADEIRO",
     turnoEtiqueta: "M",
@@ -126,6 +129,7 @@ type Cenario = {
   aberto?: boolean;
   processo?: ProcessoDetalheDto | null;
   podeCancelar?: boolean;
+  podeEfetivar?: boolean;
   podeEditarInternos?: boolean;
   /** O default e a tela de Testes, que TEM caminho de volta. A de Processos passa `false`. */
   podeVerTeste?: boolean;
@@ -154,6 +158,7 @@ function montar(cenario: Cenario = {}) {
       processo: cenario.processo === undefined ? processoDe("iniciado") : cenario.processo,
       historico: HISTORICO,
       podeCancelar: cenario.podeCancelar ?? true,
+      podeEfetivar: cenario.podeEfetivar ?? false,
       podeEditarInternos: cenario.podeEditarInternos ?? true,
       podeVerTeste: cenario.podeVerTeste ?? true,
       podeVerCpf: cenario.podeVerCpf ?? false,

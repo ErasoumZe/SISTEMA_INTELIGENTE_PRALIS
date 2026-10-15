@@ -18,7 +18,12 @@ export async function listarEmpresas(perfil?: PerfilComEmpresa) {
 
 export async function salvarEmpresa(id: string | null, body: DadosExternos, usuarioCriadorId?: string) {
   const dados = empresaPayloadSchema.parse(body);
-  const empresa = { ...(id ? { id } : {}), nome: dados.nome.trim(), cnpj: apenasDigitos(dados.cnpj) };
+  const empresa = {
+    ...(id ? { id } : {}),
+    nome: dados.nome.trim(),
+    cnpj: apenasDigitos(dados.cnpj),
+    matriculaPrefixo: dados.matriculaPrefixo
+  };
 
   if (id) return salvarEmpresaRepository(empresa);
   if (!usuarioCriadorId) throw erroValidacao("Usuario criador obrigatorio", "USUARIO_CRIADOR_OBRIGATORIO");

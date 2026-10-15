@@ -32,6 +32,7 @@ export type CadastroForm = {
   cidade: string;
   estado: string;
   cnpj: string;
+  matriculaPrefixo: string;
   email: string;
   senha: string;
   // `""` = papel DESCONHECIDO, e nao "papel padrao". O formulario de edicao e montado da linha da
@@ -134,7 +135,7 @@ export function bloqueioCadastroUsuario(
 }
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
-  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
+  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null, matriculaPrefixo: form.matriculaPrefixo };
   // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
   // campo em branco significa "sem fundo", e mandar undefined faria o servidor MANTER o fundo
   // anterior — o admin que apagasse o campo veria o valor voltar sozinho.

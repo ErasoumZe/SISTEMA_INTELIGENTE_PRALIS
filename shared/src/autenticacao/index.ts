@@ -150,6 +150,8 @@ export const permissoes = [
   // mandou nao e o mesmo que aprovar ou devolver. Quem revisa precisa das duas.
   "admissoes_processos_ver_ficha",
   "admissoes_processos_revisar_ficha",
+  // Efetivar cria o cadastro operacional e o vínculo de trabalho; não herda criar admissão.
+  "admissoes_processos_efetivar",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",

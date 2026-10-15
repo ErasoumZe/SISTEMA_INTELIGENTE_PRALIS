@@ -110,22 +110,27 @@ const documentoFiscalLancamento = {
   numeroDocumentoFiscal: text("numero_documento_fiscal")
 };
 
-export const empresas = pgTable("empresas", {
-  id: idUuid,
-  nome: text("nome").notNull(),
-  cnpj: text("cnpj"),
-  configuracoesAparencia: jsonb("configuracoes_aparencia")
-    .$type<ConfiguracaoAparenciaEmpresa>()
-    .notNull()
-    .default(
-      sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
-    ),
-  // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
-  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
-  contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
-  criadoEm
-});
-
+export const empresas = pgTable(
+  "empresas",
+  {
+    id: idUuid,
+    nome: text("nome").notNull(),
+    cnpj: text("cnpj"),
+    // Prefixo visível da matrícula. O sequencial é por empresa e a combinação é única no vínculo.
+    matriculaPrefixo: text("matricula_prefixo").notNull().default("TNP"),
+    configuracoesAparencia: jsonb("configuracoes_aparencia")
+      .$type<ConfiguracaoAparenciaEmpresa>()
+      .notNull()
+      .default(
+        sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
+      ),
+    // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
+    // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
+    contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
+    criadoEm
+  },
+  (table) => [check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`)]
+);
 export const perfisUsuarios = pgTable(
   "perfis_usuarios",
   {
@@ -462,6 +467,12 @@ export const colaboradores = pgTable(
     idImportado: uuid("id_importado")
   },
   (table) => [
+    // Alvo das FKs compostas do vínculo: impede uma efetivação cruzar empresas no banco.
+    unique("colaboradores_id_empresa_unica").on(table.id, table.empresaId),
+    // CPF armazenado pode vir com pontuação nos dados legados; a unicidade normaliza apenas CPF válido.
+    uniqueIndex("colaboradores_empresa_cpf_unico")
+      .on(table.empresaId, sql`regexp_replace(${table.cpf}, '\\D', '', 'g')`)
+      .where(sql`regexp_replace(${table.cpf}, '\\D', '', 'g') ~ '^[0-9]{11}$'`),
     uniqueIndex("colaboradores_usuario_id_unico")
       .on(table.usuarioId)
       .where(sql`${table.usuarioId} is not null`)
@@ -3384,7 +3395,7 @@ export const admissoesProcessosHistorico = pgTable(
     ),
     check(
       "admissoes_processos_historico_acao_check",
-      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'efetivado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
     ),
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
@@ -3590,5 +3601,161 @@ export const admissoesProcessosDependentes = pgTable(
       .on(table.processoId, table.cpf)
       .where(sql`${table.cpf} is not null`),
     index("admissoes_processos_dependentes_empresa_processo_idx").on(table.empresaId, table.processoId)
+  ]
+);
+
+export const colaboradoresVinculos = pgTable(
+  "colaboradores_vinculos",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    // Cada processo de admissão pode efetivar uma única vez. É a barreira final de idempotência
+    // contra duplo clique/retry depois de o serviço já ter feito as validações.
+    processoId: uuid("processo_id").notNull(),
+    numeroSequencial: integer("numero_sequencial").notNull(),
+    matricula: text("matricula").notNull(),
+    status: text("status").$type<"ativo" | "desligado">().notNull().default("ativo"),
+    admitidoEm: date("admitido_em").notNull(),
+    desligadoEm: timestamp("desligado_em", { withTimezone: true }),
+    desligadoPor: text("desligado_por").references(() => perfisUsuarios.usuarioId),
+    // Lista de motivos só entra quando o DP definir o vocabulário. Até lá é texto obrigatório no
+    // ato de desligar — mais honesto que gravar um código legal fictício.
+    motivoDesligamento: text("motivo_desligamento"),
+    funcaoId: uuid("funcao_id").notNull(),
+    funcaoNome: text("funcao_nome").notNull(),
+    funcaoCbo: text("funcao_cbo"),
+    turnoId: uuid("turno_id"),
+    turnoRotulo: text("turno_rotulo"),
+    turnoEtiqueta: text("turno_etiqueta").$type<EtiquetaTurno>(),
+    turnoHoraInicio: time("turno_hora_inicio"),
+    turnoHoraFim: time("turno_hora_fim"),
+    turnoDiasSemana: text("turno_dias_semana").array().$type<DiaSemana[]>(),
+    jornadaHorario: text("jornada_horario"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_vinculos_colaborador_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "colaboradores_vinculos_processo_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.funcaoId, table.empresaId],
+      foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
+      name: "colaboradores_vinculos_funcao_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.turnoId, table.empresaId],
+      foreignColumns: [turnos.id, turnos.empresaId],
+      name: "colaboradores_vinculos_turno_empresa_fk"
+    }).onDelete("restrict"),
+    unique("colaboradores_vinculos_processo_unico").on(table.processoId),
+    // Alvo das FKs compostas da linha do tempo e das etapas de desligamento.
+    unique("colaboradores_vinculos_id_empresa_unica").on(table.id, table.empresaId),
+    unique("colaboradores_vinculos_empresa_numero_unico").on(table.empresaId, table.numeroSequencial),
+    unique("colaboradores_vinculos_empresa_matricula_unica").on(table.empresaId, table.matricula),
+    check("colaboradores_vinculos_numero_check", sql`${table.numeroSequencial} > 0`),
+    check("colaboradores_vinculos_matricula_check", sql`${table.matricula} ~ '^[A-Z0-9]{2,8}-[0-9]{6}$'`),
+    check("colaboradores_vinculos_status_check", sql`${table.status} in ('ativo', 'desligado')`),
+    check("colaboradores_vinculos_funcao_nome_check", sql`length(btrim(${table.funcaoNome})) > 0`),
+    check(
+      "colaboradores_vinculos_funcao_cbo_check",
+      sql`${table.funcaoCbo} is null or ${table.funcaoCbo} ~ '^[0-9]{6}$'`
+    ),
+    check(
+      "colaboradores_vinculos_turno_retrato_check",
+      sql`(
+        ${table.turnoId} is null
+        and ${table.turnoRotulo} is null and ${table.turnoEtiqueta} is null
+        and ${table.turnoHoraInicio} is null and ${table.turnoHoraFim} is null and ${table.turnoDiasSemana} is null
+      ) or (
+        ${table.turnoId} is not null
+        and ${table.turnoRotulo} is not null and ${table.turnoEtiqueta} is not null
+        and ${table.turnoHoraInicio} is not null and ${table.turnoHoraFim} is not null and ${table.turnoDiasSemana} is not null
+      )`
+    ),
+    check(
+      "colaboradores_vinculos_jornada_check",
+      sql`(${table.turnoId} is not null and ${table.jornadaHorario} is null) or (${table.turnoId} is null and ${table.jornadaHorario} is not null and length(btrim(${table.jornadaHorario})) > 0)`
+    ),
+    check(
+      "colaboradores_vinculos_desligamento_check",
+      sql`(
+        ${table.status} = 'ativo'
+        and ${table.desligadoEm} is null and ${table.desligadoPor} is null and ${table.motivoDesligamento} is null
+      ) or (
+        ${table.status} = 'desligado'
+        and ${table.desligadoEm} is not null and ${table.desligadoPor} is not null
+        and ${table.motivoDesligamento} is not null and length(btrim(${table.motivoDesligamento})) > 0
+      )`
+    ),
+    uniqueIndex("colaboradores_vinculos_colaborador_ativo_unico")
+      .on(table.colaboradorId)
+      .where(sql`${table.status} = 'ativo'`),
+    index("colaboradores_vinculos_empresa_colaborador_idx").on(table.empresaId, table.colaboradorId, table.criadoEm),
+    index("colaboradores_vinculos_empresa_status_idx").on(table.empresaId, table.status, table.admitidoEm)
+  ]
+);
+
+/**
+ * Histórico próprio do colaborador. Só guarda o tipo do ato e nomes de campos, nunca os valores
+ * pessoais anteriores/depois. Assim a linha do tempo é auditável sem virar uma segunda cópia de PII.
+ */
+export const colaboradoresEventos = pgTable(
+  "colaboradores_eventos",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id").notNull(),
+    vinculoId: uuid("vinculo_id"),
+    processoId: uuid("processo_id"),
+    tipo: text("tipo")
+      .$type<"efetivado" | "recontratado" | "dados_cadastrais_atualizados" | "vinculo_desligado">()
+      .notNull(),
+    camposAlterados: jsonb("campos_alterados")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    atorUsuarioId: text("ator_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    ocorridoEm: timestamp("ocorrido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.colaboradorId, table.empresaId],
+      foreignColumns: [colaboradores.id, colaboradores.empresaId],
+      name: "colaboradores_eventos_colaborador_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.vinculoId, table.empresaId],
+      foreignColumns: [colaboradoresVinculos.id, colaboradoresVinculos.empresaId],
+      name: "colaboradores_eventos_vinculo_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "colaboradores_eventos_processo_empresa_fk"
+    }).onDelete("restrict"),
+    check(
+      "colaboradores_eventos_tipo_check",
+      sql`${table.tipo} in ('efetivado', 'recontratado', 'dados_cadastrais_atualizados', 'vinculo_desligado')`
+    ),
+    index("colaboradores_eventos_empresa_colaborador_idx").on(
+      table.empresaId,
+      table.colaboradorId,
+      table.ocorridoEm,
+      table.id
+    )
   ]
 );
