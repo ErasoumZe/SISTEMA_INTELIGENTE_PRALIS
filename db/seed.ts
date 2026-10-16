@@ -1,6 +1,6 @@
 import "dotenv/config";
 import pg from "pg";
-import { and, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
@@ -24,6 +24,7 @@ import {
   despesasItens,
   edicoesCaixa,
   empresas,
+  estoqueMovimentos,
   fechamentosCaixa,
   fechamentosCaixaAnexos,
   fechamentosCaixaRelatoriosMaquininha,
@@ -44,6 +45,9 @@ import {
   mercadoriasItens,
   notificacoes,
   pdvs,
+  pedidos,
+  pedidosEventos,
+  pedidosRecebimentos,
   permissoesCargos,
   permissoesSetores,
   permissoesTabela,
@@ -548,6 +552,37 @@ async function removerUsuariosSeed() {
   console.info(`[seed] OK Usuarios seed antigos removidos: ${ids.length}`);
 }
 
+/**
+ * O seed de desenvolvimento apaga os fatos de Compras antes dos perfis que os assinaram.
+ * Como R-213 deixa o saldo materializado ser escrito apenas pelo recebimento, cada produto volta
+ * ao saldo anterior ao seu primeiro movimento antes de o livro ser descartado.
+ */
+async function limparComprasDaEmpresa(empresaId: string) {
+  await banco.transaction(async (tx) => {
+    const movimentos = await tx
+      .select({ produtoId: estoqueMovimentos.produtoId, saldoAnterior: estoqueMovimentos.saldoAnterior })
+      .from(estoqueMovimentos)
+      .where(eq(estoqueMovimentos.empresaId, empresaId))
+      .orderBy(asc(estoqueMovimentos.criadoEm));
+    const saldoInicialPorProduto = new Map<string, string>();
+    for (const movimento of movimentos) {
+      if (!saldoInicialPorProduto.has(movimento.produtoId)) {
+        saldoInicialPorProduto.set(movimento.produtoId, movimento.saldoAnterior);
+      }
+    }
+    for (const [produtoId, saldoAnterior] of saldoInicialPorProduto) {
+      await tx
+        .update(produtos)
+        .set({ quantidadeEstoque: saldoAnterior, atualizadoEm: new Date() })
+        .where(and(eq(produtos.id, produtoId), eq(produtos.empresaId, empresaId)));
+    }
+    await tx.delete(estoqueMovimentos).where(eq(estoqueMovimentos.empresaId, empresaId));
+    await tx.delete(pedidosEventos).where(eq(pedidosEventos.empresaId, empresaId));
+    await tx.delete(pedidosRecebimentos).where(eq(pedidosRecebimentos.empresaId, empresaId));
+    await tx.delete(pedidos).where(eq(pedidos.empresaId, empresaId));
+  });
+}
+
 console.info("[seed] Aplicando seed de desenvolvimento");
 console.info(`[seed] Banco: ${bancoSemSenha(databaseUrl)}`);
 console.info(`[seed] Permissoes: ${permissoes.length}`);
@@ -635,6 +670,7 @@ if (despesaIds.length) {
 if (mercadoriaIds.length) {
   await banco.delete(mercadoriasItens).where(inArray(mercadoriasItens.mercadoriaId, mercadoriaIds));
 }
+await limparComprasDaEmpresa(empresaId);
 // `notificacoes` e dado OPERACIONAL (R-017/R-019/R-037) e sai junto com o resto do movimento.
 // Precisa morrer ANTES de `removerUsuariosSeed()`: `destinatario_usuario_id` tem ON DELETE CASCADE,
 // mas `verificado_por` NAO tem — entao bastava alguem clicar "Marcar como verificada" uma vez para
@@ -756,29 +792,6 @@ await banco.delete(cargos).where(and(eq(cargos.empresaId, empresaId), inArray(ca
 // Area e setor podem ser referenciados por colaboradores criados durante testes locais.
 // O seed deve ser repetivel sem apagar esses colaboradores: reutiliza os registros base em
 // vez de removê-los e recriá-los a cada execução.
-await banco.delete(unidadesMedida).where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")));
-await banco
-  .delete(gruposRetiradas)
-  .where(
-    and(
-      eq(gruposRetiradas.empresaId, empresaId),
-      inArray(gruposRetiradas.nome, ["Sangria", "Retiradas operacionais", "Retirada operacional"])
-    )
-  );
-await banco
-  .delete(gruposMercadorias)
-  .where(and(eq(gruposMercadorias.empresaId, empresaId), inArray(gruposMercadorias.nome, ["Farinhas", "Insumos"])));
-await banco
-  .delete(gruposDespesas)
-  .where(
-    and(
-      eq(gruposDespesas.empresaId, empresaId),
-      inArray(gruposDespesas.nome, ["Pecas de maquina", "Manutencao", "Operacional", "Quebra de caixa"])
-    )
-  );
-await banco
-  .delete(gruposVendas)
-  .where(and(eq(gruposVendas.empresaId, empresaId), inArray(gruposVendas.nome, ["Vendas balcão", "Vendas delivery"])));
 await banco
   .delete(fornecedores)
   .where(and(eq(fornecedores.empresaId, empresaId), eq(fornecedores.nome, "Fornecedor Exemplo")));
@@ -892,40 +905,108 @@ const formasPagamentoSeed = await banco
   .returning({ id: formasPagamento.id, nome: formasPagamento.nome });
 const formaPagamentoIds = new Map(formasPagamentoSeed.map((forma) => [forma.nome, forma.id]));
 
-const grupoDespesaPai = (
-  await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
-)[0];
+const [grupoDespesaPaiExistente] = await banco
+  .select({ id: gruposDespesas.id })
+  .from(gruposDespesas)
+  .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, "Operacional")))
+  .limit(1);
+const grupoDespesaPai =
+  grupoDespesaPaiExistente ??
+  (
+    await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
+  )[0];
 if (!grupoDespesaPai) throw new Error("Grupo de despesa pai nao foi criado");
-const grupoDespesaSub = (
-  await banco
-    .insert(gruposDespesas)
-    .values({ empresaId, nome: "Manutencao", grupoPaiId: grupoDespesaPai.id })
-    .returning({ id: gruposDespesas.id })
-)[0];
+const [grupoDespesaSubExistente] = await banco
+  .select({ id: gruposDespesas.id })
+  .from(gruposDespesas)
+  .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, "Manutencao")))
+  .limit(1);
+const grupoDespesaSub =
+  grupoDespesaSubExistente ??
+  (
+    await banco
+      .insert(gruposDespesas)
+      .values({ empresaId, nome: "Manutencao", grupoPaiId: grupoDespesaPai.id })
+      .returning({ id: gruposDespesas.id })
+  )[0];
 if (!grupoDespesaSub) throw new Error("Grupo de despesa filho nao foi criado");
-await banco.insert(gruposDespesas).values({ empresaId, nome: "Quebra de caixa" });
-await banco.insert(gruposDespesas).values({ empresaId, nome: "Pecas de maquina", grupoPaiId: grupoDespesaSub.id });
+await banco
+  .update(gruposDespesas)
+  .set({ grupoPaiId: grupoDespesaPai.id })
+  .where(eq(gruposDespesas.id, grupoDespesaSub.id));
+for (const [nome, grupoPaiId] of [
+  ["Quebra de caixa", null],
+  ["Pecas de maquina", grupoDespesaSub.id]
+] as const) {
+  const [existente] = await banco
+    .select({ id: gruposDespesas.id })
+    .from(gruposDespesas)
+    .where(and(eq(gruposDespesas.empresaId, empresaId), eq(gruposDespesas.nome, nome)))
+    .limit(1);
+  if (existente) {
+    await banco.update(gruposDespesas).set({ grupoPaiId }).where(eq(gruposDespesas.id, existente.id));
+  } else {
+    await banco.insert(gruposDespesas).values({ empresaId, nome, grupoPaiId });
+  }
+}
 
-const grupoMercadoriaPai = (
-  await banco.insert(gruposMercadorias).values({ empresaId, nome: "Insumos" }).returning({ id: gruposMercadorias.id })
-)[0];
+const [grupoMercadoriaPaiExistente] = await banco
+  .select({ id: gruposMercadorias.id })
+  .from(gruposMercadorias)
+  .where(and(eq(gruposMercadorias.empresaId, empresaId), eq(gruposMercadorias.nome, "Insumos")))
+  .limit(1);
+const grupoMercadoriaPai =
+  grupoMercadoriaPaiExistente ??
+  (
+    await banco.insert(gruposMercadorias).values({ empresaId, nome: "Insumos" }).returning({ id: gruposMercadorias.id })
+  )[0];
 if (!grupoMercadoriaPai) throw new Error("Grupo de mercadoria pai nao foi criado");
-const grupoMercadoria = (
-  await banco
-    .insert(gruposMercadorias)
-    .values({ empresaId, nome: "Farinhas", grupoPaiId: grupoMercadoriaPai.id })
-    .returning({ id: gruposMercadorias.id })
-)[0];
+const [grupoMercadoriaExistente] = await banco
+  .select({ id: gruposMercadorias.id })
+  .from(gruposMercadorias)
+  .where(and(eq(gruposMercadorias.empresaId, empresaId), eq(gruposMercadorias.nome, "Farinhas")))
+  .limit(1);
+const grupoMercadoria =
+  grupoMercadoriaExistente ??
+  (
+    await banco
+      .insert(gruposMercadorias)
+      .values({ empresaId, nome: "Farinhas", grupoPaiId: grupoMercadoriaPai.id })
+      .returning({ id: gruposMercadorias.id })
+  )[0];
 if (!grupoMercadoria) throw new Error("Grupo de mercadoria nao foi criado");
+await banco
+  .update(gruposMercadorias)
+  .set({ grupoPaiId: grupoMercadoriaPai.id })
+  .where(eq(gruposMercadorias.id, grupoMercadoria.id));
 
-const grupoRetiradaPai = (
-  await banco
-    .insert(gruposRetiradas)
-    .values({ empresaId, nome: "Retiradas operacionais" })
-    .returning({ id: gruposRetiradas.id })
-)[0];
+const [grupoRetiradaPaiExistente] = await banco
+  .select({ id: gruposRetiradas.id })
+  .from(gruposRetiradas)
+  .where(and(eq(gruposRetiradas.empresaId, empresaId), eq(gruposRetiradas.nome, "Retiradas operacionais")))
+  .limit(1);
+const grupoRetiradaPai =
+  grupoRetiradaPaiExistente ??
+  (
+    await banco
+      .insert(gruposRetiradas)
+      .values({ empresaId, nome: "Retiradas operacionais" })
+      .returning({ id: gruposRetiradas.id })
+  )[0];
 if (!grupoRetiradaPai) throw new Error("Grupo de retirada pai nao foi criado");
-await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
+const [grupoSangriaExistente] = await banco
+  .select({ id: gruposRetiradas.id })
+  .from(gruposRetiradas)
+  .where(and(eq(gruposRetiradas.empresaId, empresaId), eq(gruposRetiradas.nome, "Sangria")))
+  .limit(1);
+if (grupoSangriaExistente) {
+  await banco
+    .update(gruposRetiradas)
+    .set({ grupoPaiId: grupoRetiradaPai.id })
+    .where(eq(gruposRetiradas.id, grupoSangriaExistente.id));
+} else {
+  await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
+}
 
 // Grupos de patrimonio (D2): as seis siglas da aba PATRIMONIO da planilha. Idempotente pela
 // unica (empresa_id, sig) — rodar o seed de novo nao duplica.
@@ -934,18 +1015,42 @@ await banco
   .values(gruposPatrimonioPadrao.map((grupo) => ({ empresaId, sig: grupo.sig, nome: grupo.nome })))
   .onConflictDoNothing();
 
-const grupoVendaPai = (
-  await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id })
-)[0];
+const [grupoVendaPaiExistente] = await banco
+  .select({ id: gruposVendas.id })
+  .from(gruposVendas)
+  .where(and(eq(gruposVendas.empresaId, empresaId), eq(gruposVendas.nome, "Vendas balcão")))
+  .limit(1);
+const grupoVendaPai =
+  grupoVendaPaiExistente ??
+  (await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id }))[0];
 if (!grupoVendaPai) throw new Error("Grupo de venda pai nao foi criado");
-await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas delivery", grupoPaiId: grupoVendaPai.id });
-
-const unidade = (
+const [grupoVendaDeliveryExistente] = await banco
+  .select({ id: gruposVendas.id })
+  .from(gruposVendas)
+  .where(and(eq(gruposVendas.empresaId, empresaId), eq(gruposVendas.nome, "Vendas delivery")))
+  .limit(1);
+if (grupoVendaDeliveryExistente) {
   await banco
-    .insert(unidadesMedida)
-    .values({ empresaId, nome: "Unidade", sigla: "un" })
-    .returning({ id: unidadesMedida.id })
-)[0];
+    .update(gruposVendas)
+    .set({ grupoPaiId: grupoVendaPai.id })
+    .where(eq(gruposVendas.id, grupoVendaDeliveryExistente.id));
+} else {
+  await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas delivery", grupoPaiId: grupoVendaPai.id });
+}
+
+const [unidadeExistente] = await banco
+  .select({ id: unidadesMedida.id })
+  .from(unidadesMedida)
+  .where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")))
+  .limit(1);
+const unidade =
+  unidadeExistente ??
+  (
+    await banco
+      .insert(unidadesMedida)
+      .values({ empresaId, nome: "Unidade", sigla: "un" })
+      .returning({ id: unidadesMedida.id })
+  )[0];
 if (!unidade) throw new Error("Unidade de medida nao foi criada");
 
 const [areaExistente] = await banco

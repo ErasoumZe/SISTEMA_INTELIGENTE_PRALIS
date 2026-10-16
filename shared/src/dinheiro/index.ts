@@ -52,7 +52,10 @@ export type TipoJuros = (typeof tiposJuros)[number];
 // O percentual NAO passa por paraCentavos: "2.5" ali viraria 250 (dois reais e cinquenta), e nao
 // dois e meio por cento. Aqui ele e lido como numero de pontos percentuais, com ate 4 casas —
 // a mesma precisao de juros_valor_informado (numeric(14,4)).
-function pontosPercentuaisEmDezMilesimos(informado: string | number | null | undefined): number {
+//
+// Exportada porque a cotacao de compra (R-216) le desconto percentual com a MESMA regra: duas
+// leituras de "2,5%" que pudessem divergir seriam dois numeros de dinheiro para o mesmo fato.
+export function pontosPercentuaisEmDezMilesimos(informado: string | number | null | undefined): number {
   const texto = String(informado ?? 0)
     .trim()
     .replace(",", ".");

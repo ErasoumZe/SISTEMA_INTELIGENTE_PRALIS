@@ -29,7 +29,6 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "relatorio_faltas",
   "relatorio_advertencias",
   "perdas_sobras",
-  "estoque_produtos",
   "relatorio_dre",
   "folha_ponto",
   "avaliacao_qualidade",
@@ -139,6 +138,12 @@ export const itemPorTela: Record<string, ItemMenu> = {
     titulo: "Estoques de produtos",
     permissao: "estoque_produtos_visualizar",
     icone: "mdi-warehouse"
+  },
+  conferencias_estoque: {
+    id: "conferencias_estoque",
+    titulo: "Conferências de estoque",
+    permissao: "conferencias_estoque_visualizar",
+    icone: "mdi-clipboard-check-outline"
   },
   relatorio_dre: {
     id: "relatorio_dre",
@@ -540,6 +545,7 @@ export const secoesPermissoes = [
     prefixos: [
       "cadastro_produtos",
       "estoque_produtos",
+      "conferencias_estoque",
       "perdas_sobras",
       "cadastro_fornecedores",
       "cadastro_ficha_tecnica",
@@ -548,6 +554,7 @@ export const secoesPermissoes = [
       "relatorio_produtos",
       "menu_produtos",
       "menu_estoque_produtos",
+      "menu_conferencias_estoque",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",

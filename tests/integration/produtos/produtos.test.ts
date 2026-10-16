@@ -153,7 +153,8 @@ describe("produtos integration", () => {
       local_venda_1: "PDV1",
       foto_url: "https://exemplo.test/foto.png"
     });
-    expect(Number(linha?.quantidade_estoque)).toBe(12);
+    // O saldo informado por um cliente antigo/malicioso e ignorado. Somente movimentos auditados alteram estoque.
+    expect(Number(linha?.quantidade_estoque)).toBe(0);
     expect(Number(linha?.estoque_min)).toBe(5);
     expect(linha).toMatchObject({
       auto: true,
@@ -182,6 +183,26 @@ describe("produtos integration", () => {
     );
     expect(promo).toMatchObject({ tipo: "desconto", seg: true, ter: false });
     expect(Number(promo?.desconto_fracao)).toBe(0.1);
+
+    const tentativaAlterarSaldo = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/produtos/${produtoId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        descricao: "Produto comercial integracao",
+        unidadeIndividualId: unidadeId,
+        quantidadeIndividual: 1,
+        quantidadeEstoque: 99,
+        conversoes: []
+      }
+    });
+    expect(tentativaAlterarSaldo.statusCode).toBe(204);
+    const saldoAposEdicao = await consultarUm<{ quantidade_estoque: string }>(
+      "select quantidade_estoque from produtos where id = $1",
+      [produtoId]
+    );
+    expect(Number(saldoAposEdicao?.quantidade_estoque)).toBe(0);
   });
 
   it("Deve_PersistirTransformacao_Quando_TipoTransformacao", async () => {

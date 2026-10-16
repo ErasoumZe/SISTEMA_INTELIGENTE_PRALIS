@@ -61,6 +61,8 @@ describe("seguranca default-deny integration", () => {
       "/api/admissao/ficha",
       "/api/admissao/ficha/enviar",
       "/api/auth/*",
+      "/api/cotacao",
+      "/api/cotacao/enviar",
       "/api/integracoes",
       "/api/integracoes/conciliacao",
       "/api/me",

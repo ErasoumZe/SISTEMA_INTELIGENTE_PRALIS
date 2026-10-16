@@ -171,7 +171,8 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       etiqueta: form.etiquetaTurno || null,
       diasSemana: form.diasSemanaTurno.length ? form.diasSemanaTurno : null
     };
-  if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
+  if (tela === "fornecedores")
+    return { empresaId, nome: form.nome, documento: form.documento || null, whatsapp: form.whatsapp || null };
   if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")
     return {

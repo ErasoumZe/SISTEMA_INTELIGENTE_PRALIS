@@ -100,7 +100,9 @@ export async function listarProdutosPaginadoRepository(
       quantidadeEstoque: produtos.quantidadeEstoque,
       estoqueMin: produtos.estoqueMin,
       estoqueMax: produtos.estoqueMax,
+      areaEstoque: produtos.areaEstoque,
       setorEstoque: produtos.setorEstoque,
+      curvaAbc: produtos.curvaAbc,
       precoVenda: produtos.precoVenda,
       fotoUrl: produtos.fotoUrl,
       criadoPorNome: perfisUsuarios.nome
@@ -163,19 +165,25 @@ export async function opcoesDeProdutoRepository(entrada: {
     : undefined;
   const selecionados = entrada.ids.length ? inArray(produtos.id, entrada.ids) : undefined;
 
-  return banco
-    .select({
-      id: produtos.id,
-      descricao: produtos.descricao,
-      codigoInterno: produtos.codigoInterno,
-      codigoBarras: produtos.codigoBarras,
-      marca: produtos.marca,
-      status: produtos.status
-    })
-    .from(produtos)
-    .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
-    .orderBy(asc(produtos.descricao))
-    .limit(entrada.limite);
+  return (
+    banco
+      .select({
+        id: produtos.id,
+        descricao: produtos.descricao,
+        codigoInterno: produtos.codigoInterno,
+        codigoBarras: produtos.codigoBarras,
+        marca: produtos.marca,
+        status: produtos.status
+      })
+      .from(produtos)
+      // NAO acrescente campo aqui sem decidir o limite de novo. Esta projecao e compartilhada com
+      // quem tem apenas `mercadorias_visualizar`, e `produtos-listagem.test.ts` fixa exatamente
+      // estas seis chaves para nao vazar custo, margem e preco. Contexto de estoque para montar
+      // pedido vem de `/api/compras/estoque`, que exige `estoque_produtos_visualizar`.
+      .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
+      .orderBy(asc(produtos.descricao))
+      .limit(entrada.limite)
+  );
 }
 
 /** Valores existentes para montar os filtros da tela, dentro do escopo do ator. */

@@ -94,11 +94,12 @@ export const produtoPayloadSchema = z.object({
   auto: z.boolean().optional().default(false),
   status: statusProdutoSchema.optional().default("ativo"),
   tipo: tipoProdutoSchema.optional().default("revenda"),
-  // Estoque (saldo + parametrizacao), locais de venda e foto.
-  quantidadeEstoque: z.coerce.number().min(0).optional().nullable(),
+  // Parametrizacao de estoque. O saldo e somente leitura e muda por movimentos auditados.
   estoqueMin: z.coerce.number().min(0).optional().nullable(),
   estoqueMax: z.coerce.number().min(0).optional().nullable(),
+  areaEstoque: z.string().trim().max(120).optional().nullable(),
   setorEstoque: z.string().optional().nullable(),
+  curvaAbc: z.enum(["A", "B", "C"]).optional().nullable(),
   localVenda1: z.string().optional().nullable(),
   localVenda2: z.string().optional().nullable(),
   fotoUrl: z.string().optional().nullable(),
@@ -172,7 +173,9 @@ export interface ProdutoResumo {
   quantidadeEstoque: string;
   estoqueMin: string | null;
   estoqueMax: string | null;
+  areaEstoque: string | null;
   setorEstoque: string | null;
+  curvaAbc: "A" | "B" | "C" | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
   fotoUrl: string | null;
@@ -227,7 +230,9 @@ export interface ProdutoDetalhe {
   quantidadeEstoque: string;
   estoqueMin: string | null;
   estoqueMax: string | null;
+  areaEstoque: string | null;
   setorEstoque: string | null;
+  curvaAbc: "A" | "B" | "C" | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;

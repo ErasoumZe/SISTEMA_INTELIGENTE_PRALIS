@@ -81,6 +81,11 @@
       "development": "./src/contas/index.ts",
       "default": "./dist/contas/index.js"
     },
+    "./compras": {
+      "types": "./dist/compras/index.d.ts",
+      "development": "./src/compras/index.ts",
+      "default": "./dist/compras/index.js"
+    },
     "./contas-usuarios": {
       "types": "./dist/contas-usuarios/index.d.ts",
       "development": "./src/contas-usuarios/index.ts",

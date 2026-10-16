@@ -1,198 +1,60 @@
 <script setup lang="ts">
-import type { AuthSession, PedidoDto, PedidoRecorrencia } from "@padaria/shared";
-import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
-import { usePermissoes } from "~/composables/usePermissoes";
-import { itemPorTela, mensagemErro } from "~/utils/domain";
+import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
+import PedidoFormDialog from "~/components/pedidos/PedidoFormDialog.vue";
+import PedidoRecebimentoDialog from "~/components/pedidos/PedidoRecebimentoDialog.vue";
+import PedidosFila from "~/components/pedidos/PedidosFila.vue";
+import { usePedidos } from "~/composables/usePedidos";
+import { itemPorTela } from "~/utils/domain";
 
-const router = useRouter();
-const { apiGet, apiPost, carregarSessao } = useApi();
-
-const sessao = ref<AuthSession | null>(null);
-const empresas = ref<Opcao[]>([]);
-const empresaId = ref("");
-const caixaStatus = ref<CaixaStatus | null>(null);
-const carregando = ref(true);
-const empresaCarregando = ref(false);
-const erro = ref("");
-const snackbar = reactive({ show: false, text: "", color: "success" });
-
-const pedidos = ref<PedidoDto[]>([]);
-const detalhe = ref<PedidoDto | null>(null);
-const dialogDetalhe = ref(false);
-const gerando = ref(false);
-const salvandoManual = ref(false);
-const aprovandoId = ref("");
-
-const recorrencias: Array<{ value: PedidoRecorrencia; label: string }> = [
-  { value: "nenhuma", label: "Sem recorrencia" },
-  { value: "semanal", label: "Semanal" },
-  { value: "quinzenal", label: "Quinzenal" },
-  { value: "mensal", label: "Mensal" }
-];
-
-const formManual = reactive({
-  recorrencia: "nenhuma" as PedidoRecorrencia,
-  dataAgendada: "",
-  observacao: "",
-  itens: [{ produtoId: "", quantidade: "1" }]
-});
-const gerarConfig = reactive({ recorrencia: "nenhuma" as PedidoRecorrencia, dataAgendada: "" });
-
-const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
-const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
-  permissoesUsuario,
-  () => Boolean(caixaStatus.value?.caixaAberto)
-);
-const podeCriar = computed(() => temPermissao("pedidos_criar"));
-const podeAprovar = computed(() => temPermissao("pedidos_aprovar"));
-
-function notificar(text: string, color = "success") {
-  snackbar.text = text;
-  snackbar.color = color;
-  snackbar.show = true;
-}
-
-function corStatus(status: string) {
-  if (status === "aprovado") return "success";
-  if (status === "cancelado") return "error";
-  return "warning";
-}
-
-async function carregarEmpresas() {
-  empresas.value = await apiGet<Opcao[]>("/api/empresas");
-  empresaId.value =
-    sessao.value?.perfil?.empresaId ?? sessao.value?.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
-}
-
-async function carregarDados() {
-  if (!empresaId.value) return;
-  empresaCarregando.value = true;
-  try {
-    // Produtos NAO sao mais carregados aqui: o ProdutoAutocomplete busca no servidor conforme se
-    // digita, em vez de depender de uma lista pre-carregada (que vinha cortada na primeira pagina).
-    const query = `?empresaId=${empresaId.value}`;
-    pedidos.value = await apiGet<PedidoDto[]>(`/api/pedidos${query}`);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    empresaCarregando.value = false;
-  }
-}
-
-async function trocarEmpresa(id: string) {
-  empresaId.value = id;
-  await carregarDados();
-}
-
-function payloadAgendamento(config: { recorrencia: PedidoRecorrencia; dataAgendada: string }) {
-  return {
-    recorrencia: config.recorrencia,
-    dataAgendada: config.dataAgendada || null
-  };
-}
-
-async function gerarAutomatico() {
-  gerando.value = true;
-  try {
-    const resposta = await apiPost<{ id: string; totalItens: number }>("/api/pedidos/gerar-automatico", {
-      empresaId: empresaId.value,
-      ...payloadAgendamento(gerarConfig)
-    });
-    notificar(`Pedido automatico gerado com ${resposta.totalItens} item(ns).`);
-    await carregarDados();
-    await verPedido(resposta.id);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    gerando.value = false;
-  }
-}
-
-function adicionarItem() {
-  formManual.itens.push({ produtoId: "", quantidade: "1" });
-}
-function removerItem(indice: number) {
-  formManual.itens.splice(indice, 1);
-  if (!formManual.itens.length) adicionarItem();
-}
-
-async function salvarManual() {
-  const itens = formManual.itens
-    .filter((item) => item.produtoId && Number(item.quantidade) > 0)
-    .map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade) }));
-  if (!itens.length) {
-    notificar("Adicione ao menos um produto com quantidade.", "error");
-    return;
-  }
-  salvandoManual.value = true;
-  try {
-    await apiPost<{ id: string }>("/api/pedidos", {
-      empresaId: empresaId.value,
-      observacao: formManual.observacao || null,
-      ...payloadAgendamento(formManual),
-      itens
-    });
-    notificar("Pedido manual criado.");
-    formManual.itens = [{ produtoId: "", quantidade: "1" }];
-    formManual.observacao = "";
-    await carregarDados();
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    salvandoManual.value = false;
-  }
-}
-
-async function verPedido(id: string) {
-  try {
-    detalhe.value = await apiGet<PedidoDto>(`/api/pedidos/${id}`);
-    dialogDetalhe.value = true;
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  }
-}
-
-async function aprovar(id: string) {
-  aprovandoId.value = id;
-  try {
-    await apiPost(`/api/pedidos/${id}/aprovar`, {});
-    notificar("Pedido aprovado.");
-    await carregarDados();
-    if (detalhe.value?.id === id) detalhe.value = { ...detalhe.value, status: "aprovado" };
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    aprovandoId.value = "";
-  }
-}
-
-// (Edicao de itens em rascunho: PUT /api/pedidos/:id existe no back; UI fica para o V2.)
-
-onMounted(async () => {
-  try {
-    sessao.value = await carregarSessao();
-    if (!sessao.value) {
-      await router.push("/login");
-      return;
-    }
-    if (!temPermissao("pedidos_visualizar")) {
-      erro.value = "Sem permissao para acessar esta pagina.";
-      return;
-    }
-    await carregarEmpresas();
-    await carregarDados();
-  } catch (error) {
-    erro.value = mensagemErro(error);
-  } finally {
-    carregando.value = false;
-  }
-});
+const {
+  sessao,
+  empresas,
+  fornecedores,
+  empresaId,
+  caixaStatus,
+  carregando,
+  empresaCarregando,
+  erro,
+  snackbar,
+  pedidos,
+  detalhe,
+  dialogDetalhe,
+  dialogForm,
+  dialogRecebimento,
+  pedidoEditandoId,
+  salvando,
+  gerando,
+  transicionando,
+  recebendo,
+  sugestaoFornecedorId,
+  estoquePorProduto,
+  form,
+  telasPermitidas,
+  telasDesabilitadasMenu,
+  motivosTelasDesabilitadas,
+  podeCriar,
+  podeEditar,
+  podeReceber,
+  trocarEmpresa,
+  abrirNovo,
+  adicionarItem,
+  removerItem,
+  salvarPedido,
+  gerarSugestao,
+  verPedido,
+  editarPedido,
+  abrirRecebimento,
+  mudarSituacao,
+  enviarCotacao,
+  copiarLink,
+  linkCotacaoDoDetalhe,
+  confirmarRecebimento
+} = usePedidos();
 </script>
 
 <template>
   <v-progress-linear v-if="carregando" indeterminate />
-
   <AppShell
     v-else-if="sessao"
     :sessao="sessao"
@@ -206,192 +68,180 @@ onMounted(async () => {
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
-
-    <div v-else class="d-grid ga-4">
-      <!-- O NOME DA TELA VEM DO MENU (`itemPorTela`), e nao de uma string escrita aqui. Antes eram
-           dois lugares dizendo o nome da mesma tela, e eles ja divergiam: o menu dizia "Pedidos" e o
-           cabecalho dizia "Pedidos de reposicao".
-           NAO da para usar `ctx.telaAtual` aqui: esta pagina monta `AppShell` direto, sem o
-           `AppWorkspace`, entao nao existe `ctx`. Importar o `itemPorTela` e a menor mudanca que
-           resolve, e nao mexe em assinatura de slot de nenhuma outra pagina.
-           O CONTEXTO NAO SE PERDE: o subtitulo, uma linha abaixo, continua dizendo do que se trata.
-           De quebra o subtitulo ganhou os acentos que faltavam (R-100). -->
+    <div class="pedidos-page d-grid ga-5">
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos?.titulo ?? ''"
-        subtitulo="Compra e reposição de estoque (manual e automática)."
+        subtitulo="Fluxo único: sugestão, pedido, fornecedor, negociação e recebimento físico."
       />
-
-      <v-card v-if="podeCriar" variant="tonal">
-        <v-card-title class="text-subtitle-1">Gerar pedido automatico</v-card-title>
-        <v-card-text>
-          <p class="text-body-2 mb-3">
-            Cria um pedido com os produtos que atingiram o estoque minimo, na quantidade que enche ate o maximo.
-          </p>
-          <v-row dense align="center">
-            <v-col cols="12" md="4">
+      <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
+      <div v-if="podeCriar" class="pedidos-acoes">
+        <v-card class="pedidos-acao pedidos-acao--sugestao">
+          <v-card-text class="pedidos-acao__corpo">
+            <div class="pedidos-acao__cabecalho">
+              <v-avatar color="primary" variant="tonal" size="44"><v-icon icon="mdi-auto-fix" /></v-avatar>
+              <div>
+                <h3 class="text-subtitle-1 font-weight-medium">Sugestão de reposição</h3>
+                <p class="text-caption text-medium-emphasis mb-0">
+                  Produto no mínimo é sugerido até o máximo. Você revisa antes de enviar.
+                </p>
+              </div>
+            </div>
+            <div class="pedidos-acao__controles">
               <v-select
-                v-model="gerarConfig.recorrencia"
-                :items="recorrencias"
-                item-title="label"
-                item-value="value"
-                label="Recorrencia"
+                v-model="sugestaoFornecedorId"
+                :items="fornecedores"
+                item-title="nome"
+                item-value="id"
+                label="Fornecedor"
                 density="comfortable"
+                hide-details
               />
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-text-field
-                v-model="gerarConfig.dataAgendada"
-                type="datetime-local"
-                label="Data/hora agendada (opcional)"
-                density="comfortable"
-              />
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-btn color="primary" :loading="gerando" prepend-icon="mdi-cog-sync" @click="gerarAutomatico">
-                Gerar automatico
-              </v-btn>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
+              <v-btn color="primary" variant="flat" :loading="gerando" @click="gerarSugestao">Gerar sugestão</v-btn>
+            </div>
+          </v-card-text>
+        </v-card>
 
-      <v-card v-if="podeCriar">
-        <v-card-title class="text-subtitle-1">Novo pedido manual</v-card-title>
-        <v-card-text>
-          <v-row v-for="(item, indice) in formManual.itens" :key="`item-${indice}`" dense align="center">
-            <v-col cols="12" md="7">
-              <!-- Busca remota: o seletor deixou de depender da lista pre-carregada, que estava
-                   presa a primeira pagina da API. -->
-              <ProdutoAutocomplete v-model="item.produtoId" :empresa-id="empresaId" />
-            </v-col>
-            <v-col cols="8" md="4">
-              <v-text-field v-model="item.quantidade" type="number" min="0" label="Quantidade" density="comfortable" />
-            </v-col>
-            <v-col cols="4" md="1" class="d-flex justify-end">
-              <v-btn icon="mdi-delete" variant="text" @click="removerItem(indice)" />
-            </v-col>
-          </v-row>
-          <div class="d-flex flex-wrap ga-3 mt-2">
-            <v-btn variant="outlined" size="small" prepend-icon="mdi-plus" @click="adicionarItem">Adicionar item</v-btn>
-            <v-spacer />
-            <v-select
-              v-model="formManual.recorrencia"
-              :items="recorrencias"
-              item-title="label"
-              item-value="value"
-              label="Recorrencia"
-              density="comfortable"
-              style="max-width: 200px"
-            />
-            <v-text-field
-              v-model="formManual.dataAgendada"
-              type="datetime-local"
-              label="Data/hora (opcional)"
-              density="comfortable"
-              style="max-width: 220px"
-            />
-            <v-btn color="primary" :loading="salvandoManual" prepend-icon="mdi-content-save" @click="salvarManual">
-              Criar pedido
-            </v-btn>
-          </div>
-        </v-card-text>
-      </v-card>
-
-      <v-card>
-        <v-card-title class="text-subtitle-1">Pedidos</v-card-title>
-        <v-card-text>
-          <div class="responsive-table-shell">
-            <v-table density="comfortable">
-              <thead>
-                <tr>
-                  <th>Tipo</th>
-                  <th>Status</th>
-                  <th class="text-right">Itens</th>
-                  <th>Recorrencia</th>
-                  <th>Agendado</th>
-                  <th class="text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!pedidos.length">
-                  <td colspan="6" class="text-center text-medium-emphasis">
-                    <span class="tabela-vazio">Nenhum pedido encontrado.</span>
-                  </td>
-                </tr>
-                <tr v-for="pedido in pedidos" :key="pedido.id">
-                  <td>{{ pedido.tipo === "automatico" ? "Automatico" : "Manual" }}</td>
-                  <td>
-                    <v-chip size="small" :color="corStatus(pedido.status)" variant="flat">{{ pedido.status }}</v-chip>
-                  </td>
-                  <td class="text-right">{{ pedido.totalItens }}</td>
-                  <td>{{ pedido.recorrencia === "nenhuma" ? "-" : pedido.recorrencia }}</td>
-                  <td>{{ pedido.dataAgendada ? new Date(pedido.dataAgendada).toLocaleString("pt-BR") : "-" }}</td>
-                  <td class="text-right">
-                    <v-btn size="small" variant="text" icon="mdi-eye" @click="verPedido(pedido.id)" />
-                    <v-btn
-                      v-if="podeAprovar && pedido.status === 'rascunho'"
-                      size="small"
-                      variant="text"
-                      color="success"
-                      icon="mdi-check"
-                      :loading="aprovandoId === pedido.id"
-                      @click="aprovar(pedido.id)"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </div>
-        </v-card-text>
-      </v-card>
+        <v-card class="pedidos-acao pedidos-acao--manual">
+          <v-card-text class="pedidos-acao__corpo">
+            <div class="pedidos-acao__cabecalho">
+              <v-avatar color="primary" variant="tonal" size="44"><v-icon icon="mdi-playlist-plus" /></v-avatar>
+              <div>
+                <h3 class="text-subtitle-1 font-weight-medium">Pedido manual</h3>
+                <p class="text-caption text-medium-emphasis mb-0">
+                  Você escolhe fornecedor, produtos e quantidades, com saldo e teto à vista.
+                </p>
+              </div>
+            </div>
+            <div class="pedidos-acao__controles">
+              <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="abrirNovo"
+                >Novo pedido manual</v-btn
+              >
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
+      <PedidosFila :pedidos="pedidos" @abrir="verPedido" />
     </div>
-
-    <v-dialog v-model="dialogDetalhe" max-width="720" persistent no-click-animation>
-      <v-card v-if="detalhe">
-        <v-card-title class="d-flex align-center justify-space-between">
-          <span>Pedido {{ detalhe.tipo === "automatico" ? "automatico" : "manual" }}</span>
-          <v-chip size="small" :color="corStatus(detalhe.status)" variant="flat">{{ detalhe.status }}</v-chip>
-        </v-card-title>
-        <v-card-text>
-          <div class="responsive-table-shell">
-            <v-table density="compact">
-              <thead>
-                <tr>
-                  <th>Produto</th>
-                  <th class="text-right">Quantidade</th>
-                  <th class="text-right">Estoque (atual/min/max)</th>
-                  <th>Fornecedor</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in detalhe.itens ?? []" :key="item.id">
-                  <td>{{ item.descricaoProduto }}</td>
-                  <td class="text-right">{{ item.quantidade }}</td>
-                  <td class="text-right">
-                    {{ item.estoqueAtual ?? "-" }} / {{ item.estoqueMin ?? "-" }} / {{ item.estoqueMax ?? "-" }}
-                  </td>
-                  <td>{{ item.fornecedorNome ?? "-" }}</td>
-                </tr>
-              </tbody>
-            </v-table>
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-btn
-            v-if="podeAprovar && detalhe.status === 'rascunho'"
-            color="success"
-            :loading="aprovandoId === detalhe.id"
-            @click="aprovar(detalhe.id)"
-          >
-            Aprovar
-          </v-btn>
-          <v-spacer />
-          <v-btn variant="text" @click="dialogDetalhe = false">Fechar</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
+    <PedidoFormDialog
+      v-model="dialogForm"
+      :titulo="pedidoEditandoId ? 'Ajustar pedido manual' : 'Novo pedido manual'"
+      :empresa-id="empresaId"
+      :fornecedores="fornecedores"
+      :form="form"
+      :salvando="salvando"
+      :estoque-por-produto="estoquePorProduto"
+      @salvar="salvarPedido"
+      @adicionar="adicionarItem"
+      @remover="removerItem"
+    />
+    <PedidoRecebimentoDialog
+      v-model="dialogRecebimento"
+      :pedido="detalhe"
+      :salvando="recebendo"
+      @confirmar="confirmarRecebimento"
+    />
+    <PedidoDetalheDialog
+      v-model="dialogDetalhe"
+      :pedido="detalhe"
+      :pode-editar="podeEditar"
+      :pode-receber="podeReceber"
+      :transicionando="transicionando"
+      @editar="editarPedido"
+      :link-cotacao="linkCotacaoDoDetalhe"
+      @enviar-cotacao="enviarCotacao"
+      @copiar-link="copiarLink"
+      @situacao="mudarSituacao"
+      @receber="abrirRecebimento"
+    />
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
+
+<style scoped>
+.pedidos-acoes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cx-sp-4, 16px);
+}
+
+.pedidos-acao {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-xl);
+  background: var(--cx-surface-raised);
+  box-shadow: var(--cx-e-1);
+  transition:
+    transform var(--cx-dur-2) var(--cx-ease-out),
+    box-shadow var(--cx-dur-2) var(--cx-ease-out),
+    border-color var(--cx-dur-2) var(--cx-ease-out);
+}
+
+.pedidos-acao::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--cx-brand-gradiente);
+  content: "";
+  opacity: 0.9;
+}
+
+.pedidos-acao:hover {
+  transform: translateY(-2px);
+  border-color: var(--cx-line);
+  box-shadow: var(--cx-e-2);
+}
+
+.pedidos-acao__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cx-sp-5);
+  height: 100%;
+  padding: var(--cx-sp-6);
+}
+
+.pedidos-acao__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cx-sp-4);
+}
+
+.pedidos-acao__cabecalho h3 {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-lead);
+  font-weight: 650;
+  letter-spacing: var(--cx-tracking-tight);
+}
+
+.pedidos-acao__cabecalho p {
+  max-width: 46ch;
+  color: var(--cx-ink-soft);
+  line-height: 1.55;
+}
+
+.pedidos-acao__controles {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-3, 12px);
+  margin-top: auto;
+}
+
+.pedidos-acao__controles :deep(.v-input) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 959px) {
+  .pedidos-acoes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pedidos-acao__controles {
+    flex-wrap: wrap;
+  }
+
+  .pedidos-acao__controles :deep(.v-btn) {
+    width: 100%;
+  }
+}
+</style>

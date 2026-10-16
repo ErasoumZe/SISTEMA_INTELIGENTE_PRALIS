@@ -8,7 +8,7 @@ import type { ItemMenu } from "~/types/padaria";
 // categoria e so navegacao — cada tela continua com a sua listagem separada por categoria.
 export type CategoriaMenu = { id: string; titulo: string; icone: string; ids: readonly string[] };
 
-// "Lancamentos" SUBSTITUI os tres itens soltos (Despesas / Mercadorias / Retiradas) no menu: eles
+// "Lancamentos" agrupa as saidas financeiras que nao sao do fluxo operacional de Compras.
 // deixam de existir na raiz e passam a viver DENTRO desta categoria. A visibilidade continua sendo
 // a de cada tela — cargo sem nenhuma das tres (ou Caixa com o caixa fechado) nao ve a categoria.
 export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
@@ -27,7 +27,12 @@ export type NoMenu<T extends ItemMenu> =
   | ({ tipo: "tela" } & T)
   | { tipo: "categoria"; id: string; titulo: string; icone: string; itens: T[] };
 
-export type GrupoMenu<T extends ItemMenu> = { titulo: string; cor?: CorMenuGrupo; corRgb?: CorRgbMenu; itens: NoMenu<T>[] };
+export type GrupoMenu<T extends ItemMenu> = {
+  titulo: string;
+  cor?: CorMenuGrupo;
+  corRgb?: CorRgbMenu;
+  itens: NoMenu<T>[];
+};
 
 // Grupos do menu na nomenclatura do Xmind V2 (PROJECT_BRAIN/10): as grandes categorias viram
 // Entradas / Transferencias / Saidas / Resultados / Configuracao. Isto e SO o esqueleto de grupos
@@ -48,16 +53,28 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     ids: ["transferencias", "contas"]
   },
   {
-    // Saidas – Lancamentos (Despesas / Mercadorias / Retiradas, agrupadas na categoria) + estoque e a pagar.
+    // Saidas financeiras fora do fluxo de Compras.
     titulo: "Saidas",
     cor: "neutro",
-    ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "pedidos", "perdas_sobras", "estoque_produtos"]
+    ids: [CATEGORIA_LANCAMENTOS.id, "contas_pagar", "perdas_sobras"]
+  },
+  {
+    // R-215: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
+    titulo: "Compras",
+    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "fornecedores"]
   },
   {
     // Resultados – Relatorios + Diferenca de fechamento.
     titulo: "Resultados",
     cor: "resultado",
-    ids: ["fechamento", "relatorio_fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
+    ids: [
+      "fechamento",
+      "relatorio_fechamento",
+      "relatorio_vendas",
+      "relatorio_produtos",
+      "relatorio_dre",
+      "relatorio_fiscal"
+    ]
   },
   {
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
@@ -86,7 +103,6 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
       "grupos",
       "unidades",
       "formas_pagamento",
-      "fornecedores",
       "socios_gestores",
       "clientes",
       "promocoes",
@@ -122,7 +138,12 @@ function noTela<T extends ItemMenu>(tela: T): NoMenu<T> {
 // agora vale sobre a estrutura salva em vez de sobre a constante.
 export function agruparTelasMenu<T extends ItemMenu>(
   telas: readonly T[],
-  estrutura: readonly { titulo: string; ids: readonly string[]; cor?: CorMenuGrupo; corRgb?: CorRgbMenu }[] = SECOES_MENU,
+  estrutura: readonly {
+    titulo: string;
+    ids: readonly string[];
+    cor?: CorMenuGrupo;
+    corRgb?: CorRgbMenu;
+  }[] = SECOES_MENU,
   idsOcultos: readonly string[] = []
 ): GrupoMenu<T>[] {
   const ocultos = new Set(idsOcultos);

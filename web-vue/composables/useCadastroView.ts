@@ -3,6 +3,7 @@ import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
 import { rotuloDiaSemanaCurto } from "~/utils/admissoes";
 import { dinheiro, permissaoPertenceASecao, permissoes, permissoesOcultasNaTela } from "~/utils/domain";
+import { mascararWhatsapp } from "~/utils/formatacao";
 import type { SecaoPermissao } from "~/utils/domain";
 
 type LinhaCadastro = Record<string, string | undefined>;
@@ -48,7 +49,12 @@ export function useCadastroView(params: {
         ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "fornecedores")
-      return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
+      return listas.fornecedores.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        documento: item.documento,
+        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined
+      }));
     if (tela === "socios_gestores")
       return listas.sociosGestores.map((item) => ({
         id: item.id,
@@ -247,8 +253,8 @@ export function useCadastroView(params: {
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Perfil", "Setor", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
-      colaboradores: ["Colaborador", "Situação", "Função atual", "Matrícula"],
-      fornecedores: ["Nome", "Documento"],
+      colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
+      fornecedores: ["Nome", "Documento", "WhatsApp"],
       socios_gestores: ["Nome", "Ativo"],
       maquininhas: ["Apelido", "Número de série", "Ativo"],
       clientes: ["Nome", "Documento"],

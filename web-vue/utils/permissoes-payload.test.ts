@@ -7,8 +7,8 @@ import {
   type ListasPermissoesPersistidas
 } from "./permissoes-payload";
 
-// S-06: a tela esconde 52 permissoes — as 13 telas de `telasOcultasNoDrawerEPermissoes` (uma
-// `*_visualizar` cada) mais 39 flags de menu (13 x mostrar/desabilitado/somente_caixa_aberto). O
+// S-06: a tela esconde 48 permissoes — as 12 telas de `telasOcultasNoDrawerEPermissoes` (uma
+// `*_visualizar` cada) mais 36 flags de menu (12 x mostrar/desabilitado/somente_caixa_aberto). O
 // salvamento faz REPLACE total no servidor, entao o que a tela nao manda o servidor apaga. Estes
 // testes usam a LISTA REAL (`permissoesOcultasNaTela`), nao uma copia paralela.
 
@@ -22,8 +22,6 @@ const OCULTAS_DA_GERENCIA = [
   "menu_relatorio_advertencias_mostrar",
   "perdas_sobras_visualizar",
   "menu_perdas_sobras_mostrar",
-  "estoque_produtos_visualizar",
-  "menu_estoque_produtos_mostrar",
   "relatorio_dre_visualizar",
   "menu_relatorio_dre_mostrar"
 ] as const;
@@ -74,15 +72,15 @@ const formGerencia = (regras: Record<string, boolean>) => ({
 describe("regrasComOcultasPreservadas — criterios da S-06", () => {
   const persistidas = listasComCargo(CARGO_GERENCIA, regrasDaGerenciaNoBanco());
 
-  it("a fixture nao apodrece: as 12 da Gerencia sao mesmo ocultas hoje", () => {
-    expect(OCULTAS_DA_GERENCIA).toHaveLength(12);
+  it("a fixture nao apodrece: as 10 da Gerencia sao mesmo ocultas hoje", () => {
+    expect(OCULTAS_DA_GERENCIA).toHaveLength(10);
     for (const oculta of OCULTAS_DA_GERENCIA) {
       expect(permissoesOcultasNaTela.has(oculta as never), oculta).toBe(true);
     }
     expect(permissoesOcultasNaTela.has(OCULTA_AUSENTE as never)).toBe(true);
   });
 
-  it("(a) editar e salvar a Gerencia mantem as 12 permissoes ocultas que ela tinha", () => {
+  it("(a) editar e salvar a Gerencia mantem as 10 permissoes ocultas que ela tinha", () => {
     const resultado = regrasComOcultasPreservadas(
       formGerencia(comoATelaFiltra(regrasDaGerenciaNoBanco())),
       persistidas
@@ -175,7 +173,7 @@ describe("regrasComOcultasPreservadas — guardas", () => {
       { id: CARGO_CAIXA, cargoId: CARGO_CAIXA, regras: { entradas_visualizar: true, menu_promocoes_mostrar: true } }
     ],
     setoresPermissoes: [{ id: "s1", setorId: "s1", regras: { relatorio_dre_visualizar: true } }],
-    usuariosPermissoes: [{ id: "u1", usuarioId: "u1", regras: { menu_estoque_produtos_mostrar: true } }]
+    usuariosPermissoes: [{ id: "u1", usuarioId: "u1", regras: { menu_perdas_sobras_mostrar: true } }]
   };
 
   it("trocar o alvo no modal NAO leva as ocultas do alvo anterior", () => {
@@ -212,7 +210,7 @@ describe("regrasComOcultasPreservadas — guardas", () => {
     );
 
     expect(doSetor["relatorio_dre_visualizar"]).toBe(true);
-    expect(doUsuario["menu_estoque_produtos_mostrar"]).toBe(true);
+    expect(doUsuario["menu_perdas_sobras_mostrar"]).toBe(true);
     expect(doUsuario).not.toHaveProperty("relatorio_dre_visualizar");
   });
 
@@ -327,7 +325,7 @@ describe("payload final da tela de Permissoes (S-06)", () => {
     expect(payload.usuarioId).toBeUndefined();
   });
 
-  it("carrega as 12 ocultas da Gerencia e as alteracoes do formulario", () => {
+  it("carrega as 10 ocultas da Gerencia e as alteracoes do formulario", () => {
     const payload = payloadDaTela(formEditadoPeloUsuario(), listas);
 
     for (const oculta of OCULTAS_DA_GERENCIA) {
@@ -353,7 +351,7 @@ describe("payload final da tela de Permissoes (S-06)", () => {
     expect(payload.regras["cadastro_clientes_visualizar"]).toBe(false); // ja era negada no banco
   });
 
-  it("o conjunto de chaves e exatamente 12 ocultas + o que o form tem", () => {
+  it("o conjunto de chaves e exatamente 10 ocultas + o que o form tem", () => {
     const form = formEditadoPeloUsuario();
     const payload = payloadDaTela(form, listas);
 
@@ -396,7 +394,7 @@ describe("payload final da tela de Permissoes (S-06)", () => {
 // e desfaz a restauracao em silencio. O endpoint devolve `{ cargoId, regras }`, entao sincronizar
 // nao custa chamada nenhuma.
 //
-// O cenario tem 12 ocultas ANTES e 12 DEPOIS, de proposito: contagem igual dos dois lados faz um
+// O cenario tem 10 ocultas ANTES e 10 DEPOIS, de proposito: contagem igual dos dois lados faz um
 // teste que so conte chaves passar. So a igualdade de CONJUNTO denuncia a troca.
 
 const OCULTAS_QUE_ENTRAM = ["relatorio_dre_visualizar", "menu_relatorio_dre_mostrar"] as const;
@@ -426,7 +424,7 @@ describe("restaurar padrao do cargo sincroniza as opcoes (S-06)", () => {
     const antes = soOcultas(regrasDaGerenciaAntesDaRestauracao());
     const depois = soOcultas(regrasDaGerenciaNoBanco());
 
-    expect(antes.size).toBe(depois.size); // 12 = 12 — a contagem nao denuncia
+    expect(antes.size).toBe(depois.size); // 10 = 10 — a contagem nao denuncia
     expect([...depois].filter((p) => !antes.has(p)).sort()).toEqual([...OCULTAS_QUE_ENTRAM].sort());
     expect([...antes].filter((p) => !depois.has(p)).sort()).toEqual([...OCULTAS_QUE_SAEM].sort());
     for (const permissao of [...OCULTAS_QUE_ENTRAM, ...OCULTAS_QUE_SAEM]) {

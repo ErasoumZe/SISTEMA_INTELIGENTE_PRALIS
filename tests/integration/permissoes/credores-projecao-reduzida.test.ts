@@ -41,7 +41,7 @@ const CONTRATO_COMPLETO_COLABORADOR = [
   "matricula",
   "funcaoNome"
 ];
-const CONTRATO_COMPLETO_FORNECEDOR = ["id", "empresaId", "nome", "documento"];
+const CONTRATO_COMPLETO_FORNECEDOR = ["id", "empresaId", "nome", "documento", "whatsapp"];
 
 // Dados que NAO podem sair na resposta operacional. Sao gravados por SQL direto de proposito: o
 // payload de cadastro valida CPF/CNPJ e o que importa aqui e o vazamento, nao a validacao.

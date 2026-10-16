@@ -84,6 +84,21 @@ describe("atualizarCadastroLocal", () => {
     expect(opcoes.pdvs[0]).toMatchObject({ id: "p1", empresaId: "emp-1", nome: "Caixa 1", contaId: "c1", ativo: true });
   });
 
+  it("fornecedores: preserva documento e WhatsApp no cache apos salvar", () => {
+    const { atualizarCadastroLocal, opcoes } = montarCenario();
+    atualizarCadastroLocal(
+      "fornecedores",
+      form({ nome: "Fornecedor", documento: "12345678000199", whatsapp: "5511999999999" }),
+      "forn1"
+    );
+    expect(opcoes.fornecedores[0]).toMatchObject({
+      id: "forn1",
+      nome: "Fornecedor",
+      documento: "12345678000199",
+      whatsapp: "5511999999999"
+    });
+  });
+
   it("clientes: mantem dataNascimento so quando o documento e CPF", () => {
     const cpf = montarCenario();
     cpf.atualizarCadastroLocal(

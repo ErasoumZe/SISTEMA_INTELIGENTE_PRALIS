@@ -8,6 +8,8 @@ import { expect, request, type APIRequestContext, type Page } from "@playwright/
 export const USUARIOS = {
   /** Enxerga e edita tudo — `usuario_admin` do seed de desenvolvimento. */
   admin: { email: "diretor@email.com", senha: "123456" },
+  /** Opera o fluxo completo de compras sem privilegio administrativo global. */
+  compras: { email: "compras@email.com", senha: "123456" },
   /** Opera caixa e mercadorias, mas NAO tem `cadastro_produtos_visualizar`. */
   semProdutos: { email: "caixa@email.com", senha: "123456" },
   /** Confere retornos e divergencias nas contas de destino do seed de desenvolvimento. */
@@ -134,7 +136,12 @@ export function observarConsole(page: Page): string[] {
     /Nuxt DevTools/i,
     /\[vite\]/i,
     /Download the Vue Devtools/i,
-    /Timer '\[nuxt-app\] (?:page:loading:start|page:loading:end|page:finish|link:prefetch)' already exists/i
+    /Timer '\[nuxt-app\] (?:page:start|page:loading:start|page:loading:end|page:finish|link:prefetch)' already exists/i,
+    // Ruido do ripple do Vuetify sob clique sintetico rapido: ele calcula a origem da onda pelo
+    // retangulo do alvo e, quando o clique cai enquanto o overlay ainda anima, o retangulo vem
+    // zerado e o keyframe sai com NaN. Reproduzido a mao na mesma tela, com clique humano, o
+    // console fica limpo — nao e sintoma da tela, e sim do ritmo do teste.
+    /Invalid keyframe value for property transform/i
   ];
   page.on("console", (msg) => {
     if (msg.type() !== "error" && msg.type() !== "warning") return;

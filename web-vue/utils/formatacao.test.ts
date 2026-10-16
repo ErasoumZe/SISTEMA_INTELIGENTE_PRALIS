@@ -8,11 +8,14 @@ import {
   formatarDataSomenteDia,
   formatarDiaDeTimestamp,
   formatarHora,
+  formatarQuantidade,
   mascararCep,
   mascararCnpj,
   mascararCpf,
   mascararDocumento,
-  mascararWhatsapp
+  mascararWhatsapp,
+  normalizarQuantidadeEditavel,
+  normalizarWhatsappParaLink
 } from "./formatacao";
 
 describe("formatacao", () => {
@@ -27,6 +30,20 @@ describe("formatacao", () => {
 
   it("apenasDigitos remove tudo que nao e digito", () => {
     expect(apenasDigitos("12.345-67/ab")).toBe("1234567");
+  });
+
+  it("formata quantidade sem zeros decimais artificiais", () => {
+    expect(formatarQuantidade("40.000")).toBe("40");
+    expect(formatarQuantidade("4.500")).toBe("4,5");
+    expect(formatarQuantidade("4.100")).toBe("4,1");
+    expect(formatarQuantidade("4.010")).toBe("4,01");
+    expect(formatarQuantidade("4.001")).toBe("4,001");
+  });
+
+  it("normaliza quantidade para campo numerico sem casas vazias", () => {
+    expect(normalizarQuantidadeEditavel("40.000")).toBe("40");
+    expect(normalizarQuantidadeEditavel("4.500")).toBe("4.5");
+    expect(normalizarQuantidadeEditavel("4.010")).toBe("4.01");
   });
 
   // Campo date-only ("yyyy-MM-dd") jamais pode passar por Date: seria lido como meia-noite UTC e,
@@ -85,7 +102,13 @@ describe("formatacao", () => {
   it("mascararWhatsapp formata celular (11) e fixo (10)", () => {
     expect(mascararWhatsapp("11987654321")).toBe("(11) 98765-4321");
     expect(mascararWhatsapp("1132654321")).toBe("(11) 3265-4321");
+    expect(mascararWhatsapp("5511987654321")).toBe("+55 (11) 98765-4321");
     expect(mascararWhatsapp("11")).toBe("11");
+  });
+
+  it("normalizarWhatsappParaLink acrescenta DDI somente ao numero local", () => {
+    expect(normalizarWhatsappParaLink("(11) 98765-4321")).toBe("5511987654321");
+    expect(normalizarWhatsappParaLink("+55 (11) 98765-4321")).toBe("5511987654321");
   });
 
   it("mascararCep formata 8 digitos", () => {

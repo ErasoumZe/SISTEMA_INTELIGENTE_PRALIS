@@ -73,7 +73,12 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
     }
 
     if (tela === "fornecedores") {
-      upsertOpcao(opcoes.fornecedores, { ...itemBase, nome: form.nome, documento: form.documento || undefined });
+      upsertOpcao(opcoes.fornecedores, {
+        ...itemBase,
+        nome: form.nome,
+        documento: form.documento || undefined,
+        whatsapp: form.whatsapp || undefined
+      });
       return true;
     }
 

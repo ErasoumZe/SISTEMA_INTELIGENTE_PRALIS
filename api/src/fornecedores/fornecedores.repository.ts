@@ -15,26 +15,27 @@ export async function listarFornecedoresRepository() {
       id: fornecedores.id,
       empresaId: fornecedores.empresaId,
       nome: fornecedores.nome,
-      documento: fornecedores.documento
+      documento: fornecedores.documento,
+      whatsapp: fornecedores.whatsapp
     })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
 }
 
 export async function salvarFornecedorRepository(
-  input: { id?: string; empresaId: string; nome: string; documento: string | null },
+  input: { id?: string; empresaId: string; nome: string; documento: string | null; whatsapp: string | null },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
     await db
       .update(fornecedores)
-      .set({ nome: input.nome, documento: input.documento })
+      .set({ nome: input.nome, documento: input.documento, whatsapp: input.whatsapp })
       .where(and(eq(fornecedores.id, input.id), eq(fornecedores.empresaId, input.empresaId)));
     return input;
   }
   const [criado] = await db
     .insert(fornecedores)
-    .values({ empresaId: input.empresaId, nome: input.nome, documento: input.documento })
+    .values({ empresaId: input.empresaId, nome: input.nome, documento: input.documento, whatsapp: input.whatsapp })
     .returning({ id: fornecedores.id });
   return criado;
 }
@@ -56,6 +57,7 @@ export async function copiarFornecedoresRepository(
         empresaId: empresaDestinoId,
         nome: fornecedor.nome,
         documento: fornecedor.documento,
+        whatsapp: fornecedor.whatsapp,
         importadoDe: fornecedor.empresaId,
         idImportado: fornecedor.id
       });

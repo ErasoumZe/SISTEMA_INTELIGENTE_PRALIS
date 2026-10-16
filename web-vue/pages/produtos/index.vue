@@ -53,7 +53,7 @@ onMounted(async () => {
       erroDeAcesso.value = "Sem permissão para acessar esta página.";
       return;
     }
-    empresas.value = await apiGet<Opcao[]>("/api/empresas");
+    empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
     empresaId.value =
       sessao.value.perfil?.empresaId ?? sessao.value.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
     await Promise.all([lista.carregar(), lista.carregarOpcoesDeFiltro()]);

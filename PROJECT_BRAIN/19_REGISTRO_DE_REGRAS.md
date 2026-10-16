@@ -161,8 +161,8 @@ Colhidas perguntando uma a uma. **Fala dele entre aspas.**
 | Id            | Decisão                                                                                        | Detalhe                                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-032**     | Transferência sem caixa aberto: **só tesouraria, gerência, financeiro, diretor geral e admin** | O cargo **Caixa** continua precisando de caixa aberto. Mesma lógica de R-073/R-074. Some a regra atual que exige caixa para _todo mundo_                 |
-| **R-008**     | 🚫 **Superada na referência Caixa B1 (08/10/2026):** o retorno final é atômico no fechamento  | O operador pode registrar sangrias/retornos durante o turno; saldo físico remanescente gera o retorno final na mesma transação do fechamento.          |
-| **R-033** 🆕  | 🚫 **Superada na referência Caixa B1 (08/10/2026):** abertura exige malote/lacre identificado | Não há abertura zerada: o lacre reivindica a transferência pendente e o fundo entra no mesmo ato de abertura.                                           |
+| **R-008**     | 🚫 **Superada na referência Caixa B1 (08/10/2026):** o retorno final é atômico no fechamento   | O operador pode registrar sangrias/retornos durante o turno; saldo físico remanescente gera o retorno final na mesma transação do fechamento.            |
+| **R-033** 🆕  | 🚫 **Superada na referência Caixa B1 (08/10/2026):** abertura exige malote/lacre identificado  | Não há abertura zerada: o lacre reivindica a transferência pendente e o fundo entra no mesmo ato de abertura.                                            |
 | **R-008b** 🆕 | O retorno do fechamento vai para o **COFRE PRINCIPAL**                                         | José, 31/07. A planilha tem **dois** cofres (`CNT CONTA - COFRE PRINCIPAL` e `CNT CONTA - COFRE TROCO`); o brain falava de "o cofre" no singular         |
 | **R-020** 🆕  | As contas nascem no sistema **com o saldo da planilha** como fundo                             | José, 31/07. É a foto do dia da virada: dali em diante cada movimento soma ou subtrai. Vale para **todas** as contas, não só os cofres                   |
 | **R-021** 🆕  | A quebra de caixa vive em **tabela própria**, nunca em `contas`                                | Decisão técnica minha, 31/07 (o José já tinha definido a REGRA em 30/07). Saldo por PESSOA não pode encostar no saldo das contas, que alimenta o ADR-001 |
@@ -232,7 +232,7 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 | **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa                                                 |
 | **R-037** 🆕 | Estourado o prazo opcional da transferência direta (R-035), o sistema trava/notifica quem enviou e os usuários de destino realmente aptos a confirmar: vínculo conta+empresa, acesso à empresa e permissão efetiva `transferencias_conferir` |
 | **R-038** 🆕 | O bloco **Transferência de retorno** da FOTO 1 contém retornos independentes do dia — cada linha é uma transferência própria, agrupada na mesma tela por comodidade                                                                          |
-| **R-039** 🆕 | 🚫 **Superada na referência Caixa B1 (08/10/2026):** maquininha cadastrada e vinculada é obrigatória na abertura. Os relatórios de manhã/tarde usam exclusivamente a maquininha escolhida. |
+| **R-039** 🆕 | 🚫 **Superada na referência Caixa B1 (08/10/2026):** maquininha cadastrada e vinculada é obrigatória na abertura. Os relatórios de manhã/tarde usam exclusivamente a maquininha escolhida.                                                   |
 
 ### §1-C · R-040 — abrir o caixa É confirmar (José, 31/07)
 
@@ -1174,6 +1174,46 @@ Falta ou sobra preserva a regra R-206: a divergência exige relato, autoria e ho
 Toda venda cancelada já exige no CREARE login/autorização do gerente e motivo do cancelamento. O fechamento apenas consulta e apresenta esse fato no período operacional congelado: venda, horário, valor, gerente/autorizador e motivo/justificativa registrados no CREARE. O operador do Caixa não grava áudio, texto nem nova justificativa para a mesma venda no Pralis.
 
 O motivo aparece em modo somente leitura no relatório final e no dossiê da Tesouraria. Ausência de motivo no dado integrado é uma pendência de integração/auditoria visível, não uma oportunidade para reescrever o fato em outro sistema.
+
+### R-213 — Recebimento físico é a única entrada de estoque (José, 08/10/2026)
+
+Somente o ato de marcar um pedido como **Recebido**, depois da conferência física, aumenta o estoque. O saldo sobe pela **quantidade efetivamente conferida**, nunca pela quantidade inicialmente pedida, enviada, negociada ou confirmada. Criar pedido, enviá-lo ao fornecedor, negociar preço, confirmar o pedido, aprovar Mercadoria ou importar NF-e não altera estoque por si só. Toda entrada precisa deixar ator, data/hora do servidor, pedido, itens e quantidade recebida auditáveis; não existe campo livre para aumentar o saldo do produto.
+
+Esta regra não define ainda recebimento parcial, saída por venda/produção/perda, ajuste de inventário ou o gatilho automático de reposição. Esses atos exigem decisão própria antes de qualquer implementação.
+
+### R-214 — Pedido de Compra: fornecedor único e recebimento parcial auditável (José, 08/10/2026)
+
+Todo **novo** pedido pertence a um único fornecedor. Itens destinados a fornecedores diferentes formam pedidos distintos; assim, envio por WhatsApp/formulário, negociação e estado do pedido continuam tendo uma única verdade. O `fornecedor_id` por item fica apenas como fato histórico dos pedidos antigos e deixa de ser caminho de escrita.
+
+O recebimento pode ser parcial. Cada conferência física gera uma entrada auditável com quantidade por item, ator, hora do servidor e saldo anterior/posterior; essa quantidade entra no estoque imediatamente conforme R-208. Enquanto restar item pendente, o pedido fica em **Recebido parcialmente**. Ao alcançar as quantidades solicitadas, fica **Recebido**. Se o restante for cancelado, nenhum saldo já recebido é estornado: o cancelamento encerra apenas o que não chegou.
+
+O ciclo novo é **A fazer → Enviado → Retornado → Confirmado → Recebido parcialmente → Recebido**, com **Cancelado** como estado terminal auditável. Estados legados `rascunho` e `aprovado` não ganham nova porta de escrita; permanecem apenas para leitura histórica até uma migração de dados aprovada por contagem e amostra.
+
+O gerador `máximo − atual` é, por enquanto, uma **sugestão de reposição** acionada pelo Compras. Ele só poderá disparar sozinho quando venda, produção, perda e inventário também gerarem movimentos de estoque rastreáveis.
+
+### R-215 — Módulo Compras: filtros e agenda de conferência (José, 08/10/2026)
+
+O módulo **Compras** concentra Estoque, Conferências, Pedidos e Fornecedores no menu; Mercadorias e NF-e continuam sendo lançamentos/financeiro e não ganham uma segunda tela de compra. A listagem de estoque filtra por grupo, área, local de venda, local de estoque e Curva ABC.
+
+**Área** e **Local de estoque** são dimensões distintas do produto. A Curva ABC entra inicialmente como classificação manual (`A`, `B` ou `C`), visível e filtrável; não haverá cálculo automático fingindo usar giro, faturamento ou margem sem a fórmula e o período definidos pelo negócio.
+
+A **Conferência de estoque** agenda a contagem física com os mesmos filtros. Agendar ou concluir a agenda não altera saldo. A regra de ajuste de divergência (sobra/perda) fica bloqueada até ser decidida em regra própria.
+
+O **agendador** de compras é uma data/recorrência para o comprador revisar ou gerar uma sugestão; não cria envio ao fornecedor e não é um robô autônomo. Enquanto venda, produção, perda e inventário não emitirem movimentos rastreáveis, o botão de reposição continua uma sugestão assistida, calculada por `estoque máximo − estoque atual` quando o saldo atingir o mínimo.
+
+### R-216 — Cotação respondida pelo fornecedor por link (José, 16/10/2026)
+
+O pedido não vai mais ao fornecedor como texto com a lista de itens. O Comprador clica em **Enviar cotação**; o sistema gera um link e abre o WhatsApp do fornecedor com uma mensagem curta e esse link. O link abre uma tela de cotação **sem login**, onde o fornecedor informa, por produto: valor atual, desconto em R$ **por unidade** ou em %, e pode marcar **Não tenho este produto**. A tela mostra nome do fornecedor, produto, quantidade, **último valor pago**, valor com desconto, total do item, total do pedido, total com desconto e um **desconto sobre o pedido todo**, rateado proporcionalmente entre os itens pelo maior resto, sem perder centavo. Previsão de entrega, condição de pagamento e observação são opcionais.
+
+O link vale até o **fim do 2º dia útil** seguinte ao envio, no fuso do negócio. Feriado não é considerado porque o sistema não tem calendário de feriados. Dentro do prazo o fornecedor salva rascunho quantas vezes quiser pelo mesmo link; o rascunho salva sozinho. **Enviar** é ato único: recalcula tudo no servidor, grava os totais, muda o pedido para **Retornado** com o fornecedor como autor e fecha o link. Depois disso o link só informa que a cotação foi enviada.
+
+**Último valor pago** é o preço efetivo por unidade, já com descontos, da cotação respondida mais recente daquele produto cujo pedido o Comprador **confirmou**. O fornecedor vê apenas o que foi pago **a ele mesmo**; o Comprador vê a referência de qualquer fornecedor. Mostrar ao fornecedor B o preço negociado com o concorrente A seria vazamento comercial (achado da revisão de segurança de 16/10/2026). Proposta respondida e não confirmada não vira referência. Mercadoria/NF-e ainda não alimenta esse número porque o vínculo com o pedido segue pendente.
+
+**Enviado** só nasce da geração do link e **Retornado** só da resposta do fornecedor; a troca manual de situação ficou restrita a confirmar ou cancelar. Gerar novo link revoga o anterior; confirmar ou cancelar o pedido também encerra o link. A resposta não confirma o pedido nem mexe em estoque (R-208): quem confirma é o Comprador.
+
+O token tem 256 bits, viaja no fragmento da URL e no cabeçalho `x-cotacao-token`, nunca em caminho ou query, e só o hash SHA-256 fica no banco — o mesmo desenho da ficha pública de admissão. O transporte por `wa.me` continua até a integração oficial da Meta (documento 51), que troca só o envio, não o formulário.
+
+**Em aberto para decisão:** fornecedor que só responde por telefone hoje não tem como o Comprador registrar a resposta, porque `Enviado → Confirmado` foi retirado antes desta regra; mostrar o último valor pago ao fornecedor pode ancorar o preço dele para cima ou para baixo.
 
 ## §4 · Como isto deixa de ser mais um documento
 

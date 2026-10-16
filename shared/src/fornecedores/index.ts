@@ -13,7 +13,8 @@ const uuidSchema = z.string().uuid();
 export const fornecedorPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
-  documento: z.string().optional().nullable()
+  documento: z.string().optional().nullable(),
+  whatsapp: z.string().trim().min(8).max(30).optional().nullable()
 });
 
 export const fornecedoresQuerySchema = empresaQuerySchema;

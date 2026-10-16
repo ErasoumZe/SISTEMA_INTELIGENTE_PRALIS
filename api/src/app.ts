@@ -13,6 +13,8 @@ import { registrarRotasRelatorioFechamento } from "./relatorios/relatorio-fecham
 import { registrarRotasCampanhas } from "./campanhas/campanhas.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
+import { registrarRotasCompras } from "./compras/compras.controller.js";
+import { registrarRotasCotacoes } from "./cotacoes/cotacoes.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
@@ -80,7 +82,11 @@ const rotasComAutenticacaoPropria = new Set([
   // dividem a primeira, PUT e DELETE dividem a segunda, porque a comparacao e pela url
   // DECLARADA da rota, com o `:id` literal, e nao pelo caminho ja resolvido.
   "/api/admissao/dependentes",
-  "/api/admissao/dependentes/:id"
+  "/api/admissao/dependentes/:id",
+  // R-216: a cotacao do fornecedor. Ele NAO tem conta — autentica pelo header `x-cotacao-token`,
+  // cujo hash mora em `pedidos_cotacoes`. GET e PUT dividem a primeira entrada.
+  "/api/cotacao",
+  "/api/cotacao/enviar"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -102,6 +108,8 @@ export async function buildApp(): Promise<FastifyInstance> {
                 // registra headers, mas isto e cinto e suspensorio para o dia em que alguem logar
                 // `req` inteiro ou o Sentry serializar o contexto.
                 'req.headers["x-admissao-convite"]',
+                // R-216: o link do fornecedor vale dois dias uteis e da acesso a precos.
+                'req.headers["x-cotacao-token"]',
                 'res.headers["set-cookie"]'
               ],
               censor: "[redigido]"
@@ -177,7 +185,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       "X-API-Key",
       // Sem isto o preflight recusa e o navegador nem chega a mandar a requisicao real —
       // falha silenciosa, sem nada no log do servidor.
-      "X-Admissao-Convite"
+      "X-Admissao-Convite",
+      // R-216: o token da cotacao do fornecedor. Mesmo motivo do anterior.
+      "X-Cotacao-Token"
     ]
   });
   await app.register(helmet);
@@ -281,6 +291,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasProdutosMaisVendidos(app);
   await registrarRotasIntegracoes(app);
   await registrarRotasPedidos(app);
+  await registrarRotasCompras(app);
+  await registrarRotasCotacoes(app);
 
   return app;
 }

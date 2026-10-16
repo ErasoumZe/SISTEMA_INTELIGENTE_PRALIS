@@ -37,6 +37,7 @@ const permissaoAcessoPorTela = {
   pedidos: "pedidos_visualizar",
   perdas_sobras: "perdas_sobras_visualizar",
   estoque_produtos: "estoque_produtos_visualizar",
+  conferencias_estoque: "conferencias_estoque_visualizar",
   relatorio_dre: "relatorio_dre_visualizar",
   clientes: "cadastro_clientes_visualizar",
   fornecedores: "cadastro_fornecedores_visualizar",
@@ -210,6 +211,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "pedidos",
       "perdas_sobras",
       "estoque_produtos",
+      "conferencias_estoque",
       "relatorio_dre",
       "clientes",
       "admissoes_testes"
@@ -262,8 +264,18 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     ]
   }),
   Compras: permissoesDoCargo({
-    ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
-    extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
+    ativas: ["pedidos", "estoque_produtos", "conferencias_estoque", "mercadorias", "fornecedores", "produtos"],
+    extras: [
+      "pedidos_criar",
+      "pedidos_editar",
+      "pedidos_aprovar",
+      "conferencias_estoque_agendar",
+      "mercadorias_criar",
+      "mercadorias_discriminar",
+      "cadastro_fornecedores_criar",
+      "cadastro_fornecedores_editar",
+      "cadastro_produtos_criar"
+    ]
   }),
   DP: permissoesDoCargo({
     ativas: [

@@ -12,7 +12,9 @@ export default defineNuxtConfig({
   },
   vite: {
     optimizeDeps: {
-      include: ["@vue/devtools-core", "@vue/devtools-kit", "zod"]
+      // Dependencias carregadas por rotas menos frequentes tambem entram no pre-bundle. Sem isso,
+      // o primeiro acesso a Produtos reinicia o Vite no meio do login/teste e deixa a tela vazia.
+      include: ["@vue/devtools-core", "@vue/devtools-kit", "@zxing/browser", "uuid", "zod"]
     }
   },
   modules: ["vuetify-nuxt-module"],
