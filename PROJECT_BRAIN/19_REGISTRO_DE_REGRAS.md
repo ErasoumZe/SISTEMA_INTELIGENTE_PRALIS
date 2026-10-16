@@ -1201,6 +1201,20 @@ A **Conferência de estoque** agenda a contagem física com os mesmos filtros. A
 
 O **agendador** de compras é uma data/recorrência para o comprador revisar ou gerar uma sugestão; não cria envio ao fornecedor e não é um robô autônomo. Enquanto venda, produção, perda e inventário não emitirem movimentos rastreáveis, o botão de reposição continua uma sugestão assistida, calculada por `estoque máximo − estoque atual` quando o saldo atingir o mínimo.
 
+### R-216 — Cotação respondida pelo fornecedor por link (José, 16/10/2026)
+
+O pedido não vai mais ao fornecedor como texto com a lista de itens. O Comprador clica em **Enviar cotação**; o sistema gera um link e abre o WhatsApp do fornecedor com uma mensagem curta e esse link. O link abre uma tela de cotação **sem login**, onde o fornecedor informa, por produto: valor atual, desconto em R$ **por unidade** ou em %, e pode marcar **Não tenho este produto**. A tela mostra nome do fornecedor, produto, quantidade, **último valor pago**, valor com desconto, total do item, total do pedido, total com desconto e um **desconto sobre o pedido todo**, rateado proporcionalmente entre os itens pelo maior resto, sem perder centavo. Previsão de entrega, condição de pagamento e observação são opcionais.
+
+O link vale até o **fim do 2º dia útil** seguinte ao envio, no fuso do negócio. Feriado não é considerado porque o sistema não tem calendário de feriados. Dentro do prazo o fornecedor salva rascunho quantas vezes quiser pelo mesmo link; o rascunho salva sozinho. **Enviar** é ato único: recalcula tudo no servidor, grava os totais, muda o pedido para **Retornado** com o fornecedor como autor e fecha o link. Depois disso o link só informa que a cotação foi enviada.
+
+**Último valor pago** é o preço efetivo por unidade, já com descontos, da cotação respondida mais recente daquele produto cujo pedido o Comprador **confirmou**. Proposta respondida e não confirmada não vira referência. Mercadoria/NF-e ainda não alimenta esse número porque o vínculo com o pedido segue pendente.
+
+**Enviado** só nasce da geração do link e **Retornado** só da resposta do fornecedor; a troca manual de situação ficou restrita a confirmar ou cancelar. Gerar novo link revoga o anterior; confirmar ou cancelar o pedido também encerra o link. A resposta não confirma o pedido nem mexe em estoque (R-208): quem confirma é o Comprador.
+
+O token tem 256 bits, viaja no fragmento da URL e no cabeçalho `x-cotacao-token`, nunca em caminho ou query, e só o hash SHA-256 fica no banco — o mesmo desenho da ficha pública de admissão. O transporte por `wa.me` continua até a integração oficial da Meta (documento 51), que troca só o envio, não o formulário.
+
+**Em aberto para decisão:** fornecedor que só responde por telefone hoje não tem como o Comprador registrar a resposta, porque `Enviado → Confirmado` foi retirado antes desta regra; mostrar o último valor pago ao fornecedor pode ancorar o preço dele para cima ou para baixo.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

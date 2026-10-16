@@ -38,7 +38,10 @@ test.describe("ciclo de compra", () => {
     await contexto.api.dispose();
   });
 
-  test("do pedido ao estoque: sugestao, envio, negociacao, recebimento parcial e extrato", async ({ page }) => {
+  test("do pedido ao estoque: sugestao, envio, negociacao, recebimento parcial e extrato", async ({
+    page,
+    browser
+  }) => {
     const problemas = observarConsole(page);
     const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const nomeProduto = `E2E Ciclo ${sufixo}`;
@@ -116,26 +119,62 @@ test.describe("ciclo de compra", () => {
     detalhe = dialogoAberto(page);
     await expect(detalhe.locator("tbody tr").filter({ hasText: nomeProduto })).toContainText("12");
 
-    // 4) Envio por WhatsApp: abre com o numero do fornecedor e os itens, e muda a situacao.
+    // 4) Envio da cotacao (R-216): o WhatsApp abre com o numero do fornecedor e o LINK do formulario.
+    // O conteudo do pedido mora no formulario, nao no texto da mensagem.
     const [janela] = await Promise.all([
       page.waitForEvent("popup"),
-      detalhe.getByRole("button", { name: "Enviar WhatsApp" }).click()
+      detalhe.getByRole("button", { name: "Enviar cotação" }).click()
     ]);
-    // O `wa.me` redireciona para `api.whatsapp.com`; o que importa e o destino final carregar o
-    // numero do fornecedor e os itens. No formato de redirecionamento o espaco vira "+", que o
-    // `decodeURIComponent` nao desfaz.
+    // O `wa.me` redireciona para `api.whatsapp.com`; nesse formato o espaco vira "+".
     await expect.poll(() => janela.url(), { timeout: 20_000 }).toMatch(/wa\.me|api\.whatsapp\.com/u);
-    const enderecoWhatsapp = decodeURIComponent(janela.url()).replaceAll("+", " ");
-    expect(enderecoWhatsapp).toContain("5511988887777");
-    expect(enderecoWhatsapp).toContain(nomeProduto);
+    const mensagem = decodeURIComponent(janela.url()).replaceAll("+", " ");
+    expect(mensagem).toContain("5511988887777");
+    const link = /https?:\/\/\S+?\/cotacao#t=[0-9a-f]{64}/u.exec(mensagem)?.[0];
+    expect(link, "a mensagem leva o link da cotacao").toBeTruthy();
     await janela.close();
-    // A etapa "Enviado" aparece sempre na trilha de chips; quem prova a transicao e a acao que so
-    // existe nesse estado.
-    await expect(detalhe.getByRole("button", { name: "Marcar retornado" })).toBeVisible();
+    detalhe = dialogoAberto(page);
+    await expect(detalhe.locator('[data-secao="cotacao-pedido"]')).toContainText("Aguardando o fornecedor");
+    await expect(detalhe.getByRole("button", { name: "Confirmar negociação" })).toHaveCount(0);
 
-    // 5) Negociacao: Enviado -> Retornado -> Confirmado.
-    await detalhe.getByRole("button", { name: "Marcar retornado" }).click();
-    await expect(detalhe.getByRole("button", { name: "Marcar retornado" })).toBeHidden();
+    // 5) O fornecedor responde pelo link, num navegador SEM sessao: prova que nao precisa de login.
+    // 12 x (10,00 - 0,50) = 114,00; menos R$ 4,00 no pedido = 110,00.
+    const navegadorFornecedor = await browser.newContext({ locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+    const fornecedor = await navegadorFornecedor.newPage();
+    const problemasFornecedor = observarConsole(fornecedor);
+    await fornecedor.goto(link!);
+    await expect(fornecedor.getByText(fornecedorManual)).toBeVisible({ timeout: 120_000 });
+    expect(new URL(fornecedor.url()).hash, "o token sai da barra de enderecos").toBe("");
+    const cartao = fornecedor.locator(".cotacao-item").filter({ hasText: nomeProduto });
+    await expect(cartao).toContainText("sem histórico");
+    await cartao.getByLabel("Valor atual").fill("10,00");
+    await cartao.getByLabel("Desconto por unidade").fill("0,50");
+    await expect(cartao.locator('[data-campo="total-item"]')).toContainText("114,00");
+    await fornecedor.locator('[data-campo="desconto-geral"] input').fill("4");
+    await expect(fornecedor.locator('[data-campo="total-final"]')).toContainText("110,00");
+    await semRolagemHorizontal(fornecedor);
+    await fornecedor.getByRole("button", { name: "Enviar cotação" }).click();
+    await fornecedor.getByRole("button", { name: "Enviar agora" }).click();
+    await expect(fornecedor.locator('[data-estado="respondida"]')).toBeVisible();
+    expect(problemasFornecedor, problemasFornecedor.join("\n")).toEqual([]);
+    // O mesmo link, aberto de novo, so diz que ja foi enviada. Aba NOVA, como o WhatsApp abre: na
+    // mesma aba so o fragmento mudaria e o Vue Router de desenvolvimento imprimiria o seletor com o
+    // token (limite conhecido, compartilhado com a ficha de admissao; o build de producao nao avisa).
+    const reaberta = await navegadorFornecedor.newPage();
+    await reaberta.goto(link!);
+    await expect(reaberta.locator('[data-estado="respondida"]')).toBeVisible({ timeout: 60_000 });
+    await navegadorFornecedor.close();
+
+    // O Comprador ve Retornado com a proposta lado a lado e so entao confirma.
+    await detalhe.getByRole("button", { name: "Fechar" }).click();
+    await esperarOverlayFechar(page);
+    await page.reload();
+    await page.getByRole("tab", { name: /^Retornado \d+$/u }).click();
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorManual);
+    const linhaRetornada = page.locator("tbody tr").filter({ hasText: fornecedorManual });
+    await linhaRetornada.getByRole("button", { name: "Abrir" }).click();
+    detalhe = dialogoAberto(page);
+    await expect(detalhe.locator('[data-campo="cotacao-total-final"]')).toContainText("110,00");
+    await expect(detalhe.locator('[data-secao="historico-pedido"]')).toContainText("pelo link");
     await detalhe.getByRole("button", { name: "Confirmar negociação" }).click();
     await expect(detalhe.getByRole("button", { name: "Conferir recebimento" })).toBeVisible();
 
@@ -186,7 +225,10 @@ test.describe("ciclo de compra", () => {
     await expect(linhaFinal).toContainText("Recebido");
     await linhaFinal.getByRole("button", { name: "Abrir" }).click();
     detalhe = dialogoAberto(page);
-    await expect(detalhe.locator("tbody tr").filter({ hasText: nomeProduto })).toContainText("12");
+    // Duas tabelas citam o produto depois da cotacao (itens e proposta); a quantidade recebida e da de itens.
+    await expect(detalhe.locator(".pedido-detalhe__tabela tbody tr").filter({ hasText: nomeProduto })).toContainText(
+      "12"
+    );
     await detalhe.getByRole("button", { name: "Fechar" }).click();
 
     // 10) Extrato auditavel: conferente, entrada e saldo anterior/posterior de cada movimento.
