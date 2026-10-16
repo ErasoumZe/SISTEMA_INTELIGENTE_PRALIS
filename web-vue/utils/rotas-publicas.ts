@@ -18,11 +18,17 @@
 // solta em cada lugar, o link continuaria apontando para a rota velha sem ninguem perceber.
 export const ROTA_ADMISSAO = "/admissao";
 
+// R-216: a cotacao do fornecedor. Mesma natureza da ficha de admissao — quem abre nao tem conta, o
+// acesso e provado pelo token no cabecalho e a pagina nao monta AppWorkspace. Constante pelo mesmo
+// motivo: o montador do link (`linkDaCotacao`) e a allowlist precisam mudar juntos.
+export const ROTA_COTACAO = "/cotacao";
+
 export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   "/login",
   "/forgot-password",
   "/reset-password",
-  ROTA_ADMISSAO
+  ROTA_ADMISSAO,
+  ROTA_COTACAO
 ]);
 
 // Remove barras finais, preservando a raiz. `/reset-password/` e `/reset-password//` viram

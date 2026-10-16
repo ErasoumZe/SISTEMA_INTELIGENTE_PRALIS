@@ -1,9 +1,10 @@
-import type { AuthSession, PedidoDto, PedidoStatus, ProdutoEstoqueDto } from "@padaria/shared";
+import type { AuthSession, CotacaoGeradaDto, PedidoDto, PedidoStatus, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { usePermissoes } from "~/composables/usePermissoes";
 import type { PedidoFormEdicao } from "~/types/pedidos";
+import { linkDaCotacao, mensagemDaCotacao } from "~/utils/cotacao-link";
 import { mensagemErro } from "~/utils/domain";
-import { formatarQuantidade, normalizarQuantidadeEditavel, normalizarWhatsappParaLink } from "~/utils/formatacao";
+import { normalizarQuantidadeEditavel, normalizarWhatsappParaLink } from "~/utils/formatacao";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 function formVazio(): PedidoFormEdicao {
@@ -42,6 +43,11 @@ export function usePedidos() {
   const tentativaRecebimento = ref<TentativaRecebimento | null>(null);
   const sugestaoFornecedorId = ref("");
   const estoquePorProduto = ref<Record<string, ProdutoEstoqueDto>>({});
+  /** Ultimo link de cotacao gerado nesta sessao. O token sai uma vez so: recarregou, so gerando outro. */
+  const linkCotacao = ref<{ pedidoId: string; link: string } | null>(null);
+  const linkCotacaoDoDetalhe = computed(() =>
+    linkCotacao.value && linkCotacao.value.pedidoId === detalhe.value?.id ? linkCotacao.value.link : null
+  );
   const form = reactive<PedidoFormEdicao>(formVazio());
   const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
   const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
@@ -198,7 +204,7 @@ export function usePedidos() {
     dialogDetalhe.value = false;
     dialogRecebimento.value = true;
   }
-  async function mudarSituacao(status: "enviado" | "retornado" | "confirmado" | "cancelado") {
+  async function mudarSituacao(status: "confirmado" | "cancelado") {
     if (!detalhe.value) return false;
     transicionando.value = true;
     try {
@@ -214,21 +220,66 @@ export function usePedidos() {
       transicionando.value = false;
     }
   }
-  async function enviarWhatsapp() {
-    if (!detalhe.value?.fornecedorWhatsapp)
-      return notificar("Cadastre o WhatsApp do fornecedor antes de enviar.", "error");
-    const numero = normalizarWhatsappParaLink(detalhe.value.fornecedorWhatsapp);
-    if (numero.length < 12 || numero.length > 15)
-      return notificar("WhatsApp do fornecedor invalido. Informe DDD e numero.", "error");
-    const itens = (detalhe.value.itens ?? [])
-      .map((item) => `• ${item.descricaoProduto}: ${formatarQuantidade(item.quantidade)}`)
-      .join("\n");
-    const url = `https://wa.me/${numero}?text=${encodeURIComponent(`Pedido Pralis\n${itens}`)}`;
-    const janela = window.open("about:blank", "_blank");
-    if (!janela) return notificar("O navegador bloqueou o WhatsApp. Libere pop-ups e tente novamente.", "error");
-    janela.opener = null;
-    if (!(await mudarSituacao("enviado"))) return void janela.close();
-    janela.location.replace(url);
+  async function copiarLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      notificar("Link copiado.");
+    } catch {
+      notificar("Nao foi possivel copiar. Selecione o link e copie manualmente.", "error");
+    }
+  }
+  /**
+   * R-216: gera o link da cotacao e abre o WhatsApp do fornecedor com ele.
+   *
+   * A janela abre ANTES da chamada a API, dentro do clique: aberta depois de um `await`, o
+   * navegador a trataria como pop-up nao solicitado e bloquearia. Fornecedor sem WhatsApp valido
+   * nao trava o fluxo: o link vai para a area de transferencia para seguir por outro canal.
+   */
+  async function enviarCotacao() {
+    const pedido = detalhe.value;
+    if (!pedido) return;
+    const numero = pedido.fornecedorWhatsapp ? normalizarWhatsappParaLink(pedido.fornecedorWhatsapp) : "";
+    const temWhatsapp = numero.length >= 12 && numero.length <= 15;
+    const janela = temWhatsapp ? window.open("about:blank", "_blank") : null;
+    if (temWhatsapp && !janela)
+      return notificar("O navegador bloqueou o WhatsApp. Libere pop-ups e tente novamente.", "error");
+    if (janela) janela.opener = null;
+    transicionando.value = true;
+    try {
+      const gerada = await apiPost<CotacaoGeradaDto>(`/api/pedidos/${pedido.id}/cotacoes`, {});
+      const link = linkDaCotacao(window.location.origin, gerada.token);
+      linkCotacao.value = { pedidoId: pedido.id, link };
+      const prazo = new Date(new Date(gerada.expiraEm).getTime() - 60_000).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      const empresaNome = empresas.value.find((empresa) => empresa.id === empresaId.value)?.nome ?? "Pralis";
+      const mensagem = mensagemDaCotacao({
+        fornecedorNome: pedido.fornecedorNome ?? "fornecedor",
+        empresaNome,
+        totalItens: pedido.totalItens,
+        link,
+        prazo
+      });
+      if (janela) {
+        janela.location.replace(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`);
+        notificar("Cotação gerada e WhatsApp aberto com o link.");
+      } else {
+        await copiarLink(link);
+        notificar("Fornecedor sem WhatsApp válido: link copiado para enviar por outro canal.", "warning");
+      }
+      await carregarDados();
+      await verPedido(pedido.id);
+    } catch (causa) {
+      janela?.close();
+      notificar(mensagemErro(causa), "error");
+    } finally {
+      transicionando.value = false;
+    }
   }
   function chaveIdempotencia() {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -326,7 +377,9 @@ export function usePedidos() {
     editarPedido,
     abrirRecebimento,
     mudarSituacao,
-    enviarWhatsapp,
+    enviarCotacao,
+    copiarLink,
+    linkCotacaoDoDetalhe,
     confirmarRecebimento
   };
 }

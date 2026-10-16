@@ -46,7 +46,9 @@ const {
   editarPedido,
   abrirRecebimento,
   mudarSituacao,
-  enviarWhatsapp,
+  enviarCotacao,
+  copiarLink,
+  linkCotacaoDoDetalhe,
   confirmarRecebimento
 } = usePedidos();
 </script>
@@ -145,7 +147,9 @@ const {
       :pode-receber="podeReceber"
       :transicionando="transicionando"
       @editar="editarPedido"
-      @enviar-whatsapp="enviarWhatsapp"
+      :link-cotacao="linkCotacaoDoDetalhe"
+      @enviar-cotacao="enviarCotacao"
+      @copiar-link="copiarLink"
       @situacao="mudarSituacao"
       @receber="abrirRecebimento"
     />

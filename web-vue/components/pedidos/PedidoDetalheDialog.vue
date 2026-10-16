@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
+import PedidoCotacaoPainel from "~/components/pedidos/PedidoCotacaoPainel.vue";
 import { formatarQuantidade } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ default: false });
@@ -8,11 +9,14 @@ defineProps<{
   podeEditar: boolean;
   podeReceber: boolean;
   transicionando: boolean;
+  /** Link de cotacao gerado nesta sessao para este pedido, para copiar. */
+  linkCotacao: string | null;
 }>();
 const emit = defineEmits<{
   editar: [pedido: PedidoDto];
-  enviarWhatsapp: [];
-  situacao: [status: "retornado" | "confirmado" | "cancelado"];
+  enviarCotacao: [];
+  copiarLink: [link: string];
+  situacao: [status: "confirmado" | "cancelado"];
   receber: [];
 }>();
 
@@ -103,6 +107,19 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             >
           </v-card>
         </div>
+        <PedidoCotacaoPainel
+          v-if="
+            pedido.cotacao &&
+            ['enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado'].includes(pedido.status)
+          "
+          :cotacao="pedido.cotacao"
+          :status="pedido.status"
+          :link="linkCotacao"
+          :pode-editar="podeEditar"
+          :transicionando="transicionando"
+          @novo-link="emit('enviarCotacao')"
+          @copiar="(link) => emit('copiarLink', link)"
+        />
         <v-list
           v-if="pedido.eventos?.length"
           class="pedido-detalhe__historico"
@@ -125,14 +142,9 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           v-if="podeEditar && pedido.status === 'a_fazer'"
           color="primary"
           :loading="transicionando"
-          @click="emit('enviarWhatsapp')"
-          >Enviar WhatsApp</v-btn
-        >
-        <v-btn
-          v-if="podeEditar && pedido.status === 'enviado'"
-          :loading="transicionando"
-          @click="emit('situacao', 'retornado')"
-          >Marcar retornado</v-btn
+          prepend-icon="mdi-whatsapp"
+          @click="emit('enviarCotacao')"
+          >Enviar cotação</v-btn
         >
         <v-btn
           v-if="podeEditar && pedido.status === 'retornado'"
