@@ -46,6 +46,7 @@ import {
   notificacoes,
   pdvs,
   pedidos,
+  pedidosCotacoes,
   pedidosEventos,
   pedidosRecebimentos,
   permissoesCargos,
@@ -576,9 +577,13 @@ async function limparComprasDaEmpresa(empresaId: string) {
         .set({ quantidadeEstoque: saldoAnterior, atualizadoEm: new Date() })
         .where(and(eq(produtos.id, produtoId), eq(produtos.empresaId, empresaId)));
     }
+    // A ordem segue as chaves estrangeiras, todas com `restrict`. `pedidos_eventos` sai antes das
+    // cotacoes porque aponta para elas (R-216), e as cotacoes antes dos pedidos porque os itens da
+    // cotacao apontam para `pedidos_itens`, que o cascade do pedido apagaria primeiro.
     await tx.delete(estoqueMovimentos).where(eq(estoqueMovimentos.empresaId, empresaId));
     await tx.delete(pedidosEventos).where(eq(pedidosEventos.empresaId, empresaId));
     await tx.delete(pedidosRecebimentos).where(eq(pedidosRecebimentos.empresaId, empresaId));
+    await tx.delete(pedidosCotacoes).where(eq(pedidosCotacoes.empresaId, empresaId));
     await tx.delete(pedidos).where(eq(pedidos.empresaId, empresaId));
   });
 }
