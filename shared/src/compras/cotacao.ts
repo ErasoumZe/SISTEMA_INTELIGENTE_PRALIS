@@ -144,6 +144,10 @@ export function calcularCotacao(itens: ItemCotacaoEntrada[], descontoGeral: Desc
       ? { centavos: 0, erro: null }
       : descontoUnitario(unitario, item.descontoTipo, item.descontoValor);
     const unitarioComDesconto = unitario - desconto.centavos;
+    // Quantidade absurda vezes preco no teto ainda pode passar do inteiro seguro; ai e erro do item.
+    if (milesimos * unitario > Number.MAX_SAFE_INTEGER) {
+      return { item, milesimos, unitarioComDesconto: 0, bruto: 0, totalItem: 0, erro: "Valor fora do limite." };
+    }
     const bruto = Math.round((milesimos * unitario) / 1000);
     const totalItem = Math.round((milesimos * unitarioComDesconto) / 1000);
     return { item, milesimos, unitarioComDesconto, bruto, totalItem, erro: desconto.erro };
@@ -152,7 +156,8 @@ export function calcularCotacao(itens: ItemCotacaoEntrada[], descontoGeral: Desc
   const totalBruto = parciais.reduce((soma, parcial) => soma + parcial.bruto, 0);
   const totalItens = parciais.reduce((soma, parcial) => soma + parcial.totalItem, 0);
 
-  let erroGeral: string | null = null;
+  // numeric(14,2) guarda ate 999.999.999.999,99. Acima disso o envio viraria erro 500 no banco.
+  let erroGeral: string | null = totalBruto > 99_999_999_999_999 ? "Total acima do limite permitido." : null;
   let descontoGeralCentavos = 0;
   if (descontoGeral.tipo && descontoGeral.valor !== null && descontoGeral.valor !== "") {
     if (descontoGeral.tipo === "valor") {
@@ -236,8 +241,13 @@ export function dezMilesimosParaDecimal(valor: number): string {
 
 const uuidSchema = z.string().uuid();
 
+/**
+ * Numero decimal digitado pelo fornecedor. Teto de 7 digitos inteiros (ate 9.999.999,99): um
+ * valor maior nao e preco de padaria, e o teto mantem a conta em centavos dentro do inteiro seguro
+ * do JavaScript e do numeric(14,2) do banco — sem ele, o envio virava erro 500.
+ */
 function textoDecimal(casas: number) {
-  const padrao = new RegExp(`^\\d{1,9}(\\.\\d{1,${casas}})?$`, "u");
+  const padrao = new RegExp(`^\\d{1,7}(\\.\\d{1,${casas}})?$`, "u");
   return z.preprocess(
     (valor) => {
       if (valor === null || valor === undefined) return null;
@@ -250,28 +260,47 @@ function textoDecimal(casas: number) {
   );
 }
 
-export const cotacaoRespostaPayloadSchema = z.object({
-  itens: z
-    .array(
-      z.object({
-        pedidoItemId: uuidSchema,
-        indisponivel: z.boolean().default(false),
-        valorUnitario: textoDecimal(2).default(null),
-        descontoTipo: z.enum(tiposDescontoCotacao).nullable().default(null),
-        descontoValor: textoDecimal(4).default(null)
-      })
-    )
-    .max(500),
-  descontoGeralTipo: z.enum(tiposDescontoCotacao).nullable().default(null),
-  descontoGeralValor: textoDecimal(4).default(null),
-  observacao: z.string().trim().max(1_000).nullable().default(null),
-  prazoEntrega: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/u)
-    .nullable()
-    .default(null),
-  condicaoPagamento: z.string().trim().max(200).nullable().default(null)
-});
+export const cotacaoRespostaPayloadSchema = z
+  .object({
+    itens: z
+      .array(
+        z.object({
+          pedidoItemId: uuidSchema,
+          indisponivel: z.boolean().default(false),
+          valorUnitario: textoDecimal(2).default(null),
+          descontoTipo: z.enum(tiposDescontoCotacao).nullable().default(null),
+          descontoValor: textoDecimal(4).default(null)
+        })
+      )
+      .max(500),
+    descontoGeralTipo: z.enum(tiposDescontoCotacao).nullable().default(null),
+    descontoGeralValor: textoDecimal(4).default(null),
+    observacao: z.string().trim().max(1_000).nullable().default(null),
+    // Data REAL, nao so o formato: "2026-13-45" passava na regex e quebrava no cast para date.
+    prazoEntrega: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .refine((dia) => {
+        const data = new Date(`${dia}T00:00:00Z`);
+        return !Number.isNaN(data.getTime()) && data.toISOString().slice(0, 10) === dia;
+      }, "Data invalida.")
+      .nullable()
+      .default(null),
+    condicaoPagamento: z.string().trim().max(200).nullable().default(null)
+  })
+  // Desconto em R$ so com centavos. O calculo le 2 casas; aceitar 4 gravaria um desconto diferente
+  // do que foi aplicado. O percentual segue com ate 4 casas.
+  .superRefine((payload, ctx) => {
+    const maisDeDuasCasas = (valor: string | null) => valor !== null && /\.\d{3,}$/u.test(valor);
+    payload.itens.forEach((item, indice) => {
+      if (item.descontoTipo === "valor" && maisDeDuasCasas(item.descontoValor)) {
+        ctx.addIssue({ code: "custom", path: ["itens", indice, "descontoValor"], message: "Use no maximo 2 casas." });
+      }
+    });
+    if (payload.descontoGeralTipo === "valor" && maisDeDuasCasas(payload.descontoGeralValor)) {
+      ctx.addIssue({ code: "custom", path: ["descontoGeralValor"], message: "Use no maximo 2 casas." });
+    }
+  });
 
 export type CotacaoRespostaPayload = z.infer<typeof cotacaoRespostaPayloadSchema>;
 

@@ -313,7 +313,9 @@ describe("migracoes integration", () => {
       "colaboradores_onboarding",
       "colaboradores_vinculos",
       "configuracoes_menu_empresas",
-      "funcoes_operacionais"
+      "funcoes_operacionais",
+      // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
+      "pedidos_cotacoes"
     ]);
 
     const esperadas = [...new Set([...tabelasDoArrayDa0002(), ...aMao.map((achado) => achado.tabela)])].sort();

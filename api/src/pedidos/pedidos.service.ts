@@ -17,7 +17,6 @@ import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import {
   atualizarPedidoRepository,
   atualizarSituacaoPedidoRepository,
-  buscarPedidoBaseRepository,
   buscarProdutosEstoqueRepository,
   buscarRecebimentoPorIdempotenciaRepository,
   criarPedidoRepository,
@@ -137,17 +136,26 @@ export async function atualizarPedido(
   payload: PedidoEdicaoPayload,
   perfil: PerfilUsuario
 ): Promise<void> {
-  const base = await buscarPedidoBaseRepository(pedidoId);
-  if (!base || !podeAcessarEmpresa(perfil, base.empresaId)) throw naoEncontrado("Pedido nao encontrado");
-  if (base.status !== "a_fazer") throw erroValidacao("So e possivel editar pedido em A fazer", "PEDIDO_NAO_EDITAVEL");
-  if (payload.fornecedorId) await validarFornecedor(payload.fornecedorId, base.empresaId);
-  const produtos = await buscarProdutosEstoqueRepository(base.empresaId);
-  await atualizarPedidoRepository(pedidoId, {
-    fornecedorId: payload.fornecedorId,
-    dataAgendada: payload.dataAgendada,
-    recorrencia: payload.recorrencia,
-    observacao: payload.observacao,
-    itens: resolverItens(payload.itens, new Map(produtos.map((produto) => [produto.id, produto])))
+  await executarEmTransacao(async (tx) => {
+    // Trava e reconfere DENTRO da transacao, na mesma ordem de `gerarCotacao`. Lendo fora, uma
+    // cotacao gerada entre a leitura e a gravacao mandaria o link a um fornecedor, e esta edicao
+    // trocaria fornecedor e itens depois — a resposta entraria atribuida a quem nao respondeu.
+    const base = await travarPedidoRepository(pedidoId, tx);
+    if (!base || !podeAcessarEmpresa(perfil, base.empresaId)) throw naoEncontrado("Pedido nao encontrado");
+    if (base.status !== "a_fazer") throw erroValidacao("So e possivel editar pedido em A fazer", "PEDIDO_NAO_EDITAVEL");
+    if (payload.fornecedorId) await validarFornecedor(payload.fornecedorId, base.empresaId);
+    const produtos = await buscarProdutosEstoqueRepository(base.empresaId, tx);
+    await atualizarPedidoRepository(
+      pedidoId,
+      {
+        fornecedorId: payload.fornecedorId,
+        dataAgendada: payload.dataAgendada,
+        recorrencia: payload.recorrencia,
+        observacao: payload.observacao,
+        itens: resolverItens(payload.itens, new Map(produtos.map((produto) => [produto.id, produto])))
+      },
+      tx
+    );
   });
 }
 

@@ -227,11 +227,15 @@ export async function listarItensDaCotacaoRepository(
  *
  * Cotacao respondida e ainda nao confirmada fica de fora de proposito: e proposta, nao preco pago.
  * O pedido atual tambem fica de fora, senao o fornecedor veria a propria resposta como referencia.
+ *
+ * Com `fornecedorId`, so conta o que foi pago a ESSE fornecedor. A tela publica sempre passa o
+ * filtro: sem ele, o fornecedor B leria o preco negociado com o concorrente A.
  */
 export async function ultimosValoresConfirmadosRepository(
   empresaId: string,
   produtoIds: string[],
   pedidoAtualId: string,
+  fornecedorId: string | null,
   db: ExecutorBanco = banco
 ): Promise<Map<string, string>> {
   if (!produtoIds.length) return new Map();
@@ -247,6 +251,7 @@ export async function ultimosValoresConfirmadosRepository(
         eq(pedidosCotacoes.status, "respondida"),
         inArray(pedidos.status, ["confirmado", "recebido_parcial", "recebido"]),
         ne(pedidos.id, pedidoAtualId),
+        ...(fornecedorId ? [eq(pedidos.fornecedorId, fornecedorId)] : []),
         eq(pedidosCotacoesItens.indisponivel, false),
         inArray(pedidosItens.produtoId, produtoIds)
       )
@@ -263,9 +268,9 @@ export async function ultimosValoresConfirmadosRepository(
 export async function buscarNomesDaCotacaoRepository(
   pedidoId: string,
   db: ExecutorBanco = banco
-): Promise<{ empresaNome: string; fornecedorNome: string | null } | null> {
+): Promise<{ empresaNome: string; fornecedorNome: string | null; fornecedorId: string | null } | null> {
   const [linha] = await db
-    .select({ empresaNome: empresas.nome, fornecedorNome: fornecedores.nome })
+    .select({ empresaNome: empresas.nome, fornecedorNome: fornecedores.nome, fornecedorId: pedidos.fornecedorId })
     .from(pedidos)
     .innerJoin(empresas, eq(empresas.id, pedidos.empresaId))
     .leftJoin(fornecedores, eq(fornecedores.id, pedidos.fornecedorId))

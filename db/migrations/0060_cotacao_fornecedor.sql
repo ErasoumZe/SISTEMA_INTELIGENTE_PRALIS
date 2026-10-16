@@ -47,4 +47,9 @@ CREATE UNIQUE INDEX "pedidos_cotacoes_token_hash_unico" ON "pedidos_cotacoes" US
 CREATE UNIQUE INDEX "pedidos_cotacoes_pedido_aberta_unica" ON "pedidos_cotacoes" USING btree ("pedido_id") WHERE "pedidos_cotacoes"."status" = 'aberta';--> statement-breakpoint
 CREATE INDEX "pedidos_cotacoes_empresa_pedido_idx" ON "pedidos_cotacoes" USING btree ("empresa_id","pedido_id");--> statement-breakpoint
 ALTER TABLE "pedidos_eventos" ADD CONSTRAINT "pedidos_eventos_cotacao_id_pedidos_cotacoes_id_fk" FOREIGN KEY ("cotacao_id") REFERENCES "public"."pedidos_cotacoes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "pedidos_eventos" ADD CONSTRAINT "pedidos_eventos_autor_check" CHECK ("pedidos_eventos"."criado_por" is not null or "pedidos_eventos"."cotacao_id" is not null);
+ALTER TABLE "pedidos_eventos" ADD CONSTRAINT "pedidos_eventos_autor_check" CHECK ("pedidos_eventos"."criado_por" is not null or "pedidos_eventos"."cotacao_id" is not null);--> statement-breakpoint
+-- R-216: atualizado_em e mantido pelo mesmo gatilho das demais tabelas atualizaveis (funcao da 0002).
+CREATE TRIGGER "pedidos_cotacoes_set_atualizado_em"
+BEFORE UPDATE ON "pedidos_cotacoes"
+FOR EACH ROW
+EXECUTE FUNCTION set_atualizado_em();

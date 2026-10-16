@@ -19,7 +19,12 @@ export async function registrarRotasCotacoes(app: FastifyInstance): Promise<void
   });
 
   // --- Publicas (token) --------------------------------------------------------------------------
-  app.get("/api/cotacao", TETO_COTACAO, async (request) => ok(await obterCotacaoPublica(tokenDaCotacao(request))));
+  // `no-store`: a resposta tem precos e chega por aparelho de terceiro; nenhum cache intermediario
+  // nem o historico do navegador deve guardar.
+  app.get("/api/cotacao", TETO_COTACAO, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return ok(await obterCotacaoPublica(tokenDaCotacao(request)));
+  });
 
   app.put("/api/cotacao", TETO_COTACAO, async (request, reply) => {
     await salvarRascunhoCotacao(tokenDaCotacao(request), request.body ?? {});

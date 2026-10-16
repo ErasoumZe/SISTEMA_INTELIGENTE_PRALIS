@@ -47,10 +47,10 @@ describe("cotacao de fornecedor (R-216)", () => {
       ...(payload ? { payload } : {})
     });
 
-  async function criarPedido(quantidade = 4): Promise<string> {
+  async function criarPedido(quantidade = 4, fornecedorId: string = idsTeste.fornecedor): Promise<string> {
     const criar = await comSessao("POST", "/api/pedidos", {
       empresaId: idsTeste.empresaA,
-      fornecedorId: idsTeste.fornecedor,
+      fornecedorId,
       recorrencia: "nenhuma",
       itens: [{ produtoId: idsTeste.produto, quantidade }]
     });
@@ -244,5 +244,83 @@ describe("cotacao de fornecedor (R-216)", () => {
     );
     expect((await abrir(tokenSegundo)).itens[0]!.ultimoValor).toBe("9.7000");
     expect(antesDeConfirmar).not.toBe("9.7000");
+  });
+
+  it("o fornecedor so ve o ultimo valor pago A ELE; o Comprador ve o de qualquer fornecedor", async () => {
+    const concorrente = await comSessao("POST", "/api/fornecedores", {
+      empresaId: idsTeste.empresaA,
+      nome: `Concorrente ${Date.now()}`,
+      whatsapp: "11966665555"
+    });
+    expect(concorrente.statusCode, concorrente.body).toBe(201);
+    const concorrenteId = json<{ data: { id: string } }>(concorrente).data.id;
+
+    // O fornecedor padrao vende e o Comprador confirma: 3 x 8,00 = 8,0000 por unidade.
+    const pago = await criarPedido(3);
+    const tokenPago = await gerarLink(pago);
+    const item = (await abrir(tokenPago)).itens[0]!;
+    const envio = await publico("POST", "/api/cotacao/enviar", tokenPago, {
+      itens: [{ pedidoItemId: item.pedidoItemId, valorUnitario: "8.00" }]
+    });
+    expect(envio.statusCode, envio.body).toBe(204);
+    expect((await comSessao("POST", `/api/pedidos/${pago}/situacao`, { status: "confirmado" })).statusCode).toBe(204);
+
+    // O concorrente recebe link para o mesmo produto e NAO pode ver o preco do outro.
+    const pedidoConcorrente = await criarPedido(1, concorrenteId);
+    const tokenConcorrente = await gerarLink(pedidoConcorrente);
+    expect((await abrir(tokenConcorrente)).itens[0]!.ultimoValor).toBeNull();
+
+    // O Comprador, decidindo, ve a referencia de qualquer fornecedor.
+    const detalhe = await comSessao("GET", `/api/pedidos/${pedidoConcorrente}`);
+    assertOk(detalhe);
+    expect(
+      json<{ data: { cotacao: { itens: Array<{ ultimoValor: string | null }> } } }>(detalhe).data.cotacao.itens[0]!
+        .ultimoValor
+    ).not.toBeNull();
+  });
+
+  it("editar e enviar ao mesmo tempo nunca deixa um pedido Enviado com itens trocados", async () => {
+    for (let rodada = 0; rodada < 5; rodada += 1) {
+      const pedidoId = await criarPedido(2);
+      const [geracao, edicao] = await Promise.all([
+        comSessao("POST", `/api/pedidos/${pedidoId}/cotacoes`),
+        contexto.app.inject({
+          method: "PUT",
+          url: `/api/pedidos/${pedidoId}`,
+          headers: { cookie: cookieAdmin },
+          payload: { recorrencia: "nenhuma", itens: [{ produtoId: idsTeste.produto, quantidade: 3 }] }
+        })
+      ]);
+      expect(geracao.statusCode, geracao.body).toBe(201);
+      expect(await situacaoDoPedido(pedidoId)).toBe("enviado");
+      if (edicao.statusCode !== 204) {
+        // Chegou depois do link: tem de ser RECUSADA, nao gravada por cima.
+        assertProblem(edicao, 400, "PEDIDO_NAO_EDITAVEL");
+        continue;
+      }
+      // As duas deram certo: so e valido se a edicao terminou ANTES da geracao. A edicao recria os
+      // itens; ids sao uuid v7 (crescem com o tempo), entao os itens tem de ser anteriores a cotacao.
+      const ordem = await consultarUm<{ itens_antes: boolean }>(
+        `select bool_and(pi.id < pc.id) as itens_antes
+           from pedidos_itens pi join pedidos_cotacoes pc on pc.pedido_id = pi.pedido_id
+          where pi.pedido_id = $1`,
+        [pedidoId]
+      );
+      expect(ordem?.itens_antes, "a edicao gravou por cima de um link ja enviado").toBe(true);
+    }
+  });
+
+  it("recusa data impossivel, valor acima do teto e desconto em R$ com mais de 2 casas", async () => {
+    const pedidoId = await criarPedido();
+    const token = await gerarLink(pedidoId);
+    const item = (await abrir(token)).itens[0]!;
+    const casos = [
+      { itens: [], prazoEntrega: "2026-13-45" },
+      { itens: [{ pedidoItemId: item.pedidoItemId, valorUnitario: "99999999" }] },
+      {
+        itens: [{ pedidoItemId: item.pedidoItemId, valorUnitario: "5", descontoTipo: "valor", descontoValor: "0.009" }]
+      }
+    ];
+    for (const caso of casos) assertProblem(await publico("PUT", "/api/cotacao", token, caso), 400, "VALIDATION_ERROR");
   });
 });

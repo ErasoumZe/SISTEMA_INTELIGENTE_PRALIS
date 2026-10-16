@@ -61,9 +61,15 @@ function referenciaDoPedido(pedidoId: string): string {
   return pedidoId.replace(/-/gu, "").slice(-8).toUpperCase();
 }
 
+/**
+ * `ultimoValorDe`: "fornecedor" restringe o ultimo valor ao que foi pago a ESTE fornecedor — e o que
+ * a tela publica usa, para nao revelar preco de concorrente. "empresa" usa qualquer fornecedor, que
+ * e a referencia util para o Comprador decidir.
+ */
 async function montarCotacao(
   linha: CotacaoLinha,
   comConteudo: boolean,
+  ultimoValorDe: "fornecedor" | "empresa",
   db?: ExecutorBanco
 ): Promise<CotacaoPublicaDto> {
   const nomes = await buscarNomesDaCotacaoRepository(linha.pedidoId, db);
@@ -91,6 +97,7 @@ async function montarCotacao(
     linha.empresaId,
     leitura.map((item) => item.produtoId).filter((id): id is string => Boolean(id)),
     linha.pedidoId,
+    ultimoValorDe === "fornecedor" ? (nomes?.fornecedorId ?? null) : null,
     db
   );
   const itens: CotacaoItemDto[] = leitura.map((item) => ({
@@ -165,7 +172,7 @@ export async function gerarCotacao(pedidoId: string, perfil: PerfilUsuario): Pro
 export async function cotacaoDoPedido(pedidoId: string): Promise<CotacaoResumoDto | null> {
   const linha = await buscarUltimaCotacaoDoPedidoRepository(pedidoId);
   if (!linha) return null;
-  const cotacao = await montarCotacao(linha, true);
+  const cotacao = await montarCotacao(linha, true, "empresa");
   return { ...cotacao, id: linha.id, criadaEm: linha.criadoEm.toISOString() };
 }
 
@@ -185,7 +192,7 @@ export async function obterCotacaoPublica(token: string | undefined): Promise<Co
   const linha = await buscarCotacaoPorHashRepository(hashTokenCotacao(exigirToken(token)));
   if (!linha) throw naoEncontrado("Link de cotacao invalido", "COTACAO_INVALIDA");
   // Fora de `aberta`, o link so diz o que aconteceu: nao mostra mais itens nem valores.
-  return montarCotacao(linha, situacaoDe(linha) === "aberta");
+  return montarCotacao(linha, situacaoDe(linha) === "aberta", "fornecedor");
 }
 
 export async function salvarRascunhoCotacao(token: string | undefined, corpo: DadosExternos): Promise<void> {
@@ -198,9 +205,16 @@ export async function enviarCotacao(token: string | undefined, corpo: DadosExter
 
 async function responder(token: string | undefined, corpo: DadosExternos, enviar: boolean): Promise<void> {
   const hash = hashTokenCotacao(exigirToken(token));
+  // Token desconhecido e recusado ANTES de validar um corpo de ate 500 itens: quem chuta tokens nao
+  // ganha CPU de graca.
+  const conhecida = await buscarCotacaoPorHashRepository(hash);
+  if (!conhecida) throw naoEncontrado("Link de cotacao invalido", "COTACAO_INVALIDA");
   const payload = cotacaoRespostaPayloadSchema.parse(corpo ?? {});
 
   await executarEmTransacao(async (tx) => {
+    // Mesma ordem de trava de `gerarCotacao` e `alterarSituacaoPedido`: pedido, depois cotacao.
+    // Ordem invertida entre transacoes concorrentes e receita de deadlock.
+    const pedido = await travarPedidoRepository(conhecida.pedidoId, tx);
     const linha = await travarCotacaoPorHashRepository(hash, tx);
     if (!linha) throw naoEncontrado("Link de cotacao invalido", "COTACAO_INVALIDA");
     const situacao = situacaoDe(linha);
@@ -209,7 +223,6 @@ async function responder(token: string | undefined, corpo: DadosExternos, enviar
     }
     if (situacao !== "aberta") throw foiEmbora("Esta cotacao ja foi enviada ou nao vale mais.", "COTACAO_ENCERRADA");
 
-    const pedido = await travarPedidoRepository(linha.pedidoId, tx);
     if (!pedido || pedido.status !== "enviado") {
       throw foiEmbora("Este pedido nao aceita mais respostas.", "COTACAO_ENCERRADA");
     }

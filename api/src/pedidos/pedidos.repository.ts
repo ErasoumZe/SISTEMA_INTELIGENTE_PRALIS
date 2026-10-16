@@ -223,24 +223,6 @@ export type PedidoLinhaBase = {
   fornecedorId: string | null;
 };
 
-export async function buscarPedidoBaseRepository(
-  pedidoId: string,
-  db: ExecutorBanco = banco
-): Promise<PedidoLinhaBase | null> {
-  const [pedido] = await db
-    .select({
-      id: pedidos.id,
-      empresaId: pedidos.empresaId,
-      status: pedidos.status,
-      tipo: pedidos.tipo,
-      fornecedorId: pedidos.fornecedorId
-    })
-    .from(pedidos)
-    .where(eq(pedidos.id, pedidoId))
-    .limit(1);
-  return pedido ?? null;
-}
-
 export async function listarPedidosRepository(
   filtros: { empresaId?: string | undefined; status?: string | undefined },
   empresasPermitidasIds: string[] | null,

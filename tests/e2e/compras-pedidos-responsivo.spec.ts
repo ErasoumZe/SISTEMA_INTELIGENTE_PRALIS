@@ -41,8 +41,10 @@ test.describe("cotacao do fornecedor", () => {
   test.setTimeout(240_000);
 
   // Contexto novo e sem sessao: e assim que o fornecedor chega. Ele nao herda a URL base do projeto.
-  const navegadorDoFornecedor = (browser: Browser) =>
-    browser.newContext({ baseURL: test.info().project.use.baseURL, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  const navegadorDoFornecedor = (browser: Browser) => {
+    const baseURL = test.info().project.use.baseURL;
+    return browser.newContext({ ...(baseURL ? { baseURL } : {}), locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  };
 
   test("nao rola na horizontal e mantem o total visivel em todas as larguras", async ({ browser }) => {
     const contexto = await abrirContextoCompras();
