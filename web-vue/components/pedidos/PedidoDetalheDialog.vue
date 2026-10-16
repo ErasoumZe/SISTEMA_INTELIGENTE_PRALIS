@@ -209,6 +209,11 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
 
 .pedido-detalhe__corpo {
   display: grid;
+  /* Linhas do tamanho do conteudo. Sem isto, num dialogo com altura limitada, os blocos com
+     overflow: hidden (tabela e historico) tem tamanho minimo zero e sao ESPREMIDOS em vez de o
+     corpo rolar: a tabela mostrava 1 de 3 itens e o historico so o primeiro evento. */
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: var(--cx-sp-4);
   padding: var(--cx-sp-5) var(--cx-sp-6);
 }
