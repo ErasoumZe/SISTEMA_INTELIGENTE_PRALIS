@@ -239,7 +239,30 @@ const estadoDoRascunho = computed(() => {
   return "Você pode salvar e voltar pelo mesmo link";
 });
 
+/**
+ * Salva o que falta no instante em que a pagina sai de cena (troca de app, aba fechada).
+ *
+ * O rascunho automatico espera 2,5 s; quem digita o ultimo valor e volta para o WhatsApp em menos
+ * que isso perderia a digitacao. `keepalive` deixa a requisicao terminar mesmo com a pagina
+ * descarregando — e, ao contrario do `sendBeacon`, aceita o cabecalho do token.
+ */
+function salvarAoSair() {
+  if (document.visibilityState !== "hidden" || !pendenteDeSalvar.value || !aberta.value || enviando.value) return;
+  if (temporizador) clearTimeout(temporizador);
+  pendenteDeSalvar.value = false;
+  void fetch(`${apiUrl}/api/cotacao`, {
+    method: "PUT",
+    credentials: "omit",
+    keepalive: true,
+    headers: { [CABECALHO_DA_COTACAO]: token.value, "Content-Type": "application/json" },
+    body: JSON.stringify(payload())
+  }).catch(() => {
+    pendenteDeSalvar.value = true;
+  });
+}
+
 onMounted(async () => {
+  document.addEventListener("visibilitychange", salvarAoSair);
   token.value = tokenDoFragmento(window.location.hash);
   // Tira o segredo da barra de enderecos: print de tela e historico deixam de carregar o token.
   if (window.location.hash) history.replaceState(null, "", window.location.pathname);
@@ -251,6 +274,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("visibilitychange", salvarAoSair);
   if (temporizador) clearTimeout(temporizador);
 });
 </script>

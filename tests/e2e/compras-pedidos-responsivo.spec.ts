@@ -1,12 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Browser } from "@playwright/test";
 import { entrar, LARGURAS, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
-import {
-  abrirContextoCompras,
-  criarFornecedor,
-  criarProdutoDeEstoque,
-  dialogoAberto,
-  irParaTela
-} from "./apoio-compras.js";
+import { abrirContextoCompras, dialogoAberto, irParaTela, prepararCotacao } from "./apoio-compras.js";
 
 /**
  * Item 3 do Definition of Done para as telas de gerar pedido: 1440 / 1024 / 768 / 390 sem rolagem
@@ -43,40 +37,18 @@ test.describe("telas de pedido em todas as larguras", () => {
  * R-216: a tela da cotacao e aberta pelo FORNECEDOR, quase sempre no celular, a partir do link do
  * WhatsApp. Ela tem barra fixa no rodape e campos lado a lado — exatamente o que estoura em 390 px.
  */
-test.describe("cotacao do fornecedor em todas as larguras", () => {
+test.describe("cotacao do fornecedor", () => {
   test.setTimeout(240_000);
 
-  test("a cotacao nao rola na horizontal e mantem o total visivel", async ({ browser }) => {
-    const contexto = await abrirContextoCompras();
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    try {
-      const produtoId = await criarProdutoDeEstoque(contexto, {
-        descricao: `E2E Cotacao com nome longo para quebrar linha ${sufixo}`,
-        estoqueMin: 1,
-        estoqueMax: 50,
-        setorEstoque: `Deposito ${sufixo}`
-      });
-      const fornecedorId = await criarFornecedor(contexto, `E2E Cotacao ${sufixo}`, "11977776666");
-      const pedido = await contexto.api.post("/api/pedidos", {
-        data: {
-          empresaId: contexto.empresaId,
-          fornecedorId,
-          recorrencia: "nenhuma",
-          itens: [{ produtoId, quantidade: 4.5 }]
-        }
-      });
-      expect(pedido.status(), await pedido.text()).toBe(201);
-      const pedidoId = ((await pedido.json()) as { data: { id: string } }).data.id;
-      const gerada = await contexto.api.post(`/api/pedidos/${pedidoId}/cotacoes`, { data: {} });
-      expect(gerada.status(), await gerada.text()).toBe(201);
-      const token = ((await gerada.json()) as { data: { token: string } }).data.token;
+  // Contexto novo e sem sessao: e assim que o fornecedor chega. Ele nao herda a URL base do projeto.
+  const navegadorDoFornecedor = (browser: Browser) =>
+    browser.newContext({ baseURL: test.info().project.use.baseURL, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
 
-      // Contexto novo e sem sessao: e assim que o fornecedor chega. Ele nao herda a URL base do projeto.
-      const navegador = await browser.newContext({
-        baseURL: test.info().project.use.baseURL,
-        locale: "pt-BR",
-        timezoneId: "America/Sao_Paulo"
-      });
+  test("nao rola na horizontal e mantem o total visivel em todas as larguras", async ({ browser }) => {
+    const contexto = await abrirContextoCompras();
+    try {
+      const { token } = await prepararCotacao(contexto, `${Date.now()}-${Math.floor(Math.random() * 1000)}`);
+      const navegador = await navegadorDoFornecedor(browser);
       // Uma aba por largura, como o link chega pelo WhatsApp: reabrir na mesma aba mudaria so o
       // fragmento, e o Vue Router de desenvolvimento imprimiria o seletor com o token.
       const coletas: string[][] = [];
@@ -92,6 +64,27 @@ test.describe("cotacao do fornecedor em todas as larguras", () => {
       }
       const problemas = coletas.flat();
       expect(problemas, problemas.join("\n")).toEqual([]);
+      await navegador.close();
+    } finally {
+      await contexto.api.dispose();
+    }
+  });
+
+  // O rascunho automatico espera 2,5 s. Quem digita e volta para o WhatsApp antes disso nao pode
+  // perder o valor: a pagina salva quando sai de cena.
+  test("nao perde o valor digitado quando o fornecedor sai logo em seguida", async ({ browser }) => {
+    const contexto = await abrirContextoCompras();
+    try {
+      const { token } = await prepararCotacao(contexto, `${Date.now()}-${Math.floor(Math.random() * 1000)}`);
+      const navegador = await navegadorDoFornecedor(browser);
+      const primeira = await navegador.newPage();
+      await primeira.goto(`/cotacao#t=${token}`);
+      await primeira.locator(".cotacao-item").getByLabel("Valor atual").fill("7,35");
+      await primeira.close({ runBeforeUnload: true });
+
+      const segunda = await navegador.newPage();
+      await segunda.goto(`/cotacao#t=${token}`);
+      await expect(segunda.locator(".cotacao-item").getByLabel("Valor atual")).toHaveValue("7,35", { timeout: 60_000 });
       await navegador.close();
     } finally {
       await contexto.api.dispose();
