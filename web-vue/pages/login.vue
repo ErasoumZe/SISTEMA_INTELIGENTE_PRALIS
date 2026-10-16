@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import PwaInstallButton from "~/components/PwaInstallButton.vue";
-import { agendarTransicaoEntrada } from "~/composables/useTransicaoEntrada";
 
 const router = useRouter();
 const { apiUrl } = useApi();
@@ -24,6 +23,9 @@ const password = ref("");
 const loading = ref(false);
 const error = ref("");
 const mostrarSenha = ref(false);
+const introAposLogin = useState("padaria.intro-apos-login", () => false);
+const introPendente = useState("padaria.intro-pendente", () => false);
+const introDashboardPronto = useState("padaria.intro-dashboard-pronto", () => false);
 
 async function login() {
   loading.value = true;
@@ -43,7 +45,9 @@ async function login() {
       limparEstadoWorkspace(useNuxtApp().payload.state);
       // A marca é consumida no painel, depois que a casca autenticada estiver renderizada. Não
       // espera aqui: segurar a rota manteria o formulário visível atrás da animação.
-      agendarTransicaoEntrada();
+      introAposLogin.value = false;
+      introDashboardPronto.value = false;
+      introPendente.value = true;
       await router.push("/");
     } else {
       error.value = "E-mail ou senha inválidos.";
