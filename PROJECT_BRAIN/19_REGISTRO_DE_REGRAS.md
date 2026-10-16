@@ -1207,7 +1207,7 @@ O pedido não vai mais ao fornecedor como texto com a lista de itens. O Comprado
 
 O link vale até o **fim do 2º dia útil** seguinte ao envio, no fuso do negócio. Feriado não é considerado porque o sistema não tem calendário de feriados. Dentro do prazo o fornecedor salva rascunho quantas vezes quiser pelo mesmo link; o rascunho salva sozinho. **Enviar** é ato único: recalcula tudo no servidor, grava os totais, muda o pedido para **Retornado** com o fornecedor como autor e fecha o link. Depois disso o link só informa que a cotação foi enviada.
 
-**Último valor pago** é o preço efetivo por unidade, já com descontos, da cotação respondida mais recente daquele produto cujo pedido o Comprador **confirmou**. Proposta respondida e não confirmada não vira referência. Mercadoria/NF-e ainda não alimenta esse número porque o vínculo com o pedido segue pendente.
+**Último valor pago** é o preço efetivo por unidade, já com descontos, da cotação respondida mais recente daquele produto cujo pedido o Comprador **confirmou**. O fornecedor vê apenas o que foi pago **a ele mesmo**; o Comprador vê a referência de qualquer fornecedor. Mostrar ao fornecedor B o preço negociado com o concorrente A seria vazamento comercial (achado da revisão de segurança de 16/10/2026). Proposta respondida e não confirmada não vira referência. Mercadoria/NF-e ainda não alimenta esse número porque o vínculo com o pedido segue pendente.
 
 **Enviado** só nasce da geração do link e **Retornado** só da resposta do fornecedor; a troca manual de situação ficou restrita a confirmar ou cancelar. Gerar novo link revoga o anterior; confirmar ou cancelar o pedido também encerra o link. A resposta não confirma o pedido nem mexe em estoque (R-208): quem confirma é o Comprador.
 
