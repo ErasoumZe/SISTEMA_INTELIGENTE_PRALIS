@@ -8,7 +8,8 @@ import { calcularCotacao, pendenciasParaEnviar, type CotacaoPublicaDto } from "@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useApi } from "~/composables/useApi";
 import type { CondicoesCotacao, RespostaItemCotacao } from "~/types/cotacao";
-import { CABECALHO_DA_COTACAO, tokenDoFragmento } from "~/utils/cotacao-link";
+import { CABECALHO_DA_COTACAO } from "~/utils/cotacao-link";
+import { tokenDoFragmento } from "~/utils/convite-token";
 
 class ErroHttp extends Error {
   constructor(

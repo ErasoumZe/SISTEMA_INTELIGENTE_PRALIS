@@ -221,16 +221,17 @@ describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () =>
   });
 
   // Anti-falso-verde: se `SECOES_MENU` vier vazio (import quebrado, renome de arquivo), o teste
-  // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as seis secoes.
+  // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as sete secoes.
   // Departamento pessoal tem eixo proprio e nao pode sumir sem este contrato acusar a mudanca.
-  it("achou as seis secoes declaradas — o teste acima nao passou no vazio", () => {
-    expect(titulosDasSecoes).toHaveLength(6);
+  it("achou as sete secoes declaradas — o teste acima nao passou no vazio", () => {
+    expect(titulosDasSecoes).toHaveLength(7);
     expect(titulosDasSecoes).toContain("Saidas");
     expect(titulosDasSecoes).toContain("Departamento pessoal");
     expect(titulosDasSecoes).toContain("Configuração");
   });
 
-  // Saidas guarda tres categorias e Configuracao nenhuma: as duas ficam SEM cor de propriedade.
+  // Saidas guarda tres categorias, Compras nao tem categoria cromatica propria e Configuracao nenhuma:
+  // as tres ficam SEM cor de propriedade.
   // Sem esta linha alguem "completa" o mapa escolhendo uma das tres de Saidas.
   //
   // "Geral" nao esta em SECOES_MENU e mesmo assim APARECE no menu: e o balde de sobra que o
@@ -238,8 +239,9 @@ describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () =>
   // Ele fica sem cor porque nao e uma secao desenhada, e sim uma rede de seguranca — dar cor a ele
   // seria dar identidade ao acaso. Se alguem tentar, o teste de cima ja falha (nao e titulo de
   // SECOES_MENU); esta linha diz por que a falha esta certa.
-  it("Saidas, Configuracao e o balde Geral continuam sem cor de secao", () => {
+  it("Saidas, Compras, Configuracao e o balde Geral continuam sem cor de secao", () => {
     expect(CATEGORIA_POR_SECAO["Saidas"]).toBeUndefined();
+    expect(CATEGORIA_POR_SECAO["Compras"]).toBeUndefined();
     expect(CATEGORIA_POR_SECAO["Configuração"]).toBeUndefined();
     expect(CATEGORIA_POR_SECAO["Geral"]).toBeUndefined();
   });

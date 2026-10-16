@@ -28,9 +28,15 @@ describe("ehRotaPublica · demais rotas publicas", () => {
 
   // Abrir uma rota ao publico e decisao, nao detalhe: esta assercao existe para que qualquer
   // acrescimo apareca como diff que alguem precisa aprovar. Tres sao telas de autenticacao;
-  // `/admissao` e a ficha do candidato, que nao tem conta para autenticar.
+  // `/admissao` e a ficha do candidato e `/cotacao` e a resposta do fornecedor: ambas nao exigem conta.
   it("a allowlist tem exatamente as rotas publicas decididas", () => {
-    expect([...ROTAS_PUBLICAS].sort()).toEqual(["/admissao", "/forgot-password", "/login", "/reset-password"]);
+    expect([...ROTAS_PUBLICAS].sort()).toEqual([
+      "/admissao",
+      "/cotacao",
+      "/forgot-password",
+      "/login",
+      "/reset-password"
+    ]);
   });
 });
 

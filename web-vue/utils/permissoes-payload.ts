@@ -1,4 +1,4 @@
-// S-06 — a tela de Permissoes esconde 52 permissoes do formulario (`permissoesOcultasNaTela`), o
+// S-06 — a tela de Permissoes esconde 48 permissoes do formulario (`permissoesOcultasNaTela`), o
 // servidor faz REPLACE total (`permissoes.repository.ts`) e o que a tela nao manda ele apaga.
 //
 // A correcao e no cliente porque o replace e intencional e tem dois donos: `restaurarPadraoCargo`

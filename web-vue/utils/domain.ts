@@ -545,6 +545,7 @@ export const secoesPermissoes = [
     prefixos: [
       "cadastro_produtos",
       "estoque_produtos",
+      "conferencias_estoque",
       "perdas_sobras",
       "cadastro_fornecedores",
       "cadastro_ficha_tecnica",
@@ -553,6 +554,7 @@ export const secoesPermissoes = [
       "relatorio_produtos",
       "menu_produtos",
       "menu_estoque_produtos",
+      "menu_conferencias_estoque",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",

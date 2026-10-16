@@ -7,8 +7,6 @@
  */
 import { ROTA_COTACAO } from "~/utils/rotas-publicas";
 
-export { tokenDoFragmento } from "~/utils/convite-token";
-
 /** Precisa casar com `CABECALHO_DA_COTACAO` da API e com o `allowedHeaders` do CORS. */
 export const CABECALHO_DA_COTACAO = "x-cotacao-token";
 
