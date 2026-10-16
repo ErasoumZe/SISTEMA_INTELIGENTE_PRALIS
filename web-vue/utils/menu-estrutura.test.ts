@@ -47,6 +47,23 @@ describe("estrutura configurável do menu", () => {
     for (const tela of todas) expect(ids).toContain(tela.id);
   });
 
+  it("inclui a Central do DP na secao existente de estruturas salvas antes dela", () => {
+    const estruturaLegada: EstruturaMenu = {
+      versao: 1,
+      idsOcultos: [],
+      secoes: [
+        { id: "operacao", titulo: "Operação", ids: ["caixa"] },
+        { id: "dp", titulo: "Departamento pessoal", ids: ["admissoes_processos", "colaboradores"] }
+      ]
+    };
+
+    expect(estruturaEfetiva(estruturaLegada).secoes[1]?.ids).toEqual([
+      "departamento_pessoal",
+      "admissoes_processos",
+      "colaboradores"
+    ]);
+  });
+
   it("oculta somente o atalho do menu, sem alterar a lista de permissões", () => {
     const estrutura: EstruturaMenu = {
       versao: 1,

@@ -1,0 +1,202 @@
+.pagina-dp {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.cabecalho,
+.titulo-bloco {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cabecalho {
+  margin-bottom: 24px;
+}
+.sobretitulo {
+  margin-bottom: 4px;
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.15;
+}
+.subtitulo,
+.titulo-bloco p {
+  max-width: 68ch;
+  margin: 6px 0 0;
+  color: rgb(var(--v-theme-on-surface) / 0.68);
+}
+.bloco {
+  margin-bottom: 28px;
+}
+.titulo-bloco {
+  margin-bottom: 12px;
+}
+.titulo-bloco h2 {
+  font-size: 1.05rem;
+}
+.grade-acoes,
+.grade-filas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.grade-filas {
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+}
+.acao-card {
+  position: relative;
+  display: flex;
+  min-height: 184px;
+  isolation: isolate;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  border-color: rgb(var(--acao-cor) / 0.42);
+  background: linear-gradient(145deg, rgb(var(--acao-cor) / 0.16), rgb(var(--v-theme-surface) / 0.72));
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+.acao-card:not(.acao-card--preparacao):hover,
+.fila-card:hover {
+  transform: translateY(-2px);
+}
+.acao-card__conteudo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 16px 8px;
+}
+.acao-card__conteudo h3 {
+  margin: 0;
+  font-size: clamp(1rem, 2.7vw, 1.22rem);
+  line-height: 1.18;
+}
+.acao-card__conteudo p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: rgb(var(--v-theme-on-surface) / 0.72);
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.acao-card__acoes {
+  padding: 4px 16px 16px;
+}
+.acao-card__acoes .v-btn {
+  min-width: 0;
+  letter-spacing: 0.04em;
+}
+.acao-card--admissoes {
+  --acao-cor: 155 108 255;
+}
+.acao-card--testes {
+  --acao-cor: 66 181 255;
+}
+.acao-card--colaboradores {
+  --acao-cor: 72 223 138;
+}
+.acao-card--folha {
+  --acao-cor: 228 154 53;
+}
+.acao-card--ponto {
+  --acao-cor: 24 181 200;
+}
+.acao-card--ouvidoria {
+  --acao-cor: 219 99 148;
+}
+.acao-card--preparacao {
+  min-height: 146px;
+}
+.acao-card__status {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 3px 8px;
+  border: 1px solid rgb(var(--v-theme-on-surface) / 0.16);
+  border-radius: var(--cx-r-pill);
+  color: rgb(var(--v-theme-on-surface) / 0.68);
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+.fila-card {
+  --fila-cor: 139 92 246;
+  min-height: 86px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--fila-cor) / 0.38);
+  border-radius: 15px;
+  background: linear-gradient(135deg, rgb(var(--fila-cor) / 0.18), rgb(var(--v-theme-surface) / 0.74));
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fila-card__conteudo {
+  display: flex;
+  min-height: 84px;
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+}
+.fila-card__texto {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  color: rgb(var(--v-theme-on-surface) / 0.76);
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+.fila-card__texto strong {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+.fila-card--hoje {
+  --fila-cor: 230 163 38;
+}
+.fila-card--vencidos {
+  --fila-cor: 228 82 82;
+}
+.fila-card--fichas {
+  --fila-cor: 44 183 225;
+}
+.fila-card--pausados {
+  --fila-cor: 111 126 160;
+}
+.atalhos-cadastros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .pagina-dp {
+    padding: 12px;
+  }
+  .cabecalho > .v-btn,
+  .atalhos-cadastros .v-btn,
+  .acao-card__acoes .v-btn {
+    width: 100%;
+  }
+  .atalhos-cadastros .v-btn {
+    justify-content: flex-start;
+  }
+  .grade-acoes,
+  .grade-filas {
+    grid-template-columns: 1fr;
+  }
+  .acao-card {
+    min-height: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acao-card,
+  .fila-card {
+    transition: none;
+  }
+  .acao-card:not(.acao-card--preparacao):hover,
+  .fila-card:hover {
+    transform: none;
+  }
+}

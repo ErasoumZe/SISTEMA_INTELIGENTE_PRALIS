@@ -223,6 +223,7 @@ describe("categoria Departamento pessoal no menu", () => {
   it("concentra as telas de admissão e cadastros de pessoas em menu principal próprio", () => {
     const menu = menuDoPerfil(permissoesDepartamentoPessoal);
     expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([
+      "departamento_pessoal",
       "admissoes_processos",
       "admissoes_testes",
       "colaboradores",
@@ -242,6 +243,12 @@ describe("categoria Departamento pessoal no menu", () => {
 
   it("não aparece para perfil sem nenhuma tela de departamento pessoal", () => {
     expect(idsDaSecao(menuDoPerfil(["cadastro_clientes_visualizar"]), "Departamento pessoal")).toEqual([]);
+  });
+
+  it("abre a Central do DP com qualquer permissão que já abre uma tela do departamento", () => {
+    for (const permissao of permissoesDepartamentoPessoal) {
+      expect(idsDaSecao(menuDoPerfil([permissao]), "Departamento pessoal")).toContain("departamento_pessoal");
+    }
   });
 });
 
