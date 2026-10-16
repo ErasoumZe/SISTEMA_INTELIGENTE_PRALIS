@@ -28,7 +28,6 @@ import type {
 } from "~/types/padaria";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
-import AppTransicaoEntrada from "~/components/app/AppTransicaoEntrada.vue";
 import ConfirmacaoDialog from "~/components/comum/ConfirmacaoDialog.vue";
 import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
@@ -107,7 +106,6 @@ import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 import { separarNotificacoes } from "~/utils/notificacoes";
 import { useFilaMensagensOperador, useMensagensAdmin } from "~/composables/useMensagensAdmin";
-import { consumirTransicaoEntrada } from "~/composables/useTransicaoEntrada";
 import MensagemAdminPopup from "~/components/comum/MensagemAdminPopup.vue";
 
 type TipoPagina =
@@ -150,6 +148,8 @@ const router = useRouter();
 const { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiPatch, apiDelete, carregarSessao, aplicarTema } = useApi();
 
 const workspaceCarregado = useState("padaria.workspace.carregado", () => false);
+const introPendente = useState("padaria.intro-pendente", () => false);
+const introDashboardPronto = useState("padaria.intro-dashboard-pronto", () => false);
 const telaInicialNormalizada = computed(() =>
   paginaInicialNeutra.value ? "" : props.telaInicial && itemPorTela[props.telaInicial] ? props.telaInicial : "entradas"
 );
@@ -173,11 +173,22 @@ const mensagemAtual = computed(() => filaMensagens.atual());
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
-const mostrarTransicaoEntrada = ref(false);
 const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
 const atualizandoCaixaAutomaticamente = ref(false);
 const erro = ref("");
+
+const aguardarProximoQuadro = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+async function sinalizarDashboardProntoParaIntro() {
+  if (!introPendente.value || carregando.value || !sessao.value) return;
+
+  await nextTick();
+  await aguardarProximoQuadro();
+  await aguardarProximoQuadro();
+
+  if (introPendente.value && !carregando.value && sessao.value) introDashboardPronto.value = true;
+}
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
 const confirmacao = reactive({ aberto: false, titulo: "Confirmar ação", mensagem: "", textoConfirmar: "Confirmar" });
@@ -1096,6 +1107,8 @@ async function carregarTudo() {
     sessao.value = await carregarSessao();
     if (!sessao.value) {
       workspaceCarregado.value = false;
+      introPendente.value = false;
+      introDashboardPronto.value = false;
       await router.push("/login");
       return;
     }
@@ -1120,8 +1133,11 @@ async function carregarTudo() {
     workspaceCarregado.value = true;
   } catch (error) {
     erro.value = mensagemErro(error);
+    introPendente.value = false;
+    introDashboardPronto.value = false;
   } finally {
     carregando.value = false;
+    await sinalizarDashboardProntoParaIntro();
   }
 }
 
@@ -2353,17 +2369,9 @@ function atualizarAoRetomarPagina() {
   void atualizarCaixaAutomaticamente();
 }
 
-function exibirTransicaoEntradaAgendada() {
-  if (mostrarTransicaoEntrada.value || !consumirTransicaoEntrada()) return;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  mostrarTransicaoEntrada.value = true;
-}
 
 // A logo só entra depois que a casca autenticada existe. Assim o desfoque revela o painel em vez
 // de revelar o formulário de login, e a marca não reaparece ao trocar de página internamente.
-watch([carregando, sessao], ([estaCarregando, sessaoAtual]) => {
-  if (!estaCarregando && sessaoAtual) exibirTransicaoEntradaAgendada();
-});
 
 onMounted(() => {
   window.addEventListener("focus", atualizarAoRetomarPagina);
@@ -2381,7 +2389,7 @@ onMounted(() => {
     carregando.value = false;
     erro.value = "";
     aplicarTema(temaAtual.value, temaResumoCaixa.value);
-    exibirTransicaoEntradaAgendada();
+    void sinalizarDashboardProntoParaIntro();
     void atualizarOperacoesAutomaticamente();
     return;
   }
@@ -2530,5 +2538,4 @@ onBeforeUnmount(() => {
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 
-  <AppTransicaoEntrada v-if="mostrarTransicaoEntrada" @terminou="mostrarTransicaoEntrada = false" />
 </template>
