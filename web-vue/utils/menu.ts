@@ -63,6 +63,7 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
     titulo: "Departamento pessoal",
     ids: [
+      "departamento_pessoal",
       "admissoes_processos",
       "admissoes_testes",
       "colaboradores",

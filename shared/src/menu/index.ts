@@ -28,6 +28,7 @@ export const idsMenuConfiguraveis = [
   "maquininhas",
   "produtos",
   "colaboradores",
+  "departamento_pessoal",
   "admissoes_testes",
   "admissoes_processos",
   "folha_ponto",
