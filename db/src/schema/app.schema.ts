@@ -1515,12 +1515,14 @@ export const pedidosEventos = pgTable(
       .references(() => pedidos.id, { onDelete: "restrict" }),
     status: text("status").notNull(),
     observacao: text("observacao"),
-    criadoPor: text("criado_por")
-      .notNull()
-      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    // Nulo SO quando o ato e do fornecedor pelo link de cotacao (R-216): ele nao tem conta, e gravar
+    // o Comprador como autor de "Retornado" atribuiria a resposta a quem nao respondeu.
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    cotacaoId: uuid("cotacao_id").references((): AnyPgColumn => pedidosCotacoes.id, { onDelete: "restrict" }),
     criadoEm
   },
   (table) => [
+    check("pedidos_eventos_autor_check", sql`${table.criadoPor} is not null or ${table.cotacaoId} is not null`),
     check(
       "pedidos_eventos_status_check",
       sql`${table.status} in ('a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
@@ -1575,7 +1577,10 @@ export const conferenciasEstoque = pgTable(
   },
   (table) => [
     check("conferencias_estoque_status_check", sql`${table.status} in ('agendada', 'cancelada', 'concluida')`),
-    check("conferencias_estoque_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),
+    check(
+      "conferencias_estoque_curva_abc_check",
+      sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`
+    ),
     index("conferencias_estoque_empresa_agendada_idx").on(table.empresaId, table.agendadaPara)
   ]
 );
@@ -1599,6 +1604,85 @@ export const pedidosItens = pgTable(
   (table) => [
     check("pedidos_itens_quantidade_check", sql`${table.quantidade} > 0`),
     index("pedidos_itens_pedido_idx").on(table.pedidoId)
+  ]
+);
+
+// R-216: cotacao de compra respondida pelo FORNECEDOR, sem login, por link assinado.
+//
+// O token nunca e gravado: so o hash SHA-256. Ele expira em dias uteis, pode ser revogado (novo
+// link, confirmacao ou cancelamento do pedido) e e de uso unico para ENVIAR — rascunho pode ser
+// salvo varias vezes ate o envio. Responder muda o pedido para Retornado; NUNCA confirma nem mexe em
+// estoque. Quem confirma e o Comprador.
+export const pedidosCotacoes = pgTable(
+  "pedidos_cotacoes",
+  {
+    id: idUuid,
+    empresaId,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    tokenHash: text("token_hash").notNull(),
+    status: text("status").notNull().default("aberta"),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    // Desconto sobre o pedido inteiro. 'valor' e R$, 'percentual' e pontos percentuais — a mesma
+    // convencao do desconto de lancamento. Rateado proporcionalmente entre os itens no calculo.
+    descontoGeralTipo: text("desconto_geral_tipo").$type<"valor" | "percentual" | null>(),
+    descontoGeralValor: numeric("desconto_geral_valor", { precision: 14, scale: 4 }),
+    observacao: text("observacao"),
+    prazoEntrega: date("prazo_entrega", { mode: "string" }),
+    condicaoPagamento: text("condicao_pagamento"),
+    // Totais congelados no ENVIO, recalculados pelo servidor (nunca confiados ao navegador).
+    totalBruto: numeric("total_bruto", { precision: 14, scale: 2 }),
+    totalFinal: numeric("total_final", { precision: 14, scale: 2 }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm,
+    respondidaEm: timestamp("respondida_em", { withTimezone: true }),
+    revogadaEm: timestamp("revogada_em", { withTimezone: true })
+  },
+  (table) => [
+    check("pedidos_cotacoes_status_check", sql`${table.status} in ('aberta', 'respondida', 'revogada')`),
+    check(
+      "pedidos_cotacoes_desconto_geral_tipo_check",
+      sql`${table.descontoGeralTipo} is null or ${table.descontoGeralTipo} in ('valor', 'percentual')`
+    ),
+    uniqueIndex("pedidos_cotacoes_token_hash_unico").on(table.tokenHash),
+    // No maximo UM link aberto por pedido: gerar outro revoga o anterior na mesma transacao.
+    uniqueIndex("pedidos_cotacoes_pedido_aberta_unica")
+      .on(table.pedidoId)
+      .where(sql`${table.status} = 'aberta'`),
+    index("pedidos_cotacoes_empresa_pedido_idx").on(table.empresaId, table.pedidoId)
+  ]
+);
+
+export const pedidosCotacoesItens = pgTable(
+  "pedidos_cotacoes_itens",
+  {
+    id: idUuid,
+    cotacaoId: uuid("cotacao_id")
+      .notNull()
+      .references(() => pedidosCotacoes.id, { onDelete: "cascade" }),
+    pedidoItemId: uuid("pedido_item_id")
+      .notNull()
+      .references(() => pedidosItens.id, { onDelete: "restrict" }),
+    indisponivel: boolean("indisponivel").notNull().default(false),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 2 }),
+    descontoTipo: text("desconto_tipo").$type<"valor" | "percentual" | null>(),
+    descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
+    // Preco efetivo por unidade depois do desconto do item E do rateio do desconto geral. E o
+    // numero que vira "ultimo valor" da proxima cotacao quando o pedido for confirmado.
+    valorUnitarioFinal: numeric("valor_unitario_final", { precision: 14, scale: 4 }),
+    totalFinal: numeric("total_final", { precision: 14, scale: 2 })
+  },
+  (table) => [
+    check(
+      "pedidos_cotacoes_itens_desconto_tipo_check",
+      sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('valor', 'percentual')`
+    ),
+    check("pedidos_cotacoes_itens_valor_check", sql`${table.valorUnitario} is null or ${table.valorUnitario} >= 0`),
+    unique("pedidos_cotacoes_itens_cotacao_item_unico").on(table.cotacaoId, table.pedidoItemId)
   ]
 );
 

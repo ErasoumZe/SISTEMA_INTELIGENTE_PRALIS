@@ -414,6 +414,20 @@
       "when": 1792088261168,
       "tag": "0058_nosy_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791986779356,
+      "tag": "0059_minor_lorna_dane",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792153512794,
+      "tag": "0060_cotacao_fornecedor",
+      "breakpoints": true
     }
   ]
 }
