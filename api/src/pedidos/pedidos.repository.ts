@@ -123,17 +123,24 @@ async function inserirItens(pedidoId: string, itens: ItemPedidoParaCriar[], tx: 
   );
 }
 
+/**
+ * Autor do evento: um usuario OU uma cotacao (R-216). O banco exige um dos dois por CHECK; o tipo
+ * aqui repete a regra para o erro aparecer na compilacao, nao na primeira resposta de fornecedor.
+ */
+export type AutorEventoPedido =
+  | { criadoPor: string; cotacaoId?: string | null }
+  | { criadoPor: null; cotacaoId: string };
+
 async function inserirEvento(
   input: {
     empresaId: string;
     pedidoId: string;
     status: PedidoStatusNovo;
     observacao: string | null;
-    criadoPor: string;
-  },
+  } & AutorEventoPedido,
   tx: ExecutorBanco
 ): Promise<void> {
-  await tx.insert(pedidosEventos).values(input);
+  await tx.insert(pedidosEventos).values({ ...input, cotacaoId: input.cotacaoId ?? null });
 }
 
 export async function criarPedidoRepository(
@@ -298,16 +305,20 @@ export async function obterPedidoDetalheRepository(
       observacao: pedidosEventos.observacao,
       criadoPor: pedidosEventos.criadoPor,
       criadoPorNome: perfisUsuarios.nome,
+      cotacaoId: pedidosEventos.cotacaoId,
       criadoEm: pedidosEventos.criadoEm
     })
     .from(pedidosEventos)
-    .innerJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, pedidosEventos.criadoPor))
+    // leftJoin: o Retornado de uma cotacao nao tem usuario — quem respondeu foi o fornecedor.
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, pedidosEventos.criadoPor))
     .where(eq(pedidosEventos.pedidoId, pedidoId))
     .orderBy(asc(pedidosEventos.criadoEm))
     .then((linhas) =>
-      linhas.map((linha) => ({
+      linhas.map(({ cotacaoId, ...linha }) => ({
         ...linha,
         status: linha.status as PedidoStatusNovo,
+        criadoPorNome:
+          linha.criadoPorNome ?? (cotacaoId ? `${cabecalho.fornecedorNome ?? "Fornecedor"} (pelo link)` : "Sistema"),
         criadoEm: linha.criadoEm.toISOString()
       }))
     );
@@ -392,8 +403,7 @@ export async function atualizarSituacaoPedidoRepository(
     empresaId: string;
     status: PedidoStatusNovo;
     observacao: string | null;
-    criadoPor: string;
-  },
+  } & AutorEventoPedido,
   db: ExecutorBanco
 ): Promise<void> {
   await db

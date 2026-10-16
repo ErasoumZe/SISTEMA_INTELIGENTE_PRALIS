@@ -12,6 +12,7 @@ import type {
 import { gerarItensReposicao } from "@padaria/shared/pedidos";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
+import { cotacaoDoPedido, encerrarCotacaoAberta } from "../cotacoes/cotacoes.service.js";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import {
   atualizarPedidoRepository,
@@ -83,7 +84,7 @@ export async function listarPedidos(query: PedidosQuery, perfil: PerfilUsuario):
 export async function obterPedido(pedidoId: string, perfil: PerfilUsuario): Promise<PedidoDto> {
   const pedido = await obterPedidoDetalheRepository(pedidoId);
   if (!pedido || !podeAcessarEmpresa(perfil, pedido.empresaId)) throw naoEncontrado("Pedido nao encontrado");
-  return pedido;
+  return { ...pedido, cotacao: await cotacaoDoPedido(pedidoId) };
 }
 
 export async function criarPedido(payload: PedidoPayload, perfil: PerfilUsuario): Promise<{ id: string }> {
@@ -151,8 +152,9 @@ export async function atualizarPedido(
 }
 
 const transicoesPermitidas: Record<string, PedidoStatusNovo[]> = {
-  a_fazer: ["enviado", "cancelado"],
-  enviado: ["retornado", "cancelado"],
+  // R-216: "Enviado" so nasce de `gerarCotacao` e "Retornado" so da resposta do fornecedor.
+  a_fazer: ["cancelado"],
+  enviado: ["cancelado"],
   retornado: ["confirmado", "cancelado"],
   confirmado: ["cancelado"],
   recebido_parcial: ["cancelado"],
@@ -181,6 +183,9 @@ export async function alterarSituacaoPedido(
       },
       tx
     );
+    // Decidido o pedido, o link do fornecedor deixa de valer na mesma transacao: uma resposta que
+    // chegasse depois de cancelado reabriria uma negociacao encerrada.
+    await encerrarCotacaoAberta(pedidoId, tx);
   });
 }
 

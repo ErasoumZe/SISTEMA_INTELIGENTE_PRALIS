@@ -21,6 +21,23 @@ describe("pedidos integration (Compras)", () => {
     return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
   }
 
+  /** Leva o pedido a Retornado pelo unico caminho que existe: link gerado e resposta do fornecedor. */
+  async function responderCotacao(pedidoId: string, valorUnitario: string) {
+    const gerado = await post(`/api/pedidos/${pedidoId}/cotacoes`, {});
+    expect(gerado.statusCode, gerado.body).toBe(201);
+    const token = json<{ data: { token: string } }>(gerado).data.token;
+    const cabecalho = { "x-cotacao-token": token };
+    const aberta = await contexto.app.inject({ method: "GET", url: "/api/cotacao", headers: cabecalho });
+    const itens = json<{ data: { itens: Array<{ pedidoItemId: string }> } }>(aberta).data.itens;
+    const envio = await contexto.app.inject({
+      method: "POST",
+      url: "/api/cotacao/enviar",
+      headers: cabecalho,
+      payload: { itens: itens.map((item) => ({ pedidoItemId: item.pedidoItemId, valorUnitario })) }
+    });
+    expect(envio.statusCode, envio.body).toBe(204);
+  }
+
   it("recebe parcialmente uma compra, soma so a conferencia e e idempotente", async () => {
     const criar = await post("/api/pedidos", {
       empresaId: idsTeste.empresaA,
@@ -50,10 +67,10 @@ describe("pedidos integration (Compras)", () => {
       )?.quantidade_estoque
     ).toBe("0.000");
 
-    for (const status of ["enviado", "retornado", "confirmado"] as const) {
-      const situacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status });
-      expect(situacao.statusCode, situacao.body).toBe(204);
-    }
+    // R-216: Enviado nasce do link de cotacao e Retornado da resposta do fornecedor.
+    await responderCotacao(pedidoId, "10.00");
+    const confirmacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
+    expect(confirmacao.statusCode, confirmacao.body).toBe(204);
 
     const pedidoConfirmado = json<{ data: { itens: Array<{ id: string }> } }>(
       await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
@@ -204,7 +221,7 @@ describe("pedidos integration (Compras)", () => {
     });
     assertProblem(antes, 400, "PEDIDO_NAO_RECEBIVEL");
 
-    expect((await post(`/api/pedidos/${pedidoId}/situacao`, { status: "enviado" })).statusCode).toBe(204);
+    expect((await post(`/api/pedidos/${pedidoId}/cotacoes`, {})).statusCode).toBe(201);
     const salto = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
     assertProblem(salto, 400, "TRANSICAO_PEDIDO_INVALIDA");
   });

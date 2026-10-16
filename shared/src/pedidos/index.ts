@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CotacaoResumoDto } from "../compras/cotacao.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -59,7 +60,9 @@ export const gerarPedidoAutomaticoPayloadSchema = agendamentoPedidoSchema.extend
 });
 
 export const pedidoSituacaoPayloadSchema = z.object({
-  status: z.enum(["enviado", "retornado", "confirmado", "cancelado"]),
+  // R-216: "Enviado" so nasce da cotacao gerada e "Retornado" so da resposta do fornecedor. A troca
+  // manual fica restrita a decidir: confirmar a negociacao ou cancelar o pedido.
+  status: z.enum(["confirmado", "cancelado"]),
   observacao: z.string().trim().max(1_000).optional().nullable()
 });
 
@@ -104,7 +107,8 @@ export type PedidoEventoDto = {
   id: string;
   status: PedidoStatusNovo;
   observacao: string | null;
-  criadoPor: string;
+  /** Nulo quando o ato foi do fornecedor pelo link de cotacao (R-216); o nome vem preenchido assim mesmo. */
+  criadoPor: string | null;
   // Quem agiu precisa ser legivel na tela: o id sozinho nao responde "quem enviou" nem "quem recebeu".
   criadoPorNome: string;
   criadoEm: string;
@@ -126,6 +130,8 @@ export type PedidoDto = {
   aprovadoEm: string | null;
   itens?: PedidoItemDto[];
   eventos?: PedidoEventoDto[];
+  /** Cotacao mais recente do pedido (R-216), so no detalhe. */
+  cotacao?: CotacaoResumoDto | null;
 };
 
 export type ProdutoEstoque = {
