@@ -130,3 +130,10 @@ CREATE INDEX "pedidos_recebimentos_empresa_pedido_recebido_idx" ON "pedidos_rece
 ALTER TABLE "pedidos" ADD CONSTRAINT "pedidos_fornecedor_id_fornecedores_id_fk" FOREIGN KEY ("fornecedor_id") REFERENCES "public"."fornecedores"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pedidos" ADD CONSTRAINT "pedidos_status_check" CHECK ("pedidos"."status" in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado'));--> statement-breakpoint
 ALTER TABLE "produtos" ADD CONSTRAINT "produtos_curva_abc_check" CHECK ("produtos"."curva_abc" is null or "produtos"."curva_abc" in ('A', 'B', 'C'));
+--> statement-breakpoint
+-- O rascunho da cotacao e atualizado pelo fornecedor antes do envio; o trigger mantem a auditoria
+-- igual ao provisionamento por schema (`triggers-manuais.ts`).
+CREATE TRIGGER "pedidos_cotacoes_set_atualizado_em"
+BEFORE UPDATE ON "pedidos_cotacoes"
+FOR EACH ROW
+EXECUTE FUNCTION set_atualizado_em();
