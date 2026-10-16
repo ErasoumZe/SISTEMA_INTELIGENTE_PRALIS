@@ -6,15 +6,10 @@
  * o servidor usa no envio. Assim o numero que o fornecedor ve e o numero que fica gravado.
  */
 import type { CotacaoItemDto, ItemCotacaoCalculado, TipoDescontoCotacao } from "@padaria/shared";
+import type { RespostaItemCotacao } from "~/types/cotacao";
 import { formatarQuantidade } from "~/utils/formatacao";
 
-export type RespostaItemCotacao = {
-  pedidoItemId: string;
-  indisponivel: boolean;
-  valorUnitario: string;
-  descontoTipo: TipoDescontoCotacao;
-  descontoValor: string;
-};
+export type { RespostaItemCotacao } from "~/types/cotacao";
 
 const props = defineProps<{
   item: CotacaoItemDto;

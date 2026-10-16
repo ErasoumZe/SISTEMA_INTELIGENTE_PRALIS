@@ -7,14 +7,9 @@
  * cada item" sao decisoes diferentes para quem vende.
  */
 import type { CotacaoCalculada, TipoDescontoCotacao } from "@padaria/shared";
+import type { CondicoesCotacao } from "~/types/cotacao";
 
-export type CondicoesCotacao = {
-  descontoGeralTipo: TipoDescontoCotacao;
-  descontoGeralValor: string;
-  prazoEntrega: string;
-  condicaoPagamento: string;
-  observacao: string;
-};
+export type { CondicoesCotacao } from "~/types/cotacao";
 
 defineProps<{ calculo: CotacaoCalculada; somenteLeitura?: boolean }>();
 const condicoes = defineModel<CondicoesCotacao>({ required: true });
