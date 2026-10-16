@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import logoCicluzUrl from "~/assets/cicluz-simbolo-animado.png";
 
 const emit = defineEmits<{ concluida: [] }>();
