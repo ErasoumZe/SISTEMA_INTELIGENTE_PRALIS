@@ -85,3 +85,5 @@ export type EstoqueMovimentoDto = {
   recebidoEm: string;
   criadoEm: string;
 };
+
+export * from "./cotacao.js";
