@@ -223,3 +223,28 @@ export async function prepararCotacao(
   expect(gerada.status(), await gerada.text()).toBe(201);
   return { pedidoId, token: ((await gerada.json()) as { data: { token: string } }).data.token, produto };
 }
+
+/**
+ * Acha uma linha da tabela de cadastro, virando a pagina quando preciso.
+ *
+ * A listagem pagina em 10 e ordena por nome. Um cadastro novo raramente cai na primeira pagina
+ * depois de algumas rodadas de E2E, e esperar mais tempo nao resolve: a linha nao esta ali. Virar a
+ * pagina e exatamente o que a pessoa faria.
+ */
+export async function acharLinhaPaginando(page: Page, texto: string, maximoDePaginas = 30): Promise<Locator> {
+  const linha = page.locator("tbody tr").filter({ hasText: texto });
+  const proxima = page.getByRole("button", { name: "Próxima" });
+  // Teto alto na primeira espera: depois de um reload a rota remonta e a listagem so chega depois
+  // da sessao; com o servidor de desenvolvimento frio isso passa dos 15s padrao do expect.
+  await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 60_000 });
+  for (let pagina = 1; pagina <= maximoDePaginas; pagina += 1) {
+    if (await linha.count()) return linha;
+    if (await proxima.isDisabled()) break;
+    await proxima.click();
+    await expect(proxima)
+      .toBeEnabled({ timeout: 15_000 })
+      .catch(() => undefined);
+  }
+  await expect(linha, `"${texto}" nao foi encontrado em nenhuma pagina`).toBeVisible();
+  return linha;
+}

@@ -817,7 +817,11 @@ async function trocarEmpresa(idEmpresa = empresaId.value) {
 }
 
 async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva.value) {
-  const params = new URLSearchParams({ t: String(Date.now()) });
+  // `pageSize`: as rotas de cadastro paginam em 10 por padrao e aceitam ate 100. Sem pedir, a tela
+  // de Fornecedores (e as demais listagens de cadastro) mostrava so os 10 primeiros, sem controle de
+  // pagina — do 11o registro em diante o cadastro existia e nao aparecia. Acima de 100 e preciso
+  // paginar, como `carregarFornecedores` faz em Pedidos.
+  const params = new URLSearchParams({ t: String(Date.now()), pageSize: "100" });
   if (idEmpresa) params.set("empresaId", idEmpresa);
   const query = `?${params.toString()}`;
   const dados = opcoesVazias();
@@ -1324,7 +1328,11 @@ async function atualizarCaixaAutomaticamente() {
 }
 
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
-  const params = new URLSearchParams({ t: String(Date.now()) });
+  // `pageSize`: as rotas de cadastro paginam em 10 por padrao e aceitam ate 100. Sem pedir, a tela
+  // de Fornecedores (e as demais listagens de cadastro) mostrava so os 10 primeiros, sem controle de
+  // pagina — do 11o registro em diante o cadastro existia e nao aparecia. Acima de 100 e preciso
+  // paginar, como `carregarFornecedores` faz em Pedidos.
+  const params = new URLSearchParams({ t: String(Date.now()), pageSize: "100" });
   if (idEmpresa) params.set("empresaId", idEmpresa);
   const query = `?${params.toString()}`;
   const alvo = opcoes.value;
@@ -2374,7 +2382,6 @@ function atualizarAoRetomarPagina() {
   void atualizarCaixaAutomaticamente();
 }
 
-
 // A logo só entra depois que a casca autenticada existe. Assim o desfoque revela o painel em vez
 // de revelar o formulário de login, e a marca não reaparece ao trocar de página internamente.
 
@@ -2542,5 +2549,4 @@ onBeforeUnmount(() => {
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
-
 </template>
