@@ -79,12 +79,9 @@ watch(
   },
   { immediate: true }
 );
-watch(
-  [caixaEmFechamento, eRetaguarda, podeUsarComum, aba],
-  ([emFechamento, retaguarda, podeComum, abaAtual]) => {
-    if (emFechamento && retaguarda && podeComum && abaAtual === "retorno") aba.value = "nova";
-  }
-);
+watch([caixaEmFechamento, eRetaguarda, podeUsarComum, aba], ([emFechamento, retaguarda, podeComum, abaAtual]) => {
+  if (emFechamento && retaguarda && podeComum && abaAtual === "retorno") aba.value = "nova";
+});
 watch(
   [aberto, aba],
   ([visivel, atual]) => {
@@ -109,7 +106,12 @@ function fechar() {
           <h2 class="lc-titulo">{{ editando ? "Editar transferência" : "Nova transferência" }}</h2>
           <v-icon class="lc-x" size="19" :disabled="ocupado" aria-label="Fechar" @click="fechar">mdi-close</v-icon>
         </div>
-        <div v-if="!editando" class="lc-cats transferencias-host__abas" role="tablist" aria-label="Tipo de transferência">
+        <div
+          v-if="!editando"
+          class="lc-cats transferencias-host__abas"
+          role="tablist"
+          aria-label="Tipo de transferência"
+        >
           <button
             type="button"
             class="lc-cat"
@@ -209,7 +211,9 @@ function fechar() {
   box-shadow: none;
 }
 .transferencias-host :deep(.tr-corpo) {
-  padding-top: 0;
+  /* Separa as abas laranja do primeiro resumo: sem esta folga, a borda do cartão de Saída parecia
+     encostar na faixa e os dois blocos viravam uma única superfície no modal. */
+  padding-top: var(--cx-sp-3);
 }
 .transferencias-host :deep(.retorno-dialog) {
   flex: 1 1 auto;
@@ -217,6 +221,9 @@ function fechar() {
 @media (max-width: 560px) {
   .transferencias-host__faixa {
     padding: 10px 12px 0;
+  }
+  .transferencias-host :deep(.tr-corpo) {
+    padding-top: 10px;
   }
 }
 </style>
