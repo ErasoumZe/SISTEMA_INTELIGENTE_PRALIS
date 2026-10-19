@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio, somarDias } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
@@ -74,5 +75,57 @@ describe("notificacoes - verificar todas", () => {
     });
 
     expect(resposta.statusCode, resposta.body).toBe(403);
+  });
+
+  it("mantem o aviso de vencimento lido depois de nova carga do sino", async () => {
+    const referenciaId = randomUUID();
+    const ontem = somarDias(diaNegocio(new Date()), -1);
+    await executarSql(
+      `insert into despesas (id, empresa_id, data_referencia, data_vencimento, observacao, valor_original)
+       values ($1, $2, $3, $3, 'Despesa de notificacao ja lida', '10.00')`,
+      [referenciaId, idsTeste.empresaA, ontem]
+    );
+    await executarSql(
+      `insert into notificacoes
+         (empresa_id, tipo, destinatario_usuario_id, referencia_id, titulo, criado_em)
+       values ($1, 'lancamento_vencimento', $2, $3, 'Despesa vencida', now() - interval '1 day')`,
+      [idsTeste.empresaA, usuarioTesourariaId, referenciaId]
+    );
+
+    const marcarTodas = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/notificacoes/verificar-todas?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieTesouraria },
+      payload: {}
+    });
+    expect(marcarTodas.statusCode, marcarTodas.body).toBe(200);
+
+    const recarregada = await contexto.app.inject({
+      method: "GET",
+      url: `/api/notificacoes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(recarregada.statusCode, recarregada.body).toBe(200);
+    expect(json<{ data: { referenciaId: string }[] }>(recarregada).data).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ referenciaId })])
+    );
+
+    const estado = await consultarUm<{
+      verificado: boolean;
+      verificado_por: string | null;
+      verificado_em: Date | null;
+    }>(
+      `select verificado, verificado_por, verificado_em
+       from notificacoes
+       where referencia_id = $1 and destinatario_usuario_id = $2`,
+      [referenciaId, usuarioTesourariaId]
+    );
+    expect(estado).toEqual(
+      expect.objectContaining({
+        verificado: true,
+        verificado_por: usuarioTesourariaId,
+        verificado_em: expect.any(Date)
+      })
+    );
   });
 });
