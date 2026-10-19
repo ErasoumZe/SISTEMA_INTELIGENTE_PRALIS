@@ -145,6 +145,25 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     return conta;
   }
 
+  it("recusa abrir caixa em nome de outro usuario mesmo quando ambos pertencem a empresa", async () => {
+    const { contaId, pdvId } = await criarContaEPdv("r040-usuario-forjado");
+    const lacre = "R040-USUARIO-FORJADO";
+    await criarTransferencia(lacre, 150, [contaId]);
+
+    const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
+      empresaId: idsTeste.empresaA,
+      pdvId,
+      usuarioCaixaId: tesourariaId,
+      maquininhaId: await criarMaquininhaParaAbertura(pdvId),
+      lacreAbertura: lacre,
+      caixaResponsavelNome: "Operador forjado",
+      supervisorResponsavelNome: "Supervisor R040"
+    });
+
+    assertProblem(resposta, 403);
+    expect(await consultarUm<{ id: string }>("select id from fechamentos_caixa where pdv_id = $1", [pdvId])).toBeNull();
+  });
+
   it("Deve levar TUDO para o caixa que abriu e deixar os outros candidatos sem nada", async () => {
     const a = await criarContaEPdv("r040-cand-a");
     const b = await criarContaEPdv("r040-cand-b");
@@ -317,7 +336,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const aberta = await abrir(pdvId, "R040-PRAZO-VENCIDO", { cookie: cookieAdmin, usuarioId: adminId }, maquininhaId);
     expect(aberta.statusCode, aberta.body).toBe(201);
     const caixaId = json<{ data: { id: string } }>(aberta).data.id;
-    expect(await consultarUm("select id from fechamentos_caixa where id = $1 and status = 'aberto'", [caixaId])).toBeTruthy();
+    expect(
+      await consultarUm("select id from fechamentos_caixa where id = $1 and status = 'aberto'", [caixaId])
+    ).toBeTruthy();
   });
 
   it.skip("Legado removido: retornos planejados nao fazem parte do malote atual", async () => {

@@ -912,6 +912,10 @@ export async function resolverEscopoEntradasDoDia(
 
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, dados.empresaId)) throw new Error("Empresa nao permitida");
+  // A sessão autenticada é a única identidade que pode abrir o próprio caixa. Sem esta guarda, uma
+  // requisição direta podia gravar a abertura em nome de outro colaborador da mesma empresa e dar
+  // acesso operacional aos dois perfis.
+  if (dados.usuarioCaixaId !== perfil.usuarioId) throw new Error("Caixa nao permitido");
   // R-184: o instante nasce no servidor. Aceitar um horario do navegador permitiria ao operador
   // abrir o Caixa fora da janela real do CREARE e mudaria quais vendas pertencem ao turno.
   const dataHoraAbertura = new Date();
