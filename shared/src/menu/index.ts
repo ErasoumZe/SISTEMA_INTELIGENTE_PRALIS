@@ -21,6 +21,7 @@ export const idsMenuConfiguraveis = [
   "pedidos",
   "perdas_sobras",
   "estoque_produtos",
+  "conferencias_estoque",
   "relatorio_dre",
   "clientes",
   "fornecedores",
@@ -59,6 +60,9 @@ export const idsMenuConfiguraveis = [
 ] as const;
 
 export type IdMenuConfiguravel = (typeof idsMenuConfiguraveis)[number];
+
+/** Filhos representados pela categoria única Lançamentos no menu lateral. */
+export const idsFilhosLancamentos = ["despesas", "mercadorias", "retiradas"] as const satisfies readonly IdMenuConfiguravel[];
 
 /**
  * Paleta sem hex livre: cada cor já possui contraste e variante para tema claro/escuro no web.
@@ -119,7 +123,7 @@ const corLegadaPorTitulo: Record<string, CorMenuGrupo> = {
   Resultados: "resultado"
 };
 
-const filhosLancamentos = new Set<IdMenuConfiguravel>(["despesas", "mercadorias", "retiradas"]);
+const filhosLancamentos = new Set<IdMenuConfiguravel>(idsFilhosLancamentos);
 
 /**
  * Remove duplicatas, seções vazias e qualquer tela fora do catálogo. A organização só muda

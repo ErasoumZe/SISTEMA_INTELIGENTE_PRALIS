@@ -100,6 +100,12 @@ a necessidade.
 > pública e dependentes) → **38** (V5, revisão do DP) → **39** (V6, fila — e os contratos do que
 > falta) → **40** (catálogo de funções) → **41** (retrato da função, ⛔ esperando aprovação do SQL).
 
+## Diretriz operacional vigente
+
+- [70 — Fonte única e execução contínua (19/10/2026)](70_DIRETRIZ_FONTE_UNICA_E_EXECUCAO_2026_10_19.md): diretório canônico, `main` como base, branches/PRs pequenas, revisão por agentes e proibição de retomar implementação por pastas históricas.
+
+- [71 — Auditoria de menu e permissões (19/10/2026)](71_AUDITORIA_MENU_E_PERMISSOES_2026_10_19.md): achados confirmados e fatiamento das próximas PRs de menu/perfis.
+
 ## Documento adicional
 
 - [35 — Lume, assistente futuro do Caixa](35_LUME_ASSISTENTE_CAIXA.md): escopo futuro, governança e limites da primeira base de FAQs.

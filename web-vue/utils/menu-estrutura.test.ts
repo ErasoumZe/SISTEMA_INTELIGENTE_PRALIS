@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Permissao } from "@padaria/shared";
-import { permissoesAcessoTotal } from "@padaria/shared";
+import { idsMenuConfiguraveis, permissoesAcessoTotal } from "@padaria/shared";
 import { agruparTelasMenu } from "./menu";
-import { estruturaEfetiva, estruturaPadrao, normalizarEstrutura, type EstruturaMenu } from "./menu-estrutura";
+import { estruturaEfetiva, estruturaPadrao, idsMenuSemSecao, normalizarEstrutura, type EstruturaMenu } from "./menu-estrutura";
+import { itemPorTela } from "~/utils/domain";
 import { usePermissoes } from "~/composables/usePermissoes";
 
 const telasDe = (permissoes: Permissao[], caixaAberto = true) => usePermissoes(permissoes, caixaAberto).telasPermitidas.value;
@@ -75,5 +76,22 @@ describe("estrutura configurável do menu", () => {
 
     expect(ids).not.toContain("caixa");
     expect(telasDe(["menu_caixa_mostrar", "caixa_operar", "menu_entradas_mostrar"]).map((tela) => tela.id)).toContain("caixa");
+  });
+
+  it("trata os filhos de Lançamentos como organizados pela categoria", () => {
+    const estrutura: EstruturaMenu = { versao: 1, idsOcultos: [], secoes: [{ id: "saidas", titulo: "Saídas", ids: ["lancamentos"] }] };
+    expect(idsMenuSemSecao(estrutura)).not.toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
+    expect(idsMenuSemSecao({ ...estrutura, secoes: [] })).toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
+  });
+
+  it("mantém catálogo, telas navegáveis e estrutura padrão alinhados", () => {
+    expect(idsMenuConfiguraveis.filter((id) => id !== "lancamentos").sort()).toEqual(Object.keys(itemPorTela).sort());
+    expect(estruturaPadrao().secoes.flatMap((secao) => secao.ids)).toContain("conferencias_estoque");
+  });
+
+  it("oculta a categoria Lançamentos junto com seus filhos", () => {
+    const grupos = agruparTelasMenu(todas, [{ titulo: "Saídas", ids: ["lancamentos"] }], ["lancamentos"]);
+    const ids = grupos.flatMap((grupo) => grupo.itens.flatMap((item) => item.tipo === "categoria" ? item.itens.map((filho) => filho.id) : [item.id]));
+    expect(ids).not.toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
   });
 });
