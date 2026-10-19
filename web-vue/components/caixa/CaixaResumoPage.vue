@@ -601,6 +601,12 @@ function confirmarFechamento() {
       <!-- Abertura de Caixa fiel ao desenho do Rodrigo (FOTO 5): enxuta, 4 campos em 2x2. -->
       <template v-if="!caixaAberto">
         <v-row dense class="caixa-abertura-form">
+          <v-col cols="12" class="caixa-abertura-secao">
+            <div class="caixa-abertura-secao__cabecalho">
+              <v-icon icon="mdi-storefront-outline" />
+              <div><strong>1. Identificação do turno</strong><span>Confira onde este caixa será aberto.</span></div>
+            </div>
+          </v-col>
           <v-col cols="12" md="6">
             <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="Ponto de Venda" />
           </v-col>
@@ -614,6 +620,12 @@ function confirmarFechamento() {
               clearable
             />
           </v-col>
+          <v-col cols="12" class="caixa-abertura-secao">
+            <div class="caixa-abertura-secao__cabecalho">
+              <v-icon icon="mdi-package-variant-closed-check" />
+              <div><strong>2. Malote de abertura</strong><span>Informe o lacre e confira o fundo recebido.</span></div>
+            </div>
+          </v-col>
           <v-col cols="12">
             <v-text-field
               v-model="aberturaExtra.numeroLacre"
@@ -626,30 +638,6 @@ function confirmarFechamento() {
               :error="lacreAberturaPendente"
               :error-messages="lacreAberturaPendente ? 'Informe o lacre para consultar e conferir o malote.' : ''"
               prepend-inner-icon="mdi-lock-alert-outline"
-              required
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="aberturaExtra.caixaResponsavelNome"
-              label="Caixa responsavel (obrigatorio)"
-              placeholder="Digite o nome do responsavel pelo caixa"
-              :error="!aberturaExtra.caixaResponsavelNome.trim()"
-              :error-messages="!aberturaExtra.caixaResponsavelNome.trim() ? 'Informe o caixa responsavel.' : ''"
-              prepend-inner-icon="mdi-account-cash-outline"
-              required
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="aberturaExtra.supervisorResponsavelNome"
-              label="Supervisor responsavel (obrigatorio)"
-              placeholder="Digite o nome do supervisor"
-              :error="!aberturaExtra.supervisorResponsavelNome.trim()"
-              :error-messages="
-                !aberturaExtra.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsavel.' : ''
-              "
-              prepend-inner-icon="mdi-account-supervisor-outline"
               required
             />
           </v-col>
@@ -751,6 +739,39 @@ function confirmarFechamento() {
               </div>
             </v-col>
           </template>
+          <v-col cols="12" class="caixa-abertura-secao">
+            <div class="caixa-abertura-secao__cabecalho">
+              <v-icon icon="mdi-account-check-outline" />
+              <div>
+                <strong>3. Responsáveis e terminal</strong
+                ><span>Registre a supervisão e o equipamento deste turno.</span>
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.caixaResponsavelNome"
+              label="Caixa responsavel (obrigatorio)"
+              placeholder="Digite o nome do responsavel pelo caixa"
+              :error="!aberturaExtra.caixaResponsavelNome.trim()"
+              :error-messages="!aberturaExtra.caixaResponsavelNome.trim() ? 'Informe o caixa responsavel.' : ''"
+              prepend-inner-icon="mdi-account-cash-outline"
+              required
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.supervisorResponsavelNome"
+              label="Supervisor responsavel (obrigatorio)"
+              placeholder="Digite o nome do supervisor"
+              :error="!aberturaExtra.supervisorResponsavelNome.trim()"
+              :error-messages="
+                !aberturaExtra.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsavel.' : ''
+              "
+              prepend-inner-icon="mdi-account-supervisor-outline"
+              required
+            />
+          </v-col>
           <v-col v-if="exibirMaquininhaNaAbertura" cols="12" md="6">
             <v-select
               v-model="aberturaExtra.maquininhaId"
@@ -764,23 +785,12 @@ function confirmarFechamento() {
               required
             />
           </v-col>
-        </v-row>
-
-        <!-- R-184: o operador nao escolhe o instante. A API registra o relogio do servidor no
-             clique; mostrar um datetime editavel aqui criava duas verdades para a abertura. -->
-        <v-row dense class="mt-2">
-          <v-col cols="12" md="6">
-            <v-text-field
-              model-value="Registrada automaticamente ao abrir"
-              label="Data e hora de abertura"
-              prepend-inner-icon="mdi-clock-check-outline"
-              readonly
-              density="comfortable"
-            />
-          </v-col>
           <v-col cols="12" md="6">
             <v-text-field :model-value="usuarioNome" label="Usuário do caixa" readonly density="comfortable" />
           </v-col>
+        </v-row>
+
+        <v-row dense class="mt-2">
           <v-col cols="12">
             <v-btn
               color="primary"
@@ -808,7 +818,6 @@ function confirmarFechamento() {
         :caixa-responsavel="aberturaExtra.caixaResponsavelNome"
         :supervisor="aberturaExtra.supervisorResponsavelNome"
         :maquininha="maquininhaSelecionada?.apelido ?? maquininhaSelecionada?.numeroSerie ?? ''"
-        data-hora-abertura="Registrada automaticamente ao confirmar"
         :valor-especie="
           aberturaExtra.conferenciaConfirmada === false
             ? Number(aberturaExtra.valorEspecie)
@@ -1073,6 +1082,33 @@ function confirmarFechamento() {
 .caixa-abertura-form > :deep(.v-col) {
   padding-top: 8px;
   padding-bottom: 8px;
+}
+.caixa-abertura-secao {
+  padding-bottom: 0 !important;
+}
+.caixa-abertura-secao__cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 28%, var(--cx-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, var(--cx-surface));
+}
+.caixa-abertura-secao__cabecalho :deep(.v-icon) {
+  color: rgb(var(--v-theme-primary));
+}
+.caixa-abertura-secao__cabecalho > div {
+  display: grid;
+  gap: 2px;
+}
+.caixa-abertura-secao__cabecalho strong {
+  color: var(--cx-ink, rgb(var(--v-theme-on-surface)));
+  font-size: 0.875rem;
+}
+.caixa-abertura-secao__cabecalho span {
+  color: var(--cx-ink-soft, rgba(var(--v-theme-on-surface), 0.72));
+  font-size: 0.75rem;
 }
 .caixa-abertura__aviso {
   display: flex;
