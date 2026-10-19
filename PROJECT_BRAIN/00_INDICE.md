@@ -75,7 +75,7 @@ a necessidade.
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **52**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **53**.
 >
 > ⚠️ **Dois números estão ocupados duas vezes**, porque duas linhas de trabalho avançaram em
 > paralelo e cada uma pegou o próximo livre que via: **29** (`29_RUNBOOK_ROTACAO_ADMIN.md` e

@@ -56,6 +56,11 @@ O campo de recorrência e data lembra o comprador de revisar. Para virar agendad
 decidir: quem é o responsável por cada agenda, qual o aviso (e-mail, WhatsApp, notificação interna),
 o que acontece quando a data passa sem ação, e se a recorrência gera uma nova sugestão sozinha.
 
+**Atualização de 19/10/2026:** a forma temporal foi decidida na R-217 e no documento 52. A agenda
+segue uma série de calendário, com ocorrências independentes; uma atrasada não bloqueia as
+seguintes. Continua pendente somente o ato operacional de cada ocorrência: criar uma tarefa de
+revisão ou criar diretamente um pedido `A fazer`.
+
 ## 6. Compras ↔ Mercadorias/NF-e: vínculo ainda não existe
 
 Hoje os dois fluxos convivem no menu sem laço operacional. O comportamento pretendido é claro e
