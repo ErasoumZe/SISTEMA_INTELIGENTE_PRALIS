@@ -23,7 +23,8 @@ const situacoesOperacionais: PedidoStatus[] = [
   "retornado",
   "confirmado",
   "recebido_parcial",
-  "recebido"
+  "recebido",
+  "cancelado"
 ];
 const pedidosExibidos = computed(() => {
   const termo = busca.value.trim().toLocaleLowerCase("pt-BR");
