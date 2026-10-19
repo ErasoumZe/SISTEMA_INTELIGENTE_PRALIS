@@ -225,4 +225,68 @@ describe("pedidos integration (Compras)", () => {
     const salto = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
     assertProblem(salto, 400, "TRANSICAO_PEDIDO_INVALIDA");
   });
+
+  it("recusa a mesma chave concorrente em pedidos diferentes sem duplicar estoque", async () => {
+    async function criarPedidoConfirmado() {
+      const criar = await post("/api/pedidos", {
+        empresaId: idsTeste.empresaA,
+        fornecedorId: idsTeste.fornecedor,
+        recorrencia: "nenhuma",
+        itens: [{ produtoId: idsTeste.produto, quantidade: 1 }]
+      });
+      expect(criar.statusCode, criar.body).toBe(201);
+      const pedidoId = json<{ data: { id: string } }>(criar).data.id;
+      await responderCotacao(pedidoId, "10.00");
+      const confirmacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
+      expect(confirmacao.statusCode, confirmacao.body).toBe(204);
+      const detalhe = await contexto.app.inject({
+        method: "GET",
+        url: `/api/pedidos/${pedidoId}`,
+        headers: { cookie: cookieAdmin }
+      });
+      assertOk(detalhe);
+      const itemId = json<{ data: { itens: Array<{ id: string }> } }>(detalhe).data.itens[0]!.id;
+      return { pedidoId, itemId };
+    }
+
+    const [primeiro, segundo] = await Promise.all([criarPedidoConfirmado(), criarPedidoConfirmado()]);
+    const saldoAntes = Number(
+      (
+        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
+          idsTeste.produto
+        ])
+      )?.quantidade_estoque
+    );
+    const chave = "00000000-0000-4000-8000-000000000904";
+    const respostas = await Promise.all([
+      post(`/api/pedidos/${primeiro.pedidoId}/recebimentos`, {
+        idempotenciaChave: chave,
+        itens: [{ pedidoItemId: primeiro.itemId, quantidadeConferida: 1 }]
+      }),
+      post(`/api/pedidos/${segundo.pedidoId}/recebimentos`, {
+        idempotenciaChave: chave,
+        itens: [{ pedidoItemId: segundo.itemId, quantidadeConferida: 1 }]
+      })
+    ]);
+
+    expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([200, 400]);
+    const conflito = respostas.find((resposta) => resposta.statusCode === 400)!;
+    assertProblem(conflito, 400, "IDEMPOTENCIA_CONFLITO");
+    const saldoDepois = Number(
+      (
+        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
+          idsTeste.produto
+        ])
+      )?.quantidade_estoque
+    );
+    expect(saldoDepois).toBe(saldoAntes + 1);
+    expect(
+      (
+        await consultarUm<{ total: string }>(
+          "select count(*)::text as total from pedidos_recebimentos where empresa_id = $1 and idempotencia_chave = $2",
+          [idsTeste.empresaA, chave]
+        )
+      )?.total
+    ).toBe("1");
+  });
 });
