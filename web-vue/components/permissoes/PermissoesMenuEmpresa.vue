@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   coresMenuGrupo,
+  idsFilhosLancamentos,
   idsMenuConfiguraveis,
   type CorMenuGrupo,
   type CorRgbMenu,
@@ -8,7 +9,7 @@ import {
   type IdMenuConfiguravel
 } from "@padaria/shared";
 import { CATEGORIAS_MENU } from "~/utils/menu";
-import { estruturaEfetiva, estruturaPadrao, type EstruturaMenu } from "~/utils/menu-estrutura";
+import { estruturaEfetiva, estruturaPadrao, idsMenuSemSecao, type EstruturaMenu } from "~/utils/menu-estrutura";
 import { itemPorTela, mensagemErro } from "~/utils/domain";
 import { cssRgb } from "~/utils/menu-cor-rgb";
 
@@ -23,7 +24,7 @@ const estrutura = ref<EstruturaMenu>(estruturaPadrao());
 const estruturaInicial = ref(JSON.stringify(estrutura.value));
 const itemParaAdicionar = reactive<Record<string, IdMenuConfiguravel | "">>({});
 const gruposRecolhidos = reactive<Record<string, boolean>>({});
-const filhosLancamentos = new Set<IdMenuConfiguravel>(["despesas", "mercadorias", "retiradas"]);
+const filhosLancamentos = new Set<IdMenuConfiguravel>(idsFilhosLancamentos);
 const opcoesCor = [
   { value: "neutro", title: "Neutro" },
   { value: "entradas", title: "Amarelo" },
@@ -45,7 +46,10 @@ const catalogo = computed(() =>
 const alterado = computed(() => JSON.stringify(estrutura.value) !== estruturaInicial.value);
 const idsUsados = computed(() => new Set(estrutura.value.secoes.flatMap((secao) => secao.ids)));
 const idsOcultos = computed(() => new Set(estrutura.value.idsOcultos));
-const itensSemSecao = computed(() => catalogo.value.filter((item) => !idsUsados.value.has(item.id)));
+const itensSemSecao = computed(() => {
+  const pendentes = new Set(idsMenuSemSecao(estrutura.value));
+  return catalogo.value.filter((item) => pendentes.has(item.id));
+});
 const itensIncluiveis = computed(() => {
   const usaLancamentos = idsUsados.value.has("lancamentos");
   const usaFilhoDeLancamentos = [...filhosLancamentos].some((id) => idsUsados.value.has(id));

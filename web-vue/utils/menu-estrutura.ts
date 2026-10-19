@@ -1,4 +1,6 @@
 import {
+  idsFilhosLancamentos,
+  idsMenuConfiguraveis,
   normalizarEstruturaMenuEmpresa,
   type EstruturaMenuEmpresa,
   type IdMenuConfiguravel
@@ -7,6 +9,13 @@ import { SECOES_MENU } from "~/utils/menu";
 
 export type SecaoMenu = EstruturaMenuEmpresa["secoes"][number];
 export type EstruturaMenu = EstruturaMenuEmpresa;
+
+/** Itens pendentes; Lançamentos representa os três filhos no menu lateral. */
+export function idsMenuSemSecao(estrutura: EstruturaMenu): IdMenuConfiguravel[] {
+  const usados = new Set(estrutura.secoes.flatMap((secao) => secao.ids));
+  if (usados.has("lancamentos")) for (const filho of idsFilhosLancamentos) usados.add(filho);
+  return idsMenuConfiguraveis.filter((id) => !usados.has(id));
+}
 
 /** Sem configuração salva, o sistema preserva exatamente a organização atual. */
 export function estruturaPadrao(): EstruturaMenu {
