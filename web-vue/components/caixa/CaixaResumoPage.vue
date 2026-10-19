@@ -115,6 +115,7 @@ const maloteDeclarado = ref<{
 } | null>(null);
 const erroMalote = ref("");
 const carregandoMalote = ref(false);
+const tentouAbrirCaixa = ref(false);
 let consultaMaloteAtual = 0;
 const modalSangriasAberto = ref(false);
 const modalIndisponibilidadeAberto = ref(false);
@@ -410,6 +411,7 @@ const responsaveisAberturaPendentes = computed(
 // O fechamento usa o relatório da maquininha que foi escolhida AQUI. Sem esse vínculo, o operador
 // poderia trocar o equipamento no fim do turno e o relatório perderia a rastreabilidade do PDV.
 const maquininhaAberturaPendente = computed(() => !aberturaExtra.maquininhaId);
+const exibirErrosAbertura = computed(() => tentouAbrirCaixa.value);
 const aberturaBloqueada = computed(
   () =>
     !abertura.pdvId ||
@@ -460,6 +462,7 @@ function dadosAbertura() {
   };
 }
 function abrir() {
+  tentouAbrirCaixa.value = true;
   if (aberturaBloqueada.value) return;
   confirmacaoAberturaAberta.value = true;
 }
@@ -598,215 +601,263 @@ function confirmarFechamento() {
         Cadastre um PDV com conta vinculada antes de abrir caixa.
       </v-alert>
 
-      <!-- Abertura de Caixa fiel ao desenho do Rodrigo (FOTO 5): enxuta, 4 campos em 2x2. -->
       <template v-if="!caixaAberto">
-        <v-row dense class="caixa-abertura-form">
-          <v-col cols="12" class="caixa-abertura-secao">
-            <div class="caixa-abertura-secao__cabecalho">
-              <v-icon icon="mdi-storefront-outline" />
-              <div><strong>1. Identificação do turno</strong><span>Confira onde este caixa será aberto.</span></div>
+        <section class="caixa-abertura" aria-label="Abertura de caixa">
+          <header class="caixa-abertura__hero">
+            <div class="caixa-abertura__hero-icone"><v-icon icon="mdi-cash-register" size="28" /></div>
+            <div>
+              <p class="caixa-abertura__sobretitulo">Início do turno</p>
+              <h2>Abrir caixa</h2>
+              <p>Preencha os três blocos abaixo. A abertura só é confirmada depois da conferência do malote.</p>
             </div>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="Ponto de Venda" />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="abertura.turnoId"
-              :items="turnos ?? []"
-              item-title="nome"
-              item-value="id"
-              label="Turno"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12" class="caixa-abertura-secao">
-            <div class="caixa-abertura-secao__cabecalho">
-              <v-icon icon="mdi-package-variant-closed-check" />
-              <div><strong>2. Malote de abertura</strong><span>Informe o lacre e confira o fundo recebido.</span></div>
-            </div>
-          </v-col>
-          <v-col cols="12">
-            <v-text-field
-              v-model="aberturaExtra.numeroLacre"
-              label="Transf. Entrada / N° Lacre"
-              placeholder="Ex.: 001"
-              hint="Identifica o lacre do malote que trouxe o fundo ao caixa. Não é o lacre usado no fechamento."
-              persistent-hint
-              color="error"
-              base-color="error"
-              :error="lacreAberturaPendente"
-              :error-messages="lacreAberturaPendente ? 'Informe o lacre para consultar e conferir o malote.' : ''"
-              prepend-inner-icon="mdi-lock-alert-outline"
-              required
-            />
-          </v-col>
-          <v-col v-if="aberturaExtra.numeroLacre" cols="12">
-            <v-alert v-if="carregandoMalote" type="info" density="compact"
-              >Consultando a composição declarada do malote…</v-alert
-            >
-            <v-alert v-else-if="maloteDeclarado" :type="aberturaDivergente ? 'warning' : 'success'" density="compact">
-              Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro
-              {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas
-              {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
-              <span v-if="maloteDeclarado.lacresRetorno.length">
-                {{ maloteDeclarado.lacresRetorno.length }} lacre(s) de retorno:
-                {{ maloteDeclarado.lacresRetorno.map((lacre) => lacre.numero).join(", ") }}.
-              </span>
-              <span v-if="maloteDeclarado.lacreFechamento">
-                Lacre reservado para fechar este caixa: <strong>{{ maloteDeclarado.lacreFechamento.numero }}</strong
-                >. Mantenha-o aberto e digite esse número ao fechar.
-              </span>
-              <span v-if="aberturaDivergente">
-                A contagem diverge; descreva o motivo para abrir com o valor contado.</span
-              >
-            </v-alert>
-            <v-alert v-else-if="erroMalote" type="error" density="compact">{{ erroMalote }}</v-alert>
-          </v-col>
-          <template v-if="maloteDeclarado">
-            <v-col cols="12">
-              <div class="abertura-conferencia">
-                <div class="abertura-conferencia__titulo">Conferência do malote recebido</div>
-                <div class="abertura-conferencia__decisao">
-                  <strong>Confira o fundo recebido contra o que a Tesouraria cadastrou para este lacre.</strong>
-                  <div class="abertura-conferencia__esperado">
-                    <span>Valor esperado pela Tesouraria</span>
-                    <strong>{{ dinheiro(maloteDeclarado.valor) }}</strong>
-                    <small>
-                      Espécie {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} · moedas
-                      {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}
-                    </small>
-                  </div>
-                  <div class="abertura-conferencia__acoes">
-                    <v-btn
-                      color="success"
-                      :variant="aberturaExtra.conferenciaConfirmada === true ? 'flat' : 'tonal'"
-                      @click="aberturaExtra.conferenciaConfirmada = true"
-                    >
-                      Confirmar
-                    </v-btn>
-                    <v-btn
-                      color="error"
-                      :variant="aberturaExtra.conferenciaConfirmada === false ? 'flat' : 'outlined'"
-                      @click="aberturaExtra.conferenciaConfirmada = false"
-                    >
-                      Não confirmar
-                    </v-btn>
-                  </div>
-                  <small v-if="aberturaExtra.conferenciaConfirmada === true"
-                    >Composição confirmada. Você pode abrir o caixa.</small
-                  >
-                  <small v-else-if="aberturaExtra.conferenciaConfirmada === false"
-                    >Informe a contagem física encontrada.</small
-                  >
-                </div>
-                <v-row v-if="aberturaExtra.conferenciaConfirmada === false" dense class="abertura-conferencia__campos">
-                  <v-col cols="12" md="6">
-                    <CampoDinheiro
-                      v-model="aberturaExtra.valorEspecie"
-                      label="Dinheiro físico contado (obrigatório)"
-                      icone="mdi-cash"
-                    />
-                  </v-col>
-                  <v-col cols="12" md="6">
-                    <CampoDinheiro
-                      v-model="aberturaExtra.valorMoedas"
-                      label="Moedas contadas (obrigatório)"
-                      icone="mdi-circle-multiple-outline"
-                    />
-                  </v-col>
-                  <v-col v-if="aberturaDivergente" cols="12">
-                    <v-text-field
-                      v-model="aberturaExtra.observacaoDivergencia"
-                      label="Motivo da divergência"
-                      :hint="
-                        aberturaDivergente
-                          ? 'Obrigatório: explique a diferença encontrada.'
-                          : 'Preencha somente se a conferência divergir.'
-                      "
-                      :persistent-hint="aberturaDivergente"
-                      :error="observacaoAberturaPendente"
-                      :error-messages="
-                        observacaoAberturaPendente ? 'Informe o motivo da divergência para continuar.' : ''
-                      "
-                      :required="aberturaDivergente"
-                    />
-                  </v-col>
-                </v-row>
-                <p v-if="aberturaComposicaoPendente" class="abertura-conferencia__erro mb-0">
-                  Informe espécie e moedas contadas para conferir o malote.
-                </p>
-              </div>
-            </v-col>
-          </template>
-          <v-col cols="12" class="caixa-abertura-secao">
-            <div class="caixa-abertura-secao__cabecalho">
-              <v-icon icon="mdi-account-check-outline" />
-              <div>
-                <strong>3. Responsáveis e terminal</strong
-                ><span>Registre a supervisão e o equipamento deste turno.</span>
-              </div>
-            </div>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="aberturaExtra.caixaResponsavelNome"
-              label="Caixa responsavel (obrigatorio)"
-              placeholder="Digite o nome do responsavel pelo caixa"
-              :error="!aberturaExtra.caixaResponsavelNome.trim()"
-              :error-messages="!aberturaExtra.caixaResponsavelNome.trim() ? 'Informe o caixa responsavel.' : ''"
-              prepend-inner-icon="mdi-account-cash-outline"
-              required
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="aberturaExtra.supervisorResponsavelNome"
-              label="Supervisor responsavel (obrigatorio)"
-              placeholder="Digite o nome do supervisor"
-              :error="!aberturaExtra.supervisorResponsavelNome.trim()"
-              :error-messages="
-                !aberturaExtra.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsavel.' : ''
-              "
-              prepend-inner-icon="mdi-account-supervisor-outline"
-              required
-            />
-          </v-col>
-          <v-col v-if="exibirMaquininhaNaAbertura" cols="12" md="6">
-            <v-select
-              v-model="aberturaExtra.maquininhaId"
-              :items="maquininhasSelect"
-              item-title="nome"
-              item-value="id"
-              label="Maq. Cartão / N° Série"
-              hint="Obrigatória: será usada no relatório final deste turno."
-              :error="maquininhaAberturaPendente"
-              :error-messages="maquininhaAberturaPendente ? 'Selecione a maquininha do PDV.' : ''"
-              required
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field :model-value="usuarioNome" label="Usuário do caixa" readonly density="comfortable" />
-          </v-col>
-        </v-row>
+            <v-chip color="primary" variant="tonal" prepend-icon="mdi-format-list-numbered">3 etapas</v-chip>
+          </header>
 
-        <v-row dense class="mt-2">
-          <v-col cols="12">
-            <v-btn
-              color="primary"
-              prepend-icon="mdi-cash-register"
-              :loading="salvando"
-              :disabled="aberturaBloqueada"
-              @click="abrir"
-            >
-              Abrir caixa
-            </v-btn>
+          <section class="caixa-abertura__etapa">
+            <div class="caixa-abertura__etapa-cabecalho">
+              <span>1</span>
+              <div><strong>Onde você vai operar</strong><small>Selecione o ponto de venda e o turno.</small></div>
+            </div>
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="abertura.pdvId"
+                  :items="pdvs"
+                  item-title="nome"
+                  item-value="id"
+                  label="Ponto de venda"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="abertura.turnoId"
+                  :items="turnos ?? []"
+                  item-title="nome"
+                  item-value="id"
+                  label="Turno"
+                  clearable
+                />
+              </v-col>
+            </v-row>
+          </section>
+
+          <section class="caixa-abertura__etapa">
+            <div class="caixa-abertura__etapa-cabecalho">
+              <span>2</span>
+              <div>
+                <strong>Conferir malote de abertura</strong><small>Digite o lacre e confirme o fundo recebido.</small>
+              </div>
+            </div>
+            <v-row dense>
+              <v-col cols="12">
+                <v-text-field
+                  v-model="aberturaExtra.numeroLacre"
+                  label="Lacre do malote de abertura"
+                  placeholder="Ex.: 001"
+                  hint="Use o lacre do malote recebido da Tesouraria. Ele é diferente do lacre de fechamento."
+                  persistent-hint
+                  :error="exibirErrosAbertura && lacreAberturaPendente"
+                  :error-messages="
+                    exibirErrosAbertura && lacreAberturaPendente ? 'Informe o lacre para consultar o malote.' : ''
+                  "
+                  prepend-inner-icon="mdi-barcode-scan"
+                  required
+                />
+              </v-col>
+              <v-col v-if="aberturaExtra.numeroLacre" cols="12">
+                <v-alert v-if="carregandoMalote" type="info" variant="tonal" density="comfortable">
+                  Consultando a composição declarada do malote…
+                </v-alert>
+                <v-alert
+                  v-else-if="maloteDeclarado"
+                  :type="aberturaDivergente ? 'warning' : 'success'"
+                  variant="tonal"
+                  density="comfortable"
+                >
+                  Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro
+                  {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas
+                  {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
+                  <span v-if="maloteDeclarado.lacresRetorno.length">
+                    {{ maloteDeclarado.lacresRetorno.length }} lacre(s) de retorno:
+                    {{ maloteDeclarado.lacresRetorno.map((lacre) => lacre.numero).join(", ") }}.
+                  </span>
+                  <span v-if="maloteDeclarado.lacreFechamento">
+                    Lacre reservado para fechar este caixa: <strong>{{ maloteDeclarado.lacreFechamento.numero }}</strong
+                    >.
+                  </span>
+                </v-alert>
+                <v-alert v-else-if="erroMalote" type="error" variant="tonal" density="comfortable">{{
+                  erroMalote
+                }}</v-alert>
+              </v-col>
+              <v-col v-if="maloteDeclarado" cols="12">
+                <div class="abertura-conferencia">
+                  <div class="abertura-conferencia__titulo">Conferência do malote</div>
+                  <div class="abertura-conferencia__decisao">
+                    <strong>O valor e a composição conferem com o que foi recebido?</strong>
+                    <div class="abertura-conferencia__esperado">
+                      <span>Valor esperado pela Tesouraria</span>
+                      <strong>{{ dinheiro(maloteDeclarado.valor) }}</strong>
+                      <small>
+                        Espécie {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} · moedas
+                        {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}
+                      </small>
+                    </div>
+                    <div class="abertura-conferencia__acoes">
+                      <v-btn
+                        color="success"
+                        :variant="aberturaExtra.conferenciaConfirmada === true ? 'flat' : 'tonal'"
+                        @click="aberturaExtra.conferenciaConfirmada = true"
+                      >
+                        Sim, confere
+                      </v-btn>
+                      <v-btn
+                        color="error"
+                        :variant="aberturaExtra.conferenciaConfirmada === false ? 'flat' : 'outlined'"
+                        @click="aberturaExtra.conferenciaConfirmada = false"
+                      >
+                        Não confere
+                      </v-btn>
+                    </div>
+                    <small v-if="aberturaExtra.conferenciaConfirmada === true"
+                      >Conferência registrada. Continue para os responsáveis.</small
+                    >
+                    <small v-else-if="aberturaExtra.conferenciaConfirmada === false"
+                      >Informe a contagem física encontrada.</small
+                    >
+                    <p
+                      v-if="exibirErrosAbertura && aberturaExtra.conferenciaConfirmada === null"
+                      class="abertura-conferencia__erro mb-0"
+                    >
+                      Confirme se o valor e a composição do malote estão corretos para continuar.
+                    </p>
+                  </div>
+                  <v-row
+                    v-if="aberturaExtra.conferenciaConfirmada === false"
+                    dense
+                    class="abertura-conferencia__campos"
+                  >
+                    <v-col cols="12" md="6">
+                      <CampoDinheiro
+                        v-model="aberturaExtra.valorEspecie"
+                        label="Dinheiro físico contado (obrigatório)"
+                        icone="mdi-cash"
+                      />
+                    </v-col>
+                    <v-col cols="12" md="6">
+                      <CampoDinheiro
+                        v-model="aberturaExtra.valorMoedas"
+                        label="Moedas contadas (obrigatório)"
+                        icone="mdi-circle-multiple-outline"
+                      />
+                    </v-col>
+                    <v-col v-if="aberturaDivergente" cols="12">
+                      <v-text-field
+                        v-model="aberturaExtra.observacaoDivergencia"
+                        label="Motivo da divergência"
+                        hint="Obrigatório: explique a diferença encontrada."
+                        persistent-hint
+                        :error="exibirErrosAbertura && observacaoAberturaPendente"
+                        :error-messages="
+                          exibirErrosAbertura && observacaoAberturaPendente
+                            ? 'Informe o motivo da divergência para continuar.'
+                            : ''
+                        "
+                        required
+                      />
+                    </v-col>
+                  </v-row>
+                  <p v-if="exibirErrosAbertura && aberturaComposicaoPendente" class="abertura-conferencia__erro mb-0">
+                    Informe espécie e moedas contadas para conferir o malote.
+                  </p>
+                </div>
+              </v-col>
+            </v-row>
+          </section>
+
+          <section class="caixa-abertura__etapa">
+            <div class="caixa-abertura__etapa-cabecalho">
+              <span>3</span>
+              <div>
+                <strong>Responsáveis e terminal</strong
+                ><small>Registre o responsável, supervisor e maquininha deste turno.</small>
+              </div>
+            </div>
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="aberturaExtra.caixaResponsavelNome"
+                  label="Responsável pelo caixa"
+                  placeholder="Digite o nome do responsável"
+                  :error="exibirErrosAbertura && !aberturaExtra.caixaResponsavelNome.trim()"
+                  :error-messages="
+                    exibirErrosAbertura && !aberturaExtra.caixaResponsavelNome.trim()
+                      ? 'Informe o responsável pelo caixa.'
+                      : ''
+                  "
+                  prepend-inner-icon="mdi-account-cash-outline"
+                  required
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="aberturaExtra.supervisorResponsavelNome"
+                  label="Supervisor responsável"
+                  placeholder="Digite o nome do supervisor"
+                  :error="exibirErrosAbertura && !aberturaExtra.supervisorResponsavelNome.trim()"
+                  :error-messages="
+                    exibirErrosAbertura && !aberturaExtra.supervisorResponsavelNome.trim()
+                      ? 'Informe o supervisor responsável.'
+                      : ''
+                  "
+                  prepend-inner-icon="mdi-account-supervisor-outline"
+                  required
+                />
+              </v-col>
+              <v-col v-if="exibirMaquininhaNaAbertura" cols="12" md="6">
+                <v-select
+                  v-model="aberturaExtra.maquininhaId"
+                  :items="maquininhasSelect"
+                  item-title="nome"
+                  item-value="id"
+                  label="Maquininha de cartão"
+                  hint="Obrigatória para o relatório final deste turno."
+                  :error="exibirErrosAbertura && maquininhaAberturaPendente"
+                  :error-messages="
+                    exibirErrosAbertura && maquininhaAberturaPendente ? 'Selecione a maquininha do PDV.' : ''
+                  "
+                  prepend-inner-icon="mdi-credit-card-chip-outline"
+                  required
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  :model-value="usuarioNome"
+                  label="Usuário logado"
+                  prepend-inner-icon="mdi-account-check-outline"
+                  readonly
+                />
+              </v-col>
+            </v-row>
+          </section>
+
+          <footer class="caixa-abertura__rodape">
             <div class="caixa-abertura__aviso" role="note">
               <v-icon icon="mdi-storefront-check-outline" />
-              Abra o caixa somente quando estiver no PDV: a primeira venda já começa a contar neste turno.
+              <span>A primeira venda já começa a contar neste turno. Abra somente quando estiver no PDV.</span>
             </div>
-          </v-col>
-        </v-row>
+            <v-btn
+              color="primary"
+              size="large"
+              block
+              prepend-icon="mdi-cash-register"
+              :loading="salvando"
+              @click="abrir"
+            >
+              Conferir e abrir caixa
+            </v-btn>
+          </footer>
+        </section>
       </template>
 
       <CaixaAberturaConfirmacaoDialog
@@ -1071,59 +1122,142 @@ function confirmarFechamento() {
 </template>
 
 <style scoped>
-.abertura-conferencia {
-  border: 1px solid rgb(var(--v-theme-primary));
-  border-radius: 12px;
-  padding: 16px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, transparent);
+.caixa-abertura {
+  display: grid;
+  gap: 16px;
+  max-width: 980px;
+  margin-inline: auto;
 }
 
-/* Respiro moderado e constante: separa os grupos operacionais sem alongar a tela do PDV. */
-.caixa-abertura-form > :deep(.v-col) {
-  padding-top: 8px;
-  padding-bottom: 8px;
+.caixa-abertura__hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 42%, var(--cx-line));
+  border-radius: 16px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 15%, var(--cx-surface)),
+    var(--cx-surface-raised, rgb(var(--v-theme-surface)))
+  );
 }
-.caixa-abertura-secao {
-  padding-bottom: 0 !important;
+
+.caixa-abertura__hero-icone {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  color: rgb(var(--v-theme-on-primary));
+  background: rgb(var(--v-theme-primary));
+  box-shadow: 0 8px 18px color-mix(in srgb, rgb(var(--v-theme-primary)) 30%, transparent);
 }
-.caixa-abertura-secao__cabecalho {
+
+.caixa-abertura__sobretitulo {
+  margin: 0 0 2px;
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.caixa-abertura__hero h2 {
+  margin: 0;
+  color: var(--cx-ink, rgb(var(--v-theme-on-surface)));
+  font-size: clamp(1.2rem, 2vw, 1.45rem);
+  line-height: 1.15;
+}
+
+.caixa-abertura__hero p:not(.caixa-abertura__sobretitulo) {
+  margin: 5px 0 0;
+  color: var(--cx-ink-soft, rgba(var(--v-theme-on-surface), 0.72));
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.caixa-abertura__etapa {
+  padding: 16px;
+  border: 1px solid var(--cx-line, rgba(var(--v-theme-on-surface), 0.14));
+  border-radius: 14px;
+  background: var(--cx-surface-raised, rgb(var(--v-theme-surface)));
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 8%, transparent);
+}
+
+.caixa-abertura__etapa-cabecalho {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 28%, var(--cx-line));
-  border-radius: 10px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, var(--cx-surface));
+  margin-bottom: 12px;
 }
-.caixa-abertura-secao__cabecalho :deep(.v-icon) {
-  color: rgb(var(--v-theme-primary));
+
+.caixa-abertura__etapa-cabecalho > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  color: rgb(var(--v-theme-on-primary));
+  background: rgb(var(--v-theme-primary));
+  font-size: 0.82rem;
+  font-weight: 900;
 }
-.caixa-abertura-secao__cabecalho > div {
+
+.caixa-abertura__etapa-cabecalho > div {
   display: grid;
   gap: 2px;
 }
-.caixa-abertura-secao__cabecalho strong {
+
+.caixa-abertura__etapa-cabecalho strong {
   color: var(--cx-ink, rgb(var(--v-theme-on-surface)));
-  font-size: 0.875rem;
+  font-size: 0.98rem;
 }
-.caixa-abertura-secao__cabecalho span {
+
+.caixa-abertura__etapa-cabecalho small {
   color: var(--cx-ink-soft, rgba(var(--v-theme-on-surface), 0.72));
-  font-size: 0.75rem;
+  font-size: 0.78rem;
 }
+
+.caixa-abertura__rodape {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 320px);
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 36%, var(--cx-line));
+  border-radius: 14px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, var(--cx-surface));
+}
+
+.caixa-abertura__rodape :deep(.v-btn) {
+  min-height: 48px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
 .caixa-abertura__aviso {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
-  max-width: 560px;
-  margin-top: 10px;
-  color: var(--cx-ink-soft);
-  font-size: 0.78rem;
-  line-height: 1.35;
+  gap: 8px;
+  color: var(--cx-ink-soft, rgba(var(--v-theme-on-surface), 0.72));
+  font-size: 0.8rem;
+  line-height: 1.38;
 }
+
 .caixa-abertura__aviso :deep(.v-icon) {
   flex: 0 0 auto;
   margin-top: 1px;
   color: rgb(var(--v-theme-warning));
+}
+
+.abertura-conferencia {
+  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 48%, var(--cx-line));
+  border-radius: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, var(--cx-surface));
 }
 
 .abertura-conferencia__campos {
@@ -1183,10 +1317,51 @@ function confirmarFechamento() {
   color: var(--cx-ink-soft, rgba(var(--v-theme-on-surface), 0.72));
 }
 
-@media (max-width: 480px) {
+@media (max-width: 760px) {
+  .caixa-abertura {
+    gap: 12px;
+  }
+
+  .caixa-abertura__hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .caixa-abertura__hero :deep(.v-chip) {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .caixa-abertura__etapa,
+  .caixa-abertura__rodape {
+    padding: 14px;
+  }
+
+  .caixa-abertura__rodape {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .abertura-conferencia__acoes :deep(.v-btn) {
     flex: 1;
     min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .caixa-abertura__hero-icone {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  .caixa-abertura__hero h2 {
+    font-size: 1.15rem;
+  }
+
+  .caixa-abertura__hero p:not(.caixa-abertura__sobretitulo),
+  .caixa-abertura__etapa-cabecalho small {
+    font-size: 0.76rem;
   }
 }
 
