@@ -234,12 +234,11 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
   await page.getByRole("button", { name: "Novo cadastro" }).click();
   const dialogo = page.getByRole("dialog");
   await expect(dialogo.getByLabel("Pessoa vinculada")).toHaveValue("Cadastrar novo colaborador");
-  await expect(dialogo.getByLabel("CPF *")).toBeVisible();
+  await expect(dialogo.getByLabel("CPF (opcional)")).toBeVisible();
   await expect(dialogo.getByLabel("Setor *")).toBeVisible();
   await expect(dialogo.getByLabel("Cargo inicial *")).toBeVisible();
   await page.getByRole("textbox", { name: "Nome", exact: true }).fill("Usuario E2E guiado");
   await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
-  await dialogo.getByLabel("CPF *").fill("529.982.247-25");
   await escolherNoSelect(page, "Setor *", /.+/);
   await escolherNoSelect(page, "Cargo inicial *", /.+/);
   await page.getByRole("textbox", { name: "Senha", exact: true }).fill("12345678");
@@ -254,7 +253,7 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
     role: "usuario_comum",
     novoColaborador: {
       nome: "Usuario E2E guiado",
-      cpf: "529.982.247-25"
+      cpf: null
     }
   });
   const payloadFinal: Record<string, unknown> = payloadCriacao ?? {};

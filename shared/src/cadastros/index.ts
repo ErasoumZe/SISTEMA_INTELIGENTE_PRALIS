@@ -100,7 +100,6 @@ export const MENSAGEM_PERFIL_ACESSO_INDISPONIVEL =
 export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
   "Marque ao menos uma empresa ou desmarque a substituicao para manter os vinculos atuais.";
 
-export const MENSAGEM_NOVO_USUARIO_SEM_CPF = "Informe o CPF do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
 
@@ -108,22 +107,16 @@ export function bloqueioCadastroUsuario(
   tela: string,
   form: Pick<
     CadastroForm,
-    | "role"
-    | "empresaIds"
-    | "empresaIdsTocado"
-    | "novoColaborador"
-    | "novoColaboradorCpf"
-    | "novoColaboradorSetorId"
-    | "novoColaboradorCargoId"
+    "role" | "empresaIds" | "empresaIdsTocado" | "novoColaborador" | "novoColaboradorSetorId" | "novoColaboradorCargoId"
   >,
   edicao = false
 ): string | null {
   if (tela !== "usuarios") return null;
   if (!form.role) return MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
-  // Criar o login e a pessoa operacional e um unico ato. Estes tres campos alimentam a resolucao de
-  // permissoes (setor -> cargo -> usuario) e a deduplicacao por CPF; deixar o servidor descobrir a
-  // ausencia somente depois do clique produzia uma tela que parecia salvavel, mas nunca concluia.
-  if (form.novoColaborador && !form.novoColaboradorCpf.trim()) return MENSAGEM_NOVO_USUARIO_SEM_CPF;
+  // Criar o login e a pessoa operacional e um unico ato. Setor e cargo alimentam a resolucao de
+  // permissoes (setor -> cargo -> usuario). CPF e opcional: quando informado, apenas evita criar
+  // um segundo colaborador com o mesmo documento. Deixar o servidor descobrir a ausência de setor
+  // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
   if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
   if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no

@@ -72,9 +72,6 @@ describe("formCadastroDeLinha", () => {
     expect(form.role).toBe("usuario_comum");
     expect(form.novoColaborador).toBe(true);
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_comum" });
-    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("CPF");
-
-    form.novoColaboradorCpf = "529.982.247-25";
     expect(bloqueioCadastroUsuario("usuarios", form)).toContain("setor");
     form.novoColaboradorSetorId = "setor-1";
     expect(bloqueioCadastroUsuario("usuarios", form)).toContain("cargo");
