@@ -1215,6 +1215,24 @@ O token tem 256 bits, viaja no fragmento da URL e no cabeçalho `x-cotacao-token
 
 **Em aberto para decisão:** fornecedor que só responde por telefone hoje não tem como o Comprador registrar a resposta, porque `Enviado → Confirmado` foi retirado antes desta regra; mostrar o último valor pago ao fornecedor pode ancorar o preço dele para cima ou para baixo.
 
+### R-217 — Recorrência de Compras segue uma série de calendário (José, 19/10/2026)
+
+A recorrência de Compras funciona como uma série do Calendário da Apple, e não como uma fila de
+Lembretes dependentes. Cada ocorrência tem data própria e existe independentemente das anteriores:
+uma ocorrência atrasada não impede o nascimento das seguintes.
+
+A configuração aceita frequência diária, semanal, mensal ou anual; intervalo de `N` unidades;
+dias específicos da semana; repetição mensal por dia do mês ou por posição do dia da semana;
+data/hora de início; fuso `America/Sao_Paulo`; e término nunca, em uma data ou após determinada
+quantidade de ocorrências. Alterar uma série oferece **somente esta ocorrência** ou **esta e as
+futuras**; cancelar uma ocorrência não cancela as demais.
+
+Uma ocorrência recorrente nunca confirma compra, envia cotação nem altera estoque por conta
+própria. O ato operacional que a ocorrência deve criar — apenas uma tarefa de revisão ou um pedido
+`A fazer` — segue aguardando confirmação antes da migration. Até essa decisão, os campos simples
+`pedidos.data_agendada` e `pedidos.recorrencia` continuam sendo o estado implementado, mas não
+representam a regra-alvo completa.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
