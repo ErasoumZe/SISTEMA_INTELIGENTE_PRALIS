@@ -234,7 +234,7 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
   await page.getByRole("button", { name: "Novo cadastro" }).click();
   const dialogo = page.getByRole("dialog");
   await expect(dialogo.getByLabel("Pessoa vinculada")).toHaveValue("Cadastrar novo colaborador");
-  await expect(dialogo.getByLabel("CPF (opcional)")).toBeVisible();
+  await expect(dialogo.getByLabel("CPF (opcional)")).toHaveCount(0);
   await expect(dialogo.getByLabel("Setor *")).toBeVisible();
   await expect(dialogo.getByLabel("Cargo inicial *")).toBeVisible();
   await page.getByRole("textbox", { name: "Nome", exact: true }).fill("Usuario E2E guiado");
