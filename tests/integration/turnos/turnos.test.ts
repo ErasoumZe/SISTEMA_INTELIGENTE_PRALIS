@@ -44,8 +44,10 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
     });
     expect(json<{ data: Array<{ id: string }> }>(listar).data.some((t) => t.id === turnoId)).toBe(true);
 
-    // Define o turno padrao do colaborador admin -> abertura sem turnoId deve herda-lo.
-    await executarSql("update colaboradores set turno_padrao_id = $1 where id = $2", [
+    // Define o vinculo operacional completo do administrador: a abertura sem turnoId deve herdar
+    // o turno, e a API precisa aceitar somente o PDV que foi configurado no colaborador.
+    await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
+      idsTeste.pdvLivre,
       turnoId,
       idsTeste.colaboradorAdmin
     ]);
@@ -103,5 +105,22 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
       [idsTeste.pdvLivre]
     );
     expect(caixa?.turno_id).toBe(turnoId);
+
+    const outroPdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId: idsTeste.pdvEntradas,
+        usuarioCaixaId: adminId,
+        maquininhaId,
+        lacreAbertura: "LACRE-NAO-DEVE-SER-CONSULTADO",
+        caixaResponsavelNome: "Admin de teste",
+        supervisorResponsavelNome: "Supervisor de teste"
+      }
+    });
+    expect(outroPdv.statusCode).toBe(400);
+    expect(outroPdv.body).toContain("PDV vinculado");
   });
 });

@@ -132,6 +132,33 @@ export async function abrirCaixaDoOperador(
     pdvId = json<{ data: { id: string } }>(pdv).data.id;
   }
 
+  // O contrato vigente atrela a sessao do operador a um unico PDV e turno. A fixture continua
+  // criando postos exclusivos por caso, mas agora configura o vinculo pelo mesmo estado que a
+  // operacao usa, para que cada suite prove sua regra sem burlar a autorizacao da abertura.
+  const turno = await app.inject({
+    method: "POST",
+    url: "/api/turnos",
+    headers: { cookie: entrada.cookieAdmin },
+    payload: {
+      empresaId,
+      nome: `Turno ${entrada.nome} ${pdvId}`,
+      horaInicio: "06:00",
+      horaFim: "14:00"
+    }
+  });
+  expect(turno.statusCode, turno.body).toBe(201);
+  const turnoId = json<{ data: { id: string } }>(turno).data.id;
+  const colaborador = await consultarUm<{ id: string }>(
+    "select id from colaboradores where usuario_id = $1 and empresa_id = $2",
+    [usuario.id, empresaId]
+  );
+  if (!colaborador) throw new Error(`Colaborador do operador ${entrada.emailOperador} nao encontrado`);
+  await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
+    pdvId,
+    turnoId,
+    colaborador.id
+  ]);
+
   // A abertura da referencia 5174 sempre registra a maquininha vinculada e consome um malote
   // pendente identificado por lacre. A fixture precisa montar esse estado pelo mesmo contrato
   // publico: sem isso, todos os testes que dependem de um caixa proprio falham antes de provar
