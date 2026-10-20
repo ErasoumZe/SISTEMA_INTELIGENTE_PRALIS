@@ -107,6 +107,8 @@ a necessidade.
 - [71 — Auditoria de menu e permissões (19/10/2026)](71_AUDITORIA_MENU_E_PERMISSOES_2026_10_19.md): achados confirmados e fatiamento das próximas PRs de menu/perfis.
 - [72 — Ajustes auditáveis de saldo das contas (20/10/2026)](72_AJUSTE_SALDO_CONTAS_2026_10_20.md): saldo derivado preserva histórico; somente Administrador total e Tesouraria ajustam ou zeram por fato auditável.
 
+- [73 — Vínculo obrigatório de operador, PDV e turno (20/10/2026)](73_VINCULO_OPERADOR_PDV_TURNO_2026_10_20.md): operador de Caixa abre exclusivamente o PDV e o turno configurados; usuários globais não recebem vínculo operacional.
+
 ## Documento adicional
 
 - [35 — Lume, assistente futuro do Caixa](35_LUME_ASSISTENTE_CAIXA.md): escopo futuro, governança e limites da primeira base de FAQs.

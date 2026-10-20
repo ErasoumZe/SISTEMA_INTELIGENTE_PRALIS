@@ -1,0 +1,3 @@
+ALTER TABLE "colaboradores" ADD COLUMN "pdv_padrao_id" uuid;--> statement-breakpoint
+ALTER TABLE "colaboradores" ADD CONSTRAINT "colaboradores_pdv_padrao_id_pdvs_id_fk" FOREIGN KEY ("pdv_padrao_id") REFERENCES "public"."pdvs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "colaboradores_empresa_pdv_padrao_idx" ON "colaboradores" USING btree ("empresa_id","pdv_padrao_id");

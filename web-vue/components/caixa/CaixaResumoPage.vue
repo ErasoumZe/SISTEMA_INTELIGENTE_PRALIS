@@ -132,6 +132,7 @@ type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
+const vinculoOperador = computed(() => props.status?.vinculoOperador ?? null);
 const pdvDesligado = computed(() => Boolean(props.status?.indisponibilidadeAberta));
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
 const detalhesCaixaVisiveis = ref(true);
@@ -342,9 +343,11 @@ function iconeFormaPagamento(nome: string) {
 }
 
 watch(
-  () => props.pdvs,
-  (pdvs) => {
-    if (!abertura.pdvId && pdvs[0]?.id) abertura.pdvId = pdvs[0].id;
+  () => props.status?.vinculoOperador,
+  (vinculo) => {
+    if (!vinculo) return;
+    abertura.pdvId = vinculo.pdvId;
+    abertura.turnoId = vinculo.turnoId;
   },
   { immediate: true }
 );
@@ -415,6 +418,7 @@ const exibirErrosAbertura = computed(() => tentouAbrirCaixa.value);
 const aberturaBloqueada = computed(
   () =>
     !abertura.pdvId ||
+    !vinculoOperador.value ||
     lacreAberturaPendente.value ||
     responsaveisAberturaPendentes.value ||
     maquininhaAberturaPendente.value ||
@@ -618,6 +622,9 @@ function confirmarFechamento() {
               <span>1</span>
               <div><strong>Onde você vai operar</strong><small>Selecione o ponto de venda e o turno.</small></div>
             </div>
+            <v-alert v-if="!vinculoOperador" type="warning" variant="tonal" density="compact" class="mb-3">
+              A abertura sera liberada apos o vinculo de PDV e turno pelo administrador.
+            </v-alert>
             <v-row dense>
               <v-col cols="12" md="6">
                 <v-select
@@ -625,7 +632,8 @@ function confirmarFechamento() {
                   :items="pdvs"
                   item-title="nome"
                   item-value="id"
-                  label="Ponto de venda"
+                  :label="vinculoOperador ? 'Ponto de venda vinculado' : 'Ponto de venda'"
+                  :disabled="Boolean(vinculoOperador)"
                 />
               </v-col>
               <v-col cols="12" md="6">
@@ -634,8 +642,8 @@ function confirmarFechamento() {
                   :items="turnos ?? []"
                   item-title="nome"
                   item-value="id"
-                  label="Turno"
-                  clearable
+                  :label="vinculoOperador ? 'Turno vinculado' : 'Turno'"
+                  :disabled="Boolean(vinculoOperador)"
                 />
               </v-col>
             </v-row>

@@ -77,6 +77,16 @@ describe("formCadastroDeLinha", () => {
     expect(bloqueioCadastroUsuario("usuarios", form)).toContain("cargo");
     form.novoColaboradorCargoId = "cargo-1";
     expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({
+      novoColaborador: { pdvPadraoId: null, turnoPadraoId: null }
+    });
+    form.novoColaboradorPdvPadraoId = "pdv-1";
+    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("PDV e o turno juntos");
+    form.novoColaboradorTurnoPadraoId = "turno-manha";
+    expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({
+      novoColaborador: { pdvPadraoId: "pdv-1", turnoPadraoId: "turno-manha" }
+    });
   });
 
   it("edicao de usuario nao tenta criar outro colaborador", () => {
