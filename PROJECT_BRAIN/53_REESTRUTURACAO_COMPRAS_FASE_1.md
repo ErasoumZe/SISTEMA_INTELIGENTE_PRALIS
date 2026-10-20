@@ -9,6 +9,13 @@
 `Necessidade de compra → rodada de cotação multi-fornecedor → compra por fornecedor → separação → recebimento/NF → estoque e financeiro`.
 
 - A solicitação nasce sem fornecedor e a rodada pode convidar vários fornecedores.
+- Ao enviar a cotação, Compras usa um seletor múltiplo. O sistema sugere os fornecedores com vínculo
+  aprovado no catálogo, mas o comprador pode pesquisar e selecionar qualquer fornecedor ativo da
+  empresa, mesmo sem vínculo prévio com os produtos. A inclusão manual não aprova silenciosamente um
+  vínculo no catálogo: o comprador define quais itens aquele fornecedor receberá naquela rodada.
+- Se o fornecedor ainda não existir, o próprio seletor oferece cadastro rápido de nome e WhatsApp. Ao
+  salvar, o fornecedor é persistido no cadastro geral e já fica selecionado, sem tirar o comprador da
+  cotação. O WhatsApp continua obrigatório para que o convite possa ser enviado.
 - Cada item pode ter um vencedor diferente. Uma compra já realizada nunca é substituída por resposta tardia.
 - A resposta do fornecedor compra automaticamente somente itens ainda livres cujo custo final seja menor
   ou igual ao preço-base. Sem base ou acima dela, exige decisão manual.

@@ -1257,6 +1257,19 @@ Implementação é aditiva e protegida por feature flag; legado permanece legív
 integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0060 e no
 documento 53; nada foi publicado em produção.
 
+### R-219 — Seleção manual de fornecedores na rodada (José, 20/10/2026)
+
+Ao enviar uma cotação, Compras terá um seletor múltiplo. Os vínculos aprovados do catálogo servem como
+sugestão, não como bloqueio: o comprador pode pesquisar e selecionar qualquer fornecedor ativo da
+empresa, mesmo que ele ainda não esteja associado aos produtos. Para cada fornecedor incluído
+manualmente, o comprador define os itens que serão enviados naquela rodada; essa escolha não cria nem
+aprova silenciosamente um vínculo permanente no catálogo.
+
+Se o fornecedor ainda não existir no cadastro geral, o seletor permite cadastrá-lo rapidamente com
+nome e WhatsApp e o mantém selecionado depois de salvar. O registro passa a integrar o cadastro geral,
+mas o convite só pode ser enviado com WhatsApp válido, conforme R-218. Essa experiência pertence à
+Fase 2 do fluxo multi-fornecedor e não altera o pedido legado de fornecedor único.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
