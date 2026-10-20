@@ -453,8 +453,8 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         nome: novoColaborador.nome,
         cpf: novoColaborador.cpf,
         setorId: novoColaborador.setorId,
-        pdvPadraoId: novoColaborador.pdvPadraoId,
-        turnoPadraoId: novoColaborador.turnoPadraoId
+        pdvPadraoId: novoColaborador.pdvPadraoId ?? null,
+        turnoPadraoId: novoColaborador.turnoPadraoId ?? null
       },
       tx
     );
