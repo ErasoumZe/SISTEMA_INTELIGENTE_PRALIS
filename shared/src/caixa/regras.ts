@@ -108,7 +108,9 @@ export type TotaisContaCentavos = {
   transferenciasPendentes?: number;
   // Correcao administrativa imutavel, registrada em ajustes_contas. Nao e venda nem transferencia;
   // existe para que a projecao do saldo possa ser reconciliada sem apagar o historico anterior.
-  ajustes: number;
+  // Opcional por compatibilidade: consumidores anteriores a ajustes_contas continuam com
+  // saldo idêntico até que exista um lançamento administrativo para a conta.
+  ajustes?: number;
   despesas: number;
   retiradas: number;
   mercadorias: number;
@@ -120,7 +122,7 @@ export function saldoContaCentavos(saldoInicialCentavos: number, totais: TotaisC
     totais.vendas +
     totais.vendasRoteadas +
     totais.transferenciasEntrada +
-    totais.ajustes -
+    (totais.ajustes ?? 0) -
     totais.transferenciasSaida -
     totais.despesas -
     totais.retiradas -

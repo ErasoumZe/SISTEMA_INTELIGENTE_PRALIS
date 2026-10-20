@@ -55,6 +55,12 @@ describe("saldoContaCentavos (D8)", () => {
     expect(deCentavos(saldoContaCentavos(paraCentavos(200), resumo))).toBe(270);
   });
 
+  it("soma o ajuste administrativo sem reescrever o fundo", () => {
+    const saldo = saldoContaCentavos(paraCentavos(100), totais({ ajustes: paraCentavos(-35) }));
+
+    expect(deCentavos(saldo)).toBe(65);
+  });
+
   it("R-036 desconta a saida pendente uma vez e nao credita o destino", () => {
     const resumo = totais({ transferenciasSaida: paraCentavos(500), transferenciasPendentes: paraCentavos(500) });
     expect(deCentavos(saldoContaCentavos(paraCentavos(10_000), resumo))).toBe(9_500);
