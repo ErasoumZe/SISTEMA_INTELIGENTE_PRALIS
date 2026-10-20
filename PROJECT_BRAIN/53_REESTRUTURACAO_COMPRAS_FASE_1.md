@@ -127,21 +127,14 @@ compartilhado; antes qualquer texto passava e o CHECK do banco respondia 500 sem
 | Tolerância em produto que não é por peso             | Recusada no contrato, em vez de descartada em silêncio; a tela limpa o campo ao desligar "vendido por peso".                                |
 | Número da linha nas mensagens de erro                | Passa a vir do atributo `r` da planilha. Contado por posição, apontava a linha errada sempre que o Excel omitia uma linha vazia.            |
 
-## Decisões que a Fase 2 ainda exige, e que não podem ser inferidas
+## Decisões que a Fase 2 exigia (todas fechadas em 20/10/2026)
 
-Estas não são preferências de implementação: são regras de negócio ausentes ou em conflito. Nenhuma
-linha da Fase 2 deve ser escrita antes delas, e a migration da Fase 2 depende do desenho que elas
-definem.
-
-| Pergunta                                                                                                                                                                                                                                                                                                                                   | De quem |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| **Conflito entre regras aprovadas.** R-218 manda a resposta do fornecedor comprar automaticamente; R-216 diz que "a resposta não confirma o pedido, quem confirma é o Comprador". A R-218 é mais recente e não revoga a R-216 de forma explícita. Qual vale na rodada nova, e com que estado nasce o pedido criado pela compra automática? | José    |
-| **Regra-mãe.** Depois da Fase 2, o Comprador ainda pode criar pedido manual de fornecedor único e enviar cotação por fora da rodada? Se puder, ficam dois caminhos vivos para pedir ao fornecedor, que é o que o AGENTS §4.1 proíbe. Se não, o botão "Novo pedido" sai com a flag ligada.                                                  | José    |
-| **Prazo da rodada.** R-216 fixa "fim do 2º dia útil" em fuso fixo; a 0060 criou prazo em horas por empresa; a tela promete alteração por rodada. Qual vence quando a empresa configurou, qual vale quando não configurou, e o fuso da empresa passa a valer em todo o sistema ou só na rodada?                                             | José    |
-| **Frete e acréscimos.** R-218 inclui os dois no custo final comparado com a base. O fornecedor informa frete por rodada e o sistema rateia entre os itens dele pelo maior resto, como o desconto geral da R-216? Frete entra na base vigente? É fórmula de dinheiro.                                                                       | Rodrigo |
-| **Fechamento da rodada.** Quem fecha e quando: no vencimento do prazo ou por ato do comprador? Item sem resposta, ou só com resposta acima da base, fica aberto, vai para aprovação manual, ou encerra sem compra?                                                                                                                         | Rodrigo |
-| **Contraposta.** R-218 cita "aprovação/contraproposta" sem definir o mecanismo: vai ao fornecedor por novo link, ele responde de novo na mesma rodada, e quantas voltas?                                                                                                                                                                   | Rodrigo |
-| **O que o fornecedor vê.** Hoje ele vê o último valor pago a ele mesmo. Na rodada nova ele continua vendo isso, não vê nada, ou vê também o preço-base? Mostrar a base é entregar o preço-alvo da compra automática.                                                                                                                       | Rodrigo |
-| **Separação × conferência.** R-218 cria "quantidade efetiva na separação" e R-213 já tem "quantidade conferida no recebimento". São dois números distintos? Quem registra a separação, com qual permissão, e a tolerância compara pedido × separação, pedido × conferência, ou os dois?                                                    | José    |
-| **Estados e permissões.** Não existe ciclo definido para solicitação, rodada, convite e resposta, nem quem pode criar solicitação ou abrir rodada. Reusa `pedidos_criar` ou nasce permissão própria?                                                                                                                                       | José    |
-| **Fornecedor "ativo".** R-219 fala em "qualquer fornecedor ativo da empresa", mas `fornecedores` não tem coluna de situação. Ativo significa "existe na empresa", ou a Fase 2 precisa da coluna — que é migration?                                                                                                                         | José    |
+As dez perguntas que este documento listava como ausentes ou em conflito foram decididas por José em
+20/10/2026 e viraram a regra **R-221** (documento 19) e o contrato completo no **documento 54**. Em
+resumo: a compra automática é pré-autorização pelo preço-base (revoga parcialmente a R-216); o pedido
+manual vira rodada de um fornecedor (fecha a regra-mãe); prazo em horas por empresa com fallback de 2
+dias úteis; fuso da empresa só em Compras; frete rateado só sobre os itens livres; fechamento no
+vencimento com fila de decisão; contraproposta versionada; o fornecedor vê só o próprio último valor;
+separação e recebimento são números distintos; permissões reusam `pedidos_criar`/`pedidos_editar` mais
+`compras_excecao_aprovar`; fornecedor ganha situação ativo/inativo. Nada da Fase 2 foi implementado
+ainda: cada migration continua sendo um gate de SQL aprovado antes do arquivo.

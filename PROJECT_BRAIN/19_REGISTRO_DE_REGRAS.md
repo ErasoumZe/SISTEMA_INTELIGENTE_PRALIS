@@ -1211,6 +1211,12 @@ O link vale até o **fim do 2º dia útil** seguinte ao envio, no fuso do negóc
 
 **Enviado** só nasce da geração do link e **Retornado** só da resposta do fornecedor; a troca manual de situação ficou restrita a confirmar ou cancelar. Gerar novo link revoga o anterior; confirmar ou cancelar o pedido também encerra o link. A resposta não confirma o pedido nem mexe em estoque (R-208): quem confirma é o Comprador.
 
+> **Revogação parcial (R-221, 20/10/2026).** Na rodada multi-fornecedor, a cláusula "quem confirma é
+> o Comprador" vale apenas **fora** do envelope pré-autorizado. Item cujo custo final seja menor ou
+> igual ao preço-base nasce comprado e confirmado pela própria resposta do fornecedor, sem ato do
+> Comprador. A resposta continua não mexendo em estoque (R-213): recebimento físico é a única entrada.
+> O desenho do link e do token desta regra permanece inteiro na rodada.
+
 O token tem 256 bits, viaja no fragmento da URL e no cabeçalho `x-cotacao-token`, nunca em caminho ou query, e só o hash SHA-256 fica no banco — o mesmo desenho da ficha pública de admissão. O transporte por `wa.me` continua até a integração oficial da Meta (documento 51), que troca só o envio, não o formulário.
 
 **Em aberto para decisão:** fornecedor que só responde por telefone hoje não tem como o Comprador registrar a resposta, porque `Enviado → Confirmado` foi retirado antes desta regra; mostrar o último valor pago ao fornecedor pode ancorar o preço dele para cima ou para baixo.
@@ -1285,6 +1291,36 @@ Decisões da mesma rodada, para o custo não entrar errado em silêncio: custo *
 custo acima de dez dígitos inteiros não cabe na coluna e também vira pendência; e produto **inativo**
 fica fora do pareamento, para não dar preço-base a item descontinuado nem criar ambiguidade falsa com
 o produto ativo de mesma descrição.
+
+### R-221 — Rodada de cotação multi-fornecedor: as 14 decisões (José, 20/10/2026)
+
+Fecha os conflitos e as ausências de regra que o documento 53 listava como pendentes para a Fase 2. O
+contrato completo, com entidades, máquinas de estado, concorrência e ordem de implementação, vive no
+**documento 54**. As decisões, em uma linha cada:
+
+1. **Compra automática é pré-autorização.** Custo final ≤ preço-base compra e confirma no envio, sem o
+   Comprador; acima da base ou sem base vai para decisão. Revoga parcialmente a R-216.
+2. **Um mecanismo só:** o pedido manual de fornecedor único vira rodada de um fornecedor; o segundo
+   caminho de compra morre (regra-mãe).
+3. **Prazo:** horas por empresa quando configurado, senão os 2 dias úteis da R-216; sobrescrevível por
+   rodada.
+4. **Fuso da empresa vale só em Compras;** Caixa e dia de negócio seguem `America/Sao_Paulo` fixo.
+5. **Frete:** um valor por proposta, rateado pelo maior resto **só sobre os itens livres no instante do
+   envio**; entra no custo comparado com a base e na base vigente.
+6. **Fechamento no vencimento:** comprado fica comprado, o resto cai em fila de decisão, a solicitação
+   fica parcialmente comprada.
+7. **Contraproposta versionada,** mesmo token reaberto, nada sobrescrito, sem limite além do prazo.
+8. **O fornecedor vê só o último valor pago a ele;** nunca concorrente, nunca a base. Isolamento é
+   invariante de tipo, não disciplina.
+9. **Separação e recebimento são dois números;** só o recebimento conferido move estoque (R-213).
+10. **Permissões:** solicitação reusa `pedidos_criar`, rodada `pedidos_editar`, exceção acima da base é
+    `compras_excecao_aprovar` (nova), recebimento `pedidos_aprovar`.
+11. **Fornecedor ganha situação ativo/inativo;** WhatsApp opcional no cadastro, obrigatório para
+    convidar.
+12. **Base no fechamento = só o custo de quem venceu,** não o menor de todas as propostas.
+13. **Cancelar compra automática não re-licita** o item na mesma rodada; vira nova solicitação.
+14. **Freio:** aviso no sino a cada compra automática **mais** teto de valor por rodada que a
+    interrompe.
 
 ## §4 · Como isto deixa de ser mais um documento
 
