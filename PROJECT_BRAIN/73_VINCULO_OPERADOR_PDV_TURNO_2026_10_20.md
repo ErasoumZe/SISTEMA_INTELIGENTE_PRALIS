@@ -1,7 +1,7 @@
 # 73 — Vínculo obrigatório de operador, PDV e turno
 
-**Data:** 20/10/2026  
-**Status:** implementado em branch; aguarda validação completa e PR.  
+**Data:** 20/10/2026
+**Status:** implementado em branch; aguarda validação completa e PR.
 **Branch:** `feat/caixa-vinculo-pdv-turno-20261020`
 
 ## Decisão operacional
