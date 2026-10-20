@@ -109,7 +109,7 @@ describe("caixa integration", () => {
     expect(resposta.json()).toMatchObject({ data: { caixaAberto: { id: idsTeste.caixaAberto, status: "aberto" } } });
   });
 
-  it("Deve_RecusarSegundoCaixaAberto_Quando_OperadorJaTemOutroPdv", async () => {
+  it("Deve_RecusarSegundoCaixaAberto_Quando_OperadorJaTemCaixaNoMesmoPdv", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -117,7 +117,7 @@ describe("caixa integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
-        pdvId: idsTeste.pdvLivre,
+        pdvId: idsTeste.pdvA,
         usuarioCaixaId: usuarioAdminId,
         maquininhaId: randomUUID(),
         lacreAbertura: "TESTE-SEGUNDO-CAIXA",
@@ -673,7 +673,7 @@ describe("caixa integration", () => {
 
     assertProblem(pdvInvalido, 400);
     assertProblem(pdvJaAberto, 400);
-    expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV vinculado/i);
+    expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV.*encontrado/i);
     expect(json<{ title: string }>(pdvJaAberto).title).toMatch(/abertura.*outro caixa/i);
   });
 
