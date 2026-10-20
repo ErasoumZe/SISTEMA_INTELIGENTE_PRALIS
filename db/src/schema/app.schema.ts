@@ -492,7 +492,6 @@ export const colaboradores = pgTable(
     cpf: text("cpf"),
     setorId: uuid("setor_id").references(() => setores.id),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
-    // Turno habitual do colaborador — pre-seleciona o turno na abertura do caixa (editavel no ato).
     // Vinculo operacional do Caixa. Quando preenchidos, PDV e turno nao sao escolhas do operador na
     // abertura: a sessao abre exclusivamente o posto e o turno configurados pelo administrador.
     pdvPadraoId: uuid("pdv_padrao_id").references(() => pdvs.id, { onDelete: "set null" }),

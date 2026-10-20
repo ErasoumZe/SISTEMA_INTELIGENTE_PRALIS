@@ -45,7 +45,14 @@ describe("B-01 · criacao de usuario de Caixa", () => {
   // escolhe "novo colaborador" (shared/src/cadastros/index.ts).
   function payloadTela(
     email: string,
-    opcoes: { senha?: string; cpf?: string | null; colaboradorId?: string; empresaId?: string } = {}
+    opcoes: {
+      senha?: string;
+      cpf?: string | null;
+      colaboradorId?: string;
+      empresaId?: string;
+      pdvPadraoId?: string | null;
+      turnoPadraoId?: string | null;
+    } = {}
   ) {
     const empresaId = opcoes.empresaId ?? idsTeste.empresaA;
     const base = {
@@ -63,7 +70,9 @@ describe("B-01 · criacao de usuario de Caixa", () => {
         nome: "Operador de Caixa B01",
         cpf: opcoes.cpf ?? null,
         setorId: idsTeste.setorA,
-        cargoId: idsTeste.cargoCaixa
+        cargoId: idsTeste.cargoCaixa,
+        pdvPadraoId: opcoes.pdvPadraoId ?? null,
+        turnoPadraoId: opcoes.turnoPadraoId ?? null
       }
     };
   }
@@ -147,6 +156,38 @@ describe("B-01 · criacao de usuario de Caixa", () => {
       [idsTeste.empresaA, "11144477735"]
     );
     expect(colaboradores).toHaveLength(1);
+  });
+
+  it("vincula o novo operador ao PDV e turno da propria empresa", async () => {
+    const turno = await contexto.app.inject({
+      method: "POST",
+      url: "/api/turnos",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Turno usuario Caixa B01", horaInicio: "06:00", horaFim: "14:00" }
+    });
+    expect(turno.statusCode, turno.body).toBe(201);
+    const turnoId = json<{ data: { id: string } }>(turno).data.id;
+    const email = "b01.caixa.pdv-turno@padaria.local";
+
+    const resposta = await criarUsuario(payloadTela(email, { pdvPadraoId: idsTeste.pdvLivre, turnoPadraoId: turnoId }));
+    expect(resposta.statusCode, resposta.body).toBe(201);
+
+    const vinculo = await consultarUm<{ pdv_padrao_id: string | null; turno_padrao_id: string | null }>(
+      `select c.pdv_padrao_id, c.turno_padrao_id
+       from colaboradores c
+       join "user" u on u.id = c.usuario_id
+       where u.email = $1`,
+      [email]
+    );
+    expect(vinculo).toEqual({ pdv_padrao_id: idsTeste.pdvLivre, turno_padrao_id: turnoId });
+  });
+
+  it("recusa vinculo de Caixa incompleto antes de criar o usuario", async () => {
+    const email = "b01.caixa.vinculo-incompleto@padaria.local";
+    const resposta = await criarUsuario(payloadTela(email, { pdvPadraoId: idsTeste.pdvLivre }));
+    expect(resposta.statusCode, resposta.body).toBe(400);
+    expect(resposta.body).toContain("PDV e turno juntos");
+    expect(await contarUsuarios(email)).toBe(0);
   });
 
   it("4+5 · o usuario criado autentica e a sessao traz empresa, colaborador, cargo e permissoes", async () => {
