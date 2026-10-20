@@ -20,10 +20,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste } from "../../setup/contexto.js";
+import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
   consultarTodos,
+  executarSql,
   esperarCadeiaDeBloqueio,
   fecharBloqueador,
   json,
@@ -434,6 +435,15 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
   it("quem NAO pode ver contas recebe codigo e mensagem, e nenhum numero de saldo", async () => {
     const origem = await criarConta("R165 detalhe restrito", 10);
     const destino = await criarConta("R165 detalhe restrito destino", 0);
+    // Tesouraria agora ve contas para ajustar saldo. Para provar a borda de segurança, retiramos
+    // somente essa permissão desta sessão de teste: ela continua podendo criar transferência,
+    // mas não pode receber nenhum número do saldo da conta de origem.
+    await executarSql(
+      `update permissoes_usuarios
+         set regras = regras - 'cadastro_contas_visualizar'
+       where usuario_id = (select usuario_id from perfis_usuarios where email = $1)`,
+      [usuariosTeste.tesouraria.email]
+    );
     const cookieTesouraria = await cookieSessao(contexto.app, "tesouraria");
 
     const resposta = await contexto.app.inject({
