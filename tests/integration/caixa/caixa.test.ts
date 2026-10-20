@@ -111,6 +111,12 @@ describe("caixa integration", () => {
 
   it("Deve_RecusarSegundoCaixaAberto_Quando_OperadorJaTemCaixaNoMesmoPdv", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioAdminId,
+      pdvId: idsTeste.pdvA,
+      nome: "Administrador com caixa aberto"
+    });
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
