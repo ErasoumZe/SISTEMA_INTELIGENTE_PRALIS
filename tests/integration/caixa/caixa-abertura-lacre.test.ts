@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import {
+  encerrarCaixaSeedAdminParaTeste,
+  registrarEncerramentoCaixaParaTeste,
+  vincularOperadorAoPdvETurno
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -119,6 +123,12 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     ator = { cookie: cookieAdmin, usuarioId: adminId },
     maquininhaId: Promise<string> | string = criarMaquininhaParaAbertura(pdvId)
   ) {
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: ator.usuarioId,
+      pdvId,
+      nome: `R040 ${lacreAbertura}`
+    });
     const maquininha = await maquininhaId;
     const resposta = await request(ator.cookie, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
@@ -305,6 +315,12 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   it("Deve recusar abertura sem lacre de malote", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r040-sem-lacre");
     const maquininhaId = await criarMaquininhaParaAbertura(pdvId);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: adminId,
+      pdvId,
+      nome: "R040 sem lacre"
+    });
     const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,

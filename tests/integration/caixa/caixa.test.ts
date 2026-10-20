@@ -8,7 +8,8 @@ import {
   abrirCaixaDoOperador,
   criarRetornoValido,
   prepararPayloadFechamentoValido,
-  registrarEncerramentoCaixaParaTeste
+  registrarEncerramentoCaixaParaTeste,
+  vincularOperadorAoPdvETurno
 } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, executarSql, json } from "../../setup/integracao.js";
@@ -419,7 +420,9 @@ describe("caixa integration", () => {
       valor: 120
     });
     expect(canceladaNoDetalhe?.pagamentos).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 })])
+      expect.arrayContaining([
+        expect.objectContaining({ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 })
+      ])
     );
     expect(canceladaNoDetalhe?.produtos).toEqual(
       expect.arrayContaining([
@@ -558,7 +561,10 @@ describe("caixa integration", () => {
     });
     assertProblem(semLacre, 400);
 
-    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId });
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId
+    });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
@@ -628,6 +634,12 @@ describe("caixa integration", () => {
 
   it("Deve_Retornar400_Quando_AbrirCaixaComPdvInvalidoOuOcupado", async () => {
     const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioCaixaId,
+      pdvId: idsTeste.pdvA,
+      nome: "PDV ocupado"
+    });
     const pdvInvalido = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -661,7 +673,7 @@ describe("caixa integration", () => {
 
     assertProblem(pdvInvalido, 400);
     assertProblem(pdvJaAberto, 400);
-    expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV.*encontrado/i);
+    expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV vinculado/i);
     expect(json<{ title: string }>(pdvJaAberto).title).toMatch(/abertura.*outro caixa/i);
   });
 
@@ -684,6 +696,18 @@ describe("caixa integration", () => {
     });
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioCaixaId,
+      pdvId,
+      nome: "Concorrencia caixa"
+    });
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioGerenteId,
+      pdvId,
+      nome: "Concorrencia gerente"
+    });
 
     const payloadCaixa = await prepararAberturaFisica(pdvId, contaId, usuarioCaixaId, "Abertura A");
     const payloadGerente = await prepararAberturaFisica(pdvId, contaId, usuarioGerenteId, "Abertura B");
@@ -727,7 +751,7 @@ describe("caixa integration", () => {
     registrarEncerramentoCaixaParaTeste(caixaAberto.id);
   });
 
-  it("Deve_AbrirApenasUmCaixa_Quando_MesmoOperadorConcorreEmPdvsDiferentes", async () => {
+  it("Deve_AbrirApenasUmCaixa_Quando_MesmoOperadorTentaPdvsDiferentes", async () => {
     const usuarioGerenteId = await usuarioIdPorEmail(usuariosTeste.gerente.email);
 
     const criarPdv = async (sufixo: string) => {
@@ -750,6 +774,12 @@ describe("caixa integration", () => {
     };
 
     const [pdvA, pdvB] = await Promise.all([criarPdv("A"), criarPdv("B")]);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioGerenteId,
+      pdvId: pdvA.pdvId,
+      nome: "Operador concorrente A"
+    });
     const [payloadA, payloadB] = await Promise.all([
       prepararAberturaFisica(pdvA.pdvId, pdvA.contaId, usuarioGerenteId, "Operador concorrente A"),
       prepararAberturaFisica(pdvB.pdvId, pdvB.contaId, usuarioGerenteId, "Operador concorrente B")
@@ -765,7 +795,7 @@ describe("caixa integration", () => {
     const respostas = await Promise.all([abrir(payloadA), abrir(payloadB)]);
     expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([201, 400]);
     const perdedor = respostas.find((resposta) => resposta.statusCode === 400);
-    expect(perdedor?.json()).toMatchObject({ title: "Usuário do caixa ja possui um caixa aberto" });
+    expect(perdedor?.json()).toMatchObject({ title: "Usuário do caixa so pode abrir o PDV vinculado ao seu cadastro" });
 
     const aberto = await consultarUm<{ id: string; total: number }>(
       `select min(id::text) as id, count(*)::int as total

@@ -53,6 +53,43 @@ export function registrarEncerramentoCaixaParaTeste(caixaId: string) {
   });
 }
 
+export async function vincularOperadorAoPdvETurno(
+  app: FastifyInstance,
+  entrada: {
+    cookieAdmin: string;
+    usuarioId: string;
+    pdvId: string;
+    nome: string;
+    empresaId?: string;
+  }
+): Promise<{ turnoId: string; colaboradorId: string }> {
+  const empresaId = entrada.empresaId ?? idsTeste.empresaA;
+  const turno = await app.inject({
+    method: "POST",
+    url: "/api/turnos",
+    headers: { cookie: entrada.cookieAdmin },
+    payload: {
+      empresaId,
+      nome: `Turno ${entrada.nome} ${entrada.pdvId}`,
+      horaInicio: "06:00",
+      horaFim: "14:00"
+    }
+  });
+  expect(turno.statusCode, turno.body).toBe(201);
+  const turnoId = json<{ data: { id: string } }>(turno).data.id;
+  const colaborador = await consultarUm<{ id: string }>(
+    "select id from colaboradores where usuario_id = $1 and empresa_id = $2",
+    [entrada.usuarioId, empresaId]
+  );
+  if (!colaborador) throw new Error(`Colaborador do operador ${entrada.usuarioId} nao encontrado`);
+  await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
+    entrada.pdvId,
+    turnoId,
+    colaborador.id
+  ]);
+  return { turnoId, colaboradorId: colaborador.id };
+}
+
 // Fixture de caixa PROPRIO por caso, extraida do padrao que ja vivia copiado em quatro arquivos
 // (caixa-edicao-concorrente, retaguarda-sem-caixa, retaguarda-pos-fechamento, caixa-venda-integrada).
 //
@@ -333,7 +370,11 @@ export async function prepararPayloadFechamentoValido(
   });
   expect(status.statusCode, status.body).toBe(200);
   const dadosStatus = json<{
-    data: { caixaAberto: { id: string } | null; resumo: { saldo: number } | null; lacreFechamentoReservado: string | null };
+    data: {
+      caixaAberto: { id: string } | null;
+      resumo: { saldo: number } | null;
+      lacreFechamentoReservado: string | null;
+    };
   }>(status).data;
   if (dadosStatus.caixaAberto?.id !== entrada.caixaId) {
     throw new Error(`Fixture de fechamento esperava o caixa ${entrada.caixaId} aberto para o operador`);
@@ -343,7 +384,9 @@ export async function prepararPayloadFechamentoValido(
   }
   const saldo = dadosStatus.resumo?.saldo;
   if (typeof saldo !== "number" || !Number.isFinite(saldo) || saldo < 0) {
-    throw new Error("Fixture de fechamento recebeu saldo fisico invalido; o cenario deve corrigir a saida antes de fechar");
+    throw new Error(
+      "Fixture de fechamento recebeu saldo fisico invalido; o cenario deve corrigir a saida antes de fechar"
+    );
   }
 
   await prepararFechamentoValido(app, entrada);
