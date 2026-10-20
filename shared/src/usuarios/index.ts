@@ -11,7 +11,10 @@ export const usuarioNovoColaboradorPayloadSchema = z.object({
   nome: z.string().min(1),
   cpf: z.string().optional().nullable(),
   setorId: uuidSchema.optional().nullable(),
-  cargoId: uuidSchema
+  cargoId: uuidSchema,
+  // Vínculo operacional opcional para contas globais; obrigatório no momento de abrir Caixa.
+  pdvPadraoId: uuidSchema.optional().nullable(),
+  turnoPadraoId: uuidSchema.optional().nullable()
 });
 
 export const usuarioPayloadSchema = z.object({

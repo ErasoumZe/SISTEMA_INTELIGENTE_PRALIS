@@ -72,6 +72,8 @@ export type CadastroForm = {
   novoColaboradorCpf: string;
   novoColaboradorSetorId: string;
   novoColaboradorCargoId: string;
+  novoColaboradorPdvPadraoId: string;
+  novoColaboradorTurnoPadraoId: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
@@ -227,7 +229,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId
+        cargoId: form.novoColaboradorCargoId,
+        pdvPadraoId: form.novoColaboradorPdvPadraoId || null,
+        turnoPadraoId: form.novoColaboradorTurnoPadraoId || null
       };
     } else {
       // Mesma regra de `empresaIds`: colaborador vazio NAO viaja. A listagem recorta `colaboradorId`

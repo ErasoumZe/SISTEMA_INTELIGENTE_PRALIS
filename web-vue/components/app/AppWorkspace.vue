@@ -1024,11 +1024,13 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "areas_setores") {
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {
-    [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos] = await Promise.all([
+    [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos, dados.pdvs, dados.turnos] = await Promise.all([
       carregarOpcoesCompletas("/api/usuarios", idEmpresa),
       carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
       carregarOpcoesCompletas("/api/setores", idEmpresa),
-      carregarOpcoesCompletas("/api/cargos", idEmpresa)
+      carregarOpcoesCompletas("/api/cargos", idEmpresa),
+      carregarPdvsCompletos(idEmpresa),
+      carregarOpcoesCompletas("/api/turnos", idEmpresa)
     ]);
   } else if (tela === "permissoes") {
     Object.assign(
@@ -1906,10 +1908,14 @@ function atualizarColaboradorUsuario(valor: string) {
     formCadastro.value.colaboradorId = "";
     if (!formCadastro.value.novoColaboradorNome) formCadastro.value.novoColaboradorNome = formCadastro.value.nome;
     formCadastro.value.novoColaboradorSetorId = formCadastro.value.setorId || "";
+    formCadastro.value.novoColaboradorPdvPadraoId = "";
+    formCadastro.value.novoColaboradorTurnoPadraoId = "";
     return;
   }
   formCadastro.value.novoColaborador = false;
   formCadastro.value.colaboradorId = valor;
+  formCadastro.value.novoColaboradorPdvPadraoId = "";
+  formCadastro.value.novoColaboradorTurnoPadraoId = "";
 }
 
 // Acoes assincronas de tema: orquestracao extraida para utils/tema-acoes.ts (factory testavel).

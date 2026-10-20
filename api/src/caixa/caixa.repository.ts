@@ -119,6 +119,7 @@ export async function buscarColaboradorPorUsuarioRepository(
       empresaId: colaboradores.empresaId,
       nome: colaboradores.nome,
       usuarioId: colaboradores.usuarioId,
+      pdvPadraoId: colaboradores.pdvPadraoId,
       turnoPadraoId: colaboradores.turnoPadraoId
     })
     .from(colaboradores)

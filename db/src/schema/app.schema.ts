@@ -493,6 +493,9 @@ export const colaboradores = pgTable(
     setorId: uuid("setor_id").references(() => setores.id),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
     // Turno habitual do colaborador — pre-seleciona o turno na abertura do caixa (editavel no ato).
+    // Vinculo operacional do Caixa. Quando preenchidos, PDV e turno nao sao escolhas do operador na
+    // abertura: a sessao abre exclusivamente o posto e o turno configurados pelo administrador.
+    pdvPadraoId: uuid("pdv_padrao_id").references(() => pdvs.id, { onDelete: "set null" }),
     turnoPadraoId: uuid("turno_padrao_id").references(() => turnos.id, { onDelete: "set null" }),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
@@ -507,7 +510,8 @@ export const colaboradores = pgTable(
       .where(sql`regexp_replace(${table.cpf}, '\\D', '', 'g') ~ '^[0-9]{11}$'`),
     uniqueIndex("colaboradores_usuario_id_unico")
       .on(table.usuarioId)
-      .where(sql`${table.usuarioId} is not null`)
+      .where(sql`${table.usuarioId} is not null`),
+    index("colaboradores_empresa_pdv_padrao_idx").on(table.empresaId, table.pdvPadraoId)
   ]
 );
 
