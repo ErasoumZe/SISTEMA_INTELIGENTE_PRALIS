@@ -71,6 +71,8 @@ const carregandoDossie = ref(false);
 const erroDossie = ref("");
 const dialogoAberto = ref(false);
 const dialogoConferencia = ref(false);
+const dialogoAcaoFutura = ref(false);
+const acaoFutura = ref<"planilha" | "status">("planilha");
 const resultadoConferencia = ref<"conferido" | "divergente">("conferido");
 const observacaoConferencia = ref("");
 const confirmandoConferencia = ref(false);
@@ -199,6 +201,11 @@ function abrirConferencia(resultado: "conferido" | "divergente") {
   observacaoConferencia.value = "";
   erroConferencia.value = "";
   dialogoConferencia.value = true;
+}
+
+function abrirAcaoFutura(acao: "planilha" | "status") {
+  acaoFutura.value = acao;
+  dialogoAcaoFutura.value = true;
 }
 
 async function registrarConferencia() {
@@ -466,6 +473,22 @@ watch(
             ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
             Tesouraria não recalcula valores nem altera lacres.</v-alert
           >
+          <div class="dossie-acoes-futuras mb-3" aria-label="Ações futuras do fechamento">
+            <v-btn
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-file-excel-outline"
+              @click="abrirAcaoFutura('planilha')"
+              >Exportar para planilha</v-btn
+            >
+            <v-btn
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-swap-horizontal-circle-outline"
+              @click="abrirAcaoFutura('status')"
+              >Alteração de status</v-btn
+            >
+          </div>
           <v-card class="conferencia-tesouraria mb-3" variant="outlined">
             <v-card-text class="d-flex flex-wrap align-center justify-space-between ga-3">
               <div>
@@ -709,6 +732,30 @@ watch(
       >
     </v-card>
   </v-dialog>
+
+  <v-dialog v-model="dialogoAcaoFutura" max-width="480">
+    <v-card>
+      <v-card-title>{{ acaoFutura === "planilha" ? "Exportar para planilha" : "Alteração de status" }}</v-card-title>
+      <v-card-text>
+        <template v-if="acaoFutura === 'planilha'">
+          <p>A exportação será disponibilizada em uma próxima entrega.</p>
+          <v-alert type="info" variant="tonal">Nenhum arquivo foi gerado e nenhum dado foi alterado.</v-alert>
+        </template>
+        <template v-else>
+          <p>Esta é apenas uma prévia visual. A alteração ainda não grava nem muda o status deste fechamento.</p>
+          <v-list density="compact" aria-label="Status que serão suportados">
+            <v-list-item title="Conferido" prepend-icon="mdi-check-decagram-outline" />
+            <v-list-item title="Quebra de caixa" prepend-icon="mdi-alert-outline" />
+          </v-list>
+        </template>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0"
+        ><v-spacer /><v-btn color="primary" variant="flat" @click="dialogoAcaoFutura = false"
+          >Entendi</v-btn
+        ></v-card-actions
+      >
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
@@ -737,6 +784,12 @@ watch(
   border-left: 4px solid #22c55e;
   background: rgba(34, 197, 94, 0.07);
 }
+.dossie-acoes-futuras {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .dossie-grid {
   display: grid;
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1.2fr);
@@ -755,6 +808,12 @@ watch(
   }
   .dialogo-dossie__card > .v-card-text {
     padding: 12px !important;
+  }
+  .dossie-acoes-futuras {
+    justify-content: stretch;
+  }
+  .dossie-acoes-futuras :deep(.v-btn) {
+    flex: 1 1 100%;
   }
   .dialogo-dossie :deep(.v-toolbar-title) {
     min-width: 0;
