@@ -38,7 +38,22 @@ export const importarContasSchema = importarEmpresaPayloadSchema;
 export const exportarContaSchema = exportarEmpresaPayloadSchema;
 export const contaParamsSchema = apiIdParamsSchema;
 
+// O operador informa o SALDO DESEJADO. O servidor calcula a diferenca sob lock e grava somente o
+// delta auditavel, sem aceitar valor de ajuste vindo do navegador.
+export const ajusteSaldoContaPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  saldoDesejado: z.coerce.number(),
+  motivo: z.string().trim().min(5).max(500)
+});
+
+export const zerarSaldosContasPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  motivo: z.string().trim().min(5).max(500)
+});
+
 export type ContaPayload = z.infer<typeof contaPayloadSchema>;
 export type ContaComSaldo = z.infer<typeof contaComSaldoSchema>;
 export type ImportarContasPayload = ImportarEmpresaPayload;
 export type ExportarContaPayload = ExportarEmpresaPayload;
+export type AjusteSaldoContaPayload = z.infer<typeof ajusteSaldoContaPayloadSchema>;
+export type ZerarSaldosContasPayload = z.infer<typeof zerarSaldosContasPayloadSchema>;

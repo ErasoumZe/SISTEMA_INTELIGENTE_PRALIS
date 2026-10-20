@@ -33,8 +33,15 @@ const props = withDefaults(
     excluindoId?: string;
     // #152: so o Admin com a permissao dedicada (R-176) enxerga a acao de roteamento.
     podeConfigurarRoteamento?: boolean;
+    // A tela pode acrescentar uma acao de dominio sem copiar a tabela nem criar outro caminho para
+    // editar. Ex.: Ajustar saldo pertence somente a Contas.
+    acoesExtrasExternas?: Array<{
+      label: string;
+      event: string;
+      condicao?: (linha: Record<string, string | undefined>) => boolean;
+    }>;
   }>(),
-  { podeEditar: true }
+  { podeEditar: true, acoesExtrasExternas: () => [] }
 );
 
 const emit = defineEmits<{
@@ -91,7 +98,7 @@ const acoesExtras = computed(() => {
   // O vinculo usuario <-> contas era editado tambem por aqui (botao "Contas" na linha do usuario).
   // Removido: o D8 poe fundo e "quem opera" no cadastro da CONTA, num salvar so. Manter os dois
   // lados seria a segunda rota para o mesmo ato (DoD item 2).
-  return [];
+  return props.acoesExtrasExternas;
 });
 </script>
 
