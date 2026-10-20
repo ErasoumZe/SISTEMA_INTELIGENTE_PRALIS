@@ -765,12 +765,18 @@ function _mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
   return executarEmTransacao(async (tx) => {
+    const colaborador = await buscarColaboradorPorUsuarioRepository(perfil.usuarioId, empresaId, tx);
+    const vinculoOperador =
+      colaborador?.pdvPadraoId && colaborador.turnoPadraoId
+        ? { pdvId: colaborador.pdvPadraoId, turnoId: colaborador.turnoPadraoId }
+        : null;
     const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
     // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
     if (!caixa) {
       return {
         caixaAberto: null,
         resumo: null,
+        vinculoOperador,
         lacreFechamentoReservado: null,
         indisponibilidadeAberta: null,
         entregasPendentes: [],
@@ -783,7 +789,7 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     await revincularVendasAoCaixa(caixa, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
+    return { ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador };
   });
 }
 

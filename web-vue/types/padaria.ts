@@ -338,6 +338,7 @@ export type PlanejamentoRetorno = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+  vinculoOperador?: { pdvId: string; turnoId: string } | null;
   lacreFechamentoReservado: string | null;
   indisponibilidadeAberta?: {
     id: string;

@@ -15,6 +15,8 @@ Uma conta de operador de Caixa representa um único posto de operação em um ú
 
 O PDV e o turno não podem ser escolhidos pelo operador durante a abertura. A interface pode exibir a configuração, mas a API é a autoridade: chamadas diretas fora do vínculo são recusadas.
 
+A tela de abertura lê o vínculo no status do Caixa, preenche os dois campos e os deixa bloqueados. Sem vínculo, ela explica o bloqueio antes do operador preencher o malote.
+
 ## Implementação
 
 O cadastro de usuário novo permite informar `PDV vinculado ao Caixa` e `Turno vinculado ao Caixa` juntos. Ambos são opcionais para usuários globais, porém um sem o outro é inválido.

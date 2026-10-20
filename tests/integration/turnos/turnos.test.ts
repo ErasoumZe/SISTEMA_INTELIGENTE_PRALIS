@@ -51,6 +51,16 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
       turnoId,
       idsTeste.colaboradorAdmin
     ]);
+    const statusAntesDaAbertura = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(statusAntesDaAbertura.statusCode, statusAntesDaAbertura.body).toBe(200);
+    expect(
+      json<{ data: { vinculoOperador?: { pdvId: string; turnoId: string } | null } }>(statusAntesDaAbertura).data
+        .vinculoOperador
+    ).toEqual({ pdvId: idsTeste.pdvLivre, turnoId });
     const maquininha = await contexto.app.inject({
       method: "POST",
       url: "/api/maquininhas",
