@@ -104,7 +104,11 @@ export type Planilha = {
 };
 
 export function abrirPlanilha(caminho: string): Planilha {
-  const buffer = readFileSync(caminho);
+  return abrirPlanilhaBuffer(readFileSync(caminho));
+}
+
+/** Mesma leitura minima para uploads mantidos em memoria; nao grava arquivo temporario. */
+export function abrirPlanilhaBuffer(buffer: Buffer): Planilha {
   const entradas = lerDiretorio(buffer);
   const texto = (nome: string) => {
     const entrada = entradas.get(nome);

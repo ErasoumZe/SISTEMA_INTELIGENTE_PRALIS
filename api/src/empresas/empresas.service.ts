@@ -22,7 +22,9 @@ export async function salvarEmpresa(id: string | null, body: DadosExternos, usua
     ...(id ? { id } : {}),
     nome: dados.nome.trim(),
     cnpj: apenasDigitos(dados.cnpj),
-    matriculaPrefixo: dados.matriculaPrefixo
+    matriculaPrefixo: dados.matriculaPrefixo,
+    fusoHorario: dados.fusoHorario,
+    comprasPrazoRespostaHoras: dados.comprasPrazoRespostaHoras ?? null
   };
 
   if (id) return salvarEmpresaRepository(empresa);

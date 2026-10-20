@@ -100,6 +100,8 @@ export const produtoPayloadSchema = z.object({
   areaEstoque: z.string().trim().max(120).optional().nullable(),
   setorEstoque: z.string().optional().nullable(),
   curvaAbc: z.enum(["A", "B", "C"]).optional().nullable(),
+  quantidadeVariavel: z.boolean().optional().default(false),
+  toleranciaQuantidadePercentual: z.coerce.number().min(0).max(30).optional().nullable(),
   localVenda1: z.string().optional().nullable(),
   localVenda2: z.string().optional().nullable(),
   fotoUrl: z.string().optional().nullable(),
@@ -176,6 +178,8 @@ export interface ProdutoResumo {
   areaEstoque: string | null;
   setorEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  quantidadeVariavel: boolean;
+  toleranciaQuantidadePercentual: string | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
   fotoUrl: string | null;
@@ -233,6 +237,8 @@ export interface ProdutoDetalhe {
   areaEstoque: string | null;
   setorEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  quantidadeVariavel: boolean;
+  toleranciaQuantidadePercentual: string | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;

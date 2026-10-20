@@ -741,6 +741,8 @@ export function formCadastroVazio(): CadastroForm {
     estado: "",
     cnpj: "",
     matriculaPrefixo: "TNP",
+    fusoHorario: "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: "",
     email: "",
     senha: "",
     role: "usuario_comum",
@@ -913,6 +915,8 @@ export function formCadastroDeLinha(
     estado: linha.estado ?? "",
     cnpj: linha.cnpj ?? "",
     matriculaPrefixo: linha.matriculaPrefixo ?? "TNP",
+    fusoHorario: linha.fusoHorario ?? "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: linha.comprasPrazoRespostaHoras ?? "",
     email: linha.email ?? "",
     // SEM default. Este e o formulario de EDICAO: `|| "usuario_comum"` transformava "a linha chegou
     // sem papel" em "o papel dele e comum", e o salvar seguinte REBAIXAVA um usuario_admin sem

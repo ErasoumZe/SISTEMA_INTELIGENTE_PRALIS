@@ -19,6 +19,7 @@ export const usuarioPayloadSchema = z.object({
   empresaIds: z.array(uuidSchema).optional(),
   nome: z.string().min(1),
   email: z.string().email(),
+  whatsapp: z.string().trim().optional().nullable(),
   role: z.enum(rolesUsuario).optional(),
   colaboradorId: uuidSchema.optional(),
   novoColaborador: usuarioNovoColaboradorPayloadSchema.optional(),

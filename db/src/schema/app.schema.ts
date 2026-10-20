@@ -127,9 +127,18 @@ export const empresas = pgTable(
     // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
     // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
     contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
+    fusoHorario: text("fuso_horario").notNull().default("America/Sao_Paulo"),
+    comprasPrazoRespostaHoras: integer("compras_prazo_resposta_horas"),
     criadoEm
   },
-  (table) => [check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`)]
+  (table) => [
+    check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`),
+    check("empresas_fuso_horario_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "empresas_compras_prazo_resposta_horas_check",
+      sql`${table.comprasPrazoRespostaHoras} is null or ${table.comprasPrazoRespostaHoras} > 0`
+    )
+  ]
 );
 export const perfisUsuarios = pgTable(
   "perfis_usuarios",
@@ -138,11 +147,15 @@ export const perfisUsuarios = pgTable(
     empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
     nome: text("nome").notNull(),
     email: text("email").notNull().unique(),
+    whatsapp: text("whatsapp"),
     role: text("role").$type<"usuario_comum" | "usuario_admin" | "admin">().notNull().default("usuario_comum"),
     criadoEm,
     atualizadoEm
   },
-  (table) => [check("perfis_usuarios_role_check", sql`${table.role} in ('usuario_comum', 'usuario_admin', 'admin')`)]
+  (table) => [
+    check("perfis_usuarios_role_check", sql`${table.role} in ('usuario_comum', 'usuario_admin', 'admin')`),
+    check("perfis_usuarios_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,15}$'`)
+  ]
 );
 
 export const permissoesTabela = pgTable("permissoes", {
@@ -373,18 +386,22 @@ export const maquininhas = pgTable(
   ]
 );
 
-export const fornecedores = pgTable("fornecedores", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  documento: text("documento"),
-  // Canal operacional do fornecedor para o pedido de compra. O documento continua sendo fiscal;
-  // WhatsApp nao substitui CNPJ/CPF nem e obrigatorio para fornecedores historicos.
-  whatsapp: text("whatsapp"),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+export const fornecedores = pgTable(
+  "fornecedores",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    documento: text("documento"),
+    // Canal operacional do fornecedor para o pedido de compra. O documento continua sendo fiscal;
+    // WhatsApp nao substitui CNPJ/CPF nem e obrigatorio para fornecedores historicos.
+    whatsapp: text("whatsapp"),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [unique("fornecedores_id_empresa_unica").on(table.id, table.empresaId)]
+);
 
 // SOCIOS / GESTORES (R-047, D1 do PROJECT_BRAIN/17): cadastro MINIMO — nome, empresa, ativo.
 // Nada alem disso de proposito: a planilha confirma que a lista e curta (RET. SOCIOS - RODRIGO,
@@ -625,16 +642,27 @@ export const gruposDespesas = pgTable("grupos_despesas", {
   idImportado: uuid("id_importado")
 });
 
-export const gruposMercadorias = pgTable("grupos_mercadorias", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposMercadorias.id),
-  ativa: boolean("ativa").notNull().default(true),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+export const gruposMercadorias = pgTable(
+  "grupos_mercadorias",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    grupoPaiId: uuid("grupo_pai_id"),
+    ativa: boolean("ativa").notNull().default(true),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [
+    unique("grupos_mercadorias_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "grupos_mercadorias_pai_mesma_empresa_fk",
+      columns: [table.grupoPaiId, table.empresaId],
+      foreignColumns: [table.id, table.empresaId]
+    }).onDelete("restrict")
+  ]
+);
 
 export const gruposRetiradas = pgTable("grupos_retiradas", {
   id: idUuid,
@@ -806,7 +834,7 @@ export const produtos = pgTable(
   {
     id: idUuid,
     empresaId,
-    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id"),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
     codigo: text("codigo"), // codigo externo (PR-XXXX-XXXX gerado quando vazio; ou manual)
@@ -836,6 +864,8 @@ export const produtos = pgTable(
     areaEstoque: text("area_estoque"),
     setorEstoque: text("setor_estoque"),
     curvaAbc: text("curva_abc").$type<"A" | "B" | "C" | null>(),
+    quantidadeVariavel: boolean("quantidade_variavel").notNull().default(false),
+    toleranciaQuantidadePercentual: numeric("tolerancia_quantidade_percentual", { precision: 5, scale: 2 }),
     // Locais de venda e foto
     localVenda1: text("local_venda_1"),
     localVenda2: text("local_venda_2"),
@@ -847,11 +877,206 @@ export const produtos = pgTable(
     idImportado: uuid("id_importado")
   },
   (table) => [
+    unique("produtos_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "produtos_grupo_mercadoria_mesma_empresa_fk",
+      columns: [table.grupoMercadoriaId, table.empresaId],
+      foreignColumns: [gruposMercadorias.id, gruposMercadorias.empresaId]
+    }).onDelete("restrict"),
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
     uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
     check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
     check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`),
-    check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`)
+    check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),
+    check(
+      "produtos_quantidade_variavel_tolerancia_check",
+      sql`(${table.quantidadeVariavel} = false and ${table.toleranciaQuantidadePercentual} is null) or (${table.quantidadeVariavel} = true and ${table.toleranciaQuantidadePercentual} between 0 and 30)`
+    )
+  ]
+);
+
+export const fornecedoresProdutos = pgTable(
+  "fornecedores_produtos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    status: text("status").$type<"pendente" | "aprovado" | "rejeitado">().notNull().default("pendente"),
+    origem: text("origem").$type<"compras" | "fornecedor">().notNull(),
+    precoOfertado: numeric("preco_ofertado", { precision: 14, scale: 4 }),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    aprovadoPor: text("aprovado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    aprovadoEm: timestamp("aprovado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("fornecedores_produtos_empresa_fornecedor_produto_unico").on(
+      table.empresaId,
+      table.fornecedorId,
+      table.produtoId
+    ),
+    foreignKey({
+      name: "fornecedores_produtos_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "fornecedores_produtos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    check("fornecedores_produtos_status_check", sql`${table.status} in ('pendente', 'aprovado', 'rejeitado')`),
+    check("fornecedores_produtos_origem_check", sql`${table.origem} in ('compras', 'fornecedor')`),
+    check("fornecedores_produtos_preco_check", sql`${table.precoOfertado} is null or ${table.precoOfertado} >= 0`),
+    index("fornecedores_produtos_empresa_status_idx").on(table.empresaId, table.status),
+    index("fornecedores_produtos_fornecedor_idx").on(table.fornecedorId)
+  ]
+);
+
+export const fornecedoresProdutosEventos = pgTable(
+  "fornecedores_produtos_eventos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorProdutoId: uuid("fornecedor_produto_id")
+      .notNull()
+      .references(() => fornecedoresProdutos.id, { onDelete: "cascade" }),
+    statusAnterior: text("status_anterior").$type<"pendente" | "aprovado" | "rejeitado">(),
+    statusNovo: text("status_novo").$type<"pendente" | "aprovado" | "rejeitado">().notNull(),
+    precoOfertado: numeric("preco_ofertado", { precision: 14, scale: 4 }),
+    atorTipo: text("ator_tipo").$type<"usuario" | "fornecedor" | "sistema">().notNull(),
+    usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    observacao: text("observacao"),
+    criadoEm
+  },
+  (table) => [
+    check(
+      "fornecedores_produtos_eventos_status_anterior_check",
+      sql`${table.statusAnterior} is null or ${table.statusAnterior} in ('pendente', 'aprovado', 'rejeitado')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_status_novo_check",
+      sql`${table.statusNovo} in ('pendente', 'aprovado', 'rejeitado')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_ator_tipo_check",
+      sql`${table.atorTipo} in ('usuario', 'fornecedor', 'sistema')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_usuario_check",
+      sql`(${table.atorTipo} = 'usuario' and ${table.usuarioId} is not null) or (${table.atorTipo} <> 'usuario')`
+    ),
+    index("fornecedores_produtos_eventos_vinculo_criado_idx").on(table.fornecedorProdutoId, table.criadoEm)
+  ]
+);
+
+export const comprasImportacoesPrecoBase = pgTable(
+  "compras_importacoes_preco_base",
+  {
+    id: idUuid,
+    empresaId,
+    nomeArquivo: text("nome_arquivo").notNull(),
+    hashArquivo: text("hash_arquivo").notNull(),
+    status: text("status").$type<"analisada" | "aplicada" | "cancelada">().notNull().default("analisada"),
+    totalLinhas: integer("total_linhas").notNull(),
+    totalCorrespondencias: integer("total_correspondencias").notNull().default(0),
+    totalAmbiguidades: integer("total_ambiguidades").notNull().default(0),
+    totalNaoEncontrados: integer("total_nao_encontrados").notNull().default(0),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    aplicadoPor: text("aplicado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm,
+    aplicadoEm: timestamp("aplicado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("compras_importacoes_preco_base_empresa_hash_unico").on(table.empresaId, table.hashArquivo),
+    check(
+      "compras_importacoes_preco_base_status_check",
+      sql`${table.status} in ('analisada', 'aplicada', 'cancelada')`
+    ),
+    check(
+      "compras_importacoes_preco_base_totais_check",
+      sql`${table.totalLinhas} >= 0 and ${table.totalCorrespondencias} >= 0 and ${table.totalAmbiguidades} >= 0 and ${table.totalNaoEncontrados} >= 0`
+    ),
+    index("compras_importacoes_preco_base_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+export const comprasImportacoesPrecoBaseItens = pgTable(
+  "compras_importacoes_preco_base_itens",
+  {
+    id: idUuid,
+    importacaoId: uuid("importacao_id")
+      .notNull()
+      .references(() => comprasImportacoesPrecoBase.id, { onDelete: "cascade" }),
+    numeroLinha: integer("numero_linha").notNull(),
+    codigoInformado: text("codigo_informado"),
+    eanInformado: text("ean_informado"),
+    descricaoInformada: text("descricao_informada").notNull(),
+    descricaoNormalizada: text("descricao_normalizada").notNull(),
+    valorInformado: numeric("valor_informado", { precision: 14, scale: 4 }).notNull(),
+    produtoId: uuid("produto_id").references(() => produtos.id, { onDelete: "restrict" }),
+    resultado: text("resultado").$type<"correspondencia" | "ambiguidade" | "nao_encontrado" | "invalido">().notNull(),
+    detalhe: text("detalhe"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("compras_importacoes_preco_base_itens_importacao_linha_unica").on(table.importacaoId, table.numeroLinha),
+    check("compras_importacoes_preco_base_itens_linha_check", sql`${table.numeroLinha} > 0`),
+    check("compras_importacoes_preco_base_itens_valor_check", sql`${table.valorInformado} >= 0`),
+    check(
+      "compras_importacoes_preco_base_itens_resultado_check",
+      sql`${table.resultado} in ('correspondencia', 'ambiguidade', 'nao_encontrado', 'invalido')`
+    ),
+    index("compras_importacoes_preco_base_itens_importacao_resultado_idx").on(table.importacaoId, table.resultado)
+  ]
+);
+
+export const produtosPrecosBase = pgTable(
+  "produtos_precos_base",
+  {
+    id: idUuid,
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    valor: numeric("valor", { precision: 14, scale: 4 }).notNull(),
+    origem: text("origem").$type<"importacao" | "rodada">().notNull(),
+    importacaoItemId: uuid("importacao_item_id").references(() => comprasImportacoesPrecoBaseItens.id, {
+      onDelete: "restrict"
+    }),
+    referenciaExterna: text("referencia_externa"),
+    validoDesde: timestamp("valido_desde", { withTimezone: true }).notNull().defaultNow(),
+    validoAte: timestamp("valido_ate", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      name: "produtos_precos_base_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check("produtos_precos_base_valor_check", sql`${table.valor} >= 0`),
+    check("produtos_precos_base_origem_check", sql`${table.origem} in ('importacao', 'rodada')`),
+    check(
+      "produtos_precos_base_origem_referencia_check",
+      sql`(${table.origem} = 'importacao' and ${table.importacaoItemId} is not null) or (${table.origem} = 'rodada' and ${table.referenciaExterna} is not null)`
+    ),
+    check(
+      "produtos_precos_base_validade_check",
+      sql`${table.validoAte} is null or ${table.validoAte} > ${table.validoDesde}`
+    ),
+    uniqueIndex("produtos_precos_base_atual_unico_idx")
+      .on(table.empresaId, table.produtoId)
+      .where(sql`${table.validoAte} is null`),
+    index("produtos_precos_base_empresa_produto_historico_idx").on(table.empresaId, table.produtoId, table.validoDesde)
   ]
 );
 

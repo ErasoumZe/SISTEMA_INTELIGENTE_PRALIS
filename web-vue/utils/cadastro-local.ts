@@ -181,6 +181,7 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
           empresaId: empresaIds[0] ?? empresaAtual,
           nome: form.nome,
           email: form.email,
+          whatsapp: form.whatsapp,
           role: form.role || usuarioAtual?.role,
           colaboradorId: form.colaboradorId,
           setorId: colaborador?.setorId ?? null,

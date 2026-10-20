@@ -1,5 +1,7 @@
 # 48 — Compras: as decisões que ainda travam o módulo
 
+> **Atualização de 20/10/2026:** os bloqueios deste documento foram decididos na R-218 e no documento 53. Este arquivo permanece como histórico do estado anterior; não deve mais ser usado como regra vigente.
+
 > Escrito em 13/10/2026, depois da prova funcional ponta a ponta do módulo Compras no navegador.
 > **Nada aqui foi implementado.** Este documento existe para que José e Rodrigo decidam; enquanto a
 > decisão não vier, o código não inventa regra.

@@ -17,7 +17,9 @@ export type ContextoCompras = {
 };
 
 /** Abre um contexto de API autenticado e descobre a empresa ativa do perfil. */
-export async function abrirContextoCompras(usuario = USUARIOS.compras): Promise<ContextoCompras> {
+export async function abrirContextoCompras(
+  usuario: { email: string; senha: string } = USUARIOS.compras
+): Promise<ContextoCompras> {
   const api = await request.newContext({ baseURL: API_URL });
   const login = await api.post("/api/auth/sign-in/email", {
     data: { email: usuario.email, password: usuario.senha }

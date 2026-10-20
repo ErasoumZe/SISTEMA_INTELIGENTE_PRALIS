@@ -1228,10 +1228,34 @@ quantidade de ocorrências. Alterar uma série oferece **somente esta ocorrênci
 futuras**; cancelar uma ocorrência não cancela as demais.
 
 Uma ocorrência recorrente nunca confirma compra, envia cotação nem altera estoque por conta
-própria. O ato operacional que a ocorrência deve criar — apenas uma tarefa de revisão ou um pedido
-`A fazer` — segue aguardando confirmação antes da migration. Até essa decisão, os campos simples
+própria. O ato operacional foi decidido em 20/10/2026: ela cria **uma tarefa de revisão**, nunca um
+pedido, compra ou envio automático. Até a fase própria ser implementada, os campos simples
 `pedidos.data_agendada` e `pedidos.recorrencia` continuam sendo o estado implementado, mas não
 representam a regra-alvo completa.
+
+### R-218 — Reestruturação aditiva de Compras (José e Rodrigo, 20/10/2026)
+
+O fluxo-alvo passa a ser **necessidade sem fornecedor → rodada multi-fornecedor → compra consolidada
+por fornecedor → separação → recebimento/NF → estoque e financeiro**. Cada item pode ter vencedor
+distinto. A compra automática acontece no envio da resposta somente para item ainda livre cujo custo
+final, incluindo descontos, frete e acréscimos rateados, seja menor ou igual ao preço-base. Sem base ou
+acima dela, entra em aprovação/contraproposta; resposta tardia só informa referência e nunca troca uma
+compra realizada.
+
+Produto por peso mantém a quantidade solicitada bloqueada e informa quantidade efetiva na separação,
+com tolerância configurável entre 0% e 30%. Fora da faixa exige Compras, Gerência ou Admin. Compra não
+é pagamento: cada NF recebida e conferida cria lançamento próprio, idempotente.
+
+A base inicial vem uma única vez de `ÚLTIMO MENOR CUSTO`, pareada por código/EAN e descrição
+normalizada, com relatório de ambiguidades antes da aplicação. Depois, a base vigente é o menor custo
+final válido da rodada mais recentemente encerrada e pode subir ou cair; o histórico é preservado.
+
+Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Meta Cloud API e só muda
+para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
+
+Implementação é aditiva e protegida por feature flag; legado permanece legível. Cada fase exige SQL
+integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0060 e no
+documento 53; nada foi publicado em produção.
 
 ## §4 · Como isto deixa de ser mais um documento
 

@@ -112,6 +112,28 @@ const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "curr
         :hint="dica('estoqueMax')"
         :disabled="somenteLeitura"
       />
+      <div class="secao__interruptor">
+        <v-switch
+          v-model="form.quantidadeVariavel"
+          color="primary"
+          inset
+          hide-details
+          label="Produto vendido por peso"
+          :disabled="somenteLeitura"
+        />
+      </div>
+      <v-text-field
+        v-model="form.toleranciaQuantidadePercentual"
+        type="number"
+        min="0"
+        max="30"
+        step="0.01"
+        label="Tolerância na separação"
+        suffix="%"
+        :disabled="somenteLeitura || !form.quantidadeVariavel"
+        hint="Fora desta faixa, a quantidade efetiva exigirá aprovação."
+        persistent-hint
+      />
       <v-text-field
         v-model="form.localVenda1"
         label="Local de venda 1"

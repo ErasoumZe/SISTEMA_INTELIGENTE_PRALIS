@@ -84,6 +84,7 @@ export function recortarUsuariosPorEmpresas(
         empresaIds,
         nome: usuario.nome,
         email: usuario.email,
+        whatsapp: usuario.whatsapp,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
         setorId: setorVisivel ? usuario.setorId : null,
         setorNome: setorVisivel ? usuario.setorNome : null,
@@ -288,6 +289,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   // passava na frente da autorizacao e virava oraculo.
   const ator = exigirAtor(perfil);
   const dados = usuarioPayloadSchema.parse(body);
+  const whatsapp = apenasDigitos(dados.whatsapp) ?? null;
   // A autorizacao do ALVO nao mora aqui — ela precisa da transacao das escritas para travar a linha
   // raiz (ver `autorizarEdicaoUsuario`). Na criacao nao ha alvo previo, so o papel pedido.
   if (!id) autorizarCriacaoUsuario(dados.role, ator);
@@ -498,7 +500,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         await atualizarSenhaUsuarioAutenticacaoRepository({ id, passwordHash: await hashPassword(dados.senha) }, tx);
       }
       await upsertPerfilUsuarioRepository(
-        { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, ...(role ? { role } : {}) },
+        { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, whatsapp, ...(role ? { role } : {}) },
         tx
       );
       // Sem substituicao explicita nao se toca em `usuarios_empresas`. Um DELETE+INSERT com a mesma
@@ -566,7 +568,14 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
       await marcarEmailVerificadoRepository(usuario.id, tx);
       await upsertPerfilUsuarioRepository(
-        { usuarioId: usuario.id, empresaId: empresaIdsDoCorpo[0]!, nome, email, ...(role ? { role } : {}) },
+        {
+          usuarioId: usuario.id,
+          empresaId: empresaIdsDoCorpo[0]!,
+          nome,
+          email,
+          whatsapp,
+          ...(role ? { role } : {})
+        },
         tx
       );
       await substituirEmpresasUsuarioRepository(usuario.id, empresaIdsDoCorpo, tx);
