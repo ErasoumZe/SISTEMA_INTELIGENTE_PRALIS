@@ -105,6 +105,7 @@ a necessidade.
 - [70 — Fonte única e execução contínua (19/10/2026)](70_DIRETRIZ_FONTE_UNICA_E_EXECUCAO_2026_10_19.md): diretório canônico, `main` como base, branches/PRs pequenas, revisão por agentes e proibição de retomar implementação por pastas históricas.
 
 - [71 — Auditoria de menu e permissões (19/10/2026)](71_AUDITORIA_MENU_E_PERMISSOES_2026_10_19.md): achados confirmados e fatiamento das próximas PRs de menu/perfis.
+- [72 — Ajustes auditáveis de saldo das contas (20/10/2026)](72_AJUSTE_SALDO_CONTAS_2026_10_20.md): saldo derivado preserva histórico; somente Administrador total e Tesouraria ajustam ou zeram por fato auditável.
 
 ## Documento adicional
 

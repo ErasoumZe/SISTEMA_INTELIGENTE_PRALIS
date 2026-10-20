@@ -1105,6 +1105,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   opcoes.value = dados;
 }
 
+async function recarregarDadosCadastro() {
+  await carregarDadosPagina(empresaId.value, telaAtiva.value);
+}
+
 async function carregarTudo() {
   carregando.value = true;
   erro.value = "";
@@ -2277,6 +2281,7 @@ const pageContext = computed(() => ({
   treeItens: telaAtiva.value === "areas_setores" ? treeAreasSetores() : treeGrupos(),
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
+  recarregarDadosCadastro,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,
@@ -2373,7 +2378,6 @@ function atualizarAoRetomarPagina() {
   void atualizarNotificacoesAutomaticamente();
   void atualizarCaixaAutomaticamente();
 }
-
 
 // A logo só entra depois que a casca autenticada existe. Assim o desfoque revela o painel em vez
 // de revelar o formulário de login, e a marca não reaparece ao trocar de página internamente.
@@ -2542,5 +2546,4 @@ onBeforeUnmount(() => {
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
-
 </template>

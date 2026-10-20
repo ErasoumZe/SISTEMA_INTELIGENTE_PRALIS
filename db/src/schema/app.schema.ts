@@ -203,6 +203,35 @@ export const contas = pgTable(
   ]
 );
 
+// Ajustes administrativos nao reescrevem o historico nem o fundo da conta. Cada linha e um
+// fato financeiro imutavel que entra na mesma projecao do saldo atual; assim a tesouraria pode
+// corrigir um saldo de partida sem apagar venda, transferencia ou lancamento anterior.
+export const ajustesContas = pgTable(
+  "ajustes_contas",
+  {
+    id: idUuid,
+    empresaId,
+    contaId: uuid("conta_id").notNull(),
+    valor: valorMonetario("valor").notNull(),
+    saldoAnterior: valorMonetario("saldo_anterior").notNull(),
+    saldoPosterior: valorMonetario("saldo_posterior").notNull(),
+    motivo: text("motivo").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    check("ajustes_contas_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    foreignKey({
+      columns: [table.contaId, table.empresaId],
+      foreignColumns: [contas.id, contas.empresaId],
+      name: "ajustes_contas_conta_empresa_fk"
+    }).onDelete("restrict"),
+    index("ajustes_contas_conta_criado_em_idx").on(table.contaId, table.criadoEm)
+  ]
+);
+
 // R-167 (#152): metade CADASTRO do roteamento financeiro — para onde vai o dinheiro DESTA forma
 // NESTA empresa. Fica aqui, e nao em tabela nova, porque a chave de roteamento da R-167 e
 // (empresa, forma) e esta tabela JA e exatamente essa chave: um cadastro novo com
