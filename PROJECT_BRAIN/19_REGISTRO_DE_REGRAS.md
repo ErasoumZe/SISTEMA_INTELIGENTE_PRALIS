@@ -1270,6 +1270,22 @@ nome e WhatsApp e o mantém selecionado depois de salvar. O registro passa a int
 mas o convite só pode ser enviado com WhatsApp válido, conforme R-218. Essa experiência pertence à
 Fase 2 do fluxo multi-fornecedor e não altera o pedido legado de fornecedor único.
 
+### R-220 — Leitura do custo da planilha de preço-base é pt-BR (José, 20/10/2026)
+
+Na coluna de custo da planilha de discriminação, a vírgula é o separador decimal: `1,250` é **R$ 1,25**,
+não mil duzentos e cinquenta. A planilha é exportada em pt-BR, e custo com três ou quatro casas é
+legítimo — `produtos_precos_base.valor` é `numeric(14,4)`.
+
+O caso simétrico é recusado em vez de adivinhado: sem vírgula, um ponto seguido de exatamente três
+dígitos (`1.250`) é separador de milhar, e ler isso como 1,25 erraria o preço-base por mil. A
+importação para e nomeia as linhas para correção.
+
+Decisões da mesma rodada, para o custo não entrar errado em silêncio: custo **zero** não é base válida
+(a linha vira pendência e exige correção, porque zero reprovaria toda compra automática da R-218);
+custo acima de dez dígitos inteiros não cabe na coluna e também vira pendência; e produto **inativo**
+fica fora do pareamento, para não dar preço-base a item descontinuado nem criar ambiguidade falsa com
+o produto ativo de mesma descrição.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

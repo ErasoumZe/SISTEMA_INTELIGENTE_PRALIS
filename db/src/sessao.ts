@@ -45,6 +45,21 @@ export function sqlTravarAdmissaoDaPessoa(empresaId: string, cpf: string) {
   return sql`select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext(${empresaId}::text || ':' || ${cpf}::text))`;
 }
 
+/**
+ * Serializa a APLICACAO da carga inicial de preco-base de UMA empresa.
+ *
+ * Por que advisory e nao a trava da linha: a regra ("a carga inicial acontece uma unica vez por
+ * empresa", R-218) depende de um agregado — "existe alguma importacao aplicada?" — e nao da linha
+ * sendo aplicada. O `FOR UPDATE` da importacao escolhida nao impede duas importacoes DIFERENTES de
+ * passarem juntas pela mesma pre-checagem em READ COMMITTED: com produtos disjuntos as duas gravam
+ * e a regra e violada em silencio; com produtos em comum uma morre no indice parcial e devolve 500.
+ *
+ * Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
+ */
+export function sqlTravarPrecoBaseDaEmpresa(empresaId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('compras:preco-base'), hashtext(${empresaId}::text))`;
+}
+
 /** Serializa a escolha da próxima matrícula dentro de uma empresa. */
 export function sqlTravarMatriculaDaEmpresa(empresaId: string) {
   return sql`select pg_advisory_xact_lock(hashtext('dp:matricula'), hashtext(${empresaId}::text))`;

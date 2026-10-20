@@ -546,6 +546,12 @@ export const secoesPermissoes = [
       "cadastro_produtos",
       "estoque_produtos",
       "conferencias_estoque",
+      // Permissoes da fundacao do novo Compras (migration 0060): catalogo fornecedor-produto e
+      // carga do preco-base. Sem um prefixo aqui elas ficavam FORA de todas as secoes, e a tela de
+      // Permissoes nao as mostrava — ninguem conseguia conceder o acesso pela interface, so pelo
+      // cargo de referencia do seed. O gate `domain.test.ts` ("cada permissao visivel em exatamente
+      // um modulo") estava vermelho por isso desde a entrega da Fase 1.
+      "compras_",
       "perdas_sobras",
       "cadastro_fornecedores",
       "cadastro_ficha_tecnica",

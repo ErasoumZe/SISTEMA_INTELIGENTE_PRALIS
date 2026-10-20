@@ -31,13 +31,16 @@ const EMPRESA_B = "empresa-b";
 // nao tem `id` — so `usuarioId`. O tipo mente, e e essa mentira que fazia `upsertOpcao` (que casa por
 // `id`) nunca encontrar a linha do usuario e inserir uma duplicata sem papel. Montar o objeto "certo
 // pelo tipo" esconderia justamente o defeito.
-function usuarioDaApi(over: { empresaIds?: string[]; role?: string; colaboradorId?: string } = {}): Opcao {
+function usuarioDaApi(
+  over: { empresaIds?: string[]; role?: string; colaboradorId?: string; whatsapp?: string } = {}
+): Opcao {
   return {
     usuarioId: "u1",
     empresaId: EMPRESA_A,
     empresaIds: over.empresaIds ?? [EMPRESA_A, EMPRESA_B],
     nome: "Usuario A+B",
     email: "ab@padaria.local",
+    whatsapp: over.whatsapp ?? "11988887777",
     colaboradorId: over.colaboradorId ?? "col-1",
     setorId: "setor-1",
     cargos: ["Gerente"],
@@ -155,6 +158,42 @@ describe("fio real da edicao de usuario", () => {
     const segunda = abrirEdicao();
     expect(segunda.form.role).toBe("usuario_admin");
     expect(cadastroPayload("usuarios", segunda.form, EMPRESA_A)).toMatchObject({ role: "usuario_admin" });
+  });
+
+  // O WhatsApp do usuario (migration 0060) existe para avisar o responsavel; perde-lo em silencio
+  // significa alerta que nunca sai. O payload manda `form.whatsapp || null`, entao form vazio APAGA:
+  // a unica protecao e a linha da grade chegar preenchida.
+  it("preserva o whatsapp ao editar apenas o nome", () => {
+    const { abrirEdicao } = montarFio(usuarioDaApi());
+    const { linha, form } = abrirEdicao();
+
+    expect(linha.whatsapp).toBe("11988887777");
+    // O formulario mostra mascarado; o servidor normaliza para digitos (`apenasDigitos`).
+    expect(form.whatsapp).toBe("(11) 98888-7777");
+
+    form.nome = "Nome novo";
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).toMatchObject({ whatsapp: "(11) 98888-7777" });
+  });
+
+  // Usuario sem telefone continua podendo ser salvo sem telefone — o campo e opcional.
+  it("mantem whatsapp nulo quando o usuario nao tem telefone", () => {
+    const { abrirEdicao } = montarFio(usuarioDaApi({ whatsapp: "" }));
+    const { form } = abrirEdicao();
+
+    expect(form.whatsapp).toBe("");
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).toMatchObject({ whatsapp: null });
+  });
+
+  // Valor NOVO de proposito: `upsertOpcao` mescla o item sobre a linha anterior, entao reenviar o
+  // mesmo numero passaria ainda que o cache nunca gravasse o campo.
+  it("leva o whatsapp recem-salvo para a segunda abertura", () => {
+    const { abrirEdicao, atualizarCadastroLocal } = montarFio(usuarioDaApi());
+
+    const primeira = abrirEdicao();
+    primeira.form.whatsapp = "(11) 97777-6666";
+    expect(atualizarCadastroLocal("usuarios", primeira.form, "u1")).toBe(true);
+
+    expect(abrirEdicao().form.whatsapp).toBe("(11) 97777-6666");
   });
 
   // O papel legado tambem tem de sobreviver ao fio: ele concede retaguarda (podeLancarSemCaixa) e

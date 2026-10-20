@@ -88,7 +88,18 @@ export function documentoEhCpf(valor: string) {
 }
 
 export function mascararWhatsapp(valor: string) {
-  const recebidos = apenasDigitos(valor).slice(0, 13);
+  const todos = apenasDigitos(valor);
+  // Numero que nao tem forma brasileira sai CRU, sem truncar: DDD + numero (10 ou 11 digitos), ou o
+  // mesmo com DDI 55 (12 ou 13). Qualquer outro comprimento era cortado para 11 digitos — invisivel
+  // enquanto o telefone nao voltava para o formulario, mas desde que o WhatsApp do usuario passou a
+  // ser carregado na edicao (migration 0060) o salvar seguinte gravava o numero mutilado em cima do
+  // numero certo. O banco aceita de 10 a 15 digitos.
+  const formaBrasileira =
+    todos.length === 10 ||
+    todos.length === 11 ||
+    ((todos.length === 12 || todos.length === 13) && todos.startsWith("55"));
+  if (todos.length > 2 && !formaBrasileira) return todos;
+  const recebidos = todos;
   const temDdiBrasil = recebidos.startsWith("55") && recebidos.length > 11;
   const digitos = temDdiBrasil ? recebidos.slice(2) : recebidos.slice(0, 11);
   if (digitos.length <= 2) return temDdiBrasil ? `+55 ${digitos}` : digitos;

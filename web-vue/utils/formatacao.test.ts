@@ -106,6 +106,19 @@ describe("formatacao", () => {
     expect(mascararWhatsapp("11")).toBe("11");
   });
 
+  // O banco aceita de 10 a 15 digitos (perfis_usuarios_whatsapp_check). Truncar em 13 era invisivel
+  // enquanto o numero nao voltava ao formulario; com o WhatsApp do usuario carregado na edicao, o
+  // salvar seguinte gravaria o numero mutilado em cima do certo.
+  it("mascararWhatsapp devolve cru o numero que nao cabe no formato brasileiro", () => {
+    // 12 digitos sem DDI 55 (ex.: numero estrangeiro) era cortado para 11 e virava outro telefone.
+    expect(mascararWhatsapp("351912345678")).toBe("351912345678");
+    expect(mascararWhatsapp("12345678901234")).toBe("12345678901234");
+    expect(mascararWhatsapp("123456789012345")).toBe("123456789012345");
+    // O que tem forma brasileira continua mascarado como antes.
+    expect(mascararWhatsapp("5511987654321")).toBe("+55 (11) 98765-4321");
+    expect(mascararWhatsapp("551132654321")).toBe("+55 (11) 3265-4321");
+  });
+
   it("normalizarWhatsappParaLink acrescenta DDI somente ao numero local", () => {
     expect(normalizarWhatsappParaLink("(11) 98765-4321")).toBe("5511987654321");
     expect(normalizarWhatsappParaLink("+55 (11) 98765-4321")).toBe("5511987654321");
