@@ -442,6 +442,20 @@
       "when": 1792548195770,
       "tag": "0062_magical_mother_askani",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792592018633,
+      "tag": "0063_compras_fase2_rodada",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792592041534,
+      "tag": "0064_compras_fase2_drop_referencia",
+      "breakpoints": true
     }
   ]
 }

@@ -316,6 +316,12 @@ describe("migracoes integration", () => {
       // aplicada) e os itens sao reavaliados, entao as duas tabelas tem `atualizado_em`.
       "compras_importacoes_preco_base",
       "compras_importacoes_preco_base_itens",
+      // R-221 (0063): rodada multi-fornecedor. Solicitacao, rodada, convite e proposta mudam de
+      // estado ao longo do ciclo, entao tem `atualizado_em`.
+      "compras_propostas",
+      "compras_rodadas",
+      "compras_rodadas_convites",
+      "compras_solicitacoes",
       "configuracoes_menu_empresas",
       // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
       // aprovado/rejeitado).
