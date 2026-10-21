@@ -155,9 +155,12 @@ export async function criarPedidoConfirmadoRepository(
     // comprador que abriu a rodada (quem pre-autorizou pela base). O EVENTO registra a proposta como
     // autor (criadoPor null), provando que nenhum humano confirmou; o pedido guarda o abridor.
     abertaPor: string;
+    // Excecao aprovada pelo Comprador (E6): o evento passa a ter o aprovador como autor.
+    aprovadoPor?: string | null;
   },
   tx: TransacaoBanco
 ): Promise<string> {
+  const aprovadoPor = input.aprovadoPor ?? null;
   const [pedido] = await tx
     .insert(pedidos)
     .values({
@@ -168,7 +171,9 @@ export async function criarPedidoConfirmadoRepository(
       recorrencia: "nenhuma",
       solicitacaoId: input.solicitacaoId,
       rodadaId: input.rodadaId,
-      observacao: "Compra automatica (pre-autorizada pelo preco-base).",
+      observacao: aprovadoPor
+        ? "Compra aprovada pelo comprador (excecao ao preco-base)."
+        : "Compra automatica (pre-autorizada pelo preco-base).",
       criadoPor: input.abertaPor
     })
     .returning({ id: pedidos.id });
@@ -177,8 +182,8 @@ export async function criarPedidoConfirmadoRepository(
     empresaId: input.empresaId,
     pedidoId: pedido.id,
     status: "confirmado",
-    observacao: "Compra automatica",
-    criadoPor: null,
+    observacao: aprovadoPor ? "Compra aprovada pelo comprador" : "Compra automatica",
+    criadoPor: aprovadoPor,
     propostaId: input.propostaId
   });
   return pedido.id;
@@ -228,6 +233,9 @@ export async function inserirAdjudicacaoRepository(
     quantidade: string;
     custoFinalUnitario: number;
     precoBaseValor: string | null;
+    // 'automatica' nao tem aprovador; 'comprador' exige (constraint compras_adjudicacoes_aprovador_check).
+    modo: "automatica" | "comprador";
+    aprovadoPor: string | null;
   },
   tx: TransacaoBanco
 ): Promise<boolean> {
@@ -240,11 +248,11 @@ export async function inserirAdjudicacaoRepository(
       fornecedorId: input.fornecedorId,
       pedidoId: input.pedidoId,
       pedidoItemId: input.pedidoItemId,
-      modo: "automatica",
+      modo: input.modo,
       quantidade: input.quantidade,
       custoFinalUnitario: String(input.custoFinalUnitario),
       precoBaseValor: input.precoBaseValor,
-      aprovadoPor: null
+      aprovadoPor: input.aprovadoPor
     })
     .onConflictDoNothing({ target: comprasAdjudicacoes.rodadaItemId })
     .returning({ id: comprasAdjudicacoes.id });

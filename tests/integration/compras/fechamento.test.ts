@@ -55,7 +55,10 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     await executarSql("delete from pedidos where empresa_id = $1 and tipo = 'rodada'", [idsTeste.empresaA]);
     await executarSql("delete from notificacoes where tipo = 'compras_decisao_pendente'", []);
     await executarSql("delete from compras_propostas where empresa_id = $1", [idsTeste.empresaA]);
-    // A base de origem 'rodada' aponta para a rodada (restrict): sai antes dela.
+    // Ciclo de restrict: o item da rodada aponta para a base, e a base de origem 'rodada' aponta para a
+    // rodada. Convites e itens saem primeiro; so entao a base, e por fim a rodada.
+    await executarSql("delete from compras_rodadas_convites where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from compras_rodadas_itens where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from produtos_precos_base where empresa_id = $1 and produto_id = any($2)", [
       idsTeste.empresaA,
       [idsTeste.produto, PRODUTO_2]
@@ -216,6 +219,17 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
         rodada.id
       ])
     ).resolves.toBeTruthy();
+
+    // E o sino leva o Comprador a tela de Pedidos, onde mora a fila (so a referencia nao bastava).
+    const sino = await contexto.app.inject({
+      method: "GET",
+      url: `/api/notificacoes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    const aviso = json<{
+      data: Array<{ tipo: string; referenciaId: string; detalhes?: { setor: string; rota: string } }>;
+    }>(sino).data.find((item) => item.tipo === "compras_decisao_pendente" && item.referenciaId === rodada.id);
+    expect(aviso?.detalhes).toMatchObject({ setor: "Compras", rota: "/pedidos" });
   });
 
   it("e idempotente: um segundo tick nao fecha de novo nem troca a base outra vez", async () => {

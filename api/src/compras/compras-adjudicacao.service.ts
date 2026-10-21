@@ -117,7 +117,9 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
           pedidoItemId,
           quantidade: item.quantidade,
           custoFinalUnitario: custo.custoFinalUnitario,
-          precoBaseValor: item.precoBaseValor
+          precoBaseValor: item.precoBaseValor,
+          modo: "automatica",
+          aprovadoPor: null
         },
         tx
       );
