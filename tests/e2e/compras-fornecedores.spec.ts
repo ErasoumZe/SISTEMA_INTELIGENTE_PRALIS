@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { entrar, observarConsole, USUARIOS } from "./apoio.js";
-import { irParaTela } from "./apoio-compras.js";
+import { acharLinhaPaginando, irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(120_000);
 
@@ -24,10 +24,7 @@ test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page })
   await expect(linha).toContainText("(11) 98765-4321");
 
   await page.reload();
-  linha = page.locator("tbody tr").filter({ hasText: nome });
-  // Teto alto: depois do reload a rota volta a ser montada e a listagem so chega depois da sessao;
-  // com o servidor de desenvolvimento frio isso passa dos 15s padrao do expect.
-  await expect(linha).toBeVisible({ timeout: 60_000 });
+  linha = await acharLinhaPaginando(page, nome);
   await linha.getByRole("button", { name: "Editar" }).click();
   dialogo = page.locator(".v-dialog.v-overlay--active");
   await expect(dialogo.getByLabel("Nome", { exact: true })).toHaveValue(nome);
@@ -36,7 +33,7 @@ test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page })
   await dialogo.getByRole("button", { name: "Salvar", exact: true }).click();
 
   await page.reload();
-  await expect(page.locator("tbody tr").filter({ hasText: nomeEditado })).toContainText("(11) 98765-4321", {
+  await expect(await acharLinhaPaginando(page, nomeEditado)).toContainText("(11) 98765-4321", {
     timeout: 60_000
   });
   expect(problemas).toEqual([]);

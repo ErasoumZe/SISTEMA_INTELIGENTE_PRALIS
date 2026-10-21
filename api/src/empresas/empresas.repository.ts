@@ -9,6 +9,8 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
       nome: empresas.nome,
       cnpj: empresas.cnpj,
       matriculaPrefixo: empresas.matriculaPrefixo,
+      fusoHorario: empresas.fusoHorario,
+      comprasPrazoRespostaHoras: empresas.comprasPrazoRespostaHoras,
       contaCofreId: empresas.contaCofreId,
       configuracoesAparencia: empresas.configuracoesAparencia
     })
@@ -18,20 +20,30 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
 }
 
 export async function salvarEmpresaRepository(
-  input: { id?: string; nome: string; cnpj: string | null; matriculaPrefixo: string },
+  input: {
+    id?: string;
+    nome: string;
+    cnpj: string | null;
+    matriculaPrefixo: string;
+    fusoHorario: string;
+    comprasPrazoRespostaHoras: number | null;
+  },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
     await db
       .update(empresas)
-      .set({ nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo })
+      .set({
+        nome: input.nome,
+        cnpj: input.cnpj,
+        matriculaPrefixo: input.matriculaPrefixo,
+        fusoHorario: input.fusoHorario,
+        comprasPrazoRespostaHoras: input.comprasPrazoRespostaHoras
+      })
       .where(eq(empresas.id, input.id));
-    return { id: input.id, nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo };
+    return input;
   }
-  const [criada] = await db
-    .insert(empresas)
-    .values({ nome: input.nome, cnpj: input.cnpj, matriculaPrefixo: input.matriculaPrefixo })
-    .returning({ id: empresas.id });
+  const [criada] = await db.insert(empresas).values(input).returning({ id: empresas.id });
   return criada;
 }
 

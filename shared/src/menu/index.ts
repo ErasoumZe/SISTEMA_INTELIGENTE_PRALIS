@@ -62,7 +62,11 @@ export const idsMenuConfiguraveis = [
 export type IdMenuConfiguravel = (typeof idsMenuConfiguraveis)[number];
 
 /** Filhos representados pela categoria única Lançamentos no menu lateral. */
-export const idsFilhosLancamentos = ["despesas", "mercadorias", "retiradas"] as const satisfies readonly IdMenuConfiguravel[];
+export const idsFilhosLancamentos = [
+  "despesas",
+  "mercadorias",
+  "retiradas"
+] as const satisfies readonly IdMenuConfiguravel[];
 
 /**
  * Paleta sem hex livre: cada cor já possui contraste e variante para tema claro/escuro no web.

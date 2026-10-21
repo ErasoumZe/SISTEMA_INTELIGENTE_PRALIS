@@ -4,6 +4,8 @@ import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
 import PedidoFormDialog from "~/components/pedidos/PedidoFormDialog.vue";
 import PedidoRecebimentoDialog from "~/components/pedidos/PedidoRecebimentoDialog.vue";
 import PedidosFila from "~/components/pedidos/PedidosFila.vue";
+import ComprasFundacaoPainel from "~/components/compras/ComprasFundacaoPainel.vue";
+import { temPermissao } from "@padaria/shared";
 import { usePedidos } from "~/composables/usePedidos";
 import { itemPorTela } from "~/utils/domain";
 
@@ -51,6 +53,22 @@ const {
   linkCotacaoDoDetalhe,
   confirmarRecebimento
 } = usePedidos();
+
+const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+const podeCatalogo = computed(() => temPermissao(permissoesUsuario.value, "compras_catalogo_gerir"));
+const podePrecoBase = computed(() => temPermissao(permissoesUsuario.value, "compras_preco_base_importar"));
+const produtosFundacao = computed(() => Object.values(estoquePorProduto.value));
+const fundacaoHabilitada = ref(false);
+const { apiGet: apiGetFundacao } = useApi();
+onMounted(async () => {
+  try {
+    fundacaoHabilitada.value = (
+      await apiGetFundacao<{ habilitado: boolean }>("/api/compras/fundacao/status")
+    ).habilitado;
+  } catch {
+    fundacaoHabilitada.value = false;
+  }
+});
 </script>
 
 <template>
@@ -74,6 +92,14 @@ const {
         subtitulo="Fluxo único: sugestão, pedido, fornecedor, negociação e recebimento físico."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
+      <ComprasFundacaoPainel
+        v-if="fundacaoHabilitada && (podeCatalogo || podePrecoBase)"
+        :empresa-id="empresaId"
+        :fornecedores="fornecedores"
+        :produtos="produtosFundacao"
+        :pode-catalogo="podeCatalogo"
+        :pode-preco-base="podePrecoBase"
+      />
       <div v-if="podeCriar" class="pedidos-acoes">
         <v-card class="pedidos-acao pedidos-acao--sugestao">
           <v-card-text class="pedidos-acao__corpo">

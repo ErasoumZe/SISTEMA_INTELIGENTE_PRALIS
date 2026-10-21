@@ -246,4 +246,37 @@ test.describe("ciclo de compra", () => {
 
     expect(problemas, problemas.join("\n")).toEqual([]);
   });
+
+  test("pedido cancelado continua acessivel na fila", async ({ page }) => {
+    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const fornecedorNome = `E2E Cancelado ${sufixo}`;
+    const fornecedorId = await criarFornecedor(contexto, fornecedorNome, "11977776666");
+    const produtoId = await criarProdutoDeEstoque(contexto, {
+      descricao: `E2E Produto Cancelado ${sufixo}`,
+      estoqueMin: 1,
+      estoqueMax: 10,
+      setorEstoque: `Deposito Cancelado ${sufixo}`
+    });
+    const criar = await contexto.api.post("/api/pedidos", {
+      data: {
+        empresaId: contexto.empresaId,
+        fornecedorId,
+        recorrencia: "nenhuma",
+        itens: [{ produtoId, quantidade: 1 }]
+      }
+    });
+    expect(criar.status(), await criar.text()).toBe(201);
+    const pedidoId = ((await criar.json()) as { data: { id: string } }).data.id;
+    const cancelar = await contexto.api.post(`/api/pedidos/${pedidoId}/situacao`, { data: { status: "cancelado" } });
+    expect(cancelar.status(), await cancelar.text()).toBe(204);
+
+    await entrar(page, USUARIOS.compras);
+    await irParaTela(page, "/pedidos", "Pedidos");
+    await page.getByRole("tab", { name: /^Cancelado \d+$/u }).click();
+    await campoDeTexto(page, "Buscar fornecedor").fill(fornecedorNome);
+    const linha = page.locator("tbody tr").filter({ hasText: fornecedorNome });
+    await expect(linha).toContainText("Cancelado");
+    await linha.getByRole("button", { name: "Abrir" }).click();
+    await expect(dialogoAberto(page)).toContainText("Cancelado");
+  });
 });

@@ -72,43 +72,66 @@ export const produtoPromocaoSchema = z.object({
   validaAte: z.string().optional().nullable()
 });
 
-export const produtoPayloadSchema = z.object({
-  empresaId: uuidSchema,
-  codigo: z.string().optional().nullable(),
-  codigoBarras: z.string().optional().nullable(),
-  descricao: z.string().min(1),
-  marca: z.string().optional().nullable(),
-  unidadeIndividualId: uuidSchema,
-  quantidadeIndividual: z.coerce.number().positive(),
-  grupoMercadoriaId: uuidSchema.optional().nullable(),
-  conversoes: z.array(produtoConversaoPayloadSchema).default([]),
-  // Como se compra (porte do Pralis): embalagem + preposicao + unidades por caixa + medida de compra.
-  embalagem: embalagemSchema.optional().nullable(),
-  cDe: cDeSchema.optional().nullable(),
-  quantidadeCaixa: z.coerce.number().int().positive().optional().default(1),
-  medidaCompra: medidaCompraSchema.optional().nullable(),
-  // Comercial (por loja) — preco de venda e REFERENCIA de catalogo; margem em fracao (0.30 = 30%).
-  custo: z.coerce.number().min(0).optional().nullable(),
-  margem: z.coerce.number().min(0).optional().nullable(),
-  precoVenda: z.coerce.number().min(0).optional().nullable(),
-  auto: z.boolean().optional().default(false),
-  status: statusProdutoSchema.optional().default("ativo"),
-  tipo: tipoProdutoSchema.optional().default("revenda"),
-  // Parametrizacao de estoque. O saldo e somente leitura e muda por movimentos auditados.
-  estoqueMin: z.coerce.number().min(0).optional().nullable(),
-  estoqueMax: z.coerce.number().min(0).optional().nullable(),
-  areaEstoque: z.string().trim().max(120).optional().nullable(),
-  setorEstoque: z.string().optional().nullable(),
-  curvaAbc: z.enum(["A", "B", "C"]).optional().nullable(),
-  localVenda1: z.string().optional().nullable(),
-  localVenda2: z.string().optional().nullable(),
-  fotoUrl: z.string().optional().nullable(),
-  fiscal: produtoFiscalSchema.optional().nullable(),
-  transformacao: produtoTransformacaoSchema.optional().nullable(),
-  promocoes: z.array(produtoPromocaoSchema).default([]),
-  // Governanca: "cadastrar mesmo assim" — pula a checagem de duplicado (nome/codigo de barras na loja).
-  forcar: z.boolean().optional().default(false)
-});
+export const produtoPayloadSchema = z
+  .object({
+    empresaId: uuidSchema,
+    codigo: z.string().optional().nullable(),
+    codigoBarras: z.string().optional().nullable(),
+    descricao: z.string().min(1),
+    marca: z.string().optional().nullable(),
+    unidadeIndividualId: uuidSchema,
+    quantidadeIndividual: z.coerce.number().positive(),
+    grupoMercadoriaId: uuidSchema.optional().nullable(),
+    conversoes: z.array(produtoConversaoPayloadSchema).default([]),
+    // Como se compra (porte do Pralis): embalagem + preposicao + unidades por caixa + medida de compra.
+    embalagem: embalagemSchema.optional().nullable(),
+    cDe: cDeSchema.optional().nullable(),
+    quantidadeCaixa: z.coerce.number().int().positive().optional().default(1),
+    medidaCompra: medidaCompraSchema.optional().nullable(),
+    // Comercial (por loja) — preco de venda e REFERENCIA de catalogo; margem em fracao (0.30 = 30%).
+    custo: z.coerce.number().min(0).optional().nullable(),
+    margem: z.coerce.number().min(0).optional().nullable(),
+    precoVenda: z.coerce.number().min(0).optional().nullable(),
+    auto: z.boolean().optional().default(false),
+    status: statusProdutoSchema.optional().default("ativo"),
+    tipo: tipoProdutoSchema.optional().default("revenda"),
+    // Parametrizacao de estoque. O saldo e somente leitura e muda por movimentos auditados.
+    estoqueMin: z.coerce.number().min(0).optional().nullable(),
+    estoqueMax: z.coerce.number().min(0).optional().nullable(),
+    areaEstoque: z.string().trim().max(120).optional().nullable(),
+    setorEstoque: z.string().optional().nullable(),
+    curvaAbc: z.enum(["A", "B", "C"]).optional().nullable(),
+    quantidadeVariavel: z.boolean().optional().default(false),
+    // A faixa 0–30 e da R-218. O vinculo com `quantidadeVariavel` e checado depois, no `superRefine` do
+    // schema: o servico descartava a tolerancia em silencio quando o produto nao era de quantidade
+    // variavel, e campo que o cliente manda e o servidor joga fora sem avisar e a mesma classe de
+    // problema que "campo que aparece e nao salva".
+    toleranciaQuantidadePercentual: z.coerce.number().min(0).max(30).optional().nullable(),
+    localVenda1: z.string().optional().nullable(),
+    localVenda2: z.string().optional().nullable(),
+    fotoUrl: z.string().optional().nullable(),
+    fiscal: produtoFiscalSchema.optional().nullable(),
+    transformacao: produtoTransformacaoSchema.optional().nullable(),
+    promocoes: z.array(produtoPromocaoSchema).default([]),
+    // Governanca: "cadastrar mesmo assim" — pula a checagem de duplicado (nome/codigo de barras na loja).
+    forcar: z.boolean().optional().default(false)
+  })
+  .superRefine((dados, contexto) => {
+    // Espelha o CHECK `produtos_quantidade_variavel_tolerancia_check` da migration 0060. Sem isto o
+    // servico silenciosamente trocava a tolerancia por null quando o produto nao era de quantidade
+    // variavel: o cliente mandava 15, o banco guardava nada, e ninguem era avisado.
+    if (
+      !dados.quantidadeVariavel &&
+      dados.toleranciaQuantidadePercentual !== null &&
+      dados.toleranciaQuantidadePercentual !== undefined
+    ) {
+      contexto.addIssue({
+        code: "custom",
+        path: ["toleranciaQuantidadePercentual"],
+        message: "Tolerancia so se aplica a produto vendido por peso"
+      });
+    }
+  });
 
 // As SEIS ordenacoes da listagem. Sao contrato: o banco ordena, nao o navegador.
 export const ordenacaoProdutosSchema = z
@@ -176,6 +199,8 @@ export interface ProdutoResumo {
   areaEstoque: string | null;
   setorEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  quantidadeVariavel: boolean;
+  toleranciaQuantidadePercentual: string | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
   fotoUrl: string | null;
@@ -233,6 +258,8 @@ export interface ProdutoDetalhe {
   areaEstoque: string | null;
   setorEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  quantidadeVariavel: boolean;
+  toleranciaQuantidadePercentual: string | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;

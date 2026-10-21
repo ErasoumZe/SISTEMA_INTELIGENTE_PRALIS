@@ -32,6 +32,10 @@ const envSchema = z.object({
   WEB_ORIGIN_ADICIONAL: z.string().url().optional(),
   PORT: z.coerce.number().default(4100),
   HOST: z.string().default("0.0.0.0"),
+  COMPRAS_NOVO_FLUXO: z
+    .enum(["true", "false"])
+    .default(process.env["NODE_ENV"] === "production" ? "false" : "true")
+    .transform((valor) => valor === "true"),
   // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
   SENTRY_DSN: z.string().url().optional(),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde

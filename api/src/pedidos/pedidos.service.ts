@@ -259,7 +259,13 @@ export async function receberPedido(
         payload.idempotenciaChave,
         tx
       );
-      if (!vencedor || vencedor.pedidoId !== pedidoId) throw new Error("Recebimento nao criado");
+      if (!vencedor) throw new Error("Recebimento nao criado");
+      if (vencedor.pedidoId !== pedidoId) {
+        throw erroValidacao("Chave de recebimento ja usada para outro pedido", "IDEMPOTENCIA_CONFLITO");
+      }
+      if (!mesmaIntencaoRecebimento(vencedor, payload)) {
+        throw erroValidacao("Chave de recebimento reutilizada com dados diferentes", "IDEMPOTENCIA_CONFLITO");
+      }
       return { recebimentoId: vencedor.id, duplicado: true, status: "recebido_parcial" };
     }
 

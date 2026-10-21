@@ -33,6 +33,8 @@ export type CadastroForm = {
   estado: string;
   cnpj: string;
   matriculaPrefixo: string;
+  fusoHorario: string;
+  comprasPrazoRespostaHoras: string;
   email: string;
   senha: string;
   // `""` = papel DESCONHECIDO, e nao "papel padrao". O formulario de edicao e montado da linha da
@@ -130,10 +132,7 @@ export function bloqueioCadastroUsuario(
   // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
   if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
   if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
-  if (
-    form.novoColaborador &&
-    Boolean(form.novoColaboradorPdvPadraoId) !== Boolean(form.novoColaboradorTurnoPadraoId)
-  ) {
+  if (form.novoColaborador && Boolean(form.novoColaboradorPdvPadraoId) !== Boolean(form.novoColaboradorTurnoPadraoId)) {
     return MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO;
   }
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
@@ -145,7 +144,14 @@ export function bloqueioCadastroUsuario(
 }
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
-  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null, matriculaPrefixo: form.matriculaPrefixo };
+  if (tela === "empresas")
+    return {
+      nome: form.nome,
+      cnpj: form.cnpj || null,
+      matriculaPrefixo: form.matriculaPrefixo,
+      fusoHorario: form.fusoHorario,
+      comprasPrazoRespostaHoras: numeroCampoOuNulo(form.comprasPrazoRespostaHoras)
+    };
   // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
   // campo em branco significa "sem fundo", e mandar undefined faria o servidor MANTER o fundo
   // anterior — o admin que apagasse o campo veria o valor voltar sozinho.
@@ -220,6 +226,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     const payload: Record<string, DadosExternos> = {
       nome: form.nome,
       email: form.email,
+      whatsapp: form.whatsapp || null,
       senha: form.senha || undefined,
       // Papel desconhecido NAO vira payload. A tela ja recusa salvar nesse estado
       // (bloqueioCadastroUsuario); aqui e a segunda tranca: omitir o campo faz o servidor manter o

@@ -250,6 +250,22 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
             />
           </v-col>
+          <template v-if="cadastroTela === 'empresas'">
+            <v-col cols="12" md="6">
+              <v-text-field v-model="formCadastro.fusoHorario" label="Fuso horário" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="formCadastro.comprasPrazoRespostaHoras"
+                type="number"
+                min="1"
+                label="Prazo padrão de cotação"
+                suffix="horas"
+                hint="Pode ser alterado em cada rodada."
+                persistent-hint
+              />
+            </v-col>
+          </template>
           <template v-if="cadastroTela === 'clientes'">
             <v-col v-if="documentoEhCpf(formCadastro.documento)" cols="12" md="6">
               <v-text-field v-model="formCadastro.dataNascimento" type="date" label="Data de nascimento" />
@@ -338,6 +354,14 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6"
             ><v-text-field v-model="formCadastro.email" type="email" label="Email"
           /></v-col>
+          <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
+            <v-text-field
+              :model-value="formCadastro.whatsapp"
+              label="WhatsApp para alertas"
+              maxlength="15"
+              @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
+            />
+          </v-col>
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
             <v-select
               v-model="formCadastro.role"

@@ -72,9 +72,26 @@ describe("atualizarCadastroLocal", () => {
 
   it("empresas: upsert em empresas e opcoes.empresas (sem empresaId no item)", () => {
     const { atualizarCadastroLocal, opcoes, empresas } = montarCenario();
-    expect(atualizarCadastroLocal("empresas", form({ nome: "Padaria", cnpj: "123" }), "e1")).toBe(true);
-    expect(empresas).toEqual([{ id: "e1", nome: "Padaria", cnpj: "123" }]);
-    expect(opcoes.empresas).toEqual([{ id: "e1", nome: "Padaria", cnpj: "123" }]);
+    expect(
+      atualizarCadastroLocal(
+        "empresas",
+        form({ nome: "Padaria", cnpj: "123", fusoHorario: "America/Belem", comprasPrazoRespostaHoras: "48" }),
+        "e1"
+      )
+    ).toBe(true);
+    // A configuracao operacional entra no cache junto do nome: a grade que alimenta a PROXIMA
+    // abertura do formulario e esta, e um item sem fuso/prazo fazia o salvar seguinte apagar o que
+    // este acabou de gravar (fio-edicao-empresa.test.ts).
+    const esperado = {
+      id: "e1",
+      nome: "Padaria",
+      cnpj: "123",
+      matriculaPrefixo: "TNP",
+      fusoHorario: "America/Belem",
+      comprasPrazoRespostaHoras: "48"
+    };
+    expect(empresas).toEqual([esperado]);
+    expect(opcoes.empresas).toEqual([esperado]);
     expect(empresas[0]).not.toHaveProperty("empresaId");
   });
 

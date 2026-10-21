@@ -1,5 +1,7 @@
 # 48 — Compras: as decisões que ainda travam o módulo
 
+> **Atualização de 20/10/2026:** os bloqueios deste documento foram decididos na R-218 e no documento 53. Este arquivo permanece como histórico do estado anterior; não deve mais ser usado como regra vigente.
+
 > Escrito em 13/10/2026, depois da prova funcional ponta a ponta do módulo Compras no navegador.
 > **Nada aqui foi implementado.** Este documento existe para que José e Rodrigo decidam; enquanto a
 > decisão não vier, o código não inventa regra.
@@ -55,6 +57,11 @@ disso compraria em cima de saldo que não existe mais na prateleira.
 O campo de recorrência e data lembra o comprador de revisar. Para virar agendador de verdade falta
 decidir: quem é o responsável por cada agenda, qual o aviso (e-mail, WhatsApp, notificação interna),
 o que acontece quando a data passa sem ação, e se a recorrência gera uma nova sugestão sozinha.
+
+**Atualização de 19/10/2026:** a forma temporal foi decidida na R-217 e no documento 52. A agenda
+segue uma série de calendário, com ocorrências independentes; uma atrasada não bloqueia as
+seguintes. Continua pendente somente o ato operacional de cada ocorrência: criar uma tarefa de
+revisão ou criar diretamente um pedido `A fazer`.
 
 ## 6. Compras ↔ Mercadorias/NF-e: vínculo ainda não existe
 

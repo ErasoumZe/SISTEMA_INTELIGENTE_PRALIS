@@ -7,7 +7,13 @@ import { idsTeste } from "../../setup/contexto.js";
 const estrutura = {
   versao: 1 as const,
   secoes: [
-    { id: "operacao", titulo: "Operação", cor: "transferencias", corRgb: { r: 18, g: 76, b: 210 }, ids: ["caixa", "entradas", "transferencias", "conferencias_estoque"] },
+    {
+      id: "operacao",
+      titulo: "Operação",
+      cor: "transferencias",
+      corRgb: { r: 18, g: 76, b: 210 },
+      ids: ["caixa", "entradas", "transferencias", "conferencias_estoque"]
+    },
     { id: "resultados", titulo: "Resultados", ids: ["relatorio_vendas", "relatorio_dre"] }
   ]
 };

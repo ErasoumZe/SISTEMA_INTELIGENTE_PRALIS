@@ -312,7 +312,14 @@ describe("migracoes integration", () => {
       "colaboradores_enderecos",
       "colaboradores_onboarding",
       "colaboradores_vinculos",
+      // R-218 (0060): a analise da carga inicial de preco-base muda de estado (analisada ->
+      // aplicada) e os itens sao reavaliados, entao as duas tabelas tem `atualizado_em`.
+      "compras_importacoes_preco_base",
+      "compras_importacoes_preco_base_itens",
       "configuracoes_menu_empresas",
+      // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
+      // aprovado/rejeitado).
+      "fornecedores_produtos",
       "funcoes_operacionais",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
       "pedidos_cotacoes"

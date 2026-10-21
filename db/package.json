@@ -103,6 +103,11 @@
       "types": "./dist/triggers-manuais.d.ts",
       "development": "./triggers-manuais.ts",
       "default": "./dist/triggers-manuais.js"
+    },
+    "./planilha-xlsx": {
+      "types": "./dist/planilha-xlsx.d.ts",
+      "development": "./planilha-xlsx.ts",
+      "default": "./dist/planilha-xlsx.js"
     }
   },
   "scripts": {

@@ -229,6 +229,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // Gerencia aprova as compras vindas de NF-e (fila de aprovacao) e os pedidos.
       "mercadorias_aprovar",
       "pedidos_aprovar",
+      "compras_catalogo_gerir",
+      "compras_preco_base_importar",
       "retiradas_criar",
       "retiradas_editar",
       "notas_fiscais_importar",
@@ -269,6 +271,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "pedidos_criar",
       "pedidos_editar",
       "pedidos_aprovar",
+      "compras_catalogo_gerir",
+      "compras_preco_base_importar",
       "conferencias_estoque_agendar",
       "mercadorias_criar",
       "mercadorias_discriminar",

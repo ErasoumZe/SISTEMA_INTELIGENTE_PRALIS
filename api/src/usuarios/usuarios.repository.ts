@@ -22,6 +22,7 @@ export type UsuarioLinha = {
   empresaIds: string[];
   nome: string;
   email: string;
+  whatsapp: string | null;
   colaboradorId: string;
   setorId: string | null;
   setorNome: string | null;
@@ -56,6 +57,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         empresaId: perfisUsuarios.empresaId,
         nome: perfisUsuarios.nome,
         email: perfisUsuarios.email,
+        whatsapp: perfisUsuarios.whatsapp,
         role: perfisUsuarios.role
       })
       .from(perfisUsuarios)
@@ -102,6 +104,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         .map((empresa) => empresa.empresaId),
       nome: perfil.nome,
       email: perfil.email,
+      whatsapp: perfil.whatsapp,
       colaboradorId: colaborador?.id ?? "",
       colaboradorEmpresaId: colaborador?.empresaId ?? null,
       setorId: colaborador?.setorId ?? null,
@@ -279,7 +282,14 @@ export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string,
 }
 
 export async function upsertPerfilUsuarioRepository(
-  input: { usuarioId: string; empresaId: string; nome: string; email: string; role?: RoleUsuario },
+  input: {
+    usuarioId: string;
+    empresaId: string;
+    nome: string;
+    email: string;
+    whatsapp: string | null;
+    role?: RoleUsuario;
+  },
   db: ExecutorBanco = banco
 ) {
   await db
@@ -291,6 +301,7 @@ export async function upsertPerfilUsuarioRepository(
         empresaId: input.empresaId,
         nome: input.nome,
         email: input.email,
+        whatsapp: input.whatsapp,
         ...(input.role ? { role: input.role } : {}),
         atualizadoEm: new Date()
       }

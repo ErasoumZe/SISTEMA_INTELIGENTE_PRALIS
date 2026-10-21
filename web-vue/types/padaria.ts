@@ -29,6 +29,11 @@ export type Opcao = {
   estado?: string;
   cnpj?: string | null;
   matriculaPrefixo?: string;
+  // Configuracao operacional da empresa (migration 0060). Precisam viajar na opcao porque a grade de
+  // cadastro alimenta o formulario de edicao: campo que nao chega na linha reabre vazio e o salvar
+  // seguinte grava null em cima do valor correto.
+  fusoHorario?: string;
+  comprasPrazoRespostaHoras?: number | string | null;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
   // Conta com fundo (D8), vindo de /api/contas/saldos. saldoAtual e DERIVADO dos movimentos —

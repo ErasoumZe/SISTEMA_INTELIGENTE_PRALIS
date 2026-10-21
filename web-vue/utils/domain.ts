@@ -546,6 +546,12 @@ export const secoesPermissoes = [
       "cadastro_produtos",
       "estoque_produtos",
       "conferencias_estoque",
+      // Permissoes da fundacao do novo Compras (migration 0060): catalogo fornecedor-produto e
+      // carga do preco-base. Sem um prefixo aqui elas ficavam FORA de todas as secoes, e a tela de
+      // Permissoes nao as mostrava — ninguem conseguia conceder o acesso pela interface, so pelo
+      // cargo de referencia do seed. O gate `domain.test.ts` ("cada permissao visivel em exatamente
+      // um modulo") estava vermelho por isso desde a entrega da Fase 1.
+      "compras_",
       "perdas_sobras",
       "cadastro_fornecedores",
       "cadastro_ficha_tecnica",
@@ -741,6 +747,8 @@ export function formCadastroVazio(): CadastroForm {
     estado: "",
     cnpj: "",
     matriculaPrefixo: "TNP",
+    fusoHorario: "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: "",
     email: "",
     senha: "",
     role: "usuario_comum",
@@ -915,6 +923,8 @@ export function formCadastroDeLinha(
     estado: linha.estado ?? "",
     cnpj: linha.cnpj ?? "",
     matriculaPrefixo: linha.matriculaPrefixo ?? "TNP",
+    fusoHorario: linha.fusoHorario ?? "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: linha.comprasPrazoRespostaHoras ?? "",
     email: linha.email ?? "",
     // SEM default. Este e o formulario de EDICAO: `|| "usuario_comum"` transformava "a linha chegou
     // sem papel" em "o papel dele e comum", e o salvar seguinte REBAIXAVA um usuario_admin sem
