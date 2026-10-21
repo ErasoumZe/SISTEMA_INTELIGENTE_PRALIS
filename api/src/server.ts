@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
+import { fecharRodadasVencidas } from "./compras/compras-fechamento.service.js";
 import { processarTransferenciasTemporais } from "./transferencias/transferencias.service.js";
 
 const app = await buildApp();
@@ -20,6 +21,16 @@ try {
   executarAgendadorTransferencias();
   const agendadorTransferencias = setInterval(executarAgendadorTransferencias, 60_000);
   agendadorTransferencias.unref();
+  // R-221 decisao 6: a rodada de compras fecha sozinha no vencimento. Ate 60s depois, e no primeiro
+  // tick do boot se a API estava parada.
+  const executarAgendadorCompras = () => {
+    void fecharRodadasVencidas(new Date(), (rodadaId, erro) =>
+      app.log.error({ err: erro, rodadaId }, "falha ao fechar rodada de compras vencida")
+    ).catch((error) => app.log.error(error));
+  };
+  executarAgendadorCompras();
+  const agendadorCompras = setInterval(executarAgendadorCompras, 60_000);
+  agendadorCompras.unref();
 } catch (error) {
   app.log.error(error);
   process.exit(1);
