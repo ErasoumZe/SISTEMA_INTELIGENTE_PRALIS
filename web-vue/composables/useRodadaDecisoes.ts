@@ -62,8 +62,12 @@ export function useRodadaDecisoes(empresaId: Ref<string>) {
       })
     );
 
+  // Fecha a rodada antes do prazo (motivo `comprador`): so depois dela a excecao pode ser aprovada.
+  const encerrarRodada = (rodadaId: string) =>
+    executar(() => apiPost(`/api/compras/rodadas/${rodadaId}/encerrar`, { empresaId: empresaId.value }));
+
   const encerrar = (solicitacaoId: string) =>
     executar(() => apiPost(`/api/compras/solicitacoes/${solicitacaoId}/encerrar`, { empresaId: empresaId.value }));
 
-  return { decisoes, carregando, processando, erro, carregar, aprovar, encerrar };
+  return { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada };
 }

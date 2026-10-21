@@ -155,6 +155,13 @@ describe("fila de decisao e excecao integration (E6)", () => {
   const doProduto = (decisoes: Decisoes, produtoId: string) =>
     decisoes.itens.find((item) => item.produtoId === produtoId)!;
 
+  /** A excecao so vale com a rodada fechada: vence o prazo de 1h da rodada. */
+  const fechar = (rodada: RodadaAberta, solicitacaoId: string) =>
+    fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+
   it("a fila lista o que ficou sem vencedor, com o motivo e o que cada fornecedor ofereceu", async () => {
     const { rodada } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
@@ -174,11 +181,65 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect(resposta.statusCode).toBe(403);
   });
 
-  it("aprova a excecao: pedido confirmado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
+  it("com a rodada ABERTA a excecao e recusada (422): aprovar travaria o item contra uma oferta melhor", async () => {
     const { rodada } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
+    const resposta = await aprovar(rodada.id, item.propostas[0]!.propostaItemId);
+    expect(resposta.statusCode).toBe(422);
+    expect(json<{ code?: string }>(resposta).code).toBe("RODADA_ABERTA");
+    await expect(
+      consultarUm("select id from compras_adjudicacoes where rodada_item_id = $1", [item.rodadaItemId])
+    ).resolves.toBeNull();
+  });
+
+  it("encerrar a rodada agora: fecha com motivo comprador e libera a excecao", async () => {
+    const { rodada, solicitacaoId } = await abrir([FORN_A]);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
+    const item = doProduto(await fila(rodada.id), idsTeste.produto);
+
+    const encerrar = (cookie = cookieAdmin) =>
+      enviar("POST", `/api/compras/rodadas/${rodada.id}/encerrar`, cookie, { empresaId: idsTeste.empresaA });
+    expect((await encerrar(cookieSemPermissao)).statusCode).toBe(403);
+
+    const resposta = await encerrar();
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const fechada = await consultarUm<{ status: string; motivo_fechamento: string; fechada_por: string | null }>(
+      "select status, motivo_fechamento, fechada_por from compras_rodadas where id = $1",
+      [rodada.id]
+    );
+    expect(fechada).toMatchObject({ status: "fechada", motivo_fechamento: "comprador" });
+    expect(fechada?.fechada_por).toBeTruthy();
+    const convite = await consultarUm<{ status: string }>(
+      "select status from compras_rodadas_convites where rodada_id = $1",
+      [rodada.id]
+    );
+    expect(convite?.status).toBe("encerrado");
+    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
+      solicitacaoId
+    ]);
+    expect(solicitacao?.status).toBe("parcialmente_comprada");
+
+    // Depois de encerrada: o fornecedor nao responde mais (410), uma segunda tentativa e 422, a excecao vale.
+    const dto = json<{ data: { itens: Array<{ conviteItemId: string }> } }>(
+      await getPublico(rodada.convites[0]!.token)
+    ).data;
+    const tardia = await responder(rodada.convites[0]!.token, {
+      itens: [{ conviteItemId: dto.itens[0]!.conviteItemId, indisponivel: false, valorUnitario: 1 }]
+    });
+    expect(tardia.statusCode).toBe(410);
+    const repetida = await encerrar();
+    expect(repetida.statusCode).toBe(422);
+    expect(json<{ code?: string }>(repetida).code).toBe("RODADA_NAO_ABERTA");
+    expect((await aprovar(rodada.id, item.propostas[0]!.propostaItemId)).statusCode).toBe(200);
+  });
+
+  it("aprova a excecao: pedido confirmado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
+    const { rodada, solicitacaoId } = await abrir([FORN_A]);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
+    const item = doProduto(await fila(rodada.id), idsTeste.produto);
     const propostaItemId = item.propostas[0]!.propostaItemId;
+    await fechar(rodada, solicitacaoId);
 
     const resposta = await aprovar(rodada.id, propostaItemId);
     expect(resposta.statusCode, resposta.body).toBe(200);
@@ -219,21 +280,23 @@ describe("fila de decisao e excecao integration (E6)", () => {
   });
 
   it("recusa item que o fornecedor disse nao ter (422)", async () => {
-    const { rodada } = await abrir([FORN_A]);
+    const { rodada, solicitacaoId } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: "indisponivel", segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
     expect(item.motivo).toBe("indisponivel");
+    await fechar(rodada, solicitacaoId);
     const resposta = await aprovar(rodada.id, item.propostas[0]!.propostaItemId);
     expect(resposta.statusCode).toBe(422);
     expect(json<{ code?: string }>(resposta).code).toBe("ITEM_INDISPONIVEL");
   });
 
   it("recusa proposta superada por uma resposta mais nova do fornecedor (409)", async () => {
-    const { rodada } = await abrir([FORN_A]);
+    const { rodada, solicitacaoId } = await abrir([FORN_A]);
     const token = rodada.convites[0]!.token;
     await responderPrecos(token, { primeiro: 12, segundo: 5 });
     const velha = doProduto(await fila(rodada.id), idsTeste.produto).propostas[0]!.propostaItemId;
     await responderPrecos(token, { primeiro: 11, segundo: 5 });
+    await fechar(rodada, solicitacaoId);
     const resposta = await aprovar(rodada.id, velha);
     expect(resposta.statusCode).toBe(409);
     expect(json<{ code?: string }>(resposta).code).toBe("PROPOSTA_SUPERADA");
@@ -244,10 +307,11 @@ describe("fila de decisao e excecao integration (E6)", () => {
   });
 
   it("duas aprovacoes simultaneas de fornecedores diferentes para o MESMO item: so uma vence", async () => {
-    const { rodada } = await abrir([FORN_A, FORN_B]);
+    const { rodada, solicitacaoId } = await abrir([FORN_A, FORN_B]);
     for (const convite of rodada.convites) await responderPrecos(convite.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
     expect(item.propostas).toHaveLength(2);
+    await fechar(rodada, solicitacaoId);
 
     const respostas = await Promise.all(item.propostas.map((proposta) => aprovar(rodada.id, proposta.propostaItemId)));
     expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([200, 409]);
@@ -315,6 +379,15 @@ describe("fila de decisao e excecao integration (E6)", () => {
         empresaId: idsTeste.empresaB
       })
     );
+    naoAcha(
+      await enviar("POST", `/api/compras/rodadas/${rodada.id}/encerrar`, cookieAdmin, {
+        empresaId: idsTeste.empresaB
+      })
+    );
+    const rodadaDepois = await consultarUm<{ status: string }>("select status from compras_rodadas where id = $1", [
+      rodada.id
+    ]);
+    expect(rodadaDepois?.status).toBe("aberta");
     // Nada foi comprado nem encerrado por baixo dos panos.
     const total = await consultarUm<{ total: number }>(
       "select count(*)::int as total from compras_adjudicacoes where empresa_id = $1 and rodada_item_id in (select id from compras_rodadas_itens where rodada_id = $2)",

@@ -33,9 +33,11 @@ const emit = defineEmits<{
 }>();
 
 const empresaIdRef = computed(() => props.empresaId);
-const { decisoes, carregando, processando, erro, carregar, aprovar, encerrar } = useRodadaDecisoes(empresaIdRef);
+const { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada } =
+  useRodadaDecisoes(empresaIdRef);
 const confirmando = ref<string | null>(null);
 const confirmandoEncerrar = ref(false);
+const confirmandoEncerrarRodada = ref(false);
 
 const ROTULO_RODADA: Record<string, string> = {
   aberta: "Rodada aberta",
@@ -43,6 +45,10 @@ const ROTULO_RODADA: Record<string, string> = {
   cancelada: "Rodada cancelada"
 };
 const itens = computed(() => decisoes.value?.itens ?? []);
+// A excecao so vale com a rodada FECHADA (a API recusa com 422): com ela aberta, aprovar travaria o
+// item e uma oferta melhor que chegasse depois perderia.
+const rodadaFechada = computed(() => decisoes.value?.status === "fechada");
+const podeEncerrarRodada = computed(() => props.podeEditar && decisoes.value?.status === "aberta");
 // Com a rodada aberta o fornecedor ainda pode vender estes itens sozinho (compra automatica): levar os
 // pendentes para outra solicitacao agora poderia comprar o mesmo item duas vezes.
 const podeLevarPendentes = computed(
@@ -57,6 +63,7 @@ watch(
   ([visivel, solicitacaoId]) => {
     confirmando.value = null;
     confirmandoEncerrar.value = false;
+    confirmandoEncerrarRodada.value = false;
     if (visivel && solicitacaoId) void carregar(solicitacaoId);
   },
   { immediate: true }
@@ -70,6 +77,14 @@ async function confirmarAprovacao(propostaItemId: string) {
   // Em conflito (proposta superada, item ja vendido) a fila na tela esta velha: recarrega e mantem a
   // mensagem de erro, senao o Comprador continuaria vendo o botao armado sobre uma proposta morta.
   await carregar(props.solicitacaoId, !aprovou);
+}
+
+async function confirmarEncerrarRodada() {
+  if (!props.solicitacaoId || !decisoes.value) return;
+  const encerrou = await encerrarRodada(decisoes.value.rodadaId);
+  confirmandoEncerrarRodada.value = false;
+  if (encerrou) emit("mudou");
+  await carregar(props.solicitacaoId, !encerrou);
 }
 
 async function confirmarEncerramento() {
@@ -103,7 +118,8 @@ function levarParaNovaSolicitacao() {
         <v-progress-linear v-if="carregando" indeterminate />
         <v-alert v-if="decisoes?.status === 'aberta'" type="info" variant="tonal" density="compact">
           A rodada ainda está aberta: os fornecedores podem enviar novas respostas. Esta lista mostra o que não foi
-          comprado até agora.
+          comprado até agora. Aprovar compra fora da base só é possível depois do fechamento; se for urgente, encerre a
+          rodada agora.
         </v-alert>
         <v-alert v-if="decisoes && !itens.length" type="success" variant="tonal" density="compact">
           Nenhum item pendente. Tudo que foi pedido tem fornecedor.
@@ -143,7 +159,7 @@ function levarParaNovaSolicitacao() {
                 >
               </template>
             </div>
-            <div v-if="podeExcecao && podeAprovarProposta(proposta)" class="proposta__acao">
+            <div v-if="podeExcecao && rodadaFechada && podeAprovarProposta(proposta)" class="proposta__acao">
               <template v-if="confirmando === proposta.propostaItemId">
                 <span class="text-caption">Confirmar compra?</span>
                 <v-btn
@@ -171,6 +187,25 @@ function levarParaNovaSolicitacao() {
         </div>
       </v-card-text>
       <v-card-actions class="flex-wrap ga-2">
+        <template v-if="podeEncerrarRodada">
+          <template v-if="confirmandoEncerrarRodada">
+            <span class="text-caption">Os fornecedores não poderão mais responder. Encerrar a rodada agora?</span>
+            <v-btn color="primary" variant="flat" size="small" :loading="processando" @click="confirmarEncerrarRodada"
+              >Encerrar rodada</v-btn
+            >
+            <v-btn variant="text" size="small" :disabled="processando" @click="confirmandoEncerrarRodada = false"
+              >Voltar</v-btn
+            >
+          </template>
+          <v-btn
+            v-else
+            variant="tonal"
+            color="primary"
+            prepend-icon="mdi-flag-checkered"
+            @click="confirmandoEncerrarRodada = true"
+            >Encerrar rodada agora</v-btn
+          >
+        </template>
         <v-btn
           v-if="podeLevarPendentes"
           variant="text"

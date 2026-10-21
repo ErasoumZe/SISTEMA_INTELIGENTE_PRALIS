@@ -63,13 +63,19 @@ export async function totalItensDaRodadaRepository(rodadaId: string, tx: Transac
 }
 
 /** `where status = 'aberta'` e o que faz o fechamento idempotente mesmo se duas instancias correrem. */
-export async function fecharRodadaPorPrazoRepository(
-  input: { rodadaId: string; fechadaEm: Date },
+export async function fecharRodadaRepository(
+  input: { rodadaId: string; fechadaEm: Date; motivo: "prazo" | "comprador"; fechadaPor: string | null },
   tx: TransacaoBanco
 ): Promise<boolean> {
   const fechadas = await tx
     .update(comprasRodadas)
-    .set({ status: "fechada", fechadaEm: input.fechadaEm, motivoFechamento: "prazo", fechadaPor: null })
+    // `prazo` nao tem autor humano (constraint compras_rodadas_motivo_autor_check); `comprador` tem.
+    .set({
+      status: "fechada",
+      fechadaEm: input.fechadaEm,
+      motivoFechamento: input.motivo,
+      fechadaPor: input.fechadaPor
+    })
     .where(and(eq(comprasRodadas.id, input.rodadaId), eq(comprasRodadas.status, "aberta")))
     .returning({ id: comprasRodadas.id });
   return fechadas.length > 0;

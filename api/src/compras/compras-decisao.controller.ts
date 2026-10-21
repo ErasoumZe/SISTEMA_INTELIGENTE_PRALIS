@@ -2,11 +2,13 @@ import type { FastifyInstance } from "fastify";
 import {
   aprovarExcecaoPayloadSchema,
   decisoesQuerySchema,
+  encerrarRodadaPayloadSchema,
   encerrarSolicitacaoPayloadSchema
 } from "@padaria/shared/compras";
 import { apiIdParamsSchema, ok, semConteudo } from "@padaria/shared/api";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { aprovarExcecao, encerrarSolicitacao, obterDecisoesDaRodada } from "./compras-decisao.service.js";
+import { encerrarRodadaAgora } from "./compras-fechamento.service.js";
 
 export async function registrarRotasComprasDecisao(app: FastifyInstance): Promise<void> {
   // A fila mostra preco-base e a proposta de TODOS os fornecedores: so quem decide (ou opera a rodada)
@@ -30,6 +32,12 @@ export async function registrarRotasComprasDecisao(app: FastifyInstance): Promis
       return ok(await aprovarExcecao(id, aprovarExcecaoPayloadSchema.parse(request.body), request.perfilUsuario!));
     }
   );
+
+  // "Encerrar rodada agora" (motivo `comprador`): reusa pedidos_editar, como abrir/enviar (decisao 10).
+  app.post("/api/compras/rodadas/:id/encerrar", { preHandler: exigirPermissao("pedidos_editar") }, async (request) => {
+    const { id } = apiIdParamsSchema.parse(request.params);
+    return ok(await encerrarRodadaAgora(id, encerrarRodadaPayloadSchema.parse(request.body), request.perfilUsuario!));
+  });
 
   app.post(
     "/api/compras/solicitacoes/:id/encerrar",

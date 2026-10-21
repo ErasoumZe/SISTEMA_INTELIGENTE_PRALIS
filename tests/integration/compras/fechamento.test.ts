@@ -369,9 +369,9 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect((await bases())?.total).toBe(antes + 1);
   });
 
-  it("compra aprovada pelo comprador com a rodada aberta nao vira base no fechamento", async () => {
+  it("compra aprovada pelo comprador (excecao) nao vira base, antes nem depois", async () => {
     const { rodada, solicitacaoId } = await abrir();
-    // 12 > base vigente: nao compra sozinho; o segundo produto nao tem base.
+    // 100 > base vigente: nao compra sozinho; o segundo produto nao tem base.
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 100, segundo: 5 });
     const vigente = () =>
       consultarUm<{ id: string; valor: string }>(
@@ -379,6 +379,12 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
         [idsTeste.empresaA, idsTeste.produto]
       );
     const baseAntes = await vigente();
+    const resultado = await fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 0 });
+
     const fila = json<{ data: { itens: Array<{ produtoId: string; propostas: Array<{ propostaItemId: string }> }> } }>(
       await contexto.app.inject({
         method: "GET",
@@ -393,20 +399,42 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     });
     expect(aprovar.statusCode, aprovar.body).toBe(200);
 
-    const resultado = await fecharRodadaPorPrazo(
-      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
-      new Date(Date.now() + 2 * HORA)
-    );
-    // O item foi comprado (pelo comprador), o outro sobrou; mas NENHUMA base foi trocada.
-    expect(resultado).toMatchObject({ fechada: true, comprados: 1, pendentes: 1, basesAtualizadas: 0 });
+    // Comprou por excecao a 100 (base ~1): se isso virasse base, o teto da pre-autorizacao subiria.
     const baseDepois = await vigente();
     expect(baseDepois?.id).toBe(baseAntes?.id);
     expect(Number(baseDepois?.valor)).toBe(Number(baseAntes?.valor));
   });
 
+  it("encerrar agora (motivo comprador) aplica as mesmas regras do prazo: comprado fica, base do comprado sozinho", async () => {
+    const { rodada, solicitacaoId } = await abrir(true);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 0.25, segundo: 0.25 });
+    const resposta = await post(`/api/compras/rodadas/${rodada.id}/encerrar`, { empresaId: idsTeste.empresaA });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    expect(
+      json<{ data: { comprados: number; pendentes: number; basesAtualizadas: number } }>(resposta).data
+    ).toMatchObject({
+      comprados: 1,
+      pendentes: 0,
+      basesAtualizadas: 1
+    });
+    const fechada = await rodadaDe(rodada.id);
+    expect(fechada).toMatchObject({ status: "fechada", motivo_fechamento: "comprador" });
+    expect(fechada?.fechada_por).toBeTruthy();
+    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
+      solicitacaoId
+    ]);
+    expect(solicitacao?.status).toBe("comprada");
+    const vigente = await consultarUm<{ valor: string; origem: string }>(
+      "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, idsTeste.produto]
+    );
+    expect(Number(vigente?.valor)).toBe(0.25);
+    expect(vigente?.origem).toBe("rodada");
+  });
+
   it("base vigente mais nova que o fechamento: a troca ainda fecha a anterior (valido_ate > valido_desde)", async () => {
     const { rodada, solicitacaoId } = await abrir(true);
-    await responderPrecos(rodada.convites[0]!.token, { primeiro: 0.5, segundo: 0.5 });
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 0.2, segundo: 0.2 });
     // A base vigente comeca DEPOIS do instante de fechamento: o +1ms do codigo e o que evita violar a constraint.
     await executarSql(
       "update produtos_precos_base set valido_desde = now() + interval '5 hour' where empresa_id = $1 and produto_id = $2 and valido_ate is null",
@@ -421,7 +449,7 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
       "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
       [idsTeste.empresaA, idsTeste.produto]
     );
-    expect(Number(vigente?.valor)).toBe(0.5);
+    expect(Number(vigente?.valor)).toBe(0.2);
     expect(vigente?.origem).toBe("rodada");
   });
 

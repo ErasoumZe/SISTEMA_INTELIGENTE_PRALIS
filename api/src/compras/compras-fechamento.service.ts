@@ -1,16 +1,20 @@
 // MODULO DO COMPRADOR — fechamento da rodada por prazo (Fase 2, R-221 decisoes 6 e 12). Roda no
 // agendador in-process do `server.ts`, no molde de `processarTransferenciasTemporais`. NAO e
 // importado pelo modulo publico do fornecedor (isolamento).
-import { statusSolicitacaoAposFechamento } from "@padaria/shared/compras";
+import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { statusSolicitacaoAposFechamento, type EncerrarRodadaPayload } from "@padaria/shared/compras";
 import { sqlTravarPrecoBaseDaEmpresa, sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
+import { naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { rodadaItensAdjudicadosRepository } from "./compras-adjudicacao.repository.js";
+import { solicitacaoDaRodadaRepository } from "./compras-decisao.repository.js";
 import {
   atualizarStatusSolicitacaoRepository,
   comprasAutomaticasDaRodadaRepository,
   encerrarConvitesDaRodadaRepository,
-  fecharRodadaPorPrazoRepository,
+  fecharRodadaRepository,
   listarRodadasVencidasRepository,
   substituirPrecoBaseRepository,
   totalItensDaRodadaRepository,
@@ -42,12 +46,25 @@ const NAO_FECHADA = (rodadaId: string): ResultadoFechamento => ({
  * abertos -> encerrado; solicitacao -> comprada/parcialmente_comprada; base vigente dos itens
  * comprados AUTOMATICAMENTE passa a ser o custo final pago; aviso no sino se sobrou item sem vencedor.
  */
-export async function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): Promise<ResultadoFechamento> {
+export function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): Promise<ResultadoFechamento> {
+  return fecharRodada(rodada, { motivo: "prazo" }, agora);
+}
+
+/** Quem fecha e por que: o prazo nao tem autor humano; o "encerrar agora" tem o Comprador. */
+type OrigemFechamento = { motivo: "prazo" } | { motivo: "comprador"; usuarioId: string };
+
+async function fecharRodada(
+  rodada: RodadaVencida,
+  origem: OrigemFechamento,
+  agora: Date
+): Promise<ResultadoFechamento> {
   return executarEmTransacao(async (tx) => {
     // Ordem canonica de travas (doc 54): advisory da solicitacao -> rodada FOR UPDATE.
     await tx.execute(sqlTravarRodadaDeCompras(rodada.solicitacaoId));
     const travada = await travarRodadaRepository(rodada.id, tx);
-    if (!travada || travada.status !== "aberta" || travada.expiraEm.getTime() > agora.getTime()) {
+    if (!travada || travada.status !== "aberta") return NAO_FECHADA(rodada.id);
+    // So o fechamento por prazo exige o prazo vencido; o Comprador pode encerrar antes.
+    if (origem.motivo === "prazo" && travada.expiraEm.getTime() > agora.getTime()) {
       return NAO_FECHADA(rodada.id);
     }
 
@@ -55,7 +72,15 @@ export async function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): 
     const adjudicados = (await rodadaItensAdjudicadosRepository(travada.id, tx)).size;
     const pendentes = total - adjudicados;
 
-    const fechou = await fecharRodadaPorPrazoRepository({ rodadaId: travada.id, fechadaEm: agora }, tx);
+    const fechou = await fecharRodadaRepository(
+      {
+        rodadaId: travada.id,
+        fechadaEm: agora,
+        motivo: origem.motivo,
+        fechadaPor: origem.motivo === "comprador" ? origem.usuarioId : null
+      },
+      tx
+    );
     if (!fechou) return NAO_FECHADA(rodada.id);
     await encerrarConvitesDaRodadaRepository(travada.id, tx);
     await atualizarStatusSolicitacaoRepository(
@@ -130,4 +155,27 @@ export async function fecharRodadasVencidas(
     }
   }
   return resultados;
+}
+
+/**
+ * "Encerrar rodada agora": o Comprador fecha antes do prazo (motivo `comprador`). Mesma transacao e
+ * mesmas consequencias do fechamento por prazo (convites, solicitacao, base do que foi comprado
+ * sozinho, aviso). Existe porque a excecao so vale com a rodada fechada: sem isto, uma compra urgente
+ * acima da base esperaria o prazo inteiro.
+ */
+export async function encerrarRodadaAgora(
+  rodadaId: string,
+  payload: EncerrarRodadaPayload,
+  perfil: PerfilUsuario
+): Promise<ResultadoFechamento> {
+  if (!podeAcessarEmpresa(perfil, payload.empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+  const solicitacaoId = await solicitacaoDaRodadaRepository(rodadaId, payload.empresaId);
+  if (!solicitacaoId) throw naoEncontrado("Rodada nao encontrada");
+  const resultado = await fecharRodada(
+    { id: rodadaId, empresaId: payload.empresaId, solicitacaoId },
+    { motivo: "comprador", usuarioId: perfil.usuarioId },
+    new Date()
+  );
+  if (!resultado.fechada) throw naoProcessavel("A rodada ja nao esta aberta", "RODADA_NAO_ABERTA");
+  return resultado;
 }

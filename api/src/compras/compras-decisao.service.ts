@@ -91,8 +91,9 @@ export async function obterDecisoesDaRodada(
  * pelo teto). Cria/reusa o pedido consolidado (rodada, fornecedor) e grava a adjudicacao
  * `modo='comprador'`. O `UNIQUE (rodada_item_id)` e a ultima palavra: item ja vendido -> 409.
  *
- * Vale com a rodada aberta ou ja fechada (a decisao 6 manda a proposta acima da base para a fila
- * DEPOIS do vencimento). NAO altera a base de preco: compra por excecao nao vira envelope.
+ * So vale com a rodada FECHADA (decisao 6; confirmado por Jose em 21/10): depois do fechamento nao ha
+ * mais compra automatica, entao excecao e compra automatica nunca disputam o mesmo item. NAO altera a
+ * base de preco: compra por excecao nao vira envelope.
  */
 export async function aprovarExcecao(
   rodadaId: string,
@@ -108,8 +109,14 @@ export async function aprovarExcecao(
     await tx.execute(sqlTravarRodadaDeCompras(solicitacaoId));
     const alvo = await buscarPropostaItemParaAprovarRepository(payload.propostaItemId, payload.empresaId, tx);
     if (!alvo || alvo.rodadaId !== rodadaId) throw naoEncontrado("Proposta nao encontrada");
-    if (alvo.rodadaStatus === "cancelada") {
-      throw naoProcessavel("A rodada foi cancelada", "RODADA_CANCELADA");
+    // R-221 decisao 6 + decisao de Jose de 21/10: a excecao so vale com a rodada FECHADA. Com ela
+    // aberta, aprovar travaria o item e uma oferta melhor que chegasse depois perderia; o caminho do
+    // periodo aberto e a contraproposta (E7). Compra urgente: "Encerrar rodada agora".
+    if (alvo.rodadaStatus !== "fechada") {
+      throw naoProcessavel(
+        "A excecao so vale depois do fechamento da rodada. Aguarde o prazo ou encerre a rodada agora.",
+        "RODADA_ABERTA"
+      );
     }
     const solicitacao = await travarSolicitacaoRepository(solicitacaoId, payload.empresaId, tx);
     if (!solicitacao || solicitacao.status === "encerrada" || solicitacao.status === "cancelada") {
@@ -175,16 +182,14 @@ export async function aprovarExcecao(
     // desfaz o pedido e o item recem-criados.
     if (!venceu) throw conflito("Este item ja tem vencedor", "ITEM_JA_ADJUDICADO");
 
-    // Rodada ja fechada e este era o ultimo item sem vencedor: a solicitacao passa a comprada.
-    if (alvo.rodadaStatus === "fechada") {
-      const total = await totalItensDaRodadaRepository(alvo.rodadaId, tx);
-      const novoStatus = statusSolicitacaoAposFechamento(total, adjudicados.size + 1);
-      if (novoStatus !== solicitacao.status) {
-        await atualizarStatusSolicitacaoRepository(
-          { solicitacaoId, empresaId: payload.empresaId, status: novoStatus, agora: new Date() },
-          tx
-        );
-      }
+    // Se este era o ultimo item sem vencedor, a solicitacao passa a comprada.
+    const total = await totalItensDaRodadaRepository(alvo.rodadaId, tx);
+    const novoStatus = statusSolicitacaoAposFechamento(total, adjudicados.size + 1);
+    if (novoStatus !== solicitacao.status) {
+      await atualizarStatusSolicitacaoRepository(
+        { solicitacaoId, empresaId: payload.empresaId, status: novoStatus, agora: new Date() },
+        tx
+      );
     }
     return { pedidoId };
   });

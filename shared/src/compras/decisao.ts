@@ -14,9 +14,13 @@ export const aprovarExcecaoPayloadSchema = z.object({ empresaId: uuid, propostaI
 
 export const encerrarSolicitacaoPayloadSchema = z.object({ empresaId: uuid });
 
+// "Encerrar rodada agora": o Comprador fecha antes do prazo (motivo `comprador`).
+export const encerrarRodadaPayloadSchema = z.object({ empresaId: uuid });
+
 export type DecisoesQuery = z.infer<typeof decisoesQuerySchema>;
 export type AprovarExcecaoPayload = z.infer<typeof aprovarExcecaoPayloadSchema>;
 export type EncerrarSolicitacaoPayload = z.infer<typeof encerrarSolicitacaoPayloadSchema>;
+export type EncerrarRodadaPayload = z.infer<typeof encerrarRodadaPayloadSchema>;
 
 export const motivosDecisao = [
   "sem_resposta",
