@@ -5,13 +5,15 @@ import {
   encerrarSolicitacaoPayloadSchema
 } from "@padaria/shared/compras";
 import { apiIdParamsSchema, ok, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { aprovarExcecao, encerrarSolicitacao, obterDecisoesDaRodada } from "./compras-decisao.service.js";
 
 export async function registrarRotasComprasDecisao(app: FastifyInstance): Promise<void> {
+  // A fila mostra preco-base e a proposta de TODOS os fornecedores: so quem decide (ou opera a rodada)
+  // le. Ter a tela de Pedidos nao basta.
   app.get(
     "/api/compras/rodadas/:id/decisoes",
-    { preHandler: exigirPermissao("pedidos_visualizar") },
+    { preHandler: exigirAlgumaPermissao(["pedidos_editar", "compras_excecao_aprovar"]) },
     async (request) => {
       const { id } = apiIdParamsSchema.parse(request.params);
       const { empresaId } = decisoesQuerySchema.parse(request.query);

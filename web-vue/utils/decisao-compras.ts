@@ -27,7 +27,7 @@ export const AJUDA_MOTIVO: Record<MotivoDecisao, string> = {
   custo_nao_calculado: "A resposta chegou, mas o custo final não foi calculado. Não dá para aprovar.",
   sem_base: "O produto não tem preço-base, então toda oferta passa pela sua decisão.",
   acima_da_base: "O custo final está acima do preço-base pré-autorizado.",
-  teto: "O custo cabia na base, mas o teto de compra automática da rodada já tinha sido atingido."
+  teto: "O custo cabia na base, mas o item não foi comprado sozinho (em geral, o teto de compra automática da rodada foi atingido)."
 };
 
 /** Só dá para aprovar proposta com preço e custo final calculado. */

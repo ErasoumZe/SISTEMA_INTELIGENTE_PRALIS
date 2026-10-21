@@ -2,7 +2,7 @@
 // agendador in-process do `server.ts`, no molde de `processarTransferenciasTemporais`. NAO e
 // importado pelo modulo publico do fornecedor (isolamento).
 import { statusSolicitacaoAposFechamento } from "@padaria/shared/compras";
-import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
+import { sqlTravarPrecoBaseDaEmpresa, sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { rodadaItensAdjudicadosRepository } from "./compras-adjudicacao.repository.js";
@@ -71,8 +71,14 @@ export async function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): 
     // Decisao 12: a base nova e o que a padaria PAGOU (custo final gravado da adjudicacao). Custo zero
     // e produto inativo ficam fora da base, como na importacao (R-220).
     let basesAtualizadas = 0;
-    for (const compra of await comprasAutomaticasDaRodadaRepository(travada.id, tx)) {
-      if (!compra.produtoAtivo || Number(compra.custoFinalUnitario) <= 0) continue;
+    const paraBase = (await comprasAutomaticasDaRodadaRepository(travada.id, tx))
+      .filter((compra) => compra.produtoAtivo && Number(compra.custoFinalUnitario) > 0)
+      // Ordem fixa por produto: duas rodadas que trocam bases dos mesmos produtos nao se travam em ABBA.
+      .sort((a, b) => a.produtoId.localeCompare(b.produtoId));
+    // Rodadas de solicitacoes DIFERENTES nao compartilham a advisory da solicitacao; a troca da base e
+    // do produto da empresa, entao ela serializa pela trava da base (a mesma da carga inicial).
+    if (paraBase.length) await tx.execute(sqlTravarPrecoBaseDaEmpresa(travada.empresaId));
+    for (const compra of paraBase) {
       await substituirPrecoBaseRepository(
         {
           empresaId: travada.empresaId,

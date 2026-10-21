@@ -282,6 +282,51 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect(final?.encerrada_em).not.toBeNull();
   });
 
+  it("a fila (preco-base e propostas de todos) nao e lida por quem so tem a tela de Pedidos (403)", async () => {
+    const { rodada } = await abrir([FORN_A]);
+    const resposta = await enviar(
+      "GET",
+      `/api/compras/rodadas/${rodada.id}/decisoes?empresaId=${idsTeste.empresaA}`,
+      cookieSemPermissao
+    );
+    expect(resposta.statusCode).toBe(403);
+  });
+
+  it("nenhuma das tres rotas atravessa empresas: id da empresa A com empresa B nao acha nada", async () => {
+    const { rodada, solicitacaoId } = await abrir([FORN_A]);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
+    const propostaItemId = doProduto(await fila(rodada.id), idsTeste.produto).propostas[0]!.propostaItemId;
+
+    const naoAcha = (resposta: { statusCode: number; body: string }) => {
+      expect([403, 404]).toContain(resposta.statusCode);
+      expect(resposta.body).not.toContain(propostaItemId);
+    };
+    naoAcha(
+      await enviar("GET", `/api/compras/rodadas/${rodada.id}/decisoes?empresaId=${idsTeste.empresaB}`, cookieAdmin)
+    );
+    naoAcha(
+      await enviar("POST", `/api/compras/rodadas/${rodada.id}/decisoes/aprovar`, cookieAdmin, {
+        empresaId: idsTeste.empresaB,
+        propostaItemId
+      })
+    );
+    naoAcha(
+      await enviar("POST", `/api/compras/solicitacoes/${solicitacaoId}/encerrar`, cookieAdmin, {
+        empresaId: idsTeste.empresaB
+      })
+    );
+    // Nada foi comprado nem encerrado por baixo dos panos.
+    const total = await consultarUm<{ total: number }>(
+      "select count(*)::int as total from compras_adjudicacoes where empresa_id = $1 and rodada_item_id in (select id from compras_rodadas_itens where rodada_id = $2)",
+      [idsTeste.empresaA, rodada.id]
+    );
+    expect(total?.total).toBe(0);
+    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
+      solicitacaoId
+    ]);
+    expect(solicitacao?.status).toBe("em_cotacao");
+  });
+
   it("encerrar solicitacao: so depois do fechamento; depois disso nao se aprova mais nada", async () => {
     const { rodada, solicitacaoId } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });

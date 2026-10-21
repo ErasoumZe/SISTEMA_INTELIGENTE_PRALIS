@@ -165,7 +165,10 @@ Decisões de José tomadas ao planejar o E6, além das 14 acima:
   pendente com Rodrigo e **não** foi resolvida por esta entrega.
 - **Sobra na fila:** "Encerrar solicitação" (`parcialmente_comprada → encerrada`, só depois do
   fechamento) ou "Nova solicitação com os pendentes" (reusa o formulário do E2). Sem segunda rodada.
-- **A rodada só fecha no prazo.** Rodada com tudo comprado fica `aberta` até o vencimento.
+- **A rodada só fecha no prazo.** Rodada com tudo comprado fica `aberta` até o vencimento. (A
+  premissa registrada no plano — "fechar antes exigiria migration" — estava imprecisa: o schema já
+  aceita o motivo `comprador`, que serviria a um "encerrar agora" manual; o que não existe é motivo
+  para o fechamento automático ao completar. Fica a pergunta aberta abaixo.)
 
 Como ficou (comportamento, não intenção):
 
@@ -174,6 +177,9 @@ Como ficou (comportamento, não intenção):
   tick é idempotente. Rodada → `fechada` (motivo `prazo`, sem autor humano); convites → `encerrado`;
   solicitação → `comprada` (todos os itens com vencedor) ou `parcialmente_comprada` (também quando
   nada foi comprado — o contrato não tem outro estado); sino `compras_decisao_pendente` se sobrou item.
+  A troca da base serializa pela trava de preço-base da empresa e ignora compra automática cujo pedido
+  foi cancelado. A compra automática passou a avisar o sino a **cada** compra (decisão 14 literal; era
+  só quando sobrava item) e a reler o status da rodada sob a trava e a versão mais recente do convite.
 - **Fila** (`GET /api/compras/rodadas/:id/decisoes`): itens do envelope sem adjudicação, com motivo
   (`sem_resposta`, `indisponivel`, `custo_nao_calculado`, `sem_base`, `acima_da_base`, `teto`) e a
   última proposta enviada de cada fornecedor. O Comprador vê todas; o link público continua isolado.
@@ -214,3 +220,34 @@ Limites conhecidos, ditos na cara:
   cancelamento por item; buraco herdado.
 - Disparo de N convites de WhatsApp sem o navegador bloquear N pop-ups: decisão de UX que afeta E3;
   caminho definitivo é a Meta Cloud API do documento 51.
+
+### Perguntas levantadas na revisão do E6 (21/10/2026) — o código decidiu em silêncio, José confirma
+
+1. **Exceção com a rodada aberta.** Hoje o Comprador pode aprovar acima da base antes do prazo; o
+   `UNIQUE` trava o item e uma oferta posterior, dentro da base, de outro fornecedor perde. A decisão 6
+   manda a proposta acima da base para a fila no vencimento. Restringir a aprovação a rodada fechada?
+2. **"Nova solicitação com os pendentes" × "Encerrar".** A tela agora só oferece a nova solicitação com
+   a rodada fechada, mas a antiga continua aprovável por exceção até alguém encerrá-la. Encerrar a antiga
+   na mesma ação?
+3. **Base só desce** (compra automática ≤ base; exceção não vira base). Quando o fornecedor reajusta
+   para cima, o produto nunca mais compra sozinho até reimportar a planilha. É o desejado? Há um
+   gatilho manual para subir a base? (R-218 dizia "pode subir ou cair": nota de ajuste no registro.)
+4. **Teto da rodada.** Hoje: teto vazio = sem teto; estourado o teto, itens menores que ainda cabem
+   continuam comprando (não "para"); a exceção do Comprador não consome o teto; a ordem dos itens que
+   disputam o teto é fixa por id do item. Confirmar cada um.
+5. **Aviso do sino** vai só para quem abriu a rodada, que pode não ter `compras_excecao_aprovar`.
+   Avisar todo cargo com a permissão?
+6. **Quem encerra solicitação.** Exige `pedidos_editar`; a Gerência tem `compras_excecao_aprovar` mas
+   não `pedidos_editar` (nem `pedidos_criar`): aprova a exceção e não abre rodada nem encerra.
+7. **Resposta parcial na versão 2.** A fila e a aprovação só olham a **última** versão do fornecedor:
+   se a v2 omitir um item que a v1 precificou, ele some da fila. Exigir resposta completa?
+8. **Custo zero.** O fornecedor pode responder 0 e a compra automática compra de graça. Zero é
+   bonificação válida?
+9. **Teto de estoque na adjudicação.** O contrato (acima, "Teto de estoque sob fan-out") prevê a
+   validação pelo conjunto "na abertura e em cada adjudicação"; hoje ela só roda na criação da
+   solicitação. Lacuna herdada do E3/E5, não do E6.
+10. **Arredondamento da comparação.** O custo unitário de 4 casas (valor + frete ÷ qtd, arredondado) é
+    comparado com a base; custo de 1,00004 contra base 1,0000 compra sozinho. Reconciliar com Rodrigo
+    junto com o rateio do frete.
+11. **Caminho legado** (`POST /api/pedidos` e a transição retornado→confirmado com `pedidos_editar`)
+    continua comprando fora do envelope até o E8; `compras_excecao_aprovar` só protege o fluxo novo.

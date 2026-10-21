@@ -19,6 +19,7 @@ import { type TransacaoBanco } from "../banco/conexao.js";
 
 export type PropostaParaAdjudicacao = {
   propostaId: string;
+  versao: number;
   empresaId: string;
   conviteId: string;
   rodadaId: string;
@@ -51,6 +52,7 @@ export async function carregarPropostaParaAdjudicacaoRepository(
   const [proposta] = await tx
     .select({
       propostaId: comprasPropostas.id,
+      versao: comprasPropostas.versao,
       empresaId: comprasPropostas.empresaId,
       conviteId: comprasPropostas.conviteId,
       frete: comprasPropostas.frete,
@@ -92,6 +94,7 @@ export async function carregarPropostaParaAdjudicacaoRepository(
 
   return {
     propostaId: proposta.propostaId,
+    versao: proposta.versao,
     empresaId: proposta.empresaId,
     conviteId: proposta.conviteId,
     rodadaId: proposta.rodadaId,
@@ -140,7 +143,10 @@ export async function pedidoConfirmadoDaRodadaRepository(
     .where(
       and(eq(pedidos.rodadaId, rodadaId), eq(pedidos.fornecedorId, fornecedorId), eq(pedidos.status, "confirmado"))
     )
-    .limit(1);
+    .limit(1)
+    // Trava o pedido antes de anexar item: se o recebimento mudar o status entre a leitura e a escrita,
+    // o Postgres reavalia o filtro apos a espera e o pedido some do resultado (nasce um novo).
+    .for("update");
   return pedido?.id ?? null;
 }
 

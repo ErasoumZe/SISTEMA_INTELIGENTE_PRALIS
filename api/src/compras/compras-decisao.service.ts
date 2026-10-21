@@ -23,6 +23,7 @@ import {
   buscarPropostaItemParaAprovarRepository,
   carregarFilaDaRodadaRepository,
   solicitacaoDaRodadaRepository,
+  solicitacaoExisteNaEmpresaRepository,
   travarSolicitacaoRepository,
   ultimaVersaoEnviadaDoConviteRepository
 } from "./compras-decisao.repository.js";
@@ -200,6 +201,9 @@ export async function encerrarSolicitacao(
   perfil: PerfilUsuario
 ): Promise<void> {
   validarEmpresa(perfil, payload.empresaId);
+  if (!(await solicitacaoExisteNaEmpresaRepository(solicitacaoId, payload.empresaId))) {
+    throw naoEncontrado("Solicitacao nao encontrada");
+  }
   await executarEmTransacao(async (tx) => {
     await tx.execute(sqlTravarRodadaDeCompras(solicitacaoId));
     const solicitacao = await travarSolicitacaoRepository(solicitacaoId, payload.empresaId, tx);

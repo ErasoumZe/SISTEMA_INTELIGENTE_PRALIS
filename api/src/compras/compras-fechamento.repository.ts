@@ -1,6 +1,6 @@
 // MODULO DO COMPRADOR — fechamento da rodada por prazo (Fase 2, R-221 decisoes 6 e 12). Le e grava
 // preco-base e adjudicacao, entao NUNCA e importado pelo modulo publico do fornecedor.
-import { and, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, ne } from "drizzle-orm";
 import {
   comprasAdjudicacoes,
   comprasRodadas,
@@ -8,6 +8,7 @@ import {
   comprasRodadasItens,
   comprasSolicitacoes,
   comprasSolicitacoesItens,
+  pedidos,
   produtos,
   produtosPrecosBase
 } from "@padaria/db/schema";
@@ -126,7 +127,15 @@ export async function comprasAutomaticasDaRodadaRepository(
     .innerJoin(comprasRodadasItens, eq(comprasRodadasItens.id, comprasAdjudicacoes.rodadaItemId))
     .innerJoin(comprasSolicitacoesItens, eq(comprasSolicitacoesItens.id, comprasRodadasItens.solicitacaoItemId))
     .innerJoin(produtos, eq(produtos.id, comprasSolicitacoesItens.produtoId))
-    .where(and(eq(comprasRodadasItens.rodadaId, rodadaId), eq(comprasAdjudicacoes.modo, "automatica")));
+    .innerJoin(pedidos, eq(pedidos.id, comprasAdjudicacoes.pedidoId))
+    .where(
+      and(
+        eq(comprasRodadasItens.rodadaId, rodadaId),
+        eq(comprasAdjudicacoes.modo, "automatica"),
+        // Base e o que a padaria PAGOU: compra automatica cancelada antes do vencimento nao conta.
+        ne(pedidos.status, "cancelado")
+      )
+    );
   return linhas.map((linha) => ({
     produtoId: linha.produtoId,
     produtoAtivo: linha.produtoStatus === "ativo",

@@ -43,6 +43,11 @@ const ROTULO_RODADA: Record<string, string> = {
   cancelada: "Rodada cancelada"
 };
 const itens = computed(() => decisoes.value?.itens ?? []);
+// Com a rodada aberta o fornecedor ainda pode vender estes itens sozinho (compra automatica): levar os
+// pendentes para outra solicitacao agora poderia comprar o mesmo item duas vezes.
+const podeLevarPendentes = computed(
+  () => props.podeCriar && decisoes.value?.status === "fechada" && itens.value.length > 0
+);
 const podeEncerrarSolicitacao = computed(
   () => props.podeEditar && props.solicitacaoStatus === "parcialmente_comprada" && itens.value.length > 0
 );
@@ -59,11 +64,12 @@ watch(
 
 async function confirmarAprovacao(propostaItemId: string) {
   if (!props.solicitacaoId || !decisoes.value) return;
-  if (await aprovar(decisoes.value.rodadaId, propostaItemId)) {
-    confirmando.value = null;
-    emit("mudou");
-    await carregar(props.solicitacaoId);
-  }
+  const aprovou = await aprovar(decisoes.value.rodadaId, propostaItemId);
+  confirmando.value = null;
+  if (aprovou) emit("mudou");
+  // Em conflito (proposta superada, item ja vendido) a fila na tela esta velha: recarrega e mantem a
+  // mensagem de erro, senao o Comprador continuaria vendo o botao armado sobre uma proposta morta.
+  await carregar(props.solicitacaoId, !aprovou);
 }
 
 async function confirmarEncerramento() {
@@ -166,7 +172,7 @@ function levarParaNovaSolicitacao() {
       </v-card-text>
       <v-card-actions class="flex-wrap ga-2">
         <v-btn
-          v-if="podeCriar && itens.length"
+          v-if="podeLevarPendentes"
           variant="text"
           prepend-icon="mdi-playlist-plus"
           @click="levarParaNovaSolicitacao"

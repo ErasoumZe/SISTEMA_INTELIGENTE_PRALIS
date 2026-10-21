@@ -333,7 +333,10 @@ watch(() => props.empresaId, carregar, { immediate: true });
                   >Ver rodada</v-btn
                 >
                 <v-btn
-                  v-if="item.status === 'em_cotacao' || item.status === 'parcialmente_comprada'"
+                  v-if="
+                    (podeEditar || podeExcecao) &&
+                    (item.status === 'em_cotacao' || item.status === 'parcialmente_comprada')
+                  "
                   size="small"
                   variant="text"
                   prepend-icon="mdi-gavel"

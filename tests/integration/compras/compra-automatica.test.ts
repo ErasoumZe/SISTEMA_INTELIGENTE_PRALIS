@@ -129,6 +129,12 @@ describe("compra automatica integration (E5)", () => {
       [rodada.id]
     );
     expect(Number(propostaItem?.custo_final_unitario)).toBe(8);
+    // Decisao 14: TODA compra automatica avisa o comprador na hora, nao so o que sobrou.
+    const aviso = await consultarUm<{ titulo: string }>(
+      "select titulo from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1",
+      [rodada.id]
+    );
+    expect(aviso?.titulo).toContain("Compra automática");
   });
 
   it("item acima da base NAO compra e cai no sino do comprador", async () => {

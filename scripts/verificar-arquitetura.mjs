@@ -56,7 +56,7 @@ for (const arquivo of arquivosApi) {
   // revisao que alguem pode esquecer de fazer.
   if (arquivo.endsWith("rodada-publica.repository.ts") || arquivo.endsWith("rodada-publica.service.ts")) {
     if (
-      /compras-rodadas\.(repository|service)\.js|compras-fundacao|produtosPrecosBase|comprasAdjudicacoes|produtos_precos_base|compras_adjudicacoes/u.test(
+      /compras-(rodadas|decisao|fechamento|adjudicacao|solicitacoes)\.(repository|service)\.js|compras-fundacao|produtosPrecosBase|comprasAdjudicacoes|produtos_precos_base|compras_adjudicacoes/u.test(
         conteudo
       )
     ) {

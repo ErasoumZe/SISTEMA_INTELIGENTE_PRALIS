@@ -1256,6 +1256,11 @@ A base inicial vem uma única vez de `ÚLTIMO MENOR CUSTO`, pareada por código/
 normalizada, com relatório de ambiguidades antes da aplicação. Depois, a base vigente é o menor custo
 final válido da rodada mais recentemente encerrada e pode subir ou cair; o histórico é preservado.
 
+> **Nota de ajuste (R-221 decisão 12 e E6, 21/10/2026).** A base nova não é "o menor custo de todas as
+> propostas": é o custo final do que foi **comprado automaticamente** na rodada. Como a compra
+> automática exige custo ≤ base e a exceção do Comprador não vira base, a base vinda de rodada **só
+> desce**; só a carga inicial/reimportação a sobe. Pergunta aberta no documento 54 (item 3).
+
 Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Meta Cloud API e só muda
 para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
 
@@ -1329,8 +1334,10 @@ o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
   acima do envelope, não vira base: virar base subiria em silêncio o teto da pré-autorização seguinte.
 - **Item que sobrou na fila** tem duas saídas: encerrar a solicitação (`encerrada`) ou levar os itens
   para uma **nova** solicitação. Não há segunda rodada sobre a mesma necessidade.
-- **A rodada só fecha no prazo,** mesmo com tudo comprado antes. Fechar antecipadamente exigiria um
-  motivo de fechamento novo (migration) e não foi pedido.
+- **A rodada só fecha no prazo,** mesmo com tudo comprado antes. Fechar antes não foi pedido (o schema
+  já tem o motivo `comprador`, mas não há motivo para fechamento automático ao completar).
+- A revisão do E6 levantou 11 perguntas que o código decidiu em silêncio; estão no documento 54, ao fim
+  de "Ainda sem decisão", para José confirmar.
 
 ## §4 · Como isto deixa de ser mais um documento
 

@@ -259,6 +259,20 @@ export async function travarSolicitacaoRepository(
   return solicitacao ?? null;
 }
 
+/** A solicitacao existe NESTA empresa? Lida antes da advisory: quem manda um id alheio nao segura trava nenhuma. */
+export async function solicitacaoExisteNaEmpresaRepository(
+  solicitacaoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [linha] = await db
+    .select({ id: comprasSolicitacoes.id })
+    .from(comprasSolicitacoes)
+    .where(and(eq(comprasSolicitacoes.id, solicitacaoId), eq(comprasSolicitacoes.empresaId, empresaId)))
+    .limit(1);
+  return Boolean(linha);
+}
+
 /** Solicitacao dona da rodada, lida antes da trava so para saber qual advisory pegar. */
 export async function solicitacaoDaRodadaRepository(
   rodadaId: string,

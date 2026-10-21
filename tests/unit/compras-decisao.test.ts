@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aprovarExcecaoPayloadSchema,
   motivoDecisao,
+  motivosDecisao,
   statusSolicitacaoAposFechamento,
   type PropostaParaMotivo
 } from "@padaria/shared/compras";
@@ -58,6 +59,28 @@ describe("motivoDecisao", () => {
   it("indisponivel de um fornecedor nao esconde o preco de outro", () => {
     expect(motivoDecisao([preco(null, true), preco(12)], 10)).toBe("acima_da_base");
   });
+
+  it("decide pelo MENOR custo entre todos os fornecedores (um barato basta para nao ser acima da base)", () => {
+    expect(motivoDecisao([preco(30), preco(12), preco(10.5)], 10)).toBe("acima_da_base");
+    expect(motivoDecisao([preco(30), preco(12), preco(9.99)], 10)).toBe("teto");
+  });
+
+  it("proposta sem custo ao lado de uma com custo: decide pela que tem custo", () => {
+    expect(motivoDecisao([preco(null), preco(8)], null)).toBe("sem_base");
+    expect(motivoDecisao([preco(null), preco(12)], 10)).toBe("acima_da_base");
+  });
+
+  it("todo motivo possivel tem um caso acima (nenhum motivo novo entra sem teste)", () => {
+    const cobertos = new Set([
+      motivoDecisao([], 10),
+      motivoDecisao([preco(null, true)], 10),
+      motivoDecisao([preco(null)], 10),
+      motivoDecisao([preco(8)], null),
+      motivoDecisao([preco(12)], 10),
+      motivoDecisao([preco(10)], 10)
+    ]);
+    expect([...cobertos].sort()).toEqual([...motivosDecisao].sort());
+  });
 });
 
 describe("aprovarExcecaoPayloadSchema", () => {
@@ -69,5 +92,13 @@ describe("aprovarExcecaoPayloadSchema", () => {
 
   it("recusa sem o item de proposta: o comprador escolhe QUAL proposta aprova", () => {
     expect(aprovarExcecaoPayloadSchema.safeParse({ empresaId: uuid }).success).toBe(false);
+  });
+
+  it("recusa id que nao e uuid e descarta campo extra (quem aprova vem da sessao, nunca do corpo)", () => {
+    expect(aprovarExcecaoPayloadSchema.safeParse({ empresaId: uuid, propostaItemId: "1' or '1'='1" }).success).toBe(
+      false
+    );
+    const lido = aprovarExcecaoPayloadSchema.parse({ empresaId: uuid, propostaItemId: uuid, aprovadoPor: "outra" });
+    expect(lido).toEqual({ empresaId: uuid, propostaItemId: uuid });
   });
 });

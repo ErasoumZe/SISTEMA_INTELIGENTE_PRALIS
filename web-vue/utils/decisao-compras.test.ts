@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DecisaoItemDto, DecisaoPropostaDto } from "@padaria/shared";
+import { motivosDecisao } from "@padaria/shared";
 import {
   AJUDA_MOTIVO,
+  COR_MOTIVO,
   ROTULO_MOTIVO,
   itensParaNovaSolicitacao,
   podeAprovarProposta,
@@ -32,9 +34,11 @@ describe("decisao-compras", () => {
     expect(totalDaProposta(proposta({ custoFinalUnitario: null }), "3")).toBeNull();
   });
 
-  it("todo motivo tem rotulo e ajuda (nenhum motivo novo fica sem texto na tela)", () => {
-    for (const motivo of Object.keys(ROTULO_MOTIVO)) {
-      expect(AJUDA_MOTIVO[motivo as keyof typeof AJUDA_MOTIVO], motivo).toBeTruthy();
+  it("todo motivo do contrato tem rotulo, cor e ajuda (nenhum motivo novo fica sem texto na tela)", () => {
+    for (const motivo of motivosDecisao) {
+      expect(ROTULO_MOTIVO[motivo], motivo).toBeTruthy();
+      expect(AJUDA_MOTIVO[motivo], motivo).toBeTruthy();
+      expect(Object.keys(COR_MOTIVO), motivo).toContain(motivo);
     }
   });
 

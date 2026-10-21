@@ -87,13 +87,15 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     });
   }
 
-  /** Rodada de 1h com os dois produtos para o mesmo fornecedor. */
-  async function abrir(): Promise<{ rodada: RodadaAberta; solicitacaoId: string; solicitacaoItemIds: string[] }> {
+  /** Rodada de 1h para o mesmo fornecedor: os dois produtos, ou so o que tem base (`soComBase`). */
+  async function abrir(
+    soComBase = false
+  ): Promise<{ rodada: RodadaAberta; solicitacaoId: string; solicitacaoItemIds: string[] }> {
     const criar = await post("/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
       itens: [
         { produtoId: idsTeste.produto, quantidade: 2 },
-        { produtoId: PRODUTO_2, quantidade: 1 }
+        ...(soComBase ? [] : [{ produtoId: PRODUTO_2, quantidade: 1 }])
       ]
     });
     const solicitacaoId = json<{ data: { id: string } }>(criar).data.id;
@@ -291,7 +293,139 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect(json<{ code?: string }>(resposta).code).toBe("RODADA_ENCERRADA");
   });
 
-  it("o tick do agendador fecha so as rodadas vencidas e entrega a falha de uma sem parar as outras", async () => {
+  it("rodada em que ninguem respondeu: o fechamento e quem avisa o comprador (nao havia aviso antes)", async () => {
+    const { rodada, solicitacaoId } = await abrir();
+    // Sem resposta nenhuma nao existe aviso previo: o unico possivel e o do fechamento.
+    await expect(
+      consultarUm("select id from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1", [
+        rodada.id
+      ])
+    ).resolves.toBeNull();
+
+    const resultado = await fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 0 });
+    const aviso = await consultarUm<{ titulo: string }>(
+      "select titulo from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1",
+      [rodada.id]
+    );
+    expect(aviso?.titulo).toBe("Rodada de compra encerrada com itens para decidir");
+
+    const fila = json<{ data: { itens: Array<{ motivo: string }> } }>(
+      await contexto.app.inject({
+        method: "GET",
+        url: `/api/compras/rodadas/${rodada.id}/decisoes?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie: cookieAdmin }
+      })
+    ).data;
+    expect(fila.itens.map((item) => item.motivo)).toEqual(["sem_resposta", "sem_resposta"]);
+  });
+
+  it("tudo comprado sozinho: a solicitacao fecha como comprada, sem item para decidir e sem novo aviso", async () => {
+    const { rodada, solicitacaoId } = await abrir(true);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 1, segundo: 1 });
+    const avisos = () =>
+      consultarUm<{ total: number }>(
+        "select count(*)::int as total from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1",
+        [rodada.id]
+      );
+    // Decisao 14: TODA compra automatica avisa o comprador, nao so o que sobrou.
+    expect((await avisos())?.total).toBe(1);
+    const titulo = await consultarUm<{ titulo: string }>(
+      "select titulo from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1",
+      [rodada.id]
+    );
+    expect(titulo?.titulo).toContain("Compra automática");
+
+    const resultado = await fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+    expect(resultado).toMatchObject({ fechada: true, comprados: 1, pendentes: 0 });
+    const solicitacao = await consultarUm<{ status: string; encerrada_em: string | null }>(
+      "select status, encerrada_em from compras_solicitacoes where id = $1",
+      [solicitacaoId]
+    );
+    expect(solicitacao?.status).toBe("comprada");
+    expect(solicitacao?.encerrada_em).not.toBeNull();
+    expect((await avisos())?.total).toBe(1);
+  });
+
+  it("dois fechamentos simultaneos da mesma rodada: so um fecha e a base troca uma unica vez", async () => {
+    const { rodada, solicitacaoId } = await abrir(true);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 1, segundo: 1 });
+    const bases = () =>
+      consultarUm<{ total: number }>(
+        "select count(*)::int as total from produtos_precos_base where empresa_id = $1 and produto_id = $2",
+        [idsTeste.empresaA, idsTeste.produto]
+      );
+    const antes = (await bases())?.total ?? 0;
+    const alvo = { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId };
+    const depois = new Date(Date.now() + 2 * HORA);
+    const resultados = await Promise.all([fecharRodadaPorPrazo(alvo, depois), fecharRodadaPorPrazo(alvo, depois)]);
+    expect(resultados.filter((resultado) => resultado.fechada)).toHaveLength(1);
+    expect((await bases())?.total).toBe(antes + 1);
+  });
+
+  it("compra aprovada pelo comprador com a rodada aberta nao vira base no fechamento", async () => {
+    const { rodada, solicitacaoId } = await abrir();
+    // 12 > base vigente: nao compra sozinho; o segundo produto nao tem base.
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 100, segundo: 5 });
+    const vigente = () =>
+      consultarUm<{ id: string; valor: string }>(
+        "select id, valor from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+        [idsTeste.empresaA, idsTeste.produto]
+      );
+    const baseAntes = await vigente();
+    const fila = json<{ data: { itens: Array<{ produtoId: string; propostas: Array<{ propostaItemId: string }> }> } }>(
+      await contexto.app.inject({
+        method: "GET",
+        url: `/api/compras/rodadas/${rodada.id}/decisoes?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie: cookieAdmin }
+      })
+    ).data;
+    const item = fila.itens.find((linha) => linha.produtoId === idsTeste.produto)!;
+    const aprovar = await post(`/api/compras/rodadas/${rodada.id}/decisoes/aprovar`, {
+      empresaId: idsTeste.empresaA,
+      propostaItemId: item.propostas[0]!.propostaItemId
+    });
+    expect(aprovar.statusCode, aprovar.body).toBe(200);
+
+    const resultado = await fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+    // O item foi comprado (pelo comprador), o outro sobrou; mas NENHUMA base foi trocada.
+    expect(resultado).toMatchObject({ fechada: true, comprados: 1, pendentes: 1, basesAtualizadas: 0 });
+    const baseDepois = await vigente();
+    expect(baseDepois?.id).toBe(baseAntes?.id);
+    expect(Number(baseDepois?.valor)).toBe(Number(baseAntes?.valor));
+  });
+
+  it("base vigente mais nova que o fechamento: a troca ainda fecha a anterior (valido_ate > valido_desde)", async () => {
+    const { rodada, solicitacaoId } = await abrir(true);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 0.5, segundo: 0.5 });
+    // A base vigente comeca DEPOIS do instante de fechamento: o +1ms do codigo e o que evita violar a constraint.
+    await executarSql(
+      "update produtos_precos_base set valido_desde = now() + interval '5 hour' where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, idsTeste.produto]
+    );
+    const resultado = await fecharRodadaPorPrazo(
+      { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
+      new Date(Date.now() + 2 * HORA)
+    );
+    expect(resultado).toMatchObject({ fechada: true, basesAtualizadas: 1 });
+    const vigente = await consultarUm<{ valor: string; origem: string }>(
+      "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, idsTeste.produto]
+    );
+    expect(Number(vigente?.valor)).toBe(0.5);
+    expect(vigente?.origem).toBe("rodada");
+  });
+
+  it("o tick do agendador fecha so as rodadas vencidas, sem tocar nas em andamento", async () => {
     const vencida = await abrir();
     const emAndamento = await abrir();
     // So a `vencida` passa do prazo de 1h; a outra segue aberta (agora = daqui a 90 min nao a alcanca

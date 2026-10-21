@@ -14,10 +14,10 @@ export function useRodadaDecisoes(empresaId: Ref<string>) {
   let requisicao = 0;
 
   /** A fila da rodada MAIS RECENTE da solicitacao (a lista de rodadas vem da mais nova para a mais antiga). */
-  async function carregar(solicitacaoId: string) {
+  async function carregar(solicitacaoId: string, manterErro = false) {
     const token = (requisicao += 1);
     carregando.value = true;
-    erro.value = "";
+    if (!manterErro) erro.value = "";
     decisoes.value = null;
     try {
       const empresa = encodeURIComponent(empresaId.value);

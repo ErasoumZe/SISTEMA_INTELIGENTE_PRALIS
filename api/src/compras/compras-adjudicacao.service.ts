@@ -4,7 +4,10 @@
 import { calcularCustoFinal, type ItemParaCusto } from "@padaria/shared/compras";
 import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { executarEmTransacao } from "../banco/conexao.js";
+import { falhaTecnica } from "../erros.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
+import { ultimaVersaoEnviadaDoConviteRepository } from "./compras-decisao.repository.js";
+import { travarRodadaRepository } from "./compras-fechamento.repository.js";
 import {
   carregarPropostaParaAdjudicacaoRepository,
   criarPedidoConfirmadoRepository,
@@ -33,12 +36,21 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
     if (!proposta) return { comprados: 0, pendentes: 0 };
     // Ordem canonica: advisory por solicitacao antes de ler o que decide a corrida.
     await tx.execute(sqlTravarRodadaDeCompras(proposta.solicitacaoId));
-    if (proposta.rodadaStatus !== "aberta") return { comprados: 0, pendentes: 0 };
+    // O status lido na carga pode estar velho: o fechamento por prazo pode ter commitado enquanto esta
+    // transacao esperava a trava. Reler SOB a trava e a unica leitura que decide.
+    const rodadaAtual = await travarRodadaRepository(proposta.rodadaId, tx);
+    if (!rodadaAtual || rodadaAtual.status !== "aberta") return { comprados: 0, pendentes: 0 };
+    // So a ULTIMA resposta compra: uma versao antiga, processada depois da nova, compraria uma oferta
+    // que o fornecedor ja retirou.
+    if (proposta.versao < (await ultimaVersaoEnviadaDoConviteRepository(proposta.conviteId, tx))) {
+      return { comprados: 0, pendentes: 0 };
+    }
 
     const adjudicados = await rodadaItensAdjudicadosRepository(proposta.rodadaId, tx);
-    const livres = proposta.itens.filter(
-      (item) => !adjudicados.has(item.rodadaItemId) && !item.indisponivel && item.valorUnitario !== null
-    );
+    // Ordem fixa (id do item): com teto, QUAIS itens cabem nao pode depender da ordem fisica das linhas.
+    const livres = proposta.itens
+      .filter((item) => !adjudicados.has(item.rodadaItemId) && !item.indisponivel && item.valorUnitario !== null)
+      .sort((a, b) => a.rodadaItemId.localeCompare(b.rodadaItemId));
     if (!livres.length) return { comprados: 0, pendentes: 0 };
 
     const entrada: ItemParaCusto[] = livres.map((item) => ({
@@ -64,8 +76,11 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
       );
     }
 
-    const teto = proposta.tetoValor === null ? null : Number(proposta.tetoValor);
-    let acumulado = teto === null ? 0 : await somaAutomaticaDaRodadaRepository(proposta.rodadaId, tx);
+    // Teto em centavos inteiros: em ponto flutuante (0.1 + 0.2 <= 0.3 e falso) um item que cabe
+    // exatamente no teto seria barrado.
+    const tetoCentavos = proposta.tetoValor === null ? null : Math.round(Number(proposta.tetoValor) * 100);
+    let acumulado =
+      tetoCentavos === null ? 0 : Math.round((await somaAutomaticaDaRodadaRepository(proposta.rodadaId, tx)) * 100);
     let pedidoId: string | null = null;
     let comprados = 0;
     let pendentes = 0;
@@ -73,8 +88,8 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
     for (const item of livres) {
       const custo = custoPorRodadaItem.get(item.rodadaItemId)!;
       const quantidade = Number(item.quantidade);
-      const totalItem = custo.custoFinalUnitario * quantidade;
-      const cabeNoTeto = teto === null || acumulado + totalItem <= teto;
+      const totalItem = Math.round(custo.custoFinalUnitario * quantidade * 100);
+      const cabeNoTeto = tetoCentavos === null || acumulado + totalItem <= tetoCentavos;
       if (!custo.compraAutomatica || !cabeNoTeto) {
         pendentes += 1;
         continue;
@@ -123,25 +138,30 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
         },
         tx
       );
-      if (venceu) {
-        acumulado += totalItem;
-        comprados += 1;
-      } else {
-        // Corrida: outro ganhou o item apesar da trava (defensivo). O item do pedido fica orfao de
-        // adjudicacao — aceitavel: o pedido e consolidado e nenhuma entrada de estoque ocorreu ainda.
-        pendentes += 1;
-      }
+      // Quebra de invariante, nunca caminho normal (a advisory ja garante a exclusividade): desfaz o
+      // pedido e o item recem-criados em vez de deixar item de pedido sem adjudicacao. A resposta do
+      // fornecedor ja esta gravada; o chamador publico loga e o item cai na decisao.
+      if (!venceu) throw falhaTecnica("Item da rodada ja tinha vencedor apesar da trava");
+      acumulado += totalItem;
+      comprados += 1;
     }
 
-    if (pendentes > 0) {
-      // Decisao 14: o que a compra automatica nao resolveu cai no sino do Comprador na hora.
+    if (comprados > 0 || pendentes > 0) {
+      // Decisao 14: TODA compra automatica cai no sino do Comprador na hora (nao so o que sobrou), e o
+      // que ela nao resolveu tambem. Uma linha por rodada; cada resposta reabre com o titulo atual.
+      const titulo =
+        comprados > 0 && pendentes > 0
+          ? `Rodada de compra: ${comprados} item(ns) comprado(s) automaticamente, ${pendentes} para decidir`
+          : comprados > 0
+            ? `Compra automática: ${comprados} item(ns) comprado(s) na rodada`
+            : "Rodada de compra com itens para decidir";
       await criarNotificacoesRepository(
         {
           empresaId: proposta.empresaId,
           tipo: "compras_decisao_pendente",
           destinatariosUsuarioIds: [proposta.abertaPor],
           referenciaId: proposta.rodadaId,
-          titulo: "Rodada de compra com itens para decidir",
+          titulo,
           reabrir: true
         },
         tx
