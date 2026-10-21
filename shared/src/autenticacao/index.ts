@@ -200,6 +200,9 @@ export const permissoes = [
   "pedidos_aprovar",
   "compras_catalogo_gerir",
   "compras_preco_base_importar",
+  // R-221 decisao 10: aprovar compra acima da base (ou sem base, ou barrada pelo teto da rodada).
+  // Separada de `pedidos_aprovar` (receber): quem confere a porta nao autoriza gasto fora do envelope.
+  "compras_excecao_aprovar",
   "perdas_sobras_visualizar",
   "estoque_produtos_visualizar",
   "conferencias_estoque_visualizar",
