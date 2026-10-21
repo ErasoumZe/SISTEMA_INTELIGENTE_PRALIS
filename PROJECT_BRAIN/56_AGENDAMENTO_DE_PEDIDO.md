@@ -90,12 +90,125 @@ Na data de cada ocorrência, o pedido **aparece para o comprador conferir**: ele
 A tela de Pedidos atual (painel com catálogo, histórico, preço-base, solicitações) será redesenhada por José,
 tela por tela. Até lá, nada novo entra nela.
 
-## 7. Ainda em aberto (perguntar, não supor)
+## 7. Decisões de 21/10 (José: "use as suas recomendações")
 
-1. **Quantidade**: o agendamento guarda quantidade por produto, ou ela é preenchida na conferência (sugestão pelo
-   estoque mínimo/máximo da data)?
-2. **Tempo de resposta**: em horas, em dias, ou data e hora fixa a partir do envio?
-3. **Produto com mais de um fornecedor** no catálogo: a cotação vai para todos eles, ou só para o principal?
-4. **Produto sem fornecedor** no catálogo: bloqueia o envio daquele item, ou o comprador escolhe na conferência?
-5. **Área × setor × local**: "Salão" é `area_estoque` e "Geladeira" é `local_venda`? (conferir com a planilha do Rodrigo)
-6. **Quem recebe o aviso** de que o pedido do dia está para conferir (quem criou o agendamento, ou todo o cargo Compras)?
+1. **Quantidade:** o agendamento guarda uma **quantidade padrão opcional** por produto. Na data, a conferência já vem
+   preenchida com ela; sem padrão, com a sugestão do estoque (máximo − saldo). Tudo editável antes de enviar. Produto
+   sem quantidade padrão e acima do máximo aparece na conferência, mas não entra sozinho.
+2. **Tempo de resposta:** em **horas** (1 a 720), como o prazo da rodada; a tela oferece atalhos (4 h, 12 h, 1 dia, 2 dias).
+3. **Produto com mais de um fornecedor:** a cotação vai para **todos os fornecedores com vínculo aprovado** no catálogo
+   (é o que dá concorrência; cada um recebe só os seus produtos).
+4. **Produto sem fornecedor:** **não bloqueia**; na conferência o comprador escolhe o fornecedor (como na rodada, doc 53).
+5. **Área × local:** os quatro filtros são **independentes** e usam os campos que o produto já tem (área de estoque,
+   local de estoque = setor, local de venda 1/2, grupo/subgrupo). Não se assume que "Salão" é um e "Geladeira" é o outro.
+6. **Aviso:** o sino avisa o **responsável** do agendamento (por padrão quem criou; pode ser trocado) quando o pedido do
+   dia fica pronto para conferir. A lista "para conferir" do módulo mostra a todos que têm a permissão.
+
+Permissões novas (passo de dados, não migration): `compras_agendamento_visualizar` e `compras_agendamento_gerir`
+(Compras, Gerência, Admin). Os campos legados `pedidos.data_agendada`/`pedidos.recorrencia` saem numa migration
+própria, depois de contar em produção quantos pedidos ainda os usam (dado histórico: PARE).
+
+## 8. SQL proposto (migration 0066 — mostrado a José em 21/10, **ainda não gerado nem aplicado**)
+
+```sql
+-- 0066 (PROPOSTA — NÃO gerada, NÃO aplicada). Tabelas novas + 2 CHECKs ampliados. Nenhum dado existente é alterado.
+
+-- 1) A série: o que o comprador salva no card "Agendamento de pedido".
+create table pedidos_agendas (
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  grupo_mercadoria_id uuid not null,            -- o subgrupo escolhido (ou o grupo, se não houver subgrupo)
+  responsavel_id text not null references perfis_usuarios(usuario_id) on delete restrict,
+  inicio_em timestamptz not null,               -- data e hora da 1ª ocorrência
+  fuso_horario text not null,                   -- copiado da empresa ao salvar (a regra é calculada no horário local)
+  regra jsonb not null,                         -- recorrência (formato validado no servidor; ver doc 56 §3)
+  termino_tipo text not null default 'nunca',
+  termino_em date,
+  termino_quantidade integer,
+  prazo_resposta_horas integer not null,        -- o prazo que o fornecedor vê na cotação
+  status text not null default 'ativa',
+  serie_anterior_id uuid references pedidos_agendas(id) on delete restrict,  -- "esta e as futuras"
+  encerrada_em timestamptz,
+  criado_por text not null references perfis_usuarios(usuario_id) on delete restrict,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint pedidos_agendas_id_empresa_unica unique (id, empresa_id),
+  constraint pedidos_agendas_grupo_empresa_fk
+    foreign key (grupo_mercadoria_id, empresa_id) references grupos_mercadorias(id, empresa_id) on delete restrict,
+  constraint pedidos_agendas_status_check check (status in ('ativa', 'encerrada')),
+  constraint pedidos_agendas_encerramento_check check ((status = 'encerrada') = (encerrada_em is not null)),
+  constraint pedidos_agendas_prazo_check check (prazo_resposta_horas between 1 and 720),
+  constraint pedidos_agendas_fuso_check check (btrim(fuso_horario) <> ''),
+  constraint pedidos_agendas_termino_check check (
+    (termino_tipo = 'nunca' and termino_em is null and termino_quantidade is null)
+    or (termino_tipo = 'data' and termino_em is not null and termino_quantidade is null)
+    or (termino_tipo = 'quantidade' and termino_quantidade between 1 and 999 and termino_em is null)
+  )
+);
+create index pedidos_agendas_empresa_status_idx on pedidos_agendas (empresa_id, status);
+
+-- 2) Os produtos marcados na lista.
+create table pedidos_agendas_produtos (
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  agenda_id uuid not null,
+  produto_id uuid not null,
+  quantidade_padrao numeric(14, 3),             -- opcional; vazio = sugestão pelo estoque na data
+  constraint pedidos_agendas_produtos_unico unique (agenda_id, produto_id),
+  constraint pedidos_agendas_produtos_agenda_empresa_fk
+    foreign key (agenda_id, empresa_id) references pedidos_agendas(id, empresa_id) on delete cascade,
+  constraint pedidos_agendas_produtos_produto_empresa_fk
+    foreign key (produto_id, empresa_id) references produtos(id, empresa_id) on delete restrict,
+  constraint pedidos_agendas_produtos_quantidade_check check (quantidade_padrao is null or quantidade_padrao > 0)
+);
+
+-- 3) Cada data em que o pedido acontece (só as que já viraram fato: chegaram, foram canceladas ou movidas).
+create table pedidos_agenda_ocorrencias (
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  agenda_id uuid not null,
+  previsto_para timestamptz not null,           -- instante calculado pela regra (chave contra duplicidade)
+  data_atual timestamptz not null,              -- igual ao previsto, ou a nova data de "editar só esta"
+  situacao text not null default 'aguardando_conferencia',
+  solicitacao_id uuid references compras_solicitacoes(id) on delete restrict,
+  enviada_por text references perfis_usuarios(usuario_id) on delete restrict,
+  enviada_em timestamptz,
+  cancelada_por text references perfis_usuarios(usuario_id) on delete restrict,
+  cancelada_em timestamptz,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint pedidos_agenda_ocorrencias_unica unique (agenda_id, previsto_para),
+  constraint pedidos_agenda_ocorrencias_agenda_empresa_fk
+    foreign key (agenda_id, empresa_id) references pedidos_agendas(id, empresa_id) on delete cascade,
+  constraint pedidos_agenda_ocorrencias_situacao_check
+    check (situacao in ('agendada', 'aguardando_conferencia', 'enviada', 'cancelada')),
+  constraint pedidos_agenda_ocorrencias_conferencia_check
+    check (situacao not in ('aguardando_conferencia', 'enviada') or solicitacao_id is not null),
+  constraint pedidos_agenda_ocorrencias_envio_check
+    check ((situacao = 'enviada') = (enviada_em is not null and enviada_por is not null)),
+  constraint pedidos_agenda_ocorrencias_cancelamento_check
+    check ((situacao = 'cancelada') = (cancelada_em is not null and cancelada_por is not null))
+);
+create index pedidos_agenda_ocorrencias_empresa_situacao_idx
+  on pedidos_agenda_ocorrencias (empresa_id, situacao, data_atual);
+
+-- 4) Gatilhos de atualizado_em (convenção do projeto para tabela com a coluna).
+create trigger pedidos_agendas_set_atualizado_em
+  before update on pedidos_agendas for each row execute function set_atualizado_em();
+create trigger pedidos_agenda_ocorrencias_set_atualizado_em
+  before update on pedidos_agenda_ocorrencias for each row execute function set_atualizado_em();
+
+-- 5) A solicitação que nasce na data diz de onde veio; o aviso no sino ganha um tipo.
+alter table compras_solicitacoes drop constraint compras_solicitacoes_origem_check;
+alter table compras_solicitacoes add constraint compras_solicitacoes_origem_check
+  check (origem in ('manual', 'sugestao', 'rapida', 'agendamento'));
+alter table notificacoes drop constraint notificacoes_tipo_check;
+alter table notificacoes add constraint notificacoes_tipo_check
+  check (tipo in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
+    'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir'));
+```
+
+Como funciona: a regra fica em `regra` (jsonb validado pelo contrato em `shared`, testado contra uma biblioteca de
+referência do padrão RFC 5545). As datas futuras são **calculadas**, não gravadas uma a uma; uma linha em
+`pedidos_agenda_ocorrencias` só nasce quando a data chega (vira solicitação para conferir), quando a data é cancelada
+ou movida ("só esta"). O `UNIQUE (agenda_id, previsto_para)` impede que o agendador crie a mesma data duas vezes.
