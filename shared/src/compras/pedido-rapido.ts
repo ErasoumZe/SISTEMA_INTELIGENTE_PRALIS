@@ -1,0 +1,29 @@
+import { z } from "zod";
+
+// Pedido rapido (R-221 decisao 2): o pedido de fornecedor unico deixa de ser um segundo caminho de
+// compra e vira uma RODADA com um unico fornecedor convidado (solicitacao `origem='rapida'`). O atalho
+// continua na tela; o que muda e que a compra sai pelo mesmo portao (base, teto, adjudicacao).
+export const pedidoRapidoPayloadSchema = z.object({
+  empresaId: z.string().uuid(),
+  fornecedorId: z.string().uuid(),
+  observacao: z.string().trim().max(1_000).optional().nullable(),
+  // Mesmos limites da abertura de rodada: nulo = padrao da empresa (R-216) e sem teto.
+  prazoRespostaHoras: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 30)
+    .optional()
+    .nullable(),
+  tetoValor: z.coerce.number().positive().optional().nullable(),
+  itens: z
+    .array(
+      z.object({
+        produtoId: z.string().uuid(),
+        quantidade: z.coerce.number().positive()
+      })
+    )
+    .min(1)
+});
+
+export type PedidoRapidoPayload = z.infer<typeof pedidoRapidoPayloadSchema>;
