@@ -42,9 +42,8 @@ fornecedores (seed). O pareamento verdadeiro exige o cadastro de produção/TNP.
 Duas fases, como o preço-base: **analisar** (nada vira dado do sistema) e **aplicar** (transação única).
 
 1. `compras_historico_importacoes` + `compras_historico_importacao_itens` (staging): uma linha por linha da
-   planilha, com o resultado do pareamento de fornecedor e de produto (`correspondencia`, `ambiguidade`,
-   `nao_encontrado`, `invalido`). Ambiguidade e não encontrado **bloqueiam** a aplicação; sem gravação por
-   aproximação (mesma regra do doc 53).
+   planilha, com o resultado do pareamento de fornecedor e de produto (`correspondencia`, `fornecedor_nao_encontrado`, `produto_nao_encontrado`, `ambiguidade`, `invalido`).
+   Só a linha pareada é aplicada; as demais ficam no relatório; sem gravação por aproximação (ver §5).
 2. `fornecedores_aliases`: nome como aparece na planilha → fornecedor do cadastro. Decidido por pessoa,
    uma vez; as próximas importações reaproveitam.
 3. `compras_historico_precos` (imutável): uma linha por compra (empresa, fornecedor, produto, data,
@@ -56,12 +55,14 @@ Duas fases, como o preço-base: **analisar** (nada vira dado do sistema) e **apl
 5. Tela dentro de Compras: por produto (quem vende, último custo, variação em 3/6 meses) e por fornecedor
    (o que vende e a que preço), com os vínculos do catálogo.
 
-### Rascunho de SQL (NÃO aplicado; precisa de aprovação antes de virar migration 0065)
+### SQL final proposto (NÃO aplicado; migration 0065 só será gerada depois do seu OK)
 
 ```sql
+-- 0065 (PROPOSTA — NÃO gerada, NÃO aplicada). Só tabelas novas; nenhum UPDATE em dado existente.
+
 create table fornecedores_aliases (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id uuid not null,
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
   fornecedor_id uuid not null,
   alias_normalizado text not null,
   criado_por text references perfis_usuarios(usuario_id) on delete set null,
@@ -70,59 +71,80 @@ create table fornecedores_aliases (
   constraint fornecedores_aliases_fornecedor_empresa_fk
     foreign key (fornecedor_id, empresa_id) references fornecedores(id, empresa_id) on delete cascade
 );
+create index fornecedores_aliases_fornecedor_idx on fornecedores_aliases (fornecedor_id);
 
 create table compras_historico_importacoes (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id uuid not null,
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
   nome_arquivo text not null,
   hash_arquivo text not null,
-  status text not null default 'analisada' check (status in ('analisada','aplicada','cancelada')),
-  total_linhas integer not null check (total_linhas >= 0),
+  status text not null default 'analisada',
+  total_linhas integer not null,
+  total_pareadas integer not null default 0,
+  total_pendentes integer not null default 0,
+  total_aplicadas integer not null default 0,
   periodo_inicio date,
   periodo_fim date,
   criado_por text not null references perfis_usuarios(usuario_id) on delete restrict,
   aplicado_por text references perfis_usuarios(usuario_id) on delete restrict,
   criado_em timestamptz not null default now(),
   aplicado_em timestamptz,
-  constraint compras_historico_importacoes_empresa_hash_unico unique (empresa_id, hash_arquivo)
+  constraint compras_historico_importacoes_empresa_hash_unico unique (empresa_id, hash_arquivo),
+  constraint compras_historico_importacoes_status_check check (status in ('analisada', 'aplicada', 'cancelada')),
+  constraint compras_historico_importacoes_totais_check check (
+    total_linhas >= 0 and total_pareadas >= 0 and total_pendentes >= 0 and total_aplicadas >= 0
+  )
 );
+create index compras_historico_importacoes_empresa_criado_idx on compras_historico_importacoes (empresa_id, criado_em);
 
 create table compras_historico_importacao_itens (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key default uuid_generate_v7(),
   importacao_id uuid not null references compras_historico_importacoes(id) on delete cascade,
-  numero_linha integer not null check (numero_linha > 0),
+  numero_linha integer not null,
   fornecedor_informado text not null,
+  fornecedor_normalizado text not null,
   produto_informado text not null,
+  produto_normalizado text not null,
   data_compra date,
-  quantidade numeric(14,3),
-  custo_unitario numeric(14,4),
-  fornecedor_id uuid,
-  produto_id uuid,
-  resultado text not null check (resultado in ('correspondencia','ambiguidade','nao_encontrado','invalido')),
+  quantidade numeric(14, 3),
+  custo_unitario numeric(14, 4),
+  documento text,
+  fornecedor_id uuid references fornecedores(id) on delete restrict,
+  produto_id uuid references produtos(id) on delete restrict,
+  resultado text not null,
   detalhe text,
-  constraint compras_historico_itens_linha_unica unique (importacao_id, numero_linha)
+  atualizado_em timestamptz not null default now(),
+  constraint compras_historico_itens_linha_unica unique (importacao_id, numero_linha),
+  constraint compras_historico_itens_linha_check check (numero_linha > 0),
+  constraint compras_historico_itens_resultado_check check (
+    resultado in ('correspondencia', 'fornecedor_nao_encontrado', 'produto_nao_encontrado', 'ambiguidade', 'invalido')
+  )
 );
+create index compras_historico_itens_importacao_resultado_idx
+  on compras_historico_importacao_itens (importacao_id, resultado);
 
 create table compras_historico_precos (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id uuid not null,
+  id uuid primary key default uuid_generate_v7(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
   fornecedor_id uuid not null,
   produto_id uuid not null,
   data_compra date not null,
-  quantidade numeric(14,3) not null check (quantidade > 0),
-  custo_unitario numeric(14,4) not null check (custo_unitario > 0),
-  custo_total numeric(14,2),
+  quantidade numeric(14, 3) not null,
+  custo_unitario numeric(14, 4) not null,
   documento text,
-  origem text not null check (origem in ('planilha','recebimento')),
+  origem text not null,
   importacao_item_id uuid references compras_historico_importacao_itens(id) on delete restrict,
-  pedido_id uuid references pedidos(id) on delete restrict,
+  pedido_item_id uuid references pedidos_itens(id) on delete restrict,
   criado_por text references perfis_usuarios(usuario_id) on delete set null,
   criado_em timestamptz not null default now(),
-  constraint compras_historico_precos_origem_ref_check check (
-    (origem = 'planilha' and importacao_item_id is not null)
-    or (origem = 'recebimento' and pedido_id is not null)
+  constraint compras_historico_precos_quantidade_check check (quantidade > 0),
+  constraint compras_historico_precos_custo_check check (custo_unitario > 0),
+  constraint compras_historico_precos_origem_check check (origem in ('planilha', 'recebimento')),
+  constraint compras_historico_precos_origem_referencia_check check (
+    (origem = 'planilha' and importacao_item_id is not null and pedido_item_id is null)
+    or (origem = 'recebimento' and pedido_item_id is not null and importacao_item_id is null)
   ),
-  constraint compras_historico_precos_importacao_unica unique (empresa_id, importacao_item_id),
+  constraint compras_historico_precos_importacao_unica unique (importacao_item_id),
   constraint compras_historico_precos_fornecedor_empresa_fk
     foreign key (fornecedor_id, empresa_id) references fornecedores(id, empresa_id) on delete restrict,
   constraint compras_historico_precos_produto_empresa_fk
@@ -134,8 +156,8 @@ create index compras_historico_precos_fornecedor_data_idx
   on compras_historico_precos (empresa_id, fornecedor_id, data_compra desc);
 ```
 
-(`pedidos.id` e os nomes de FK composta seguem o padrão do schema atual; os nomes finais saem do
-`drizzle-kit generate`. Em produção, simular a migration no estado real antes — ver memória do deploy 0015–0028.)
+Só cria tabelas novas; nenhum `UPDATE` em dado existente. Os nomes finais de FK/índice saem do
+`drizzle-kit generate`; em produção, simular a migration no estado real antes (memória do deploy 0015–0028).
 
 ## 4. "Atualizar os dados do sistema" — o que cada coisa faz
 
@@ -145,22 +167,32 @@ create index compras_historico_precos_fornecedor_data_idx
 | Preço-base (`produtos_precos_base`)                  | **Não mexe sozinho.** Mostra o "menor custo dos últimos N meses" como _sugestão_; trocar a base passa pela análise e aplicação existentes, com confirmação. | **Dinheiro**: a base decide a compra automática.      |
 | Preço-base inicial                                   | A carga inicial é ato único (doc 53). Esta importação não a repete.                                                                                         | —                                                     |
 
-## 5. Decisões necessárias antes do SQL
+## 5. Decisões registradas (José, 21/10/2026: "aceito as recomendações do doc 55, 1 a 8")
 
-1. **Formato de entrada.** (a) CSV/XLSX de **uma aba só** exportado da planilha (pequeno, sem mexer no teto
-   de zip bomb) — **recomendado**; (b) subir o arquivo de 20 MB inteiro, elevando limite de upload e de
-   descompressão (consome memória do servidor numa planilha de 64+ MB descomprimidos).
-2. **O valor 0,10** em `ULTIMO MENOR CUSTO` é "sem preço" e será ignorado? (recomendado: sim; o histórico usa
-   `VALOR CUSTO UN`, que é o pago de fato.)
-3. **Vínculo vindo da planilha** nasce `aprovado` (Compras já comprou desse fornecedor) ou `pendente`
-   (doc 53: o que vem de fora nasce pendente)? Recomendado: `aprovado`, com origem `compras` e evento, pois
-   é compra efetivamente feita — **confirmar com Rodrigo**.
-4. **Pareamento de fornecedores com nomes diferentes:** lista de apelidos confirmada por pessoa (recomendado),
-   nunca automática.
-5. **Produtos `INATIVO ...`** (283): importar para produto inativo existente, ou ignorar?
-6. **Período:** importar tudo (mar–out/2026) ou só os últimos N meses? E "últimos meses" na tela = 3, 6?
-7. **Compras futuras** gravam histórico no recebimento (origem `recebimento`)? Recomendado: sim.
-8. **Linhas "NÃO CONFRONTADO" (40) e a de erro de lançamento:** ficam fora até conferência?
+1. **Entrada:** CSV ou XLSX de **uma aba só** (pequeno). Não se mexe nos tetos de upload (10 MB) nem de descompressão.
+2. **0,10 em `ULTIMO MENOR CUSTO`:** ignorado. O histórico usa `VALOR CUSTO UN` (o pago de fato).
+3. **Vínculo vindo da planilha nasce `aprovado`** (origem `compras`, evento do sistema). **Sujeito à confirmação de
+   Rodrigo antes de aplicar em produção** (gate operacional, como a reconciliação do frete).
+4. **Fornecedores com nomes diferentes:** lista de apelidos confirmada por pessoa. Nome sem par: escolher um
+   fornecedor existente (cria o apelido) ou cadastrar um novo; nunca automático.
+5. **Produtos `INATIVO ...`:** pareiam pelo nome exato com produto do cadastro (inclusive inativo); sem par fica
+   pendente. O prefixo não é removido por aproximação. _(Recomendação minha, não estava explícita em §5.)_
+6. **Período:** tudo (mar–out/2026). Tela mostra 3 meses por padrão, com opção de 6. _(idem)_
+7. **Compras futuras:** cada recebimento grava histórico (`origem='recebimento'`). Entrega posterior, sem migration
+   nova (a coluna `pedido_item_id` já nasce na 0065).
+8. **Linhas "NÃO CONFRONTADO" (40) e a de erro de lançamento:** ficam fora (resultado `invalido`, com detalhe).
+   _(idem)_
+
+**Comportamento da aplicação (decidido junto):**
+
+- Aplicar grava **só as linhas pareadas**. As demais ficam no relatório (fornecedor/produto não encontrado,
+  ambiguidade, inválida) e podem ser pareadas depois: o pareamento é refeito sobre a mesma importação e a aplicação
+  é idempotente (`UNIQUE (importacao_item_id)`). Isso **difere do preço-base** (doc 53), onde pendência bloqueia
+  tudo: lá é ato único de dinheiro; aqui é histórico de leitura, e 11 mil linhas não podem travar por 1 produto.
+- Vínculo `fornecedores_produtos`: cria se não existir (`aprovado`, `origem='compras'`, `preco_ofertado` = custo da
+  compra mais recente); se existir `pendente`, passa a `aprovado`; se `rejeitado`, **não toca** e lista no relatório.
+  A análise mostra **antes de aplicar** quantos vínculos serão criados/aprovados e uma amostra.
+- Preço-base: **não é alterado** por esta importação.
 
 ## 6. Fora de escopo desta proposta
 
