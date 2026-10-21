@@ -24,10 +24,14 @@ export async function listarNotificacoes(empresaId: string, perfil: PerfilUsuari
     criadoEm: item.criadoEm.toISOString(),
     // Compras (R-221 decisao 14): a referencia e a rodada; o sino so precisa levar o Comprador a tela
     // de Pedidos, onde mora a fila de decisao.
+    // Agendamento de pedido (doc 56): a referencia e a ocorrencia; o sino leva ao modulo, onde o pedido
+    // do dia espera a conferencia.
     detalhes:
       item.tipo === "compras_decisao_pendente"
         ? { setor: "Compras", descricao: null, dataVencimento: null, rota: "/pedidos" }
-        : detalhesPorReferencia.get(item.referenciaId)
+        : item.tipo === "compras_agendamento_conferir"
+          ? { setor: "Compras", descricao: null, dataVencimento: null, rota: "/agendamento_pedidos" }
+          : detalhesPorReferencia.get(item.referenciaId)
   }));
 }
 

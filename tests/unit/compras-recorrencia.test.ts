@@ -18,7 +18,7 @@ const padrao = (regra: Omit<Extract<RegraRecorrencia, { tipo: "padrao" }>, "tipo
   tipo: "padrao",
   ...regra
 });
-const datas = (regra: RegraRecorrencia, inicio: string, ate: string, termino = nunca) =>
+const datas = (regra: RegraRecorrencia, inicio: string, ate: string, termino: TerminoRecorrencia = nunca) =>
   datasDoAgendamento(regra, inicio, termino, ate);
 
 describe("frequencias", () => {

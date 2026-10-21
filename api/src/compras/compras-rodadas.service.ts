@@ -13,6 +13,7 @@ import { expiracaoCotacao, podeConvidar } from "@padaria/shared";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
+import { marcarOcorrenciaEnviadaRepository } from "./compras-agendamento.repository.js";
 import {
   buscarEmpresaComprasRepository,
   buscarFornecedoresParaConviteRepository,
@@ -125,6 +126,9 @@ export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsu
       tx
     );
     await marcarSolicitacaoEmCotacaoRepository(payload.solicitacaoId, payload.empresaId, tx);
+    // Solicitacao que nasceu de um agendamento (doc 56): o pedido do dia passa a "enviado" na MESMA
+    // transacao da rodada — nunca fica "para conferir" com a cotacao ja na rua.
+    await marcarOcorrenciaEnviadaRepository(payload.solicitacaoId, perfil.usuarioId, tx);
 
     // Monta o DTO de resposta (com os itens do envelope e os convites, incluindo o token em claro).
     const rodadaItemIdPorSolicitacaoItem = new Map(criada.itens.map((item) => [item.solicitacaoItemId, item.id]));

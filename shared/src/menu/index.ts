@@ -22,6 +22,7 @@ export const idsMenuConfiguraveis = [
   "perdas_sobras",
   "estoque_produtos",
   "conferencias_estoque",
+  "agendamento_pedidos",
   "relatorio_dre",
   "clientes",
   "fornecedores",

@@ -97,3 +97,4 @@ export * from "./contraproposta.js";
 export * from "./pedido-rapido.js";
 export * from "./historico.js";
 export * from "./recorrencia.js";
+export * from "./agendamento.js";

@@ -1,6 +1,7 @@
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
 import { fecharRodadasVencidas } from "./compras/compras-fechamento.service.js";
+import { materializarAgendamentos } from "./compras/compras-agendamento-agendador.js";
 import { processarTransferenciasTemporais } from "./transferencias/transferencias.service.js";
 
 const app = await buildApp();
@@ -26,6 +27,10 @@ try {
   const executarAgendadorCompras = () => {
     void fecharRodadasVencidas(new Date(), (rodadaId, erro) =>
       app.log.error({ err: erro, rodadaId }, "falha ao fechar rodada de compras vencida")
+    ).catch((error) => app.log.error(error));
+    // Doc 56: a data de um agendamento de pedido chegou -> solicitacao para conferir + aviso no sino.
+    void materializarAgendamentos(new Date(), (agendaId, erro) =>
+      app.log.error({ err: erro, agendaId }, "falha ao materializar agendamento de pedido")
     ).catch((error) => app.log.error(error));
   };
   executarAgendadorCompras();
