@@ -385,7 +385,8 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
             <v-col cols="12">
               <v-alert type="info" variant="tonal" density="compact">
                 O login e o colaborador serão criados juntos. Setor e cargo definem os acessos herdados; depois você
-                poderá ajustar exceções individuais.
+                poderá ajustar exceções individuais. Para operador de Caixa, vincule o PDV e o turno abaixo; para
+                gerência e tesouraria, deixe ambos vazios.
               </v-alert>
             </v-col>
             <v-col cols="12" md="6">
@@ -404,6 +405,30 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
                 item-title="nome"
                 item-value="id"
                 label="Cargo inicial *"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.novoColaboradorPdvPadraoId"
+                :items="opcoesEmpresa.pdvs"
+                item-title="nome"
+                item-value="id"
+                label="PDV vinculado ao Caixa"
+                clearable
+                hint="Preencha junto com o turno para travar a abertura neste PDV."
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.novoColaboradorTurnoPadraoId"
+                :items="opcoesEmpresa.turnos"
+                item-title="nome"
+                item-value="id"
+                label="Turno vinculado ao Caixa"
+                clearable
+                hint="Preencha junto com o PDV. O usuário de Caixa não poderá escolher outro turno."
+                persistent-hint
               />
             </v-col>
           </template>

@@ -18,7 +18,9 @@ import {
   bloquearColaboradorPorCpfRepository,
   bloquearColaboradorUsuarioRepository,
   buscarColaboradorUsuarioRepository,
+  buscarPdvEmpresaRepository,
   buscarSetorEmpresaRepository,
+  buscarTurnoEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
   colaboradorTemCargoAtivoRepository,
   existeEmailUsuarioRepository,
@@ -322,6 +324,19 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       const setor = await buscarSetorEmpresaRepository(novoColaborador.setorId);
       if (!setor || setor.empresaId !== novoColaborador.empresaId) falharValidacao("Setor nao pertence a empresa");
     }
+    if (Boolean(novoColaborador.pdvPadraoId) !== Boolean(novoColaborador.turnoPadraoId)) {
+      falharValidacao("Informe PDV e turno juntos para vincular um usuario ao Caixa");
+    }
+    if (novoColaborador.pdvPadraoId) {
+      const pdv = await buscarPdvEmpresaRepository(novoColaborador.pdvPadraoId);
+      if (!pdv || pdv.empresaId !== novoColaborador.empresaId) falharValidacao("PDV nao pertence a empresa");
+      if (!pdv.ativo) falharValidacao("PDV inativo nao pode ser vinculado ao Caixa");
+    }
+    if (novoColaborador.turnoPadraoId) {
+      const turno = await buscarTurnoEmpresaRepository(novoColaborador.turnoPadraoId);
+      if (!turno || turno.empresaId !== novoColaborador.empresaId) falharValidacao("Turno nao pertence a empresa");
+      if (!turno.ativo) falharValidacao("Turno inativo nao pode ser vinculado ao Caixa");
+    }
   } else if (!preservarColaborador) {
     if (!colaboradorPreLido) falharValidacao("Colaborador nao encontrado");
     validarColaboradorParaVinculo(colaboradorPreLido, id, ator);
@@ -439,7 +454,9 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         empresaId: novoColaborador.empresaId,
         nome: novoColaborador.nome,
         cpf: novoColaborador.cpf,
-        setorId: novoColaborador.setorId
+        setorId: novoColaborador.setorId,
+        pdvPadraoId: novoColaborador.pdvPadraoId ?? null,
+        turnoPadraoId: novoColaborador.turnoPadraoId ?? null
       },
       tx
     );

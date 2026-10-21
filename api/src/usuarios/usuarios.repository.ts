@@ -4,8 +4,10 @@ import {
   cargos,
   colaboradores,
   colaboradoresCargos,
+  pdvs,
   perfisUsuarios,
   setores,
+  turnos,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
@@ -399,6 +401,24 @@ export async function buscarSetorEmpresaRepository(setorId: string, db: Executor
   return setor ?? null;
 }
 
+export async function buscarPdvEmpresaRepository(pdvId: string, db: ExecutorBanco = banco) {
+  const [pdv] = await db
+    .select({ empresaId: pdvs.empresaId, ativo: pdvs.ativo })
+    .from(pdvs)
+    .where(eq(pdvs.id, pdvId))
+    .limit(1);
+  return pdv ?? null;
+}
+
+export async function buscarTurnoEmpresaRepository(turnoId: string, db: ExecutorBanco = banco) {
+  const [turno] = await db
+    .select({ empresaId: turnos.empresaId, ativo: turnos.ativo })
+    .from(turnos)
+    .where(eq(turnos.id, turnoId))
+    .limit(1);
+  return turno ?? null;
+}
+
 export async function listarEmpresasUsuarioRepository(usuarioId: string, db: ExecutorBanco = banco) {
   return db
     .select({ empresaId: usuariosEmpresas.empresaId })
@@ -416,13 +436,27 @@ export async function colaboradorTemCargoAtivoRepository(colaboradorId: string, 
 }
 
 export async function salvarColaboradorUsuarioRepository(
-  input: { id?: string; empresaId: string; nome: string; cpf: string | null; setorId?: string | null },
+  input: {
+    id?: string;
+    empresaId: string;
+    nome: string;
+    cpf: string | null;
+    setorId?: string | null;
+    pdvPadraoId?: string | null;
+    turnoPadraoId?: string | null;
+  },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
     await db
       .update(colaboradores)
-      .set({ nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+      .set({
+        nome: input.nome,
+        cpf: input.cpf,
+        setorId: input.setorId ?? null,
+        pdvPadraoId: input.pdvPadraoId ?? null,
+        turnoPadraoId: input.turnoPadraoId ?? null
+      })
       .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
     return {
       id: input.id,
@@ -434,7 +468,14 @@ export async function salvarColaboradorUsuarioRepository(
   }
   const [criado] = await db
     .insert(colaboradores)
-    .values({ empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      cpf: input.cpf,
+      setorId: input.setorId ?? null,
+      pdvPadraoId: input.pdvPadraoId ?? null,
+      turnoPadraoId: input.turnoPadraoId ?? null
+    })
     .returning({ id: colaboradores.id });
   return criado;
 }

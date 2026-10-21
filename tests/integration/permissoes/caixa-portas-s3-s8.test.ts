@@ -8,7 +8,8 @@ import {
   encerrarCaixaSeedAdminParaTeste,
   prepararPayloadFechamentoValido,
   registrarEncerramentoCaixaParaTeste,
-  universoDoCaixa
+  universoDoCaixa,
+  vincularOperadorAoPdvETurno
 } from "../../setup/caixa.js";
 import {
   abrirBloqueador,
@@ -283,6 +284,12 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     const usuarioCaixa = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
       usuariosTeste.caixa.email
     ]);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioCaixa!.id,
+      pdvId,
+      nome: `S3c ${sequencia}`
+    });
 
     const bloqueador = await abrirBloqueador();
     try {
@@ -380,16 +387,22 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     const usuarioGerente = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
       usuariosTeste.gerente.email
     ]);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioGerente!.id,
+      pdvId: pdvBId,
+      nome: `S4a ${sequencia}`
+    });
     const maquininhaId = await criarMaquininhaParaAbertura(`S4a ${sequencia}`);
     const abertura = await inject("POST", "/api/caixa/abrir", cookieGerente, {
       empresaId: idsTeste.empresaA,
       pdvId: pdvBId,
       usuarioCaixaId: usuarioGerente!.id,
       dataHoraAbertura: "2026-07-31T09:00",
-        maquininhaId,
-        lacreAbertura: lacre,
-        caixaResponsavelNome: "Gerente de teste",
-        supervisorResponsavelNome: "Supervisor de teste"
+      maquininhaId,
+      lacreAbertura: lacre,
+      caixaResponsavelNome: "Gerente de teste",
+      supervisorResponsavelNome: "Supervisor de teste"
     });
     expect(abertura.statusCode, abertura.body).toBe(400);
     expect(abertura.body).toMatch(/pertence a outro caixa/i);
@@ -453,6 +466,12 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     const usuarioCaixa = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
       usuariosTeste.caixa.email
     ]);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: usuarioCaixa!.id,
+      pdvId,
+      nome: `S4b ${sequencia}`
+    });
     const abertura = await inject("POST", "/api/caixa/abrir", cookieCaixa, {
       empresaId: idsTeste.empresaA,
       pdvId,

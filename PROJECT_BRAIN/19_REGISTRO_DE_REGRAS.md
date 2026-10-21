@@ -1260,8 +1260,8 @@ Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Me
 para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
 
 Implementação é aditiva e protegida por feature flag; legado permanece legível. Cada fase exige SQL
-integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0061
-(renumerada de 0060 ao integrar a main) e no documento 53; nada foi publicado em produção.
+integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0062
+(renumerada para 0062 ao integrar a main) e no documento 53; nada foi publicado em produção.
 
 ### R-219 — Seleção manual de fornecedores na rodada (José, 20/10/2026)
 

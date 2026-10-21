@@ -783,6 +783,8 @@ export function formCadastroVazio(): CadastroForm {
     novoColaboradorCpf: "",
     novoColaboradorSetorId: "",
     novoColaboradorCargoId: "",
+    novoColaboradorPdvPadraoId: "",
+    novoColaboradorTurnoPadraoId: "",
     cargoId: "",
     empresaIds: [],
     tipoPermissao: "cargo",

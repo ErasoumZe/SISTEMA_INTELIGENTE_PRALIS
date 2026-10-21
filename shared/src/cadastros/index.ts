@@ -74,6 +74,8 @@ export type CadastroForm = {
   novoColaboradorCpf: string;
   novoColaboradorSetorId: string;
   novoColaboradorCargoId: string;
+  novoColaboradorPdvPadraoId: string;
+  novoColaboradorTurnoPadraoId: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
@@ -104,12 +106,21 @@ export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
 
 export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
+export const MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO =
+  "Para vincular ao Caixa, selecione o PDV e o turno juntos.";
 
 export function bloqueioCadastroUsuario(
   tela: string,
   form: Pick<
     CadastroForm,
-    "role" | "empresaIds" | "empresaIdsTocado" | "novoColaborador" | "novoColaboradorSetorId" | "novoColaboradorCargoId"
+    | "role"
+    | "empresaIds"
+    | "empresaIdsTocado"
+    | "novoColaborador"
+    | "novoColaboradorSetorId"
+    | "novoColaboradorCargoId"
+    | "novoColaboradorPdvPadraoId"
+    | "novoColaboradorTurnoPadraoId"
   >,
   edicao = false
 ): string | null {
@@ -121,6 +132,9 @@ export function bloqueioCadastroUsuario(
   // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
   if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
   if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
+  if (form.novoColaborador && Boolean(form.novoColaboradorPdvPadraoId) !== Boolean(form.novoColaboradorTurnoPadraoId)) {
+    return MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO;
+  }
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
   // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
   // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
@@ -237,7 +251,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId
+        cargoId: form.novoColaboradorCargoId,
+        pdvPadraoId: form.novoColaboradorPdvPadraoId || null,
+        turnoPadraoId: form.novoColaboradorTurnoPadraoId || null
       };
     } else {
       // Mesma regra de `empresaIds`: colaborador vazio NAO viaja. A listagem recorta `colaboradorId`

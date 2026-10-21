@@ -49,9 +49,9 @@
 
 ## Fase 1 implementada localmente
 
-Migration `0061_naive_moondragon.sql` (renumerada de `0060` em 20/10/2026 ao integrar a `main`, que
-já tinha a própria `0060_ajustes_contas`; o SQL aprovado é o mesmo, só mudou o número e a posição,
-que agora é depois da `0060` da main):
+Migration `0062_magical_mother_askani.sql` (renumerada de `0060` em 20/10/2026 ao integrar a `main`,
+que já tinha a própria `0060_ajustes_contas` e, numa segunda rodada, a `0061_true_reptil`; o SQL
+aprovado é o mesmo, só mudaram o número e a posição, que agora é depois das migrations da main):
 
 - reforça grupo/subgrupo e produto no escopo da mesma empresa;
 - adiciona fuso e prazo padrão de cotação à empresa;
@@ -74,7 +74,7 @@ Estado: implementado e testado localmente. Não mergeado, não publicado e não 
 
 Revisão read-only em sete frentes (domínio, backend, segurança, front, QA, arquitetura) encontrou
 defeitos na Fase 1 que não dependiam de nova regra nem de migration. Todos corrigidos nesta rodada,
-sem alterar o DDL da migration (que depois foi só renumerada de `0060` para `0061`):
+sem alterar o DDL da migration (que depois foi só renumerada de `0060` para `0062`):
 
 **Campo que aparecia e não salvava (DoD item 2).** A grade de cadastro projetava apenas `id`, `nome`
 e `cnpj` da empresa, e nenhum `whatsapp` do usuário. Como o formulário de edição é montado da linha
