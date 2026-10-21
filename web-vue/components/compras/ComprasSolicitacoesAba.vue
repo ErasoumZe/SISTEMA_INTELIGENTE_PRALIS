@@ -6,9 +6,10 @@
  *
  * Dona do proprio carregamento/estado/erro, como as demais abas da fundacao (nao compartilham dado).
  */
-import type { ProdutoEstoqueDto, RodadaDto, SolicitacaoDto, StatusSolicitacao } from "@padaria/shared";
+import type { ProdutoEstoqueDto, RodadaDto, SolicitacaoDto } from "@padaria/shared";
 import { gerarItensReposicao } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
+import { COR_STATUS, ROTULO_ORIGEM, ROTULO_STATUS } from "~/utils/compras-solicitacao";
 import { mensagemErro } from "~/utils/domain";
 import { normalizarQuantidadeEditavel } from "~/utils/formatacao";
 import type { SolicitacaoForm, SolicitacaoFormItem } from "~/components/compras/ComprasSolicitacaoFormDialog.vue";
@@ -21,6 +22,7 @@ const props = defineProps<{
   fornecedores: Opcao[];
   podeCriar: boolean;
   podeEditar: boolean;
+  podeExcecao: boolean;
 }>();
 
 const { apiGet, apiPost, apiPut } = useApi();
@@ -41,23 +43,10 @@ const solicitacaoAlvoId = ref<string | null>(null);
 const itensAlvo = ref<Array<{ id: string }>>([]);
 const rodadaAtual = ref<RodadaDto | null>(null);
 
-const ROTULO_STATUS: Record<StatusSolicitacao, string> = {
-  rascunho: "Rascunho",
-  em_cotacao: "Em cotação",
-  parcialmente_comprada: "Parcialmente comprada",
-  comprada: "Comprada",
-  encerrada: "Encerrada",
-  cancelada: "Cancelada"
-};
-const COR_STATUS: Record<StatusSolicitacao, string | undefined> = {
-  rascunho: undefined,
-  em_cotacao: "info",
-  parcialmente_comprada: "warning",
-  comprada: "success",
-  encerrada: undefined,
-  cancelada: "error"
-};
-const ROTULO_ORIGEM: Record<string, string> = { manual: "Manual", sugestao: "Sugestão", rapida: "Rápida" };
+// Fila de decisao do Comprador (E6).
+const dialogDecisoes = ref(false);
+const decisaoSolicitacao = ref<SolicitacaoDto | null>(null);
+
 const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const dataHora = (valor: string) => DATA_HORA.format(new Date(valor));
 
@@ -128,6 +117,29 @@ async function abrirEditar(item: SolicitacaoDto) {
   } catch (causa) {
     erro.value = mensagemErro(causa);
   }
+}
+
+function abrirDecisoes(item: SolicitacaoDto) {
+  decisaoSolicitacao.value = item;
+  dialogDecisoes.value = true;
+}
+
+// Depois de aprovar/encerrar, relê a lista e atualiza o status mostrado no diálogo (mesmo id: não recarrega a fila).
+async function aoMudarDecisao() {
+  await carregar();
+  const atual = solicitacoes.value.find((linha) => linha.id === decisaoSolicitacao.value?.id);
+  if (atual) decisaoSolicitacao.value = atual;
+}
+
+// Os itens que sobraram viram uma NOVA solicitacao: nao existe segunda rodada sobre a mesma necessidade.
+function novaComPendentes(itens: Array<{ produtoId: string; quantidade: string }>) {
+  editandoId.value = null;
+  form.itens = itens.map((item) => ({
+    produtoId: item.produtoId,
+    quantidade: normalizarQuantidadeEditavel(item.quantidade)
+  }));
+  form.observacao = "Itens que sobraram da solicitação anterior.";
+  dialog.value = true;
 }
 
 function preencherMinimo() {
@@ -320,6 +332,14 @@ watch(() => props.empresaId, carregar, { immediate: true });
                   @click="verRodada(item)"
                   >Ver rodada</v-btn
                 >
+                <v-btn
+                  v-if="item.status === 'em_cotacao' || item.status === 'parcialmente_comprada'"
+                  size="small"
+                  variant="text"
+                  prepend-icon="mdi-gavel"
+                  @click="abrirDecisoes(item)"
+                  >Decisões</v-btn
+                >
               </div>
             </td>
           </tr>
@@ -358,6 +378,18 @@ watch(() => props.empresaId, carregar, { immediate: true });
       :rodada="rodadaAtual"
       :empresa-nome="empresaNome"
       @enviar="marcarEnviado"
+    />
+
+    <ComprasRodadaDecisoesDialog
+      v-model="dialogDecisoes"
+      :empresa-id="empresaId"
+      :solicitacao-id="decisaoSolicitacao?.id ?? null"
+      :solicitacao-status="decisaoSolicitacao?.status ?? null"
+      :pode-excecao="podeExcecao"
+      :pode-editar="podeEditar"
+      :pode-criar="podeCriar"
+      @mudou="aoMudarDecisao"
+      @nova-solicitacao="novaComPendentes"
     />
   </div>
 </template>

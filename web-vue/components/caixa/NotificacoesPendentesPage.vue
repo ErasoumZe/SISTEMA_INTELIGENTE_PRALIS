@@ -21,7 +21,8 @@ const categorias = [
   { title: "Transferências", value: "transferencia" },
   { title: "Quebras de caixa", value: "quebra_caixa" },
   { title: "Mensagens", value: "mensagem_admin" },
-  { title: "Campanhas", value: "campanha" }
+  { title: "Campanhas", value: "campanha" },
+  { title: "Compras", value: "compras_decisao_pendente" }
 ];
 function correspondeCategoria(item: Notificacao) {
   return (
@@ -58,7 +59,8 @@ function rotuloTipo(tipo: Notificacao["tipo"]) {
     transferencia_divergencia: "Transferência",
     transferencia_prazo_confirmacao: "Transferência",
     mensagem_admin: "Administração",
-    campanha: "Campanha"
+    campanha: "Campanha",
+    compras_decisao_pendente: "Compras"
   }[tipo];
 }
 </script>

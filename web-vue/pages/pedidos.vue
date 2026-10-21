@@ -59,6 +59,8 @@ const podeCatalogo = computed(() => temPermissao(permissoesUsuario.value, "compr
 const podePrecoBase = computed(() => temPermissao(permissoesUsuario.value, "compras_preco_base_importar"));
 // R-221 decisao 10: solicitacao reusa as permissoes de pedido.
 const podeSolicitacoes = computed(() => temPermissao(permissoesUsuario.value, "pedidos_visualizar"));
+// R-221 decisao 10: aprovar compra fora do envelope pre-autorizado tem permissao propria.
+const podeExcecao = computed(() => temPermissao(permissoesUsuario.value, "compras_excecao_aprovar"));
 const empresaNome = computed(() => empresas.value.find((empresa) => empresa.id === empresaId.value)?.nome ?? "");
 const produtosFundacao = computed(() => Object.values(estoquePorProduto.value));
 const fundacaoHabilitada = ref(false);
@@ -106,6 +108,7 @@ onMounted(async () => {
         :pode-solicitacoes="podeSolicitacoes"
         :pode-criar-solicitacao="podeCriar"
         :pode-editar-solicitacao="podeEditar"
+        :pode-excecao-solicitacao="podeExcecao"
       />
       <div v-if="podeCriar" class="pedidos-acoes">
         <v-card class="pedidos-acao pedidos-acao--sugestao">

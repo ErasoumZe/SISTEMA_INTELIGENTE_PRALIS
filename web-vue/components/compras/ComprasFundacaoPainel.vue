@@ -15,6 +15,7 @@ const props = defineProps<{
   podeSolicitacoes: boolean;
   podeCriarSolicitacao: boolean;
   podeEditarSolicitacao: boolean;
+  podeExcecaoSolicitacao: boolean;
 }>();
 
 const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos" : "solicitacoes");
@@ -55,6 +56,7 @@ const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos"
             :fornecedores="fornecedores"
             :pode-criar="podeCriarSolicitacao"
             :pode-editar="podeEditarSolicitacao"
+            :pode-excecao="podeExcecaoSolicitacao"
           />
         </v-window-item>
       </v-window>
