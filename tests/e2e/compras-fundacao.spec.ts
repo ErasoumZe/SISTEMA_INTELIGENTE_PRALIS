@@ -18,7 +18,7 @@ test("Compras mostra catalogo, preco-base e solicitacoes, e o caminho legado de 
 
     await entrar(page, USUARIOS.admin);
     await page.goto("/pedidos");
-    await expect(page.getByText("Catálogo, preço-base e solicitações", { exact: true })).toBeVisible();
+    await expect(page.getByText("Catálogo, histórico, preço-base e solicitações", { exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Catálogo fornecedor–produto" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Preço-base" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Solicitações" })).toBeVisible();

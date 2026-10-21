@@ -6,6 +6,17 @@
 > abaixo é rascunho para aprovação (AGENTS §4.6). Regra de dinheiro e dado histórico: decisão de José/Marco
 > e confirmação operacional de Rodrigo.
 
+> **Estado em 21/10/2026 (noite):** SQL aprovado por José e **implementado** na branch
+> `feat/compras-fase2-solicitacao-rodada-20261021`: migration `0065_compras_historico_precos` (gerada pelo
+> drizzle-kit; **aplicada só no banco de desenvolvimento, não em produção**), importador (analisar, parear,
+> associar/cadastrar fornecedor, aplicar, cancelar), consulta `/api/compras/historico/resumo` e a aba
+> "Histórico de compras" em Pedidos. Diferença para o SQL mostrado: `compras_historico_importacao_itens` saiu
+> **sem** `atualizado_em` (a convenção exigiria trigger e o item nao precisa dele). Testado: 19 unitários,
+> integração (8 casos) e E2E no navegador nas 4 larguras. Com a planilha real (CSV de 1,2 MB exportado da aba
+> de discriminação): 11.773 linhas analisadas em ~2,6 s; 44 inválidas; o pareamento real só se mede com o
+> cadastro de produção. **Em 21/10 José pediu para refazer as telas de Compras, uma por uma**: esta aba pode
+> mudar de lugar e de forma; o backend fica.
+
 ## 1. Por que a importação falhou
 
 O arquivo `CICLUZ GP - TNP - DISCRIMINAÇÃO_ESTOQUE (MER).xlsx` tem 20 MB. A rota

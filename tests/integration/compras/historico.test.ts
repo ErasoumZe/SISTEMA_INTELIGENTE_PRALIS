@@ -60,7 +60,7 @@ describe("historico de compras por fornecedor e produto integration", () => {
     ]);
   };
 
-  async function analisar(nome: string, arquivo: Buffer, cookie = cookieAdmin, empresaId = idsTeste.empresaA) {
+  async function analisar(nome: string, arquivo: Buffer, cookie = cookieAdmin, empresaId: string = idsTeste.empresaA) {
     const { boundary, corpo } = multipart(nome, arquivo);
     return contexto.app.inject({
       method: "POST",

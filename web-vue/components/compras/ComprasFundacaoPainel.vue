@@ -2,7 +2,7 @@
 import type { Opcao } from "~/types/padaria";
 import type { ProdutoEstoqueDto } from "@padaria/shared";
 
-// Casca de Compras (R-221): catalogo por fornecedor, preco-base e solicitacoes. Sempre ativa: a flag
+// Casca de Compras (R-221, R-222): catalogo por fornecedor, historico de compras, preco-base e solicitacoes. Sempre ativa: a flag
 // COMPRAS_NOVO_FLUXO morreu no E8, junto com o caminho legado. Cada aba e dona do proprio carregamento,
 // estado e erro: elas nao compartilham dado nenhum, e concentrar tudo aqui levava o componente a passar
 // do limite de tamanho do projeto (AGENTS 4.5).
@@ -12,6 +12,7 @@ const props = defineProps<{
   fornecedores: Opcao[];
   produtos: ProdutoEstoqueDto[];
   podeCatalogo: boolean;
+  podeCriarFornecedor: boolean;
   podePrecoBase: boolean;
   podeSolicitacoes: boolean;
   podeCriarSolicitacao: boolean;
@@ -20,13 +21,16 @@ const props = defineProps<{
 }>();
 
 const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos" : "solicitacoes");
+// Aplicar o historico cria/aprova vinculos: a aba do catalogo ja carregada ficaria velha ate recarregar
+// a pagina. Trocar a chave remonta a aba, que busca de novo.
+const versaoCatalogo = ref(0);
 </script>
 
 <template>
   <v-card class="fundacao" variant="outlined">
     <v-card-title class="d-flex align-center ga-3 flex-wrap">
       <v-icon icon="mdi-database-cog-outline" color="primary" />
-      <span>Catálogo, preço-base e solicitações</span>
+      <span>Catálogo, histórico, preço-base e solicitações</span>
     </v-card-title>
     <v-card-subtitle>
       A necessidade vira solicitação; a solicitação vira rodada de cotação; o pedido nasce da rodada.
@@ -34,6 +38,7 @@ const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos"
     <v-card-text>
       <v-tabs v-model="aba">
         <v-tab v-if="podeCatalogo" value="catalogo">Catálogo fornecedor–produto</v-tab>
+        <v-tab v-if="podeCatalogo" value="historico">Histórico de compras</v-tab>
         <v-tab v-if="podePrecoBase" value="precos">Preço-base</v-tab>
         <v-tab v-if="podeSolicitacoes" value="solicitacoes">Solicitações</v-tab>
       </v-tabs>
@@ -42,7 +47,20 @@ const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos"
            precos-base de todos os produtos da empresa. -->
       <v-window v-model="aba">
         <v-window-item v-if="podeCatalogo" value="catalogo">
-          <ComprasCatalogoAba :empresa-id="empresaId" :fornecedores="fornecedores" :produtos="produtos" />
+          <ComprasCatalogoAba
+            :key="versaoCatalogo"
+            :empresa-id="empresaId"
+            :fornecedores="fornecedores"
+            :produtos="produtos"
+          />
+        </v-window-item>
+        <v-window-item v-if="podeCatalogo" value="historico">
+          <ComprasHistoricoAba
+            :empresa-id="empresaId"
+            :fornecedores="fornecedores"
+            :pode-criar-fornecedor="podeCriarFornecedor"
+            @alterado="versaoCatalogo += 1"
+          />
         </v-window-item>
         <v-window-item v-if="podePrecoBase" value="precos">
           <ComprasPrecoBaseAba :empresa-id="empresaId" />
