@@ -7,12 +7,15 @@
  * antecipado por linha (reuso de `PedidoItemLinha`) e pelo conjunto no rodape, batendo com a funcao
  * pura `pendenciasDeTeto` do servidor: o comprador ve o impedimento antes de salvar, nao no 422.
  */
+import { podeConvidar } from "@padaria/shared";
 import type { ProdutoEstoqueDto } from "@padaria/shared";
 import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
+import type { Opcao } from "~/types/padaria";
 import { formatarQuantidade } from "~/utils/formatacao";
 
 export type SolicitacaoFormItem = { produtoId: string; quantidade: string };
-export type SolicitacaoForm = { itens: SolicitacaoFormItem[]; observacao: string };
+// `fornecedorId` so existe no PEDIDO RAPIDO (R-221 decisao 2): a solicitacao comum nao tem fornecedor.
+export type SolicitacaoForm = { itens: SolicitacaoFormItem[]; observacao: string; fornecedorId?: string };
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{
@@ -24,6 +27,10 @@ const props = defineProps<{
   estoquePorProduto: Record<string, ProdutoEstoqueDto>;
   /** Quando ha produtos no minimo para o atalho "preencher com o que esta no minimo". */
   podeReposicao: boolean;
+  /** Presente = PEDIDO RAPIDO: um fornecedor so, que vira uma rodada de um convite (R-221 decisao 2). */
+  fornecedores?: Opcao[];
+  /** Erro da API ao salvar: precisa aparecer DENTRO do dialogo, que cobre a tela com o scrim. */
+  erro?: string;
 }>();
 const emit = defineEmits<{ salvar: []; adicionar: []; remover: [indice: number]; preencherMinimo: [] }>();
 
@@ -42,7 +49,21 @@ const linhasAcimaDoMaximo = computed(() =>
   })
 );
 
+const rapido = computed(() => props.fornecedores !== undefined);
+// Inativo ou sem WhatsApp aparece, mas nao pode ser escolhido: o motivo fica a vista (a mesma regra do servidor).
+const opcoesDeFornecedor = computed(() =>
+  (props.fornecedores ?? []).map((fornecedor) => {
+    const motivo = podeConvidar({ situacao: fornecedor.situacao ?? null, whatsapp: fornecedor.whatsapp ?? null });
+    return {
+      id: fornecedor.id,
+      titulo: motivo ? `${fornecedor.nome ?? "Fornecedor"} — ${motivo}` : (fornecedor.nome ?? "Fornecedor"),
+      props: { disabled: Boolean(motivo) }
+    };
+  })
+);
+
 const impedimento = computed(() => {
+  if (rapido.value && !props.form.fornecedorId) return "Escolha o fornecedor.";
   if (!linhasValidas.value.length) return "Adicione ao menos um produto com quantidade.";
   if (produtoRepetido.value) return "O mesmo produto aparece duas vezes: junte as quantidades.";
   if (linhasAcimaDoMaximo.value.length) return "Há item acima do estoque máximo configurado.";
@@ -56,7 +77,11 @@ const impedimento = computed(() => {
       <div class="solicitacao-form__topo">
         <div class="solicitacao-form__titulo">
           <h2 class="text-h6">{{ titulo }}</h2>
-          <p class="text-caption text-medium-emphasis">
+          <p v-if="rapido" class="text-caption text-medium-emphasis">
+            Um fornecedor só. O pedido abre uma rodada com ele e a compra sai pelo mesmo caminho das demais (preço-base
+            e teto).
+          </p>
+          <p v-else class="text-caption text-medium-emphasis">
             A necessidade nasce sem fornecedor. Vários fornecedores cotam partes dela na rodada.
           </p>
         </div>
@@ -66,6 +91,17 @@ const impedimento = computed(() => {
       </div>
 
       <v-card-text class="solicitacao-form__itens">
+        <v-select
+          v-if="rapido"
+          v-model="form.fornecedorId"
+          :items="opcoesDeFornecedor"
+          item-title="titulo"
+          item-value="id"
+          label="Fornecedor"
+          density="comfortable"
+          hide-details="auto"
+          data-campo="fornecedor-rapido"
+        />
         <div class="solicitacao-form__secao">
           <span class="solicitacao-form__secao-titulo">Itens da solicitação</span>
           <div class="d-flex ga-2 flex-wrap">
@@ -114,6 +150,10 @@ const impedimento = computed(() => {
         />
       </v-card-text>
 
+      <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mx-4 mb-2" data-campo="erro-salvar">{{
+        erro
+      }}</v-alert>
+
       <div class="solicitacao-form__rodape">
         <span v-if="impedimento" class="solicitacao-form__impedimento" data-campo="impedimento">{{ impedimento }}</span>
         <span v-else class="solicitacao-form__pronto"
@@ -122,9 +162,9 @@ const impedimento = computed(() => {
         >
         <v-spacer />
         <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="salvando" :disabled="Boolean(impedimento)" @click="emit('salvar')"
-          >Salvar solicitação</v-btn
-        >
+        <v-btn color="primary" :loading="salvando" :disabled="Boolean(impedimento)" @click="emit('salvar')">{{
+          rapido ? "Enviar pedido" : "Salvar solicitação"
+        }}</v-btn>
       </div>
     </v-card>
   </v-dialog>

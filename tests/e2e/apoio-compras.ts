@@ -200,30 +200,39 @@ export function dialogoAberto(page: Page): Locator {
 }
 
 /**
- * R-216: prepara uma cotacao pronta para o fornecedor abrir — produto, fornecedor, pedido e link.
+ * R-221: prepara uma rodada pronta para o fornecedor abrir — produto, fornecedor, solicitacao e link.
  * Devolve o token cru, que so existe neste momento: o banco guarda apenas o hash.
  */
-export async function prepararCotacao(
+export async function prepararRodada(
   contexto: ContextoCompras,
   sufixo: string,
   quantidade = 4.5
-): Promise<{ pedidoId: string; token: string; produto: string }> {
-  const produto = `E2E Cotacao com nome longo para quebrar linha ${sufixo}`;
+): Promise<{ solicitacaoId: string; rodadaId: string; token: string; produto: string; produtoId: string }> {
+  const produto = `E2E Rodada com nome longo para quebrar linha ${sufixo}`;
   const produtoId = await criarProdutoDeEstoque(contexto, {
     descricao: produto,
     estoqueMin: 1,
     estoqueMax: 50,
     setorEstoque: `Deposito ${sufixo}`
   });
-  const fornecedorId = await criarFornecedor(contexto, `E2E Cotacao ${sufixo}`, "11977776666");
-  const pedido = await contexto.api.post("/api/pedidos", {
-    data: { empresaId: contexto.empresaId, fornecedorId, recorrencia: "nenhuma", itens: [{ produtoId, quantidade }] }
+  const fornecedorId = await criarFornecedor(contexto, `E2E Rodada ${sufixo}`, "11977776666");
+  const solicitacao = await contexto.api.post("/api/compras/solicitacoes", {
+    data: { empresaId: contexto.empresaId, itens: [{ produtoId, quantidade }] }
   });
-  expect(pedido.status(), await pedido.text()).toBe(201);
-  const pedidoId = ((await pedido.json()) as { data: { id: string } }).data.id;
-  const gerada = await contexto.api.post(`/api/pedidos/${pedidoId}/cotacoes`, { data: {} });
-  expect(gerada.status(), await gerada.text()).toBe(201);
-  return { pedidoId, token: ((await gerada.json()) as { data: { token: string } }).data.token, produto };
+  expect(solicitacao.status(), await solicitacao.text()).toBe(201);
+  const solicitacaoId = ((await solicitacao.json()) as { data: { id: string } }).data.id;
+  const detalhe = await contexto.api.get(`/api/compras/solicitacoes/${solicitacaoId}`);
+  const itens = ((await detalhe.json()) as { data: { itens: Array<{ id: string }> } }).data.itens;
+  const rodada = await contexto.api.post("/api/compras/rodadas", {
+    data: {
+      empresaId: contexto.empresaId,
+      solicitacaoId,
+      convites: [{ fornecedorId, solicitacaoItemIds: itens.map((item) => item.id) }]
+    }
+  });
+  expect(rodada.status(), await rodada.text()).toBe(201);
+  const corpo = ((await rodada.json()) as { data: { id: string; convites: Array<{ token: string }> } }).data;
+  return { solicitacaoId, rodadaId: corpo.id, token: corpo.convites[0]!.token, produto, produtoId };
 }
 
 /**

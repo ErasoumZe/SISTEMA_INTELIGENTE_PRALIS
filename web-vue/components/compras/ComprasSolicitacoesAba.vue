@@ -7,9 +7,8 @@
  * Dona do proprio carregamento/estado/erro, como as demais abas da fundacao (nao compartilham dado).
  */
 import type { ProdutoEstoqueDto, RodadaDto, SolicitacaoDto } from "@padaria/shared";
-import { gerarItensReposicao } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
-import { COR_STATUS, ROTULO_ORIGEM, ROTULO_STATUS } from "~/utils/compras-solicitacao";
+import { COR_STATUS, ROTULO_ORIGEM, ROTULO_STATUS, itensDeReposicaoDoEstoque } from "~/utils/compras-solicitacao";
 import { mensagemErro } from "~/utils/domain";
 import { normalizarQuantidadeEditavel } from "~/utils/formatacao";
 import type { SolicitacaoForm, SolicitacaoFormItem } from "~/components/compras/ComprasSolicitacaoFormDialog.vue";
@@ -54,25 +53,9 @@ const estoquePorProduto = computed<Record<string, ProdutoEstoqueDto>>(() =>
   Object.fromEntries(props.produtos.map((produto) => [produto.id, produto]))
 );
 // Ha produto no minimo para oferecer o atalho de reposicao?
-const reposicaoDisponivel = computed(() => itensDeReposicao().length > 0);
+const reposicaoDisponivel = computed(() => itensDeReposicaoDoEstoque(props.produtos).length > 0);
 
 let requisicao = 0;
-
-function itensDeReposicao(): SolicitacaoFormItem[] {
-  const sugeridos = gerarItensReposicao(
-    props.produtos.map((produto) => ({
-      id: produto.id,
-      descricao: produto.descricao,
-      quantidadeEstoque: Number(produto.quantidadeEstoque),
-      estoqueMin: produto.estoqueMin === null ? null : Number(produto.estoqueMin),
-      estoqueMax: produto.estoqueMax === null ? null : Number(produto.estoqueMax)
-    }))
-  );
-  return sugeridos.map((item) => ({
-    produtoId: item.produtoId,
-    quantidade: normalizarQuantidadeEditavel(item.quantidadeSugerida)
-  }));
-}
 
 async function carregar() {
   if (!props.empresaId) return;
@@ -143,7 +126,7 @@ function novaComPendentes(itens: Array<{ produtoId: string; quantidade: string }
 }
 
 function preencherMinimo() {
-  const sugeridos = itensDeReposicao();
+  const sugeridos = itensDeReposicaoDoEstoque(props.produtos);
   if (!sugeridos.length) return;
   // Mescla com o que ja esta no form: nao duplica produto e nao apaga o que o comprador digitou.
   const porProduto = new Map(form.itens.filter((item) => item.produtoId).map((item) => [item.produtoId, item]));
@@ -359,6 +342,7 @@ watch(() => props.empresaId, carregar, { immediate: true });
       :empresa-id="empresaId"
       :form="form"
       :salvando="salvando"
+      :erro="dialog ? erro : ''"
       :estoque-por-produto="estoquePorProduto"
       :pode-reposicao="reposicaoDisponivel"
       @salvar="salvar"

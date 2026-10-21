@@ -2,9 +2,10 @@
 import type { Opcao } from "~/types/padaria";
 import type { ProdutoEstoqueDto } from "@padaria/shared";
 
-// Casca da fundacao do novo Compras (feature flag COMPRAS_NOVO_FLUXO). Cada aba e dona do proprio
-// carregamento, estado e erro: elas nao compartilham dado nenhum, e concentrar as duas aqui levava o
-// componente a passar do limite de tamanho do projeto (AGENTS 4.5).
+// Casca de Compras (R-221): catalogo por fornecedor, preco-base e solicitacoes. Sempre ativa: a flag
+// COMPRAS_NOVO_FLUXO morreu no E8, junto com o caminho legado. Cada aba e dona do proprio carregamento,
+// estado e erro: elas nao compartilham dado nenhum, e concentrar tudo aqui levava o componente a passar
+// do limite de tamanho do projeto (AGENTS 4.5).
 const props = defineProps<{
   empresaId: string;
   empresaNome: string;
@@ -25,12 +26,10 @@ const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos"
   <v-card class="fundacao" variant="outlined">
     <v-card-title class="d-flex align-center ga-3 flex-wrap">
       <v-icon icon="mdi-database-cog-outline" color="primary" />
-      <span>Fundação do novo Compras</span>
-      <v-spacer />
-      <v-chip color="warning" variant="tonal" size="small">feature flag operacional</v-chip>
+      <span>Catálogo, preço-base e solicitações</span>
     </v-card-title>
     <v-card-subtitle>
-      Catálogo por fornecedor e preço-base inicial. O fluxo legado permanece disponível abaixo.
+      A necessidade vira solicitação; a solicitação vira rodada de cotação; o pedido nasce da rodada.
     </v-card-subtitle>
     <v-card-text>
       <v-tabs v-model="aba">

@@ -100,7 +100,7 @@ export function useRodadaFornecedor() {
 
   // Aceitar vira a versao N+1 DELE; o comprador nao precisa fazer mais nada para a compra sair.
   async function aceitar() {
-    if (!aberta.value || !itensContrapostos.value.length) return;
+    if (!aberta.value || !itensContrapostos.value.length || aceitando.value || enviando.value) return;
     aceitando.value = true;
     erro.value = "";
     try {
@@ -115,7 +115,12 @@ export function useRodadaFornecedor() {
   }
 
   async function enviar() {
-    if (!aberta.value) return;
+    if (!aberta.value || enviando.value || aceitando.value) return;
+    // Campo em branco nao e R$ 0,00: item sem valor precisa de preco ou de "indisponivel".
+    if (pendencias.value) {
+      erro.value = "Informe o valor de cada item ou marque como indisponível.";
+      return;
+    }
     enviando.value = true;
     erro.value = "";
     try {
@@ -130,7 +135,7 @@ export function useRodadaFornecedor() {
           itens: respostas.value.map((item) => ({
             conviteItemId: item.conviteItemId,
             indisponivel: item.indisponivel,
-            valorUnitario: item.indisponivel ? null : Number(item.valor) || 0
+            valorUnitario: item.indisponivel ? null : Number(item.valor)
           }))
         })
       });

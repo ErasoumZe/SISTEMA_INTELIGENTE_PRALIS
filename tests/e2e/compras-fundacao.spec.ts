@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 import { entrar, USUARIOS } from "./apoio.js";
 import { abrirContextoCompras } from "./apoio-compras.js";
 
-test("fundacao do novo Compras aparece sem substituir o fluxo legado", async ({ page }) => {
+test("Compras mostra catalogo, preco-base e solicitacoes, e o caminho legado de compra nao existe mais", async ({
+  page
+}) => {
   const contexto = await abrirContextoCompras(USUARIOS.admin);
   try {
     const [catalogo, importacoes, precos] = await Promise.all([
@@ -16,11 +18,15 @@ test("fundacao do novo Compras aparece sem substituir o fluxo legado", async ({ 
 
     await entrar(page, USUARIOS.admin);
     await page.goto("/pedidos");
-    await expect(page.getByText("Fundação do novo Compras", { exact: true })).toBeVisible();
+    await expect(page.getByText("Catálogo, preço-base e solicitações", { exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Catálogo fornecedor–produto" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Preço-base" })).toBeVisible();
-    await expect(page.getByText("Fluxo legado", { exact: false })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Sugestão de reposição" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Solicitações" })).toBeVisible();
+    // Regra-mae (E8): o pedido de fornecedor unico e o Pedido rapido (uma rodada de um convite). O
+    // "Novo pedido manual" e a "Sugestao de reposicao" foram removidos: nao pode haver segundo caminho.
+    await expect(page.getByRole("button", { name: "Pedido rápido" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Novo pedido manual" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Sugestão de reposição" })).toHaveCount(0);
 
     // Conteudo de cada aba, e nao so o rotulo. As abas viraram componentes proprios
     // (ComprasCatalogoAba / ComprasPrecoBaseAba): sem estas assercoes, uma falha de resolucao dos

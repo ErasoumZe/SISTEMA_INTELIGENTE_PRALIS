@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
 import { mascararWhatsapp } from "~/utils/formatacao";
+import { rotuloDoTipoDePedido } from "~/utils/pedido-origem";
 
 const props = defineProps<{ pedidos: PedidoDto[] }>();
 const emit = defineEmits<{ abrir: [id: string] }>();
 const busca = ref("");
-const situacaoSelecionada = ref<PedidoStatus>("a_fazer");
+// O pedido nasce da rodada ja confirmado: a fila abre onde ele esta (o legado em andamento tem as abas proprias).
+const situacaoSelecionada = ref<PedidoStatus>("confirmado");
 const rotulosStatus: Record<PedidoStatus, string> = {
   rascunho: "Legado: rascunho",
   aprovado: "Legado: aprovado",
@@ -109,7 +111,7 @@ function quando(valor: string | null) {
                 <div class="font-weight-medium">{{ pedido.fornecedorNome ?? "Histórico sem fornecedor" }}</div>
                 <div class="text-caption text-medium-emphasis">{{ telefone(pedido.fornecedorWhatsapp) }}</div>
               </td>
-              <td>{{ pedido.tipo === "automatico" ? "Sugestão" : "Manual" }}</td>
+              <td>{{ rotuloDoTipoDePedido(pedido.tipo) }}</td>
               <td>
                 <v-chip :color="corStatus(pedido.status)" size="small" label>{{ rotulosStatus[pedido.status] }}</v-chip>
               </td>
@@ -134,7 +136,7 @@ function quando(valor: string | null) {
               <div>
                 <div class="font-weight-bold">{{ pedido.fornecedorNome ?? "Histórico sem fornecedor" }}</div>
                 <div class="text-caption text-medium-emphasis">
-                  {{ pedido.tipo === "automatico" ? "Sugestão de reposição" : "Pedido manual" }}
+                  {{ rotuloDoTipoDePedido(pedido.tipo) }}
                 </div>
               </div>
               <v-chip :color="corStatus(pedido.status)" size="small" label>{{ rotulosStatus[pedido.status] }}</v-chip>
