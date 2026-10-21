@@ -165,10 +165,15 @@ Decisões de José tomadas ao planejar o E6, além das 14 acima:
   pendente com Rodrigo e **não** foi resolvida por esta entrega.
 - **Sobra na fila:** "Encerrar solicitação" (`parcialmente_comprada → encerrada`, só depois do
   fechamento) ou "Nova solicitação com os pendentes" (reusa o formulário do E2). Sem segunda rodada.
-- **A rodada só fecha no prazo.** Rodada com tudo comprado fica `aberta` até o vencimento. (A
-  premissa registrada no plano — "fechar antes exigiria migration" — estava imprecisa: o schema já
-  aceita o motivo `comprador`, que serviria a um "encerrar agora" manual; o que não existe é motivo
-  para o fechamento automático ao completar. Fica a pergunta aberta abaixo.)
+- **A rodada fecha no prazo, ou quando o Comprador a encerra** ("Encerrar rodada agora", motivo
+  `comprador`, `pedidos_editar`; decisão de José em 21/10, depois de o plano original dizer "só no
+  prazo"). Rodada com tudo comprado fica `aberta` até um dos dois: não há fechamento automático ao
+  completar (o schema não tem motivo para isso).
+- **A exceção do Comprador só vale com a rodada FECHADA** (decisão de José em 21/10). Com a rodada
+  aberta, aprovar travaria o item (`UNIQUE (rodada_item_id)`) contra uma oferta melhor que chegasse
+  depois; o caminho do período aberto é a contraproposta (E7). Compra urgente: "Encerrar rodada
+  agora". Efeito: depois do fechamento não há mais compra automática, então exceção e compra
+  automática nunca disputam o mesmo item.
 
 Como ficou (comportamento, não intenção):
 
@@ -184,11 +189,15 @@ Como ficou (comportamento, não intenção):
   (`sem_resposta`, `indisponivel`, `custo_nao_calculado`, `sem_base`, `acima_da_base`, `teto`) e a
   última proposta enviada de cada fornecedor. O Comprador vê todas; o link público continua isolado.
 - **Aprovar exceção** (`POST .../decisoes/aprovar`, permissão `compras_excecao_aprovar`: Compras,
-  Gerência, Admin): vale com a rodada aberta ou fechada; só a **última versão** enviada do fornecedor;
+  Gerência, Admin): só com a rodada fechada (422 `RODADA_ABERTA` antes disso); só a **última versão**
+  enviada do fornecedor;
   cria/reusa o pedido consolidado (rodada, fornecedor) e grava adjudicação `modo='comprador'` com
   `aprovado_por`. Item já vendido → 409 (`UNIQUE (rodada_item_id)`). Proposta sem custo gravado não
   se aprova (422 `CUSTO_NAO_CALCULADO`): não se inventa o rateio do frete.
-- **Encerrar solicitação** (`POST /api/compras/solicitacoes/:id/encerrar`, `pedidos_editar`).
+- **Encerrar solicitação** (`POST /api/compras/solicitacoes/:id/encerrar`, `pedidos_editar`) e
+  **encerrar rodada** (`POST /api/compras/rodadas/:id/encerrar`, `pedidos_editar`). A leitura da fila
+  (`GET .../decisoes`) exige `pedidos_editar` **ou** `compras_excecao_aprovar`: ela mostra preço-base e a
+  proposta de todos os fornecedores, então não basta ter a tela de Pedidos.
 
 Limites conhecidos, ditos na cara:
 
@@ -198,6 +207,55 @@ Limites conhecidos, ditos na cara:
 - O fechamento é aproximado: até 60s depois do vencimento, e no primeiro tick do boot.
 - A permissão nova chega aos cargos de **produção** por passo de dados próprio (referência de
   permissões); este documento não o executa.
+
+## E7 — contraproposta versionada (executado em 21/10/2026, sem migration)
+
+Decisão 7 do contrato, sem tabela nova: a contraproposta é uma versão do livro de propostas do convite
+com `autor_tipo='comprador'`. Fornecedor e comprador escrevem na **mesma** sequência de versões; nada
+sobrescreve.
+
+- **Comprador** (`POST /api/compras/rodadas/:id/convites/:conviteId/contraproposta`, `pedidos_editar`):
+  só com a rodada **aberta**, o convite aberto ou aguardando comprador, e depois de o fornecedor ter
+  respondido (contraproposta responde a uma proposta). Valor unitário positivo por item; item já vendido
+  → 409. O convite volta a `aberto` com o **mesmo token**. Sem limite de voltas além do prazo.
+- **Contraproposta vigente** (função pura em `shared`): o que o comprador mandou **depois** da última
+  versão do fornecedor. Várias seguidas se somam por item (a mais recente vence no mesmo item). Resposta
+  nova do fornecedor **supera** a contraproposta.
+- **Fornecedor** (página pública `/rodada`, mesmo link): vê o banner com os valores propostos para
+  **ele**, e o andamento de cada item (decisão 8): `comprado` (qualquer vencedor, sem dizer quem nem
+  quanto), `em análise` (cobre acima da base e sem base, para não revelar a direção da base) ou sem
+  chip. "Aceitar contraproposta" (`POST /api/rodada/aceitar`) vira a **versão N+1 dele**: valor da
+  contraproposta onde houver e o que ele já tinha nos demais itens (frete, prazo e condição também).
+  Essa versão atravessa o **mesmo portão da compra automática** de qualquer resposta. Ou ele responde de
+  novo pelo formulário (que supera a contraproposta).
+- **Convite `aguardando_comprador`**: depois da resposta do fornecedor, se sobrou item que a compra
+  automática não resolveu, o convite passa a esse estado (o comprador vê quem espera por ele).
+- A fila do comprador mostra a contraproposta pendente por proposta.
+- O módulo público continua sem importar nada do comprador: o "item já comprado" é **injetado** pelo
+  controller (`itensCompradosDoConvite`), devolvendo só ids.
+
+## E8 — remoção do caminho legado, pedido rápido e fim da flag (executado em 21/10/2026, sem migration)
+
+Regra-mãe: nada é pronto enquanto o caminho antigo existir.
+
+- **Removido (backend):** `POST /api/pedidos`, `PUT /api/pedidos/:id`, `POST /api/pedidos/gerar-sugestao`,
+  `POST /api/pedidos/:id/cotacoes`, as rotas públicas `/api/cotacao*`, o módulo `cotacoes` inteiro e o
+  cálculo de cotação por item da R-216. A opção `confirmado` de `/situacao` morreu (o contrato aceita só
+  `cancelado`). Do `shared` sobram só `expiracaoCotacao` e `ratear`, que a rodada usa.
+- **Sobrevive:** listar/ver pedido, cancelar e **receber** (a única entrada de estoque, R-213). O pedido
+  agora **nasce da rodada, já confirmado** (compra automática ou exceção).
+- **Pedido legado em andamento** (a fazer, enviado, retornado), sem migração de dados: leitura
+  preservada com selo "legado"; só pode ser **cancelado** (confirmado e recebível continua recebível).
+  Quem quiser comprar de novo usa o Pedido rápido ou uma solicitação.
+- **Pedido rápido** (decisão 2): `POST /api/compras/pedido-rapido` (`pedidos_criar` **e**
+  `pedidos_editar`) cria a solicitação `origem='rapida'` e abre a rodada de **um** convite. O fornecedor
+  é validado antes (inativo ou sem WhatsApp não deixa rascunho para trás). Substitui o "Novo pedido
+  manual" **e** a "Sugestão de reposição" (o preenchimento pelo mínimo existe no formulário).
+- **Flag `COMPRAS_NOVO_FLUXO` removida** (env, controller, compose, `.env.example`, painel,
+  `GET /api/compras/fundacao/status`): a fundação (catálogo e preço-base) está sempre ativa.
+  **Atenção operacional:** em produção a flag valia `false`, então esta entrega liga a fundação e remove o
+  caminho legado **no mesmo deploy**, junto com as migrations 0063/0064. Deploy tem autorização própria.
+- O evento de confirmação da compra automática aparece no histórico como "<Fornecedor> (pelo link)".
 
 ## Riscos registrados
 
@@ -223,9 +281,8 @@ Limites conhecidos, ditos na cara:
 
 ### Perguntas levantadas na revisão do E6 (21/10/2026) — o código decidiu em silêncio, José confirma
 
-1. **Exceção com a rodada aberta.** Hoje o Comprador pode aprovar acima da base antes do prazo; o
-   `UNIQUE` trava o item e uma oferta posterior, dentro da base, de outro fornecedor perde. A decisão 6
-   manda a proposta acima da base para a fila no vencimento. Restringir a aprovação a rodada fechada?
+1. ~~**Exceção com a rodada aberta.**~~ **Resolvida por José em 21/10:** só com a rodada fechada, com o
+   botão "Encerrar rodada agora" para a compra urgente (ver E6).
 2. **"Nova solicitação com os pendentes" × "Encerrar".** A tela agora só oferece a nova solicitação com
    a rodada fechada, mas a antiga continua aprovável por exceção até alguém encerrá-la. Encerrar a antiga
    na mesma ação?
@@ -249,5 +306,24 @@ Limites conhecidos, ditos na cara:
 10. **Arredondamento da comparação.** O custo unitário de 4 casas (valor + frete ÷ qtd, arredondado) é
     comparado com a base; custo de 1,00004 contra base 1,0000 compra sozinho. Reconciliar com Rodrigo
     junto com o rateio do frete.
-11. **Caminho legado** (`POST /api/pedidos` e a transição retornado→confirmado com `pedidos_editar`)
-    continua comprando fora do envelope até o E8; `compras_excecao_aprovar` só protege o fluxo novo.
+11. ~~**Caminho legado**~~ **Resolvida no E8:** removido; o único caminho de compra é a rodada.
+12. **Frete no aceite da contraproposta (revisão do E7/E8).** O aceite cria uma versão nova que repete o
+    frete inteiro da última versão do fornecedor; a compra automática rateia esse frete só sobre os itens
+    ainda livres. Se um item da mesma proposta já foi comprado (levando sua parte do frete), o item que
+    sobra carrega o frete cheio: ex. itens X e Y, base 10, frete 2,00; X=9 compra com 0,86; Y contraposto a
+    9 e aceito custa 11 > base e não compra, e o frete total cobrado seria 2,86. É regra de dinheiro
+    (fórmula do frete): **não alterada**; propor abater o frete já adjudicado no convite e validar com
+    Rodrigo junto com a pergunta 10.
+13. **Pedido rápido sem idempotência.** Cria a solicitação e abre a rodada em duas transações; duplo
+    clique/reenvio pode abrir duas rodadas com dois links (e o fornecedor que responde nas duas compra em
+    dobro). A UI desabilita o botão enquanto salva, mas o servidor não tem chave de idempotência.
+14. **Aceite e itens.** O aceite pode reverter um item que o fornecedor tinha marcado indisponível (a
+    contraproposta vale sobre ele), e o banner continua mostrando contraproposta de item que um concorrente
+    já comprou (o aceite pula o item sem avisar). Confirmar o desejado.
+15. **Cancelar pedido** é um clique, sem confirmação, também em `recebido_parcial` (o backend permite);
+    herdado, não tocado pelo E8.
+
+Ajustes feitos após a revisão: resposta do fornecedor e contraproposta exigem valor ≥ R$ 0,01 em centavos
+inteiros (custo zero compraria de graça); a contraproposta é recusada depois do vencimento da rodada,
+mesmo antes do tick do fechamento; a tela não envia item em branco como R$ 0,00; erro de salvar a
+solicitação/pedido rápido aparece dentro do diálogo.

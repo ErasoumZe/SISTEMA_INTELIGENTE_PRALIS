@@ -1334,8 +1334,15 @@ o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
   acima do envelope, não vira base: virar base subiria em silêncio o teto da pré-autorização seguinte.
 - **Item que sobrou na fila** tem duas saídas: encerrar a solicitação (`encerrada`) ou levar os itens
   para uma **nova** solicitação. Não há segunda rodada sobre a mesma necessidade.
-- **A rodada só fecha no prazo,** mesmo com tudo comprado antes. Fechar antes não foi pedido (o schema
-  já tem o motivo `comprador`, mas não há motivo para fechamento automático ao completar).
+- **A rodada fecha no prazo ou quando o Comprador a encerra** ("Encerrar rodada agora", motivo
+  `comprador`; decisão de José em 21/10, depois do plano original "só no prazo"). Não há fechamento
+  automático ao completar.
+- **A exceção do Comprador só vale com a rodada fechada** (José, 21/10): com ela aberta, aprovar
+  travaria o item contra uma oferta melhor que chegasse depois. No período aberto, o caminho é a
+  contraproposta (E7). Isso fecha a pergunta 1 do documento 54.
+- **E7 e E8 executados em 21/10/2026** (documento 54): contraproposta versionada pelo mesmo link; remoção
+  do caminho legado de compra (a cotação por link da R-216 deixa de existir), pedido rápido como rodada
+  de um fornecedor e fim da flag `COMPRAS_NOVO_FLUXO`.
 - A revisão do E6 levantou 11 perguntas que o código decidiu em silêncio; estão no documento 54, ao fim
   de "Ainda sem decisão", para José confirmar.
 
