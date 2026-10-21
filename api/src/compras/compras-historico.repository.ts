@@ -180,24 +180,27 @@ export async function contarPorResultadoHistoricoRepository(importacaoId: string
 }
 
 export async function fornecedoresPendentesHistoricoRepository(importacaoId: string, db: ExecutorBanco = banco) {
-  return db
-    .select({
-      fornecedorNormalizado: comprasHistoricoImportacaoItens.fornecedorNormalizado,
-      fornecedorInformado: min(comprasHistoricoImportacaoItens.fornecedorInformado),
-      linhas: count()
-    })
-    .from(comprasHistoricoImportacaoItens)
-    .where(
-      and(
-        eq(comprasHistoricoImportacaoItens.importacaoId, importacaoId),
-        // Sem fornecedor definido (nao achado ou ambiguo): o operador resolve por apelido ou cadastro.
-        isNull(comprasHistoricoImportacaoItens.fornecedorId),
-        ne(comprasHistoricoImportacaoItens.resultado, "invalido")
+  return (
+    db
+      .select({
+        fornecedorNormalizado: comprasHistoricoImportacaoItens.fornecedorNormalizado,
+        fornecedorInformado: min(comprasHistoricoImportacaoItens.fornecedorInformado),
+        linhas: count()
+      })
+      .from(comprasHistoricoImportacaoItens)
+      .where(
+        and(
+          eq(comprasHistoricoImportacaoItens.importacaoId, importacaoId),
+          // Sem fornecedor definido (nao achado ou ambiguo): o operador resolve por apelido ou cadastro.
+          isNull(comprasHistoricoImportacaoItens.fornecedorId),
+          ne(comprasHistoricoImportacaoItens.resultado, "invalido")
+        )
       )
-    )
-    .groupBy(comprasHistoricoImportacaoItens.fornecedorNormalizado)
-    .orderBy(desc(count()))
-    .limit(LIMITE_PENDENCIAS_HISTORICO);
+      .groupBy(comprasHistoricoImportacaoItens.fornecedorNormalizado)
+      .orderBy(desc(count()))
+      // Um a mais: so para saber se a lista foi cortada (a tela avisa), sem uma segunda consulta.
+      .limit(LIMITE_PENDENCIAS_HISTORICO + 1)
+  );
 }
 
 export async function produtosPendentesHistoricoRepository(importacaoId: string, db: ExecutorBanco = banco) {
@@ -217,7 +220,7 @@ export async function produtosPendentesHistoricoRepository(importacaoId: string,
     )
     .groupBy(comprasHistoricoImportacaoItens.produtoNormalizado)
     .orderBy(desc(count()))
-    .limit(LIMITE_PENDENCIAS_HISTORICO);
+    .limit(LIMITE_PENDENCIAS_HISTORICO + 1);
 }
 
 export async function linhasPendentesHistoricoRepository(importacaoId: string, db: ExecutorBanco = banco) {

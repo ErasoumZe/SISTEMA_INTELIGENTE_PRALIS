@@ -119,6 +119,9 @@ export type HistoricoImportacaoDetalheDto = HistoricoImportacaoDto & {
   porResultado: Record<HistoricoResultado, number>;
   fornecedoresPendentes: HistoricoPendenciaFornecedorDto[];
   produtosPendentes: HistoricoPendenciaProdutoDto[];
+  /** A lista foi cortada em LIMITE_PENDENCIAS_HISTORICO: ha mais, resolva e reabra. */
+  fornecedoresPendentesTruncado: boolean;
+  produtosPendentesTruncado: boolean;
   linhasPendentes: HistoricoLinhaPendenteDto[];
   previa: HistoricoPreviaVinculosDto;
 };

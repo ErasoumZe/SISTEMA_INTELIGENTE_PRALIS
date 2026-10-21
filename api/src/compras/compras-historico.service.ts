@@ -1,4 +1,5 @@
 import {
+  LIMITE_PENDENCIAS_HISTORICO,
   normalizarNomeHistorico,
   type AnalisarHistorico,
   type HistoricoAplicacaoDto,
@@ -184,12 +185,14 @@ export async function detalharImportacaoHistorico(
     criadoEm: importacao.criadoEm.toISOString(),
     aplicadoEm: importacao.aplicadoEm ? importacao.aplicadoEm.toISOString() : null,
     porResultado,
-    fornecedoresPendentes: fornecedoresPendentes.map((linha) => ({
+    fornecedoresPendentesTruncado: fornecedoresPendentes.length > LIMITE_PENDENCIAS_HISTORICO,
+    produtosPendentesTruncado: produtosPendentes.length > LIMITE_PENDENCIAS_HISTORICO,
+    fornecedoresPendentes: fornecedoresPendentes.slice(0, LIMITE_PENDENCIAS_HISTORICO).map((linha) => ({
       fornecedorNormalizado: linha.fornecedorNormalizado,
       fornecedorInformado: linha.fornecedorInformado ?? linha.fornecedorNormalizado,
       linhas: linha.linhas
     })),
-    produtosPendentes: produtosPendentes.map((linha) => ({
+    produtosPendentes: produtosPendentes.slice(0, LIMITE_PENDENCIAS_HISTORICO).map((linha) => ({
       produtoNormalizado: linha.produtoNormalizado,
       produtoInformado: linha.produtoInformado ?? linha.produtoNormalizado,
       linhas: linha.linhas
@@ -200,13 +203,11 @@ export async function detalharImportacaoHistorico(
       aprovar: plano.aprovarIds.length,
       jaAprovados: plano.jaAprovados,
       rejeitadosIgnorados: plano.rejeitadosIgnorados,
-      amostraCriar: plano.criar
-        .slice(0, 10)
-        .map((vinculo) => ({
-          fornecedor: vinculo.fornecedor,
-          produto: vinculo.produto,
-          ultimoCusto: vinculo.precoOfertado
-        }))
+      amostraCriar: plano.criar.slice(0, 10).map((vinculo) => ({
+        fornecedor: vinculo.fornecedor,
+        produto: vinculo.produto,
+        ultimoCusto: vinculo.precoOfertado
+      }))
     }
   };
 }
