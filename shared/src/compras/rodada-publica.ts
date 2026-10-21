@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SituacaoItemPublica } from "./contraproposta.js";
 
 const uuid = z.string().uuid();
 
@@ -33,6 +34,8 @@ export type RodadaPublicaItemDto = {
   conviteItemId: string;
   descricaoProduto: string;
   quantidade: string;
+  // Andamento do item para ELE (decisao 8): comprado / em analise / nao cotado. Nada de vencedor ou base.
+  situacao: SituacaoItemPublica;
 };
 
 export type RodadaPublicaPropostaItemDto = {
@@ -49,6 +52,12 @@ export type RodadaPublicaDto = {
   // fechou. Sem revelar nada do envelope do comprador.
   situacao: "aberta" | "encerrada";
   itens: RodadaPublicaItemDto[];
+  // A contraproposta do comprador PARA ELE que ainda espera resposta (E7). null se nao ha. So o valor
+  // oferecido a este fornecedor; nunca de concorrente nem a base.
+  contraproposta: {
+    versao: number;
+    itens: Array<{ conviteItemId: string; valorUnitario: string }>;
+  } | null;
   // O ULTIMO que ELE mandou (nunca de concorrente). null se ainda nao respondeu.
   ultimaProposta: {
     versao: number;

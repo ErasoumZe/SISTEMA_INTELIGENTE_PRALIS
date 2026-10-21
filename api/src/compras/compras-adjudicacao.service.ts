@@ -10,6 +10,8 @@ import { ultimaVersaoEnviadaDoConviteRepository } from "./compras-decisao.reposi
 import { travarRodadaRepository } from "./compras-fechamento.repository.js";
 import {
   carregarPropostaParaAdjudicacaoRepository,
+  conviteItensCompradosRepository,
+  marcarConviteAguardandoCompradorRepository,
   criarPedidoConfirmadoRepository,
   gravarCustoPropostaItemRepository,
   inserirAdjudicacaoRepository,
@@ -146,6 +148,9 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
       comprados += 1;
     }
 
+    // O comprador ve na lista de convites quem esta esperando por ele.
+    if (pendentes > 0) await marcarConviteAguardandoCompradorRepository(proposta.conviteId, tx);
+
     if (comprados > 0 || pendentes > 0) {
       // Decisao 14: TODA compra automatica cai no sino do Comprador na hora (nao so o que sobrou), e o
       // que ela nao resolveu tambem. Uma linha por rodada; cada resposta reabre com o titulo atual.
@@ -170,4 +175,9 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
 
     return { comprados, pendentes };
   });
+}
+
+/** Quais itens do convite ja foram comprados (so os ids). O controller publico injeta isto na leitura do fornecedor. */
+export function itensCompradosDoConvite(conviteId: string): Promise<Set<string>> {
+  return conviteItensCompradosRepository(conviteId);
 }

@@ -32,6 +32,9 @@ export type ItemDoEnvelope = {
 
 export type PropostaItemDaFila = {
   propostaItemId: string;
+  conviteId: string;
+  // Contraproposta que o comprador ja mandou para este item e o fornecedor ainda nao respondeu.
+  contrapropostaUnitario: string | null;
   rodadaItemId: string;
   fornecedorId: string;
   fornecedorNome: string;
@@ -131,11 +134,48 @@ export async function carregarFilaDaRodadaRepository(
           )
         )
     : [];
+  // Contrapropostas do comprador MAIS NOVAS que a ultima versao do fornecedor no convite (as anteriores
+  // ele ja respondeu). A mais recente vence por item.
+  const contrapropostas = ultimas.length
+    ? await db
+        .select({
+          conviteId: comprasPropostas.conviteId,
+          versao: comprasPropostas.versao,
+          rodadaItemId: comprasConvitesItens.rodadaItemId,
+          valorUnitario: comprasPropostasItens.valorUnitario
+        })
+        .from(comprasPropostas)
+        .innerJoin(comprasPropostasItens, eq(comprasPropostasItens.propostaId, comprasPropostas.id))
+        .innerJoin(comprasConvitesItens, eq(comprasConvitesItens.id, comprasPropostasItens.conviteItemId))
+        .where(
+          and(
+            inArray(
+              comprasPropostas.conviteId,
+              ultimas.map((proposta) => proposta.conviteId)
+            ),
+            eq(comprasPropostas.autorTipo, "comprador"),
+            eq(comprasPropostas.status, "enviada")
+          )
+        )
+        .orderBy(asc(comprasPropostas.versao))
+    : [];
+  const contrapropostaPendente = new Map<string, string>();
+  for (const contraproposta of contrapropostas) {
+    const ultima = ultimaPorConvite.get(contraproposta.conviteId);
+    if (!ultima || contraproposta.versao <= ultima.versao || contraproposta.valorUnitario === null) continue;
+    contrapropostaPendente.set(
+      `${contraproposta.conviteId}:${contraproposta.rodadaItemId}`,
+      contraproposta.valorUnitario
+    );
+  }
+
   const propostaPorId = new Map(ultimas.map((proposta) => [proposta.propostaId, proposta]));
   const propostas: PropostaItemDaFila[] = linhas.map((linha) => {
     const proposta = propostaPorId.get(linha.propostaId)!;
     return {
       propostaItemId: linha.propostaItemId,
+      conviteId: proposta.conviteId,
+      contrapropostaUnitario: contrapropostaPendente.get(`${proposta.conviteId}:${linha.rodadaItemId}`) ?? null,
       rodadaItemId: linha.rodadaItemId,
       fornecedorId: proposta.fornecedorId,
       fornecedorNome: proposta.fornecedorNome,

@@ -5,10 +5,15 @@
 import { createHash } from "node:crypto";
 import type { DadosExternos } from "@padaria/shared/api";
 import type { RespostaItemPublica, ResponderRodadaPayload, RodadaPublicaDto } from "@padaria/shared/compras";
-import { responderRodadaPayloadSchema } from "@padaria/shared/compras";
+import {
+  contrapropostaVigente,
+  itensDoAceite,
+  responderRodadaPayloadSchema,
+  situacaoDoItemParaFornecedor
+} from "@padaria/shared/compras";
 import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { erroValidacao, foiEmbora, naoEncontrado } from "../erros.js";
+import { conflito, erroValidacao, foiEmbora, naoEncontrado } from "../erros.js";
 import {
   buscarConvitePorHashRepository,
   conviteItemIdsRepository,
@@ -18,6 +23,7 @@ import {
   proximaVersaoRepository,
   travarConvitePorHashRepository,
   ultimaPropostaDoConviteRepository,
+  versoesDoConviteRepository,
   type ConvitePublicoLinha
 } from "./rodada-publica.repository.js";
 
@@ -52,22 +58,48 @@ function rodadaViva(convite: ConviteAutenticado): boolean {
   );
 }
 
-export async function obterRodadaPublica(token: string | undefined): Promise<RodadaPublicaDto> {
+/**
+ * `itensComprados` e INJETADO pelo controller: saber que um item ja tem vencedor exige ler a tabela de
+ * adjudicacao, que este modulo nao pode tocar (verificar-arquitetura). O resolvedor devolve so quais
+ * itens DESTE convite ja foram comprados — nunca quem venceu nem por quanto.
+ */
+export async function obterRodadaPublica(
+  token: string | undefined,
+  itensComprados: (conviteId: string) => Promise<Set<string>>
+): Promise<RodadaPublicaDto> {
   const convite = await autenticarConvitePorToken(token);
-  const [itens, ultima] = await Promise.all([
+  const [itens, ultima, versoes, comprados] = await Promise.all([
     itensDoConviteRepository(convite.conviteId),
-    ultimaPropostaDoConviteRepository(convite.conviteId)
+    ultimaPropostaDoConviteRepository(convite.conviteId),
+    versoesDoConviteRepository(convite.conviteId),
+    itensComprados(convite.conviteId)
   ]);
+  const viva = rodadaViva(convite);
+  const precificados = new Set(
+    (ultima?.itens ?? [])
+      .filter((item) => !item.indisponivel && item.valorUnitario !== null)
+      .map((item) => item.conviteItemId)
+  );
+  const contraproposta = viva ? contrapropostaVigente(versoes) : [];
+  const versaoDaContraproposta = Math.max(
+    0,
+    ...versoes.filter((versao) => versao.autorTipo === "comprador").map((versao) => versao.versao)
+  );
   return {
     fornecedorNome: convite.fornecedorNome,
     empresaNome: convite.empresaNome,
     expiraEm: convite.expiraEm.toISOString(),
-    situacao: rodadaViva(convite) ? "aberta" : "encerrada",
+    situacao: viva ? "aberta" : "encerrada",
     itens: itens.map((item) => ({
       conviteItemId: item.conviteItemId,
       descricaoProduto: item.descricaoProduto,
-      quantidade: item.quantidade
+      quantidade: item.quantidade,
+      situacao: situacaoDoItemParaFornecedor({
+        comprado: comprados.has(item.conviteItemId),
+        ofereceuPreco: precificados.has(item.conviteItemId)
+      })
     })),
+    contraproposta: contraproposta.length ? { versao: versaoDaContraproposta, itens: contraproposta } : null,
     ultimaProposta: ultima
       ? {
           versao: ultima.versao,
@@ -127,6 +159,56 @@ export async function responderRodadaPublica(
           conviteItemId: item.conviteItemId,
           indisponivel: item.indisponivel,
           valorUnitario: item.indisponivel ? null : (item.valorUnitario ?? null)
+        }))
+      },
+      tx
+    );
+    await marcarConviteRespondidoRepository(travado.id, travado.empresaId, tx);
+    return { versao, propostaId };
+  });
+}
+
+/**
+ * O fornecedor ACEITA a contraproposta do comprador (R-221 decisao 7): vira a versao N+1 DELE, com o
+ * valor da contraproposta nos itens contrapostos e o que ele ja tinha nos demais (frete, prazo e
+ * condicao tambem). O controller entrega essa versao ao mesmo portao da compra automatica que
+ * qualquer resposta atravessa. Mesma serializacao da resposta: advisory da solicitacao, convite FOR UPDATE.
+ */
+export async function aceitarContrapropostaPublica(
+  token: string | undefined
+): Promise<{ versao: number; propostaId: string }> {
+  const convite = await autenticarConvitePorToken(token);
+  if (!rodadaViva(convite)) throw foiEmbora("A rodada nao esta mais aberta para respostas", "RODADA_ENCERRADA");
+
+  return executarEmTransacao(async (tx) => {
+    await tx.execute(sqlTravarRodadaDeCompras(convite.solicitacaoId));
+    const travado = await travarConvitePorHashRepository(hashToken(exigirToken(token)), tx);
+    if (!travado) throw naoEncontrado("Convite nao encontrado", "RODADA_CONVITE_INVALIDO");
+    const atual = await autenticarConvitePorToken(token);
+    if (!rodadaViva(atual)) throw foiEmbora("A rodada nao esta mais aberta para respostas", "RODADA_ENCERRADA");
+
+    const versoes = await versoesDoConviteRepository(travado.id, tx);
+    const contraproposta = contrapropostaVigente(versoes);
+    const ultimaDoFornecedor = versoes.filter((versao) => versao.autorTipo === "fornecedor").at(-1);
+    const ultima = await ultimaPropostaDoConviteRepository(travado.id, tx);
+    if (!contraproposta.length || !ultimaDoFornecedor || !ultima) {
+      throw conflito("Nao ha contraproposta esperando resposta", "SEM_CONTRAPROPOSTA");
+    }
+
+    const versao = await proximaVersaoRepository(travado.id, tx);
+    const propostaId = await criarPropostaFornecedorRepository(
+      {
+        empresaId: travado.empresaId,
+        conviteId: travado.id,
+        versao,
+        frete: ultima.frete === null ? null : Number(ultima.frete),
+        observacao: ultima.observacao,
+        prazoEntrega: ultima.prazoEntrega,
+        condicaoPagamento: ultima.condicaoPagamento,
+        itens: itensDoAceite(ultimaDoFornecedor, contraproposta).map((item) => ({
+          conviteItemId: item.conviteItemId,
+          indisponivel: item.indisponivel,
+          valorUnitario: item.valorUnitario === null ? null : Number(item.valorUnitario)
         }))
       },
       tx

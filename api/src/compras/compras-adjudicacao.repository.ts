@@ -15,7 +15,7 @@ import {
   pedidosEventos,
   pedidosItens
 } from "@padaria/db/schema";
-import { type TransacaoBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 export type PropostaParaAdjudicacao = {
   propostaId: string;
@@ -273,4 +273,29 @@ export async function gravarCustoPropostaItemRepository(
     .update(comprasPropostasItens)
     .set({ freteRateado: String(input.freteRateado), custoFinalUnitario: String(input.custoFinalUnitario) })
     .where(eq(comprasPropostasItens.id, input.propostaItemId));
+}
+
+/**
+ * Quais itens DESTE convite ja tem vencedor (de quem for). Devolve so os ids: o fornecedor sabe que o
+ * item foi comprado, nunca quem comprou nem por quanto (decisao 8). Entregue ao modulo publico por
+ * injecao no controller, porque ele nao pode ler adjudicacao.
+ */
+export async function conviteItensCompradosRepository(
+  conviteId: string,
+  db: ExecutorBanco = banco
+): Promise<Set<string>> {
+  const linhas = await db
+    .select({ conviteItemId: comprasConvitesItens.id })
+    .from(comprasConvitesItens)
+    .innerJoin(comprasAdjudicacoes, eq(comprasAdjudicacoes.rodadaItemId, comprasConvitesItens.rodadaItemId))
+    .where(eq(comprasConvitesItens.conviteId, conviteId));
+  return new Set(linhas.map((linha) => linha.conviteItemId));
+}
+
+/** Sinal para o comprador: o fornecedor respondeu e ficou item para ele decidir. So sai de 'aberto'. */
+export async function marcarConviteAguardandoCompradorRepository(conviteId: string, tx: TransacaoBanco): Promise<void> {
+  await tx
+    .update(comprasRodadasConvites)
+    .set({ status: "aguardando_comprador" })
+    .where(and(eq(comprasRodadasConvites.id, conviteId), eq(comprasRodadasConvites.status, "aberto")));
 }

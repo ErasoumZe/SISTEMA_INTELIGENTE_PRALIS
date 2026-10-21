@@ -95,7 +95,9 @@ const rotasComAutenticacaoPropria = new Set([
   // Fase 2: a rodada do fornecedor. Mesma natureza da cotacao — sem conta, autentica pelo header
   // `x-rodada-token`, cujo hash mora em `compras_rodadas_convites`. GET e POST em entradas proprias.
   "/api/rodada",
-  "/api/rodada/responder"
+  "/api/rodada/responder",
+  // E7: aceitar a contraproposta do comprador, pelo mesmo token.
+  "/api/rodada/aceitar"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {

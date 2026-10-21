@@ -15,6 +15,7 @@ import {
   empresas,
   fornecedores
 } from "@padaria/db/schema";
+import type { VersaoDoConvite } from "@padaria/shared/compras";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 export type ConvitePublicoLinha = {
@@ -103,7 +104,7 @@ export type UltimaPropostaLinha = {
   itens: Array<{ conviteItemId: string; indisponivel: boolean; valorUnitario: string | null }>;
 };
 
-/** A ultima proposta DESTE convite (o fornecedor ve so o que e dele). */
+/** A ultima proposta DO FORNECEDOR neste convite (ele ve so o que e dele; a contraproposta vem a parte). */
 export async function ultimaPropostaDoConviteRepository(
   conviteId: string,
   db: ExecutorBanco = banco
@@ -118,7 +119,13 @@ export async function ultimaPropostaDoConviteRepository(
       condicaoPagamento: comprasPropostas.condicaoPagamento
     })
     .from(comprasPropostas)
-    .where(and(eq(comprasPropostas.conviteId, conviteId), eq(comprasPropostas.status, "enviada")))
+    .where(
+      and(
+        eq(comprasPropostas.conviteId, conviteId),
+        eq(comprasPropostas.status, "enviada"),
+        eq(comprasPropostas.autorTipo, "fornecedor")
+      )
+    )
     .orderBy(desc(comprasPropostas.versao))
     .limit(1);
   if (!proposta) return null;
@@ -210,4 +217,32 @@ export async function marcarConviteRespondidoRepository(
     .update(comprasRodadasConvites)
     .set({ respondidoEm: new Date() })
     .where(and(eq(comprasRodadasConvites.id, conviteId), eq(comprasRodadasConvites.empresaId, empresaId)));
+}
+
+/**
+ * O livro INTEIRO do convite (fornecedor e comprador, so versoes enviadas), da mais antiga para a mais
+ * nova. E o que alimenta a contraproposta vigente e o aceite. So o convite do token: nunca outro.
+ */
+export async function versoesDoConviteRepository(
+  conviteId: string,
+  db: ExecutorBanco = banco
+): Promise<VersaoDoConvite[]> {
+  const propostas = await db
+    .select({ id: comprasPropostas.id, versao: comprasPropostas.versao, autorTipo: comprasPropostas.autorTipo })
+    .from(comprasPropostas)
+    .where(and(eq(comprasPropostas.conviteId, conviteId), eq(comprasPropostas.status, "enviada")))
+    .orderBy(asc(comprasPropostas.versao));
+  const versoes: VersaoDoConvite[] = [];
+  for (const proposta of propostas) {
+    const itens = await db
+      .select({
+        conviteItemId: comprasPropostasItens.conviteItemId,
+        indisponivel: comprasPropostasItens.indisponivel,
+        valorUnitario: comprasPropostasItens.valorUnitario
+      })
+      .from(comprasPropostasItens)
+      .where(eq(comprasPropostasItens.propostaId, proposta.id));
+    versoes.push({ versao: proposta.versao, autorTipo: proposta.autorTipo, itens });
+  }
+  return versoes;
 }

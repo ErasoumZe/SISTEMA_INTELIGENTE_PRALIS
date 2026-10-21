@@ -65,6 +65,8 @@ export async function obterDecisoesDaRodada(
         ),
         propostas: propostas.map((proposta) => ({
           propostaItemId: proposta.propostaItemId,
+          conviteId: proposta.conviteId,
+          contrapropostaUnitario: proposta.contrapropostaUnitario,
           fornecedorId: proposta.fornecedorId,
           fornecedorNome: proposta.fornecedorNome,
           versao: proposta.versao,

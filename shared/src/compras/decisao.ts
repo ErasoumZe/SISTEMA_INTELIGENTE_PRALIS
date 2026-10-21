@@ -68,6 +68,9 @@ export function statusSolicitacaoAposFechamento(
 
 export type DecisaoPropostaDto = {
   propostaItemId: string;
+  conviteId: string;
+  // Contraproposta que o comprador ja mandou para este item e que o fornecedor ainda nao respondeu.
+  contrapropostaUnitario: string | null;
   fornecedorId: string;
   fornecedorNome: string;
   versao: number;
