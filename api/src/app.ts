@@ -156,6 +156,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     // captura de erros com o que nao e bug. Medido no fluxo do dia: PUT sem corpo devolvia 500.
     const statusFastify = (error as { statusCode?: number }).statusCode;
     const codigoFastify = (error as { code?: string }).code;
+    // Upload acima do limite: dizer o motivo. "Requisição inválida" generica fez o operador achar que a
+    // planilha estava errada, quando ela so tinha 10,6 MB contra o teto de 10 MB.
+    if (codigoFastify === "FST_REQ_FILE_TOO_LARGE") {
+      return erro(reply, 413, "Arquivo acima do limite de 10 MB", "FILE_TOO_LARGE");
+    }
     if (statusFastify && statusFastify >= 400 && statusFastify < 500 && codigoFastify?.startsWith("FST_")) {
       return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
     }

@@ -538,6 +538,20 @@ describe("fundacao do novo Compras integration", () => {
     expect(recusadaPorExtensao.statusCode).toBe(400);
     expect(json<{ code?: string }>(recusadaPorExtensao).code).toBe("PRICE_BASE_FILE_TYPE");
 
+    // Acima de 10 MB: a mensagem diz o motivo (antes: "Requisição inválida", sem pista do tamanho).
+    const grande = multipartXlsx("base.xlsx", Buffer.alloc(10 * 1024 * 1024 + 1024));
+    const recusadaPorTamanho = await contexto.app.inject({
+      method: "POST",
+      url: `/api/compras/precos-base/importacoes/analisar-arquivo?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin, "content-type": `multipart/form-data; boundary=${grande.boundary}` },
+      payload: grande.corpo
+    });
+    expect(recusadaPorTamanho.statusCode).toBe(413);
+    expect(json<{ code?: string; title?: string }>(recusadaPorTamanho)).toMatchObject({
+      code: "FILE_TOO_LARGE",
+      title: "Arquivo acima do limite de 10 MB"
+    });
+
     // Extensao certa e conteudo invalido: antes virava 500 "Erro interno" com alerta no Sentry.
     const conteudo = multipartXlsx("base.xlsx", Buffer.from("isto nao e um zip"));
     const recusadaPorConteudo = await contexto.app.inject({
