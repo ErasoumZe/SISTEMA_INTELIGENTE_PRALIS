@@ -4,6 +4,17 @@
 > registra o que ele disse e o que decidiu; **nada foi implementado**. Complementa e, onde diz, **substitui** o
 > doc 52 (recorrência como calendário). O que ainda está aberto está no §7: não implementar por suposição.
 
+> **Estado em 21/10/2026 (noite): IMPLEMENTADO** na branch `feat/compras-fase2-solicitacao-rodada-20261021`
+> (commits `cdff2f97`, `b113f345`, `ce98a5f6`, só locais). Migration `0066_compras_agendamento_pedidos`
+> gerada pelo drizzle-kit a partir do SQL aprovado no §8 (+ os dois gatilhos de `atualizado_em`), **aplicada só
+> no banco de desenvolvimento**. Tela `/agendamento_pedidos` no menu de Compras; agendador no tick de Compras
+> (60 s). Permissões ficaram com o nome da tela, como as demais: `agendamento_pedidos_visualizar` e
+> `agendamento_pedidos_gerir` (Compras e Gerência no seed de referência; em produção é passo de dados). Conferir e
+> enviar exige também `pedidos_editar` (abre a rodada). Testado: 17 + 6 unitários, 9 de integração e E2E no
+> navegador nas 4 larguras. **Não feito nesta entrega:** trocar o responsável pela tela (o servidor aceita
+> `responsavelId`; a tela usa quem cria) e a remoção dos campos legados `pedidos.data_agendada`/`recorrencia`
+> (precisa contar o uso em produção antes).
+
 ## 1. O que é
 
 Um **módulo próprio no menu de Compras**, ao lado de "Conferências de estoque" (mesmo padrão: agenda de um
@@ -104,7 +115,7 @@ tela por tela. Até lá, nada novo entra nela.
 6. **Aviso:** o sino avisa o **responsável** do agendamento (por padrão quem criou; pode ser trocado) quando o pedido do
    dia fica pronto para conferir. A lista "para conferir" do módulo mostra a todos que têm a permissão.
 
-Permissões novas (passo de dados, não migration): `compras_agendamento_visualizar` e `compras_agendamento_gerir`
+Permissões novas (passo de dados, não migration): `agendamento_pedidos_visualizar` e `agendamento_pedidos_gerir`
 (Compras, Gerência, Admin). Os campos legados `pedidos.data_agendada`/`pedidos.recorrencia` saem numa migration
 própria, depois de contar em produção quantos pedidos ainda os usam (dado histórico: PARE).
 
