@@ -110,7 +110,7 @@ function descontoUnitario(
  * centavos que sobram vao, um a um, para quem teve a maior fracao. A soma das fatias e SEMPRE
  * exatamente o desconto geral — nunca um centavo a mais ou a menos.
  */
-function ratear(descontoCentavos: number, pesos: number[]): number[] {
+export function ratear(descontoCentavos: number, pesos: number[]): number[] {
   const total = pesos.reduce((soma, peso) => soma + peso, 0);
   if (descontoCentavos <= 0 || total <= 0) return pesos.map(() => 0);
   const brutas = pesos.map((peso) => (descontoCentavos * peso) / total);

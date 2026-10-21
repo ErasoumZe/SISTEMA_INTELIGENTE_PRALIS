@@ -3082,6 +3082,7 @@ export const notificacoes = pgTable(
         | "mensagem_admin"
         | "campanha"
         | "lancamento_vencimento"
+        | "compras_decisao_pendente"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")

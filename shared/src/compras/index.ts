@@ -91,3 +91,4 @@ export * from "./fundacao.js";
 export * from "./solicitacao.js";
 export * from "./rodada.js";
 export * from "./rodada-publica.js";
+export * from "./adjudicacao.js";

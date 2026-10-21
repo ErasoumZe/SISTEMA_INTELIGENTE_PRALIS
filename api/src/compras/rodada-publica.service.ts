@@ -88,7 +88,7 @@ export async function obterRodadaPublica(token: string | undefined): Promise<Rod
 export async function responderRodadaPublica(
   token: string | undefined,
   body: DadosExternos
-): Promise<{ versao: number }> {
+): Promise<{ versao: number; propostaId: string }> {
   const payload: ResponderRodadaPayload = responderRodadaPayloadSchema.parse(body ?? {});
   // Autentica FORA da transacao so para obter a solicitacao (chave do advisory) e falhar cedo.
   const convite = await autenticarConvitePorToken(token);
@@ -114,7 +114,7 @@ export async function responderRodadaPublica(
     }
 
     const versao = await proximaVersaoRepository(travado.id, tx);
-    await criarPropostaFornecedorRepository(
+    const propostaId = await criarPropostaFornecedorRepository(
       {
         empresaId: travado.empresaId,
         conviteId: travado.id,
@@ -132,6 +132,6 @@ export async function responderRodadaPublica(
       tx
     );
     await marcarConviteRespondidoRepository(travado.id, travado.empresaId, tx);
-    return { versao };
+    return { versao, propostaId };
   });
 }
