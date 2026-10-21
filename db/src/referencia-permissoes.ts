@@ -175,7 +175,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
     // A Tesouraria recebe quebra/divergência pelo sino e precisa abrir a central para tratar a
     // pendência; o código antigo ainda se chama fechamento_com_diferenca_visualizar.
-    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento"],
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "contas"],
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [

@@ -1,5 +1,5 @@
 {
-  "id": "e40c65ac-cedb-4bd5-9665-c59f5bc39570",
+  "id": "e00ac308-3c33-4d75-aa6d-7d7b7fc93fcc",
   "prevId": "8e376c06-7f24-4fab-a3e5-e8c72d8e9025",
   "version": "7",
   "dialect": "postgresql",
@@ -1847,6 +1847,130 @@
         "admissoes_testes_historico_versao_check": {
           "name": "admissoes_testes_historico_versao_check",
           "value": "\"admissoes_testes_historico\".\"versao\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ajustes_contas": {
+      "name": "ajustes_contas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuid_generate_v7()"
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conta_id": {
+          "name": "conta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor": {
+          "name": "valor",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saldo_anterior": {
+          "name": "saldo_anterior",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saldo_posterior": {
+          "name": "saldo_posterior",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_por": {
+          "name": "criado_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ajustes_contas_conta_criado_em_idx": {
+          "name": "ajustes_contas_conta_criado_em_idx",
+          "columns": [
+            {
+              "expression": "conta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ajustes_contas_empresa_id_empresas_id_fk": {
+          "name": "ajustes_contas_empresa_id_empresas_id_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "empresas",
+          "columnsFrom": ["empresa_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ajustes_contas_criado_por_perfis_usuarios_usuario_id_fk": {
+          "name": "ajustes_contas_criado_por_perfis_usuarios_usuario_id_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "perfis_usuarios",
+          "columnsFrom": ["criado_por"],
+          "columnsTo": ["usuario_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ajustes_contas_conta_empresa_fk": {
+          "name": "ajustes_contas_conta_empresa_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "contas",
+          "columnsFrom": ["conta_id", "empresa_id"],
+          "columnsTo": ["id", "empresa_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ajustes_contas_valor_nao_zero_check": {
+          "name": "ajustes_contas_valor_nao_zero_check",
+          "value": "\"ajustes_contas\".\"valor\" <> 0"
         }
       },
       "isRLSEnabled": false
@@ -4505,329 +4629,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.compras_importacoes_preco_base": {
-      "name": "compras_importacoes_preco_base",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nome_arquivo": {
-          "name": "nome_arquivo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hash_arquivo": {
-          "name": "hash_arquivo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'analisada'"
-        },
-        "total_linhas": {
-          "name": "total_linhas",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "total_correspondencias": {
-          "name": "total_correspondencias",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "total_ambiguidades": {
-          "name": "total_ambiguidades",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "total_nao_encontrados": {
-          "name": "total_nao_encontrados",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "criado_por": {
-          "name": "criado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "aplicado_por": {
-          "name": "aplicado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "aplicado_em": {
-          "name": "aplicado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "compras_importacoes_preco_base_empresa_criado_idx": {
-          "name": "compras_importacoes_preco_base_empresa_criado_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "criado_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "compras_importacoes_preco_base_empresa_id_empresas_id_fk": {
-          "name": "compras_importacoes_preco_base_empresa_id_empresas_id_fk",
-          "tableFrom": "compras_importacoes_preco_base",
-          "tableTo": "empresas",
-          "columnsFrom": ["empresa_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "compras_importacoes_preco_base_criado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "compras_importacoes_preco_base_criado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "compras_importacoes_preco_base",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["criado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "compras_importacoes_preco_base_aplicado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "compras_importacoes_preco_base_aplicado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "compras_importacoes_preco_base",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["aplicado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "compras_importacoes_preco_base_empresa_hash_unico": {
-          "name": "compras_importacoes_preco_base_empresa_hash_unico",
-          "nullsNotDistinct": false,
-          "columns": ["empresa_id", "hash_arquivo"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "compras_importacoes_preco_base_status_check": {
-          "name": "compras_importacoes_preco_base_status_check",
-          "value": "\"compras_importacoes_preco_base\".\"status\" in ('analisada', 'aplicada', 'cancelada')"
-        },
-        "compras_importacoes_preco_base_totais_check": {
-          "name": "compras_importacoes_preco_base_totais_check",
-          "value": "\"compras_importacoes_preco_base\".\"total_linhas\" >= 0 and \"compras_importacoes_preco_base\".\"total_correspondencias\" >= 0 and \"compras_importacoes_preco_base\".\"total_ambiguidades\" >= 0 and \"compras_importacoes_preco_base\".\"total_nao_encontrados\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.compras_importacoes_preco_base_itens": {
-      "name": "compras_importacoes_preco_base_itens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "importacao_id": {
-          "name": "importacao_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "numero_linha": {
-          "name": "numero_linha",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "codigo_informado": {
-          "name": "codigo_informado",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ean_informado": {
-          "name": "ean_informado",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "descricao_informada": {
-          "name": "descricao_informada",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "descricao_normalizada": {
-          "name": "descricao_normalizada",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valor_informado": {
-          "name": "valor_informado",
-          "type": "numeric(14, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "produto_id": {
-          "name": "produto_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resultado": {
-          "name": "resultado",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "detalhe": {
-          "name": "detalhe",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "compras_importacoes_preco_base_itens_importacao_resultado_idx": {
-          "name": "compras_importacoes_preco_base_itens_importacao_resultado_idx",
-          "columns": [
-            {
-              "expression": "importacao_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resultado",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "compras_importacoes_preco_base_itens_importacao_id_compras_importacoes_preco_base_id_fk": {
-          "name": "compras_importacoes_preco_base_itens_importacao_id_compras_importacoes_preco_base_id_fk",
-          "tableFrom": "compras_importacoes_preco_base_itens",
-          "tableTo": "compras_importacoes_preco_base",
-          "columnsFrom": ["importacao_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "compras_importacoes_preco_base_itens_produto_id_produtos_id_fk": {
-          "name": "compras_importacoes_preco_base_itens_produto_id_produtos_id_fk",
-          "tableFrom": "compras_importacoes_preco_base_itens",
-          "tableTo": "produtos",
-          "columnsFrom": ["produto_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "compras_importacoes_preco_base_itens_importacao_linha_unica": {
-          "name": "compras_importacoes_preco_base_itens_importacao_linha_unica",
-          "nullsNotDistinct": false,
-          "columns": ["importacao_id", "numero_linha"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "compras_importacoes_preco_base_itens_linha_check": {
-          "name": "compras_importacoes_preco_base_itens_linha_check",
-          "value": "\"compras_importacoes_preco_base_itens\".\"numero_linha\" > 0"
-        },
-        "compras_importacoes_preco_base_itens_valor_check": {
-          "name": "compras_importacoes_preco_base_itens_valor_check",
-          "value": "\"compras_importacoes_preco_base_itens\".\"valor_informado\" >= 0"
-        },
-        "compras_importacoes_preco_base_itens_resultado_check": {
-          "name": "compras_importacoes_preco_base_itens_resultado_check",
-          "value": "\"compras_importacoes_preco_base_itens\".\"resultado\" in ('correspondencia', 'ambiguidade', 'nao_encontrado', 'invalido')"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.conferencias_estoque": {
       "name": "conferencias_estoque",
       "schema": "",
@@ -6120,19 +5921,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fuso_horario": {
-          "name": "fuso_horario",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'America/Sao_Paulo'"
-        },
-        "compras_prazo_resposta_horas": {
-          "name": "compras_prazo_resposta_horas",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "criado_em": {
           "name": "criado_em",
           "type": "timestamp with time zone",
@@ -6160,14 +5948,6 @@
         "empresas_matricula_prefixo_check": {
           "name": "empresas_matricula_prefixo_check",
           "value": "\"empresas\".\"matricula_prefixo\" ~ '^[A-Z0-9]{2,8}$'"
-        },
-        "empresas_fuso_horario_check": {
-          "name": "empresas_fuso_horario_check",
-          "value": "btrim(\"empresas\".\"fuso_horario\") <> ''"
-        },
-        "empresas_compras_prazo_resposta_horas_check": {
-          "name": "empresas_compras_prazo_resposta_horas_check",
-          "value": "\"empresas\".\"compras_prazo_resposta_horas\" is null or \"empresas\".\"compras_prazo_resposta_horas\" > 0"
         }
       },
       "isRLSEnabled": false
@@ -7662,354 +7442,9 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "fornecedores_id_empresa_unica": {
-          "name": "fornecedores_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": ["id", "empresa_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.fornecedores_produtos": {
-      "name": "fornecedores_produtos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fornecedor_id": {
-          "name": "fornecedor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "produto_id": {
-          "name": "produto_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pendente'"
-        },
-        "origem": {
-          "name": "origem",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "preco_ofertado": {
-          "name": "preco_ofertado",
-          "type": "numeric(14, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "observacao": {
-          "name": "observacao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_por": {
-          "name": "criado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "aprovado_por": {
-          "name": "aprovado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "aprovado_em": {
-          "name": "aprovado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "fornecedores_produtos_empresa_status_idx": {
-          "name": "fornecedores_produtos_empresa_status_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "fornecedores_produtos_fornecedor_idx": {
-          "name": "fornecedores_produtos_fornecedor_idx",
-          "columns": [
-            {
-              "expression": "fornecedor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "fornecedores_produtos_empresa_id_empresas_id_fk": {
-          "name": "fornecedores_produtos_empresa_id_empresas_id_fk",
-          "tableFrom": "fornecedores_produtos",
-          "tableTo": "empresas",
-          "columnsFrom": ["empresa_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_criado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "fornecedores_produtos_criado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "fornecedores_produtos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["criado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_aprovado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "fornecedores_produtos_aprovado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "fornecedores_produtos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["aprovado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_fornecedor_empresa_fk": {
-          "name": "fornecedores_produtos_fornecedor_empresa_fk",
-          "tableFrom": "fornecedores_produtos",
-          "tableTo": "fornecedores",
-          "columnsFrom": ["fornecedor_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_produto_empresa_fk": {
-          "name": "fornecedores_produtos_produto_empresa_fk",
-          "tableFrom": "fornecedores_produtos",
-          "tableTo": "produtos",
-          "columnsFrom": ["produto_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "fornecedores_produtos_empresa_fornecedor_produto_unico": {
-          "name": "fornecedores_produtos_empresa_fornecedor_produto_unico",
-          "nullsNotDistinct": false,
-          "columns": ["empresa_id", "fornecedor_id", "produto_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "fornecedores_produtos_status_check": {
-          "name": "fornecedores_produtos_status_check",
-          "value": "\"fornecedores_produtos\".\"status\" in ('pendente', 'aprovado', 'rejeitado')"
-        },
-        "fornecedores_produtos_origem_check": {
-          "name": "fornecedores_produtos_origem_check",
-          "value": "\"fornecedores_produtos\".\"origem\" in ('compras', 'fornecedor')"
-        },
-        "fornecedores_produtos_preco_check": {
-          "name": "fornecedores_produtos_preco_check",
-          "value": "\"fornecedores_produtos\".\"preco_ofertado\" is null or \"fornecedores_produtos\".\"preco_ofertado\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.fornecedores_produtos_eventos": {
-      "name": "fornecedores_produtos_eventos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fornecedor_produto_id": {
-          "name": "fornecedor_produto_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status_anterior": {
-          "name": "status_anterior",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status_novo": {
-          "name": "status_novo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "preco_ofertado": {
-          "name": "preco_ofertado",
-          "type": "numeric(14, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ator_tipo": {
-          "name": "ator_tipo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "usuario_id": {
-          "name": "usuario_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "observacao": {
-          "name": "observacao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "fornecedores_produtos_eventos_vinculo_criado_idx": {
-          "name": "fornecedores_produtos_eventos_vinculo_criado_idx",
-          "columns": [
-            {
-              "expression": "fornecedor_produto_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "criado_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "fornecedores_produtos_eventos_empresa_id_empresas_id_fk": {
-          "name": "fornecedores_produtos_eventos_empresa_id_empresas_id_fk",
-          "tableFrom": "fornecedores_produtos_eventos",
-          "tableTo": "empresas",
-          "columnsFrom": ["empresa_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_eventos_fornecedor_produto_id_fornecedores_produtos_id_fk": {
-          "name": "fornecedores_produtos_eventos_fornecedor_produto_id_fornecedores_produtos_id_fk",
-          "tableFrom": "fornecedores_produtos_eventos",
-          "tableTo": "fornecedores_produtos",
-          "columnsFrom": ["fornecedor_produto_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "fornecedores_produtos_eventos_usuario_id_perfis_usuarios_usuario_id_fk": {
-          "name": "fornecedores_produtos_eventos_usuario_id_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "fornecedores_produtos_eventos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["usuario_id"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "fornecedores_produtos_eventos_status_anterior_check": {
-          "name": "fornecedores_produtos_eventos_status_anterior_check",
-          "value": "\"fornecedores_produtos_eventos\".\"status_anterior\" is null or \"fornecedores_produtos_eventos\".\"status_anterior\" in ('pendente', 'aprovado', 'rejeitado')"
-        },
-        "fornecedores_produtos_eventos_status_novo_check": {
-          "name": "fornecedores_produtos_eventos_status_novo_check",
-          "value": "\"fornecedores_produtos_eventos\".\"status_novo\" in ('pendente', 'aprovado', 'rejeitado')"
-        },
-        "fornecedores_produtos_eventos_ator_tipo_check": {
-          "name": "fornecedores_produtos_eventos_ator_tipo_check",
-          "value": "\"fornecedores_produtos_eventos\".\"ator_tipo\" in ('usuario', 'fornecedor', 'sistema')"
-        },
-        "fornecedores_produtos_eventos_usuario_check": {
-          "name": "fornecedores_produtos_eventos_usuario_check",
-          "value": "(\"fornecedores_produtos_eventos\".\"ator_tipo\" = 'usuario' and \"fornecedores_produtos_eventos\".\"usuario_id\" is not null) or (\"fornecedores_produtos_eventos\".\"ator_tipo\" <> 'usuario')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.funcoes_operacionais": {
@@ -8288,6 +7723,15 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "grupos_mercadorias_grupo_pai_id_grupos_mercadorias_id_fk": {
+          "name": "grupos_mercadorias_grupo_pai_id_grupos_mercadorias_id_fk",
+          "tableFrom": "grupos_mercadorias",
+          "tableTo": "grupos_mercadorias",
+          "columnsFrom": ["grupo_pai_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "grupos_mercadorias_importado_de_empresas_id_fk": {
           "name": "grupos_mercadorias_importado_de_empresas_id_fk",
           "tableFrom": "grupos_mercadorias",
@@ -8296,25 +7740,10 @@
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
-        },
-        "grupos_mercadorias_pai_mesma_empresa_fk": {
-          "name": "grupos_mercadorias_pai_mesma_empresa_fk",
-          "tableFrom": "grupos_mercadorias",
-          "tableTo": "grupos_mercadorias",
-          "columnsFrom": ["grupo_pai_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "grupos_mercadorias_id_empresa_unica": {
-          "name": "grupos_mercadorias_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": ["id", "empresa_id"]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -12210,12 +11639,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "whatsapp": {
-          "name": "whatsapp",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "role": {
           "name": "role",
           "type": "text",
@@ -12263,10 +11686,6 @@
         "perfis_usuarios_role_check": {
           "name": "perfis_usuarios_role_check",
           "value": "\"perfis_usuarios\".\"role\" in ('usuario_comum', 'usuario_admin', 'admin')"
-        },
-        "perfis_usuarios_whatsapp_check": {
-          "name": "perfis_usuarios_whatsapp_check",
-          "value": "\"perfis_usuarios\".\"whatsapp\" is null or \"perfis_usuarios\".\"whatsapp\" ~ '^[0-9]{10,15}$'"
         }
       },
       "isRLSEnabled": false
@@ -12599,19 +12018,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "quantidade_variavel": {
-          "name": "quantidade_variavel",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "tolerancia_quantidade_percentual": {
-          "name": "tolerancia_quantidade_percentual",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "local_venda_1": {
           "name": "local_venda_1",
           "type": "text",
@@ -12696,6 +12102,15 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "produtos_grupo_mercadoria_id_grupos_mercadorias_id_fk": {
+          "name": "produtos_grupo_mercadoria_id_grupos_mercadorias_id_fk",
+          "tableFrom": "produtos",
+          "tableTo": "grupos_mercadorias",
+          "columnsFrom": ["grupo_mercadoria_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "produtos_unidade_medida_id_unidades_medida_id_fk": {
           "name": "produtos_unidade_medida_id_unidades_medida_id_fk",
           "tableFrom": "produtos",
@@ -12722,25 +12137,10 @@
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
-        },
-        "produtos_grupo_mercadoria_mesma_empresa_fk": {
-          "name": "produtos_grupo_mercadoria_mesma_empresa_fk",
-          "tableFrom": "produtos",
-          "tableTo": "grupos_mercadorias",
-          "columnsFrom": ["grupo_mercadoria_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "produtos_id_empresa_unica": {
-          "name": "produtos_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": ["id", "empresa_id"]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "produtos_status_check": {
@@ -12754,10 +12154,6 @@
         "produtos_curva_abc_check": {
           "name": "produtos_curva_abc_check",
           "value": "\"produtos\".\"curva_abc\" is null or \"produtos\".\"curva_abc\" in ('A', 'B', 'C')"
-        },
-        "produtos_quantidade_variavel_tolerancia_check": {
-          "name": "produtos_quantidade_variavel_tolerancia_check",
-          "value": "(\"produtos\".\"quantidade_variavel\" = false and \"produtos\".\"tolerancia_quantidade_percentual\" is null) or (\"produtos\".\"quantidade_variavel\" = true and \"produtos\".\"tolerancia_quantidade_percentual\" between 0 and 30)"
         }
       },
       "isRLSEnabled": false
@@ -12949,192 +12345,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.produtos_precos_base": {
-      "name": "produtos_precos_base",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "produto_id": {
-          "name": "produto_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valor": {
-          "name": "valor",
-          "type": "numeric(14, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "origem": {
-          "name": "origem",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "importacao_item_id": {
-          "name": "importacao_item_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "referencia_externa": {
-          "name": "referencia_externa",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "valido_desde": {
-          "name": "valido_desde",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "valido_ate": {
-          "name": "valido_ate",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_por": {
-          "name": "criado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "produtos_precos_base_atual_unico_idx": {
-          "name": "produtos_precos_base_atual_unico_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "produto_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"produtos_precos_base\".\"valido_ate\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "produtos_precos_base_empresa_produto_historico_idx": {
-          "name": "produtos_precos_base_empresa_produto_historico_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "produto_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "valido_desde",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "produtos_precos_base_empresa_id_empresas_id_fk": {
-          "name": "produtos_precos_base_empresa_id_empresas_id_fk",
-          "tableFrom": "produtos_precos_base",
-          "tableTo": "empresas",
-          "columnsFrom": ["empresa_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "produtos_precos_base_importacao_item_id_compras_importacoes_preco_base_itens_id_fk": {
-          "name": "produtos_precos_base_importacao_item_id_compras_importacoes_preco_base_itens_id_fk",
-          "tableFrom": "produtos_precos_base",
-          "tableTo": "compras_importacoes_preco_base_itens",
-          "columnsFrom": ["importacao_item_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "produtos_precos_base_criado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "produtos_precos_base_criado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "produtos_precos_base",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["criado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "produtos_precos_base_produto_empresa_fk": {
-          "name": "produtos_precos_base_produto_empresa_fk",
-          "tableFrom": "produtos_precos_base",
-          "tableTo": "produtos",
-          "columnsFrom": ["produto_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "produtos_precos_base_valor_check": {
-          "name": "produtos_precos_base_valor_check",
-          "value": "\"produtos_precos_base\".\"valor\" >= 0"
-        },
-        "produtos_precos_base_origem_check": {
-          "name": "produtos_precos_base_origem_check",
-          "value": "\"produtos_precos_base\".\"origem\" in ('importacao', 'rodada')"
-        },
-        "produtos_precos_base_origem_referencia_check": {
-          "name": "produtos_precos_base_origem_referencia_check",
-          "value": "(\"produtos_precos_base\".\"origem\" = 'importacao' and \"produtos_precos_base\".\"importacao_item_id\" is not null) or (\"produtos_precos_base\".\"origem\" = 'rodada' and \"produtos_precos_base\".\"referencia_externa\" is not null)"
-        },
-        "produtos_precos_base_validade_check": {
-          "name": "produtos_precos_base_validade_check",
-          "value": "\"produtos_precos_base\".\"valido_ate\" is null or \"produtos_precos_base\".\"valido_ate\" > \"produtos_precos_base\".\"valido_desde\""
-        }
-      },
       "isRLSEnabled": false
     },
     "public.produtos_promocoes": {

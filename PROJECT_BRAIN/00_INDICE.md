@@ -69,7 +69,7 @@ a necessidade.
 | [50](50_FECHAMENTO_COMPRAS_2026_10_14.md)                   | **Fechamento técnico de Compras 14/10**     | P1/P2 técnicos fechados, prova local e limites da integração oficial de WhatsApp                                                                                                                                |
 | [51](51_WHATSAPP_COMPRAS_E_ACABAMENTO_VISUAL_2026_10_15.md) | **WhatsApp em Compras e acabamento visual** | decisão recomendada, tutorial Meta do zero, arquitetura do retorno estruturado, números sem zeros artificiais e pendências atuais                                                                               |
 | [52](52_RECORRENCIA_COMPRAS_CALENDARIO.md)                  | **Recorrência de Compras como Calendário**  | ocorrências independentes, padrões diário/semanal/mensal/anual, exceções e limite antes da migration                                                                                                            |
-| [53](53_REESTRUTURACAO_COMPRAS_FASE_1.md)                   | **Reestruturação de Compras — Fase 1**      | fluxo-alvo aprovado, catálogo fornecedor–produto, preço-base inicial, tolerância de peso e estado local da migration 0060                                                                                       |
+| [53](53_REESTRUTURACAO_COMPRAS_FASE_1.md)                   | **Reestruturação de Compras — Fase 1**      | fluxo-alvo aprovado, catálogo fornecedor–produto, preço-base inicial, tolerância de peso e estado local da migration 0061 (ex-0060)                                                                             |
 | [54](54_REESTRUTURACAO_COMPRAS_FASE_2.md)                   | **Reestruturação de Compras — Fase 2**      | rodada multi-fornecedor, as 14 decisões (R-221), entidades novas, isolamento comercial estrutural, compra automática por pré-autorização e ordem de implementação E0–E8                                         |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)                         | Linguagem visual Cicluz                     | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**                                                                                                                            |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md)                   | Relatório da rodada visual                  | o que mudou por arquivo em 01/08 e o que ficou aberto                                                                                                                                                           |
@@ -102,6 +102,13 @@ a necessidade.
 > admissão direta) → **35** (o mapa das 8 estações) → **36** (pré-cadastro) → **37** (V3/V4, ficha
 > pública e dependentes) → **38** (V5, revisão do DP) → **39** (V6, fila — e os contratos do que
 > falta) → **40** (catálogo de funções) → **41** (retrato da função, ⛔ esperando aprovação do SQL).
+
+## Diretriz operacional vigente
+
+- [70 — Fonte única e execução contínua (19/10/2026)](70_DIRETRIZ_FONTE_UNICA_E_EXECUCAO_2026_10_19.md): diretório canônico, `main` como base, branches/PRs pequenas, revisão por agentes e proibição de retomar implementação por pastas históricas.
+
+- [71 — Auditoria de menu e permissões (19/10/2026)](71_AUDITORIA_MENU_E_PERMISSOES_2026_10_19.md): achados confirmados e fatiamento das próximas PRs de menu/perfis.
+- [72 — Ajustes auditáveis de saldo das contas (20/10/2026)](72_AJUSTE_SALDO_CONTAS_2026_10_20.md): saldo derivado preserva histórico; somente Administrador total e Tesouraria ajustam ou zeram por fato auditável.
 
 ## Documento adicional
 

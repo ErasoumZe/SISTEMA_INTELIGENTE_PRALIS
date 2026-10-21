@@ -1109,6 +1109,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   opcoes.value = dados;
 }
 
+async function recarregarDadosCadastro() {
+  await carregarDadosPagina(empresaId.value, telaAtiva.value);
+}
+
 async function carregarTudo() {
   carregando.value = true;
   erro.value = "";
@@ -2285,6 +2289,7 @@ const pageContext = computed(() => ({
   treeItens: telaAtiva.value === "areas_setores" ? treeAreasSetores() : treeGrupos(),
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
+  recarregarDadosCadastro,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,

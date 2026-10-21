@@ -35,12 +35,14 @@ describe("caixa integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieCaixa: string;
+  let cookieGerente: string;
   let cookieMultiempresa: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
     cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    cookieGerente = await cookieSessao(contexto.app, "gerente");
     cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
   }, 120_000);
 
@@ -417,7 +419,9 @@ describe("caixa integration", () => {
       valor: 120
     });
     expect(canceladaNoDetalhe?.pagamentos).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 })])
+      expect.arrayContaining([
+        expect.objectContaining({ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 })
+      ])
     );
     expect(canceladaNoDetalhe?.produtos).toEqual(
       expect.arrayContaining([
@@ -556,7 +560,10 @@ describe("caixa integration", () => {
     });
     assertProblem(semLacre, 400);
 
-    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId });
+    const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId
+    });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
@@ -629,7 +636,7 @@ describe("caixa integration", () => {
     const pdvInvalido = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
+      headers: { cookie: cookieCaixa },
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId: "99999999-9999-4999-8999-999999999999",
@@ -644,7 +651,7 @@ describe("caixa integration", () => {
     const pdvJaAberto = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
+      headers: { cookie: cookieCaixa },
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId: idsTeste.pdvA,
@@ -685,17 +692,17 @@ describe("caixa integration", () => {
 
     const payloadCaixa = await prepararAberturaFisica(pdvId, contaId, usuarioCaixaId, "Abertura A");
     const payloadGerente = await prepararAberturaFisica(pdvId, contaId, usuarioGerenteId, "Abertura B");
-    const abertura = (payload: Record<string, unknown>) =>
+    const abertura = (payload: Record<string, unknown>, cookie: string) =>
       contexto.app.inject({
         method: "POST",
         url: "/api/caixa/abrir",
-        headers: { cookie: cookieAdmin },
+        headers: { cookie },
         payload
       });
 
     const [primeira, segunda] = await Promise.all([
-      abertura(payloadCaixa),
-      abertura(payloadGerente)
+      abertura(payloadCaixa, cookieCaixa),
+      abertura(payloadGerente, cookieGerente)
     ]);
 
     const statuses = [primeira.statusCode, segunda.statusCode].sort();
@@ -756,7 +763,7 @@ describe("caixa integration", () => {
       contexto.app.inject({
         method: "POST",
         url: "/api/caixa/abrir",
-        headers: { cookie: cookieAdmin },
+        headers: { cookie: cookieGerente },
         payload
       });
 

@@ -389,14 +389,6 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               </v-alert>
             </v-col>
             <v-col cols="12" md="6">
-              <v-text-field
-                :model-value="formCadastro.novoColaboradorCpf"
-                label="CPF *"
-                maxlength="14"
-                @update:model-value="formCadastro.novoColaboradorCpf = mascararCpf(String($event || ''))"
-              />
-            </v-col>
-            <v-col cols="12" md="6">
               <v-select
                 v-model="formCadastro.novoColaboradorSetorId"
                 :items="opcoesEmpresa.setores"

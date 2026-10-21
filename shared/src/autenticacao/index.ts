@@ -630,6 +630,11 @@ export function ehTesouraria(perfil: Pick<PerfilUsuario, "cargos">): boolean {
   return perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("tesouraria"));
 }
 
+/** Ajustar saldo e um ato financeiro excepcional: somente Administrador total ou Tesouraria. */
+export function podeAjustarSaldoContas(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
+  return ehAdministradorTotal(perfil) || ehTesouraria(perfil);
+}
+
 /** A folha de fechamento é conferida pela Tesouraria e supervisionada pela Direção Geral. */
 export function podeAcessarRelatorioFechamento(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
   return (

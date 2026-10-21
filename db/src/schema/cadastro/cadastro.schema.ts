@@ -18,6 +18,7 @@ export {
   colaboradoresJornadas,
   colaboradoresOnboarding,
   colaboradoresVinculos,
+  ajustesContas,
   comprasImportacoesPrecoBase,
   comprasImportacoesPrecoBaseItens,
   contas,
