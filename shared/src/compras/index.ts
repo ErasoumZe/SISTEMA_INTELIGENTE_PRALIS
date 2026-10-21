@@ -89,3 +89,4 @@ export type EstoqueMovimentoDto = {
 export * from "./cotacao.js";
 export * from "./fundacao.js";
 export * from "./solicitacao.js";
+export * from "./rodada.js";

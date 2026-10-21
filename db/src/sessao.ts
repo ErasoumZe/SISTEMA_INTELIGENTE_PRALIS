@@ -65,6 +65,24 @@ export function sqlTravarMatriculaDaEmpresa(empresaId: string) {
   return sql`select pg_advisory_xact_lock(hashtext('dp:matricula'), hashtext(${empresaId}::text))`;
 }
 
+/**
+ * Serializa, dentro da transacao corrente, tudo que decide sobre a rodada de cotacao de UMA
+ * solicitacao — abrir, enviar convite, registrar resposta e adjudicar/fechar (Fase 2 do Compras).
+ *
+ * Por que advisory e nao so a linha da rodada: a regra "uma rodada aberta por solicitacao" e
+ * "resposta tardia nunca substitui compra realizada" dependem de agregados que cruzam rodada,
+ * convite, proposta e adjudicacao; o `FOR UPDATE` de uma linha nao impede duas transacoes de
+ * passarem juntas pela pre-checagem em READ COMMITTED. O escopo e a SOLICITACAO (casa com o unique
+ * parcial `compras_rodadas_solicitacao_aberta_unica`): solicitacoes diferentes nunca esperam uma
+ * pela outra. Solta sozinho no commit/rollback. É a primeira trava da ordem canonica (PROJECT_BRAIN
+ * 54): advisory por rodada -> rodada FOR UPDATE -> convite FOR UPDATE -> itens do envelope.
+ *
+ * Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
+ */
+export function sqlTravarRodadaDeCompras(solicitacaoId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('compras:rodada'), hashtext(${solicitacaoId}::text))`;
+}
+
 /** Expressao unica para comparar CPF com ou sem mascara nas consultas do dominio. */
 export function sqlCpfNormalizado(cpf: SQLWrapper) {
   return sql`regexp_replace(${cpf}, '\\D', '', 'g')`;
