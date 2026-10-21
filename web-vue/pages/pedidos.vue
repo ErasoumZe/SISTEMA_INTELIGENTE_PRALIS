@@ -57,6 +57,8 @@ const {
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeCatalogo = computed(() => temPermissao(permissoesUsuario.value, "compras_catalogo_gerir"));
 const podePrecoBase = computed(() => temPermissao(permissoesUsuario.value, "compras_preco_base_importar"));
+// R-221 decisao 10: solicitacao reusa as permissoes de pedido.
+const podeSolicitacoes = computed(() => temPermissao(permissoesUsuario.value, "pedidos_visualizar"));
 const produtosFundacao = computed(() => Object.values(estoquePorProduto.value));
 const fundacaoHabilitada = ref(false);
 const { apiGet: apiGetFundacao } = useApi();
@@ -93,12 +95,15 @@ onMounted(async () => {
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <ComprasFundacaoPainel
-        v-if="fundacaoHabilitada && (podeCatalogo || podePrecoBase)"
+        v-if="fundacaoHabilitada && (podeCatalogo || podePrecoBase || podeSolicitacoes)"
         :empresa-id="empresaId"
         :fornecedores="fornecedores"
         :produtos="produtosFundacao"
         :pode-catalogo="podeCatalogo"
         :pode-preco-base="podePrecoBase"
+        :pode-solicitacoes="podeSolicitacoes"
+        :pode-criar-solicitacao="podeCriar"
+        :pode-editar-solicitacao="podeEditar"
       />
       <div v-if="podeCriar" class="pedidos-acoes">
         <v-card class="pedidos-acao pedidos-acao--sugestao">

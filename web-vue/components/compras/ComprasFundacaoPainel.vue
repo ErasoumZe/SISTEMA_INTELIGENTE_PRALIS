@@ -11,9 +11,12 @@ const props = defineProps<{
   produtos: ProdutoEstoqueDto[];
   podeCatalogo: boolean;
   podePrecoBase: boolean;
+  podeSolicitacoes: boolean;
+  podeCriarSolicitacao: boolean;
+  podeEditarSolicitacao: boolean;
 }>();
 
-const aba = ref(props.podeCatalogo ? "catalogo" : "precos");
+const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos" : "solicitacoes");
 </script>
 
 <template>
@@ -31,6 +34,7 @@ const aba = ref(props.podeCatalogo ? "catalogo" : "precos");
       <v-tabs v-model="aba">
         <v-tab v-if="podeCatalogo" value="catalogo">Catálogo fornecedor–produto</v-tab>
         <v-tab v-if="podePrecoBase" value="precos">Preço-base</v-tab>
+        <v-tab v-if="podeSolicitacoes" value="solicitacoes">Solicitações</v-tab>
       </v-tabs>
       <!-- Sem `eager`: cada aba so busca quando e aberta. Com `eager`, abrir a tela de Pedidos para
            olhar a fila disparava tambem as tres consultas da fundacao, inclusive a lista de
@@ -41,6 +45,14 @@ const aba = ref(props.podeCatalogo ? "catalogo" : "precos");
         </v-window-item>
         <v-window-item v-if="podePrecoBase" value="precos">
           <ComprasPrecoBaseAba :empresa-id="empresaId" />
+        </v-window-item>
+        <v-window-item v-if="podeSolicitacoes" value="solicitacoes">
+          <ComprasSolicitacoesAba
+            :empresa-id="empresaId"
+            :produtos="produtos"
+            :pode-criar="podeCriarSolicitacao"
+            :pode-editar="podeEditarSolicitacao"
+          />
         </v-window-item>
       </v-window>
     </v-card-text>
