@@ -1,0 +1,138 @@
+import type { RodadaPublicaDto } from "@padaria/shared";
+import { CABECALHO_DA_RODADA } from "~/utils/rodada-link";
+import { tokenDoFragmento } from "~/utils/convite-token";
+
+/**
+ * Fase 2 — pagina publica do fornecedor na rodada. Mesma mecanica da cotacao: o token vem do
+ * FRAGMENTO (`#t=`), e removido da barra logo apos ler, e vai no cabecalho `x-rodada-token`. Sem
+ * sessao, sem cookies (`credentials: "omit"`).
+ */
+export type RespostaItemLocal = { conviteItemId: string; indisponivel: boolean; valor: string };
+
+export function useRodadaFornecedor() {
+  const { apiUrl } = useApi();
+  const token = ref("");
+  const rodada = ref<RodadaPublicaDto | null>(null);
+  const respostas = ref<RespostaItemLocal[]>([]);
+  const frete = ref("");
+  const observacao = ref("");
+  const prazoEntrega = ref("");
+  const condicaoPagamento = ref("");
+  const carregando = ref(true);
+  const enviando = ref(false);
+  const enviado = ref(false);
+  const erro = ref("");
+
+  const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const prazo = computed(() => (rodada.value ? DATA_HORA.format(new Date(rodada.value.expiraEm)) : ""));
+  const aberta = computed(() => rodada.value?.situacao === "aberta");
+
+  const totalEstimado = computed(() =>
+    respostas.value.reduce((soma, item) => (item.indisponivel ? soma : soma + (Number(item.valor) || 0)), 0)
+  );
+  const totalFormatado = computed(() => MOEDA.format(totalEstimado.value));
+
+  const pendencias = computed(
+    () => respostas.value.filter((item) => !item.indisponivel && !(Number(item.valor) > 0)).length
+  );
+
+  async function requisitar<T>(rota: string, init?: RequestInit): Promise<T> {
+    const resposta = await fetch(`${apiUrl}${rota}`, {
+      ...init,
+      credentials: "omit",
+      headers: { ...(init?.headers ?? {}), [CABECALHO_DA_RODADA]: token.value }
+    });
+    const corpo = (await resposta.json().catch(() => null)) as { data?: T; title?: string } | null;
+    if (!resposta.ok) throw new Error(corpo?.title || `Falha (HTTP ${resposta.status}).`);
+    return corpo?.data as T;
+  }
+
+  function prefill(dto: RodadaPublicaDto) {
+    const anterior = new Map((dto.ultimaProposta?.itens ?? []).map((item) => [item.conviteItemId, item]));
+    respostas.value = dto.itens.map((item) => {
+      const feito = anterior.get(item.conviteItemId);
+      return {
+        conviteItemId: item.conviteItemId,
+        indisponivel: feito?.indisponivel ?? false,
+        valor: feito?.valorUnitario ?? ""
+      };
+    });
+    frete.value = dto.ultimaProposta?.frete ?? "";
+    observacao.value = dto.ultimaProposta?.observacao ?? "";
+    prazoEntrega.value = dto.ultimaProposta?.prazoEntrega ?? "";
+    condicaoPagamento.value = dto.ultimaProposta?.condicaoPagamento ?? "";
+  }
+
+  async function carregar() {
+    carregando.value = true;
+    erro.value = "";
+    try {
+      const dto = await requisitar<RodadaPublicaDto>("/api/rodada");
+      rodada.value = dto;
+      prefill(dto);
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível abrir a rodada.";
+      rodada.value = null;
+    } finally {
+      carregando.value = false;
+    }
+  }
+
+  async function enviar() {
+    if (!aberta.value) return;
+    enviando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/responder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frete: frete.value ? Number(frete.value) : null,
+          observacao: observacao.value || null,
+          prazoEntrega: prazoEntrega.value || null,
+          condicaoPagamento: condicaoPagamento.value || null,
+          itens: respostas.value.map((item) => ({
+            conviteItemId: item.conviteItemId,
+            indisponivel: item.indisponivel,
+            valorUnitario: item.indisponivel ? null : Number(item.valor) || 0
+          }))
+        })
+      });
+      enviado.value = true;
+      await carregar();
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível enviar.";
+    } finally {
+      enviando.value = false;
+    }
+  }
+
+  onMounted(() => {
+    token.value = tokenDoFragmento(window.location.hash);
+    if (window.location.hash) history.replaceState(null, "", window.location.pathname);
+    if (!token.value) {
+      carregando.value = false;
+      return;
+    }
+    void carregar();
+  });
+
+  return {
+    rodada,
+    respostas,
+    frete,
+    observacao,
+    prazoEntrega,
+    condicaoPagamento,
+    carregando,
+    enviando,
+    enviado,
+    erro,
+    prazo,
+    aberta,
+    totalFormatado,
+    pendencias,
+    enviar
+  };
+}

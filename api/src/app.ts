@@ -17,6 +17,7 @@ import { registrarRotasCompras } from "./compras/compras.controller.js";
 import { registrarRotasComprasFundacao } from "./compras/compras-fundacao.controller.js";
 import { registrarRotasComprasSolicitacoes } from "./compras/compras-solicitacoes.controller.js";
 import { registrarRotasComprasRodadas } from "./compras/compras-rodadas.controller.js";
+import { registrarRotasRodadaPublica } from "./compras/rodada-publica.controller.js";
 import { registrarRotasCotacoes } from "./cotacoes/cotacoes.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
@@ -89,7 +90,11 @@ const rotasComAutenticacaoPropria = new Set([
   // R-216: a cotacao do fornecedor. Ele NAO tem conta — autentica pelo header `x-cotacao-token`,
   // cujo hash mora em `pedidos_cotacoes`. GET e PUT dividem a primeira entrada.
   "/api/cotacao",
-  "/api/cotacao/enviar"
+  "/api/cotacao/enviar",
+  // Fase 2: a rodada do fornecedor. Mesma natureza da cotacao — sem conta, autentica pelo header
+  // `x-rodada-token`, cujo hash mora em `compras_rodadas_convites`. GET e POST em entradas proprias.
+  "/api/rodada",
+  "/api/rodada/responder"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -113,6 +118,8 @@ export async function buildApp(): Promise<FastifyInstance> {
                 'req.headers["x-admissao-convite"]',
                 // R-216: o link do fornecedor vale dois dias uteis e da acesso a precos.
                 'req.headers["x-cotacao-token"]',
+                // Fase 2: o token da rodada do fornecedor, mesma natureza.
+                'req.headers["x-rodada-token"]',
                 'res.headers["set-cookie"]'
               ],
               censor: "[redigido]"
@@ -190,7 +197,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       // falha silenciosa, sem nada no log do servidor.
       "X-Admissao-Convite",
       // R-216: o token da cotacao do fornecedor. Mesmo motivo do anterior.
-      "X-Cotacao-Token"
+      "X-Cotacao-Token",
+      // Fase 2: o token da rodada do fornecedor.
+      "X-Rodada-Token"
     ]
   });
   await app.register(helmet);
@@ -298,6 +307,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasComprasFundacao(app);
   await registrarRotasComprasSolicitacoes(app);
   await registrarRotasComprasRodadas(app);
+  await registrarRotasRodadaPublica(app);
   await registrarRotasCotacoes(app);
 
   return app;
