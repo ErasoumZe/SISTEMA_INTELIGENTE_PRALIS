@@ -112,8 +112,16 @@ describe("atualizarCadastroLocal", () => {
       id: "forn1",
       nome: "Fornecedor",
       documento: "12345678000199",
-      whatsapp: "5511999999999"
+      whatsapp: "5511999999999",
+      // ativo (default do form) vira situacao 'ativo' no cache.
+      situacao: "ativo"
     });
+  });
+
+  it("fornecedores: grava situacao inativa no cache quando desativado", () => {
+    const { atualizarCadastroLocal, opcoes } = montarCenario();
+    atualizarCadastroLocal("fornecedores", form({ nome: "Fornecedor", ativo: false }), "forn2");
+    expect(opcoes.fornecedores[0]).toMatchObject({ id: "forn2", situacao: "inativo" });
   });
 
   it("clientes: mantem dataNascimento so quando o documento e CPF", () => {

@@ -63,7 +63,10 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.nome,
         documento: item.documento,
-        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined
+        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined,
+        // Projetado para a edicao preservar a situacao: sem isto, editar o nome reabriria o form com
+        // o default e o salvar seguinte reativaria um fornecedor inativo (R-219).
+        ativo: item.situacao === "inativo" ? "Não" : "Sim"
       }));
     if (tela === "socios_gestores")
       return listas.sociosGestores.map((item) => ({

@@ -16,26 +16,40 @@ export async function listarFornecedoresRepository() {
       empresaId: fornecedores.empresaId,
       nome: fornecedores.nome,
       documento: fornecedores.documento,
-      whatsapp: fornecedores.whatsapp
+      whatsapp: fornecedores.whatsapp,
+      situacao: fornecedores.situacao
     })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
 }
 
 export async function salvarFornecedorRepository(
-  input: { id?: string; empresaId: string; nome: string; documento: string | null; whatsapp: string | null },
+  input: {
+    id?: string;
+    empresaId: string;
+    nome: string;
+    documento: string | null;
+    whatsapp: string | null;
+    situacao: "ativo" | "inativo";
+  },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
     await db
       .update(fornecedores)
-      .set({ nome: input.nome, documento: input.documento, whatsapp: input.whatsapp })
+      .set({ nome: input.nome, documento: input.documento, whatsapp: input.whatsapp, situacao: input.situacao })
       .where(and(eq(fornecedores.id, input.id), eq(fornecedores.empresaId, input.empresaId)));
     return input;
   }
   const [criado] = await db
     .insert(fornecedores)
-    .values({ empresaId: input.empresaId, nome: input.nome, documento: input.documento, whatsapp: input.whatsapp })
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      documento: input.documento,
+      whatsapp: input.whatsapp,
+      situacao: input.situacao
+    })
     .returning({ id: fornecedores.id });
   return criado;
 }
