@@ -16,8 +16,6 @@ services:
       WATCHPACK_POLLING: "true"
       WATCHFILES_FORCE_POLLING: "true"
       TSC_WATCHFILE: FixedPollingInterval
-      # A nova experiencia de Compras fica ativa somente no ambiente local ate homologacao.
-      COMPRAS_NOVO_FLUXO: "true"
       # Leitura fiscal assistida: opcional no desenvolvimento e fornecida exclusivamente pelo
       # `.env.local` ignorado. A chave nunca vai para a imagem, o front ou o Git.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
