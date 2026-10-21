@@ -1322,6 +1322,16 @@ contrato completo, com entidades, máquinas de estado, concorrência e ordem de 
 14. **Freio:** aviso no sino a cada compra automática **mais** teto de valor por rodada que a
     interrompe.
 
+**Adendo da execução do E6 (José, 21/10/2026).** Três lacunas do contrato foram fechadas ao implementar
+o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
+
+- **Base (decisão 12) só nasce de compra automática.** Exceção aprovada pelo Comprador, por definição
+  acima do envelope, não vira base: virar base subiria em silêncio o teto da pré-autorização seguinte.
+- **Item que sobrou na fila** tem duas saídas: encerrar a solicitação (`encerrada`) ou levar os itens
+  para uma **nova** solicitação. Não há segunda rodada sobre a mesma necessidade.
+- **A rodada só fecha no prazo,** mesmo com tudo comprado antes. Fechar antecipadamente exigiria um
+  motivo de fechamento novo (migration) e não foi pedido.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

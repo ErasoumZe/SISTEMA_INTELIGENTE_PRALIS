@@ -154,6 +154,45 @@ Cada entrega é tela + backend + teste + remoção do antigo. Endpoints aposenta
 /api/pedidos/:id/cotacoes`, as rotas públicas `/api/cotacao*` e a opção `'confirmado'` de `/situacao`.
 Sobrevivem: listar/ver pedido, receber, cancelar.
 
+## E6 — fechamento, fila de decisão e exceção (executado em 21/10/2026, sem migration)
+
+Decisões de José tomadas ao planejar o E6, além das 14 acima:
+
+- **Base só de compra automática.** Ao fechar, a base vigente de cada item comprado **automaticamente**
+  passa a ser o `custo_final_unitario` da adjudicação (`origem='rodada'`, `rodada_id`); a anterior
+  recebe `valido_ate`. Custo zero e produto inativo ficam fora (R-220). Compra aprovada pelo Comprador
+  **não** vira base. A reconciliação ao centavo do frete rateado (item "Ainda sem decisão") segue
+  pendente com Rodrigo e **não** foi resolvida por esta entrega.
+- **Sobra na fila:** "Encerrar solicitação" (`parcialmente_comprada → encerrada`, só depois do
+  fechamento) ou "Nova solicitação com os pendentes" (reusa o formulário do E2). Sem segunda rodada.
+- **A rodada só fecha no prazo.** Rodada com tudo comprado fica `aberta` até o vencimento.
+
+Como ficou (comportamento, não intenção):
+
+- **Fechamento** (`compras-fechamento.service.ts`): agendador de 60s em `server.ts`; uma transação por
+  rodada (advisory da solicitação → rodada `FOR UPDATE`); revalida `status='aberta'` e prazo, então o
+  tick é idempotente. Rodada → `fechada` (motivo `prazo`, sem autor humano); convites → `encerrado`;
+  solicitação → `comprada` (todos os itens com vencedor) ou `parcialmente_comprada` (também quando
+  nada foi comprado — o contrato não tem outro estado); sino `compras_decisao_pendente` se sobrou item.
+- **Fila** (`GET /api/compras/rodadas/:id/decisoes`): itens do envelope sem adjudicação, com motivo
+  (`sem_resposta`, `indisponivel`, `custo_nao_calculado`, `sem_base`, `acima_da_base`, `teto`) e a
+  última proposta enviada de cada fornecedor. O Comprador vê todas; o link público continua isolado.
+- **Aprovar exceção** (`POST .../decisoes/aprovar`, permissão `compras_excecao_aprovar`: Compras,
+  Gerência, Admin): vale com a rodada aberta ou fechada; só a **última versão** enviada do fornecedor;
+  cria/reusa o pedido consolidado (rodada, fornecedor) e grava adjudicação `modo='comprador'` com
+  `aprovado_por`. Item já vendido → 409 (`UNIQUE (rodada_item_id)`). Proposta sem custo gravado não
+  se aprova (422 `CUSTO_NAO_CALCULADO`): não se inventa o rateio do frete.
+- **Encerrar solicitação** (`POST /api/compras/solicitacoes/:id/encerrar`, `pedidos_editar`).
+
+Limites conhecidos, ditos na cara:
+
+- A compra automática roda em transação separada, **depois** de a resposta ser gravada. Uma resposta
+  enviada em cima do prazo pode ser gravada e o fechamento entrar antes da compra: o item cai na fila
+  (comportamento seguro, não perda).
+- O fechamento é aproximado: até 60s depois do vencimento, e no primeiro tick do boot.
+- A permissão nova chega aos cargos de **produção** por passo de dados próprio (referência de
+  permissões); este documento não o executa.
+
 ## Riscos registrados
 
 - A flag `COMPRAS_NOVO_FLUXO` passa a cobrir o caminho principal de compra, não um painel extra; a
