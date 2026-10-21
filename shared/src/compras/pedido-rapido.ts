@@ -15,7 +15,7 @@ export const pedidoRapidoPayloadSchema = z.object({
     .max(24 * 30)
     .optional()
     .nullable(),
-  tetoValor: z.coerce.number().positive().optional().nullable(),
+  tetoValor: z.coerce.number().positive().max(999_999_999).optional().nullable(),
   itens: z
     .array(
       z.object({

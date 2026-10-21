@@ -14,8 +14,8 @@ export const respostaItemPublicaSchema = z
     indisponivel: z.coerce.boolean().default(false),
     valorUnitario: z.coerce.number().nonnegative().optional().nullable()
   })
-  .refine((item) => item.indisponivel || (item.valorUnitario !== null && item.valorUnitario !== undefined), {
-    message: "Informe o valor do item ou marque como indisponivel",
+  .refine((item) => item.indisponivel || (item.valorUnitario != null && item.valorUnitario > 0), {
+    message: "Informe o valor do item (maior que zero) ou marque como indisponivel",
     path: ["valorUnitario"]
   });
 

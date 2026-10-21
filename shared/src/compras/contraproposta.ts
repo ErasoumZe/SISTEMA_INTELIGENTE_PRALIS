@@ -8,8 +8,13 @@ const uuid = z.string().uuid();
 
 export const contrapropostaItemSchema = z.object({
   rodadaItemId: uuid,
-  // Positivo e limitado: o banco guarda numeric(14,2) e infinito/enorme estouraria como 500.
-  valorUnitario: z.coerce.number().positive().max(9_999_999)
+  // Centavos inteiros e >= 0,01: o banco guarda numeric(14,2); 0,004 viraria "0.00" e, depois do aceite,
+  // compraria de graca. Limitado porque infinito/enorme estouraria como 500.
+  valorUnitario: z.coerce
+    .number()
+    .min(0.01)
+    .max(9_999_999)
+    .refine((valor) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6, "Use no maximo 2 casas decimais")
 });
 
 export const contrapropostaPayloadSchema = z

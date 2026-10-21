@@ -120,7 +120,8 @@ describe("contrapropostaPayloadSchema", () => {
   it("recusa lista vazia, valor zero/negativo/enorme e id que nao e uuid", () => {
     const base = { empresaId: uuid };
     expect(contrapropostaPayloadSchema.safeParse({ ...base, itens: [] }).success).toBe(false);
-    for (const valorUnitario of [0, -1, 1e12, Number.POSITIVE_INFINITY]) {
+    // 0,004 e 1,005 nao sao centavos inteiros: gravariam 0,00 / 1,00 e o custo zero compraria de graca.
+    for (const valorUnitario of [0, -1, 1e12, Number.POSITIVE_INFINITY, 0.004, 1.005]) {
       expect(
         contrapropostaPayloadSchema.safeParse({ ...base, itens: [{ rodadaItemId: uuid, valorUnitario }] }).success
       ).toBe(false);

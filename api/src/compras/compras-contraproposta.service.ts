@@ -38,7 +38,8 @@ export async function contraproporAoFornecedor(
     await tx.execute(sqlTravarRodadaDeCompras(solicitacaoId));
     const rodada = await travarRodadaRepository(rodadaId, tx);
     if (!rodada || rodada.empresaId !== payload.empresaId) throw naoEncontrado("Rodada nao encontrada");
-    if (rodada.status !== "aberta") {
+    // Entre o vencimento e o tick do fechamento (ate 60 s) o fornecedor ja leva 410: nao ha o que contrapor.
+    if (rodada.status !== "aberta" || rodada.expiraEm.getTime() <= Date.now()) {
       throw naoProcessavel("So se contrapropoe com a rodada aberta", "RODADA_NAO_ABERTA");
     }
     const convite = await travarConviteRepository(conviteId, payload.empresaId, tx);
