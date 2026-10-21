@@ -30,6 +30,7 @@ import type {
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
+import type { RegraRecorrencia } from "@padaria/shared/compras";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -3222,6 +3223,7 @@ export const notificacoes = pgTable(
         | "campanha"
         | "lancamento_vencimento"
         | "compras_decisao_pendente"
+        | "compras_agendamento_conferir"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -3249,7 +3251,7 @@ export const notificacoes = pgTable(
     check(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
-        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente')`
+        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(
@@ -4540,7 +4542,7 @@ export const comprasSolicitacoes = pgTable(
       .default("rascunho"),
     // `rapida` e o atalho "pedido rapido" (decisao 2): o dado registra que foi atalho, o mecanismo e o
     // mesmo da rodada normal.
-    origem: text("origem").$type<"manual" | "sugestao" | "rapida">().notNull(),
+    origem: text("origem").$type<"manual" | "sugestao" | "rapida" | "agendamento">().notNull(),
     observacao: text("observacao"),
     criadoPor: text("criado_por")
       .notNull()
@@ -4554,7 +4556,8 @@ export const comprasSolicitacoes = pgTable(
       "compras_solicitacoes_status_check",
       sql`${table.status} in ('rascunho', 'em_cotacao', 'parcialmente_comprada', 'comprada', 'encerrada', 'cancelada')`
     ),
-    check("compras_solicitacoes_origem_check", sql`${table.origem} in ('manual', 'sugestao', 'rapida')`),
+    // `agendamento`: nasce sozinha na data de um agendamento de pedido (doc 56), para o comprador conferir.
+    check("compras_solicitacoes_origem_check", sql`${table.origem} in ('manual', 'sugestao', 'rapida', 'agendamento')`),
     check(
       "compras_solicitacoes_encerramento_check",
       sql`(${table.status} in ('encerrada', 'cancelada', 'comprada')) = (${table.encerradaEm} is not null)`
@@ -4594,6 +4597,137 @@ export const comprasSolicitacoesItens = pgTable(
     // Produto repetido na mesma solicitacao = duas adjudicacoes para a mesma necessidade. Invariante.
     unique("compras_solicitacoes_itens_solicitacao_produto_unica").on(table.solicitacaoId, table.produtoId),
     index("compras_solicitacoes_itens_solicitacao_idx").on(table.solicitacaoId)
+  ]
+);
+
+// Agendamento de pedido (PROJECT_BRAIN/56). A serie guarda a regra; as datas futuras sao CALCULADAS
+// (shared/compras/recorrencia). Uma ocorrencia so vira linha quando acontece (solicitacao para o
+// comprador conferir), quando e cancelada ou quando e movida ("editar so esta").
+export const pedidosAgendas = pgTable(
+  "pedidos_agendas",
+  {
+    id: idUuid,
+    empresaId,
+    // O subgrupo escolhido no card (ou o grupo, quando nao ha subgrupo).
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").notNull(),
+    responsavelId: text("responsavel_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fusoHorario: text("fuso_horario").notNull(),
+    regra: jsonb("regra").$type<RegraRecorrencia>().notNull(),
+    terminoTipo: text("termino_tipo").$type<"nunca" | "data" | "quantidade">().notNull().default("nunca"),
+    terminoEm: date("termino_em"),
+    terminoQuantidade: integer("termino_quantidade"),
+    prazoRespostaHoras: integer("prazo_resposta_horas").notNull(),
+    status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
+    serieAnteriorId: uuid("serie_anterior_id").references((): AnyPgColumn => pedidosAgendas.id, {
+      onDelete: "restrict"
+    }),
+    encerradaEm: timestamp("encerrada_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("pedidos_agendas_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "pedidos_agendas_grupo_empresa_fk",
+      columns: [table.grupoMercadoriaId, table.empresaId],
+      foreignColumns: [gruposMercadorias.id, gruposMercadorias.empresaId]
+    }).onDelete("restrict"),
+    check("pedidos_agendas_status_check", sql`${table.status} in ('ativa', 'encerrada')`),
+    check(
+      "pedidos_agendas_encerramento_check",
+      sql`(${table.status} = 'encerrada') = (${table.encerradaEm} is not null)`
+    ),
+    check("pedidos_agendas_prazo_check", sql`${table.prazoRespostaHoras} between 1 and 720`),
+    check("pedidos_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "pedidos_agendas_termino_check",
+      sql`(${table.terminoTipo} = 'nunca' and ${table.terminoEm} is null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'data' and ${table.terminoEm} is not null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'quantidade' and ${table.terminoQuantidade} between 1 and 999 and ${table.terminoEm} is null)`
+    ),
+    index("pedidos_agendas_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+export const pedidosAgendasProdutos = pgTable(
+  "pedidos_agendas_produtos",
+  {
+    id: idUuid,
+    empresaId,
+    agendaId: uuid("agenda_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    // Opcional: vazio = sugestao pelo estoque (maximo - saldo) na data.
+    quantidadePadrao: numeric("quantidade_padrao", { precision: 14, scale: 3 })
+  },
+  (table) => [
+    unique("pedidos_agendas_produtos_unico").on(table.agendaId, table.produtoId),
+    foreignKey({
+      name: "pedidos_agendas_produtos_agenda_empresa_fk",
+      columns: [table.agendaId, table.empresaId],
+      foreignColumns: [pedidosAgendas.id, pedidosAgendas.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "pedidos_agendas_produtos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check(
+      "pedidos_agendas_produtos_quantidade_check",
+      sql`${table.quantidadePadrao} is null or ${table.quantidadePadrao} > 0`
+    )
+  ]
+);
+
+export const pedidosAgendaOcorrencias = pgTable(
+  "pedidos_agenda_ocorrencias",
+  {
+    id: idUuid,
+    empresaId,
+    agendaId: uuid("agenda_id").notNull(),
+    // Instante calculado pela regra: chave contra a mesma data criada duas vezes pelo agendador.
+    previstoPara: timestamp("previsto_para", { withTimezone: true }).notNull(),
+    // Igual ao previsto, ou a nova data de "editar so esta".
+    dataAtual: timestamp("data_atual", { withTimezone: true }).notNull(),
+    situacao: text("situacao")
+      .$type<"agendada" | "aguardando_conferencia" | "enviada" | "cancelada">()
+      .notNull()
+      .default("aguardando_conferencia"),
+    solicitacaoId: uuid("solicitacao_id").references(() => comprasSolicitacoes.id, { onDelete: "restrict" }),
+    enviadaPor: text("enviada_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    enviadaEm: timestamp("enviada_em", { withTimezone: true }),
+    canceladaPor: text("cancelada_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    canceladaEm: timestamp("cancelada_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("pedidos_agenda_ocorrencias_unica").on(table.agendaId, table.previstoPara),
+    foreignKey({
+      name: "pedidos_agenda_ocorrencias_agenda_empresa_fk",
+      columns: [table.agendaId, table.empresaId],
+      foreignColumns: [pedidosAgendas.id, pedidosAgendas.empresaId]
+    }).onDelete("cascade"),
+    check(
+      "pedidos_agenda_ocorrencias_situacao_check",
+      sql`${table.situacao} in ('agendada', 'aguardando_conferencia', 'enviada', 'cancelada')`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_conferencia_check",
+      sql`${table.situacao} not in ('aguardando_conferencia', 'enviada') or ${table.solicitacaoId} is not null`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_envio_check",
+      sql`(${table.situacao} = 'enviada') = (${table.enviadaEm} is not null and ${table.enviadaPor} is not null)`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_cancelamento_check",
+      sql`(${table.situacao} = 'cancelada') = (${table.canceladaEm} is not null and ${table.canceladaPor} is not null)`
+    ),
+    index("pedidos_agenda_ocorrencias_empresa_situacao_idx").on(table.empresaId, table.situacao, table.dataAtual)
   ]
 );
 

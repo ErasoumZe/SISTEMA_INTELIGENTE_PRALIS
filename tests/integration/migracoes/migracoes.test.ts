@@ -327,6 +327,10 @@ describe("migracoes integration", () => {
       // aprovado/rejeitado).
       "fornecedores_produtos",
       "funcoes_operacionais",
+      // Doc 56 (0066): a ocorrencia do agendamento muda de situacao (conferir -> enviada/cancelada) e a
+      // serie e encerrada ao editar "esta e as futuras".
+      "pedidos_agenda_ocorrencias",
+      "pedidos_agendas",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
       "pedidos_cotacoes"
     ]);

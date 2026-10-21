@@ -22,7 +22,12 @@ export const COR_STATUS: Record<StatusSolicitacao, string | undefined> = {
   cancelada: "error"
 };
 
-export const ROTULO_ORIGEM: Record<string, string> = { manual: "Manual", sugestao: "Sugestão", rapida: "Rápida" };
+export const ROTULO_ORIGEM: Record<string, string> = {
+  manual: "Manual",
+  sugestao: "Sugestão",
+  rapida: "Rápida",
+  agendamento: "Agendamento"
+};
 
 /** O que o estoque pede (produto no minimo, ate o maximo), no formato do formulario de solicitacao. */
 export function itensDeReposicaoDoEstoque(

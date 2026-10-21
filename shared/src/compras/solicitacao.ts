@@ -15,7 +15,8 @@ export const statusSolicitacao = [
 export type StatusSolicitacao = (typeof statusSolicitacao)[number];
 
 export const origensSolicitacao = ["manual", "sugestao", "rapida"] as const;
-export type OrigemSolicitacao = (typeof origensSolicitacao)[number];
+// `agendamento` nao entra no payload: so o agendador cria solicitacao com essa origem (doc 56).
+export type OrigemSolicitacao = (typeof origensSolicitacao)[number] | "agendamento";
 
 export const solicitacaoItemPayloadSchema = z.object({
   produtoId: uuid,
