@@ -20,7 +20,6 @@ import { registrarRotasComprasRodadas } from "./compras/compras-rodadas.controll
 import { registrarRotasComprasDecisao } from "./compras/compras-decisao.controller.js";
 import { registrarRotasComprasPedidoRapido } from "./compras/compras-pedido-rapido.controller.js";
 import { registrarRotasRodadaPublica } from "./compras/rodada-publica.controller.js";
-import { registrarRotasCotacoes } from "./cotacoes/cotacoes.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
@@ -89,11 +88,8 @@ const rotasComAutenticacaoPropria = new Set([
   // DECLARADA da rota, com o `:id` literal, e nao pelo caminho ja resolvido.
   "/api/admissao/dependentes",
   "/api/admissao/dependentes/:id",
-  // R-216: a cotacao do fornecedor. Ele NAO tem conta — autentica pelo header `x-cotacao-token`,
-  // cujo hash mora em `pedidos_cotacoes`. GET e PUT dividem a primeira entrada.
-  "/api/cotacao",
-  "/api/cotacao/enviar",
-  // Fase 2: a rodada do fornecedor. Mesma natureza da cotacao — sem conta, autentica pelo header
+  // Fase 2: a rodada do fornecedor (substituiu a cotacao por link da R-216, removida no E8). Ele NAO
+  // tem conta — autentica pelo header
   // `x-rodada-token`, cujo hash mora em `compras_rodadas_convites`. GET e POST em entradas proprias.
   "/api/rodada",
   "/api/rodada/responder",
@@ -120,8 +116,6 @@ export async function buildApp(): Promise<FastifyInstance> {
                 // registra headers, mas isto e cinto e suspensorio para o dia em que alguem logar
                 // `req` inteiro ou o Sentry serializar o contexto.
                 'req.headers["x-admissao-convite"]',
-                // R-216: o link do fornecedor vale dois dias uteis e da acesso a precos.
-                'req.headers["x-cotacao-token"]',
                 // Fase 2: o token da rodada do fornecedor, mesma natureza.
                 'req.headers["x-rodada-token"]',
                 'res.headers["set-cookie"]'
@@ -200,8 +194,6 @@ export async function buildApp(): Promise<FastifyInstance> {
       // Sem isto o preflight recusa e o navegador nem chega a mandar a requisicao real —
       // falha silenciosa, sem nada no log do servidor.
       "X-Admissao-Convite",
-      // R-216: o token da cotacao do fornecedor. Mesmo motivo do anterior.
-      "X-Cotacao-Token",
       // Fase 2: o token da rodada do fornecedor.
       "X-Rodada-Token"
     ]
@@ -314,7 +306,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasComprasDecisao(app);
   await registrarRotasComprasPedidoRapido(app);
   await registrarRotasRodadaPublica(app);
-  await registrarRotasCotacoes(app);
 
   return app;
 }

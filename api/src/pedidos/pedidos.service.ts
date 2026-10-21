@@ -1,78 +1,28 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
-  GerarPedidoAutomaticoPayload,
   PedidoDto,
-  PedidoEdicaoPayload,
-  PedidoPayload,
   PedidoRecebimentoPayload,
   PedidoSituacaoPayload,
   PedidoStatusNovo,
   PedidosQuery
 } from "@padaria/shared/pedidos";
-import { gerarItensReposicao } from "@padaria/shared/pedidos";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { cotacaoDoPedido, encerrarCotacaoAberta } from "../cotacoes/cotacoes.service.js";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import {
-  atualizarPedidoRepository,
   atualizarSituacaoPedidoRepository,
-  buscarProdutosEstoqueRepository,
   buscarRecebimentoPorIdempotenciaRepository,
-  criarPedidoRepository,
   criarRecebimentoRepository,
-  fornecedorPertenceAEmpresaRepository,
   listarItensDoPedidoRepository,
   listarPedidosRepository,
   obterPedidoDetalheRepository,
   registrarMovimentoRecebimentoRepository,
   travarPedidoRepository,
-  travarProdutosRepository,
-  type ItemPedidoParaCriar,
-  type ProdutoEstoqueLinha
+  travarProdutosRepository
 } from "./pedidos.repository.js";
 
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
-}
-
-function validarItensSemDuplicidade(itens: Array<{ produtoId: string }>): void {
-  if (new Set(itens.map((item) => item.produtoId)).size !== itens.length) {
-    throw erroValidacao("Um produto nao pode aparecer duas vezes no mesmo pedido", "PRODUTO_DUPLICADO");
-  }
-}
-
-// A quantidade pedida nao pode ultrapassar o maximo quando ele foi configurado. Sem maximo, nao
-// existe teto conhecido e o sistema nao inventa um numero.
-function resolverItens(
-  itens: Array<{ produtoId: string; quantidade: number }>,
-  produtosPorId: Map<string, ProdutoEstoqueLinha>
-): ItemPedidoParaCriar[] {
-  validarItensSemDuplicidade(itens);
-  return itens.map((item) => {
-    const produto = produtosPorId.get(item.produtoId);
-    if (!produto) throw erroValidacao("Produto nao pertence a empresa informada", "INVALID_PRODUCT");
-    if (produto.estoqueMax !== null && produto.quantidadeEstoque + item.quantidade > produto.estoqueMax) {
-      throw erroValidacao(
-        `Quantidade de ${produto.descricao} ultrapassa o estoque maximo configurado`,
-        "ESTOQUE_MAXIMO_ULTRAPASSADO"
-      );
-    }
-    return {
-      produtoId: item.produtoId,
-      descricaoProduto: produto.descricao,
-      quantidade: item.quantidade,
-      estoqueAtual: produto.quantidadeEstoque,
-      estoqueMin: produto.estoqueMin,
-      estoqueMax: produto.estoqueMax
-    };
-  });
-}
-
-async function validarFornecedor(fornecedorId: string, empresaId: string): Promise<void> {
-  if (!(await fornecedorPertenceAEmpresaRepository(fornecedorId, empresaId))) {
-    throw erroValidacao("Fornecedor nao pertence a empresa informada", "INVALID_SUPPLIER");
-  }
 }
 
 export async function listarPedidos(query: PedidosQuery, perfil: PerfilUsuario): Promise<PedidoDto[]> {
@@ -83,87 +33,16 @@ export async function listarPedidos(query: PedidosQuery, perfil: PerfilUsuario):
 export async function obterPedido(pedidoId: string, perfil: PerfilUsuario): Promise<PedidoDto> {
   const pedido = await obterPedidoDetalheRepository(pedidoId);
   if (!pedido || !podeAcessarEmpresa(perfil, pedido.empresaId)) throw naoEncontrado("Pedido nao encontrado");
-  return { ...pedido, cotacao: await cotacaoDoPedido(pedidoId) };
+  return pedido;
 }
 
-export async function criarPedido(payload: PedidoPayload, perfil: PerfilUsuario): Promise<{ id: string }> {
-  validarEmpresa(perfil, payload.empresaId);
-  await validarFornecedor(payload.fornecedorId, payload.empresaId);
-  const produtos = await buscarProdutosEstoqueRepository(payload.empresaId);
-  return criarPedidoRepository({
-    empresaId: payload.empresaId,
-    fornecedorId: payload.fornecedorId,
-    tipo: "manual",
-    dataAgendada: payload.dataAgendada ?? null,
-    recorrencia: payload.recorrencia,
-    observacao: payload.observacao ?? null,
-    criadoPor: perfil.usuarioId,
-    itens: resolverItens(payload.itens, new Map(produtos.map((produto) => [produto.id, produto])))
-  });
-}
-
-export async function gerarPedidoAutomatico(
-  payload: GerarPedidoAutomaticoPayload,
-  perfil: PerfilUsuario
-): Promise<{ id: string; totalItens: number }> {
-  validarEmpresa(perfil, payload.empresaId);
-  await validarFornecedor(payload.fornecedorId, payload.empresaId);
-  const produtos = await buscarProdutosEstoqueRepository(payload.empresaId);
-  const sugeridos = gerarItensReposicao(produtos);
-  if (!sugeridos.length) throw erroValidacao("Nenhum produto atingiu o estoque minimo", "SEM_REPOSICAO");
-  const pedido = await criarPedidoRepository({
-    empresaId: payload.empresaId,
-    fornecedorId: payload.fornecedorId,
-    tipo: "automatico",
-    dataAgendada: payload.dataAgendada ?? null,
-    recorrencia: payload.recorrencia,
-    observacao: "Sugestao de reposicao gerada pelo Compras.",
-    criadoPor: perfil.usuarioId,
-    itens: sugeridos.map((item) => ({
-      produtoId: item.produtoId,
-      descricaoProduto: item.descricao ?? "Produto",
-      quantidade: item.quantidadeSugerida,
-      estoqueAtual: item.quantidadeAtual,
-      estoqueMin: item.estoqueMin,
-      estoqueMax: item.estoqueMax
-    }))
-  });
-  return { id: pedido.id, totalItens: sugeridos.length };
-}
-
-export async function atualizarPedido(
-  pedidoId: string,
-  payload: PedidoEdicaoPayload,
-  perfil: PerfilUsuario
-): Promise<void> {
-  await executarEmTransacao(async (tx) => {
-    // Trava e reconfere DENTRO da transacao, na mesma ordem de `gerarCotacao`. Lendo fora, uma
-    // cotacao gerada entre a leitura e a gravacao mandaria o link a um fornecedor, e esta edicao
-    // trocaria fornecedor e itens depois — a resposta entraria atribuida a quem nao respondeu.
-    const base = await travarPedidoRepository(pedidoId, tx);
-    if (!base || !podeAcessarEmpresa(perfil, base.empresaId)) throw naoEncontrado("Pedido nao encontrado");
-    if (base.status !== "a_fazer") throw erroValidacao("So e possivel editar pedido em A fazer", "PEDIDO_NAO_EDITAVEL");
-    if (payload.fornecedorId) await validarFornecedor(payload.fornecedorId, base.empresaId);
-    const produtos = await buscarProdutosEstoqueRepository(base.empresaId, tx);
-    await atualizarPedidoRepository(
-      pedidoId,
-      {
-        fornecedorId: payload.fornecedorId,
-        dataAgendada: payload.dataAgendada,
-        recorrencia: payload.recorrencia,
-        observacao: payload.observacao,
-        itens: resolverItens(payload.itens, new Map(produtos.map((produto) => [produto.id, produto])))
-      },
-      tx
-    );
-  });
-}
-
+// Depois do E8 o unico ato manual e CANCELAR. Pedido legado (a fazer, enviado, retornado) nao tem mais
+// como ser confirmado, editado nem enviado: so receber (se confirmado) ou cancelar. "Confirmado" nasce da
+// rodada, pela compra automatica ou pela excecao do comprador.
 const transicoesPermitidas: Record<string, PedidoStatusNovo[]> = {
-  // R-216: "Enviado" so nasce de `gerarCotacao` e "Retornado" so da resposta do fornecedor.
   a_fazer: ["cancelado"],
   enviado: ["cancelado"],
-  retornado: ["confirmado", "cancelado"],
+  retornado: ["cancelado"],
   confirmado: ["cancelado"],
   recebido_parcial: ["cancelado"],
   recebido: [],
@@ -191,9 +70,6 @@ export async function alterarSituacaoPedido(
       },
       tx
     );
-    // Decidido o pedido, o link do fornecedor deixa de valer na mesma transacao: uma resposta que
-    // chegasse depois de cancelado reabriria uma negociacao encerrada.
-    await encerrarCotacaoAberta(pedidoId, tx);
   });
 }
 
