@@ -1122,6 +1122,145 @@ export const produtosPrecosBase = pgTable(
   ]
 );
 
+// R-222 (PROJECT_BRAIN/55): historico de compras por fornecedor x produto, vindo da planilha de
+// discriminacao e (depois) do recebimento. Duas fases como o preco-base: a ANALISE guarda cada linha
+// com o resultado do pareamento; a APLICACAO grava so as pareadas, em `compras_historico_precos`
+// (imutavel). Nada aqui altera `produtos_precos_base`.
+export const fornecedoresAliases = pgTable(
+  "fornecedores_aliases",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    aliasNormalizado: text("alias_normalizado").notNull(),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    criadoEm
+  },
+  (table) => [
+    unique("fornecedores_aliases_empresa_alias_unico").on(table.empresaId, table.aliasNormalizado),
+    foreignKey({
+      name: "fornecedores_aliases_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("cascade"),
+    index("fornecedores_aliases_fornecedor_idx").on(table.fornecedorId)
+  ]
+);
+
+export const comprasHistoricoImportacoes = pgTable(
+  "compras_historico_importacoes",
+  {
+    id: idUuid,
+    empresaId,
+    nomeArquivo: text("nome_arquivo").notNull(),
+    hashArquivo: text("hash_arquivo").notNull(),
+    status: text("status").$type<"analisada" | "aplicada" | "cancelada">().notNull().default("analisada"),
+    totalLinhas: integer("total_linhas").notNull(),
+    totalPareadas: integer("total_pareadas").notNull().default(0),
+    totalPendentes: integer("total_pendentes").notNull().default(0),
+    totalAplicadas: integer("total_aplicadas").notNull().default(0),
+    periodoInicio: date("periodo_inicio"),
+    periodoFim: date("periodo_fim"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    aplicadoPor: text("aplicado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    aplicadoEm: timestamp("aplicado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("compras_historico_importacoes_empresa_hash_unico").on(table.empresaId, table.hashArquivo),
+    check("compras_historico_importacoes_status_check", sql`${table.status} in ('analisada', 'aplicada', 'cancelada')`),
+    check(
+      "compras_historico_importacoes_totais_check",
+      sql`${table.totalLinhas} >= 0 and ${table.totalPareadas} >= 0 and ${table.totalPendentes} >= 0 and ${table.totalAplicadas} >= 0`
+    ),
+    index("compras_historico_importacoes_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+export const comprasHistoricoImportacaoItens = pgTable(
+  "compras_historico_importacao_itens",
+  {
+    id: idUuid,
+    importacaoId: uuid("importacao_id")
+      .notNull()
+      .references(() => comprasHistoricoImportacoes.id, { onDelete: "cascade" }),
+    numeroLinha: integer("numero_linha").notNull(),
+    fornecedorInformado: text("fornecedor_informado").notNull(),
+    fornecedorNormalizado: text("fornecedor_normalizado").notNull(),
+    produtoInformado: text("produto_informado").notNull(),
+    produtoNormalizado: text("produto_normalizado").notNull(),
+    dataCompra: date("data_compra"),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
+    custoUnitario: numeric("custo_unitario", { precision: 14, scale: 4 }),
+    documento: text("documento"),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id, { onDelete: "restrict" }),
+    produtoId: uuid("produto_id").references(() => produtos.id, { onDelete: "restrict" }),
+    resultado: text("resultado")
+      .$type<"correspondencia" | "fornecedor_nao_encontrado" | "produto_nao_encontrado" | "ambiguidade" | "invalido">()
+      .notNull(),
+    detalhe: text("detalhe")
+  },
+  (table) => [
+    unique("compras_historico_itens_linha_unica").on(table.importacaoId, table.numeroLinha),
+    check("compras_historico_itens_linha_check", sql`${table.numeroLinha} > 0`),
+    check(
+      "compras_historico_itens_resultado_check",
+      sql`${table.resultado} in ('correspondencia', 'fornecedor_nao_encontrado', 'produto_nao_encontrado', 'ambiguidade', 'invalido')`
+    ),
+    index("compras_historico_itens_importacao_resultado_idx").on(table.importacaoId, table.resultado)
+  ]
+);
+
+export const comprasHistoricoPrecos = pgTable(
+  "compras_historico_precos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    dataCompra: date("data_compra").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    custoUnitario: numeric("custo_unitario", { precision: 14, scale: 4 }).notNull(),
+    documento: text("documento"),
+    origem: text("origem").$type<"planilha" | "recebimento">().notNull(),
+    importacaoItemId: uuid("importacao_item_id").references(() => comprasHistoricoImportacaoItens.id, {
+      onDelete: "restrict"
+    }),
+    // Reservado para o recebimento gravar a propria linha (decisao 7 do doc 55); sem escritor ainda.
+    pedidoItemId: uuid("pedido_item_id").references(() => pedidosItens.id, { onDelete: "restrict" }),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    criadoEm
+  },
+  (table) => [
+    check("compras_historico_precos_quantidade_check", sql`${table.quantidade} > 0`),
+    check("compras_historico_precos_custo_check", sql`${table.custoUnitario} > 0`),
+    check("compras_historico_precos_origem_check", sql`${table.origem} in ('planilha', 'recebimento')`),
+    check(
+      "compras_historico_precos_origem_referencia_check",
+      sql`(${table.origem} = 'planilha' and ${table.importacaoItemId} is not null and ${table.pedidoItemId} is null) or (${table.origem} = 'recebimento' and ${table.pedidoItemId} is not null and ${table.importacaoItemId} is null)`
+    ),
+    unique("compras_historico_precos_importacao_unica").on(table.importacaoItemId),
+    foreignKey({
+      name: "compras_historico_precos_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "compras_historico_precos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    index("compras_historico_precos_produto_data_idx").on(table.empresaId, table.produtoId, table.dataCompra.desc()),
+    index("compras_historico_precos_fornecedor_data_idx").on(
+      table.empresaId,
+      table.fornecedorId,
+      table.dataCompra.desc()
+    )
+  ]
+);
+
 export const produtosConversoes = pgTable(
   "produtos_conversoes",
   {

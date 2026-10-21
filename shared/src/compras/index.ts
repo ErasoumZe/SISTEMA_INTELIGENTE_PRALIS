@@ -95,3 +95,4 @@ export * from "./adjudicacao.js";
 export * from "./decisao.js";
 export * from "./contraproposta.js";
 export * from "./pedido-rapido.js";
+export * from "./historico.js";

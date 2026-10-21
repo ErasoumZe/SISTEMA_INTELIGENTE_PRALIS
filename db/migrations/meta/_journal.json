@@ -456,6 +456,13 @@
       "when": 1792592041534,
       "tag": "0064_compras_fase2_drop_referencia",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792614105047,
+      "tag": "0065_compras_historico_precos",
+      "breakpoints": true
     }
   ]
 }
