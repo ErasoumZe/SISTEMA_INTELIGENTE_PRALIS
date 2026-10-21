@@ -6,12 +6,15 @@ import {
   COR_MOTIVO,
   ROTULO_MOTIVO,
   itensParaNovaSolicitacao,
+  lerValorDigitado,
   podeAprovarProposta,
   totalDaProposta
 } from "./decisao-compras";
 
 const proposta = (sobrescrita: Partial<DecisaoPropostaDto> = {}): DecisaoPropostaDto => ({
   propostaItemId: "p1",
+  conviteId: "c1",
+  contrapropostaUnitario: null,
   fornecedorId: "f1",
   fornecedorNome: "Forn",
   versao: 1,
@@ -51,5 +54,18 @@ describe("decisao-compras", () => {
       { produtoId: "a", quantidade: "2.000" },
       { produtoId: "b", quantidade: "1.000" }
     ]);
+  });
+
+  it("le o valor digitado pelo comprador sem nunca multiplicar por cem", () => {
+    expect(lerValorDigitado("9,5")).toBe(9.5);
+    expect(lerValorDigitado("9.5")).toBe(9.5);
+    expect(lerValorDigitado("1.234,50")).toBe(1234.5);
+    expect(lerValorDigitado(" 12 ")).toBe(12);
+  });
+
+  it("recusa vazio, zero, negativo, texto e valor absurdo", () => {
+    for (const texto of ["", "  ", "0", "0,00", "-3", "abc", "1e12", "99999999"]) {
+      expect(lerValorDigitado(texto), texto).toBeNull();
+    }
   });
 });

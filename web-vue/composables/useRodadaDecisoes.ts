@@ -62,6 +62,15 @@ export function useRodadaDecisoes(empresaId: Ref<string>) {
       })
     );
 
+  // E7: contraproposta do comprador a um fornecedor que ja respondeu (so com a rodada aberta).
+  const contrapropor = (rodadaId: string, conviteId: string, rodadaItemId: string, valorUnitario: number) =>
+    executar(() =>
+      apiPost(`/api/compras/rodadas/${rodadaId}/convites/${conviteId}/contraproposta`, {
+        empresaId: empresaId.value,
+        itens: [{ rodadaItemId, valorUnitario }]
+      })
+    );
+
   // Fecha a rodada antes do prazo (motivo `comprador`): so depois dela a excecao pode ser aprovada.
   const encerrarRodada = (rodadaId: string) =>
     executar(() => apiPost(`/api/compras/rodadas/${rodadaId}/encerrar`, { empresaId: empresaId.value }));
@@ -69,5 +78,5 @@ export function useRodadaDecisoes(empresaId: Ref<string>) {
   const encerrar = (solicitacaoId: string) =>
     executar(() => apiPost(`/api/compras/solicitacoes/${solicitacaoId}/encerrar`, { empresaId: empresaId.value }));
 
-  return { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada };
+  return { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada, contrapropor };
 }

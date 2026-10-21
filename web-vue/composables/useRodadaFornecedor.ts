@@ -1,4 +1,4 @@
-import type { RodadaPublicaDto } from "@padaria/shared";
+import type { RodadaPublicaDto, SituacaoItemPublica } from "@padaria/shared";
 import { CABECALHO_DA_RODADA } from "~/utils/rodada-link";
 import { tokenDoFragmento } from "~/utils/convite-token";
 
@@ -20,10 +20,17 @@ export function useRodadaFornecedor() {
   const condicaoPagamento = ref("");
   const carregando = ref(true);
   const enviando = ref(false);
+  const aceitando = ref(false);
   const enviado = ref(false);
   const erro = ref("");
 
   const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  // O que o fornecedor ve de cada item (decisao 8): nunca quem comprou, por quanto, nem a base.
+  const ROTULO_SITUACAO: Record<SituacaoItemPublica, string> = {
+    comprado: "Já comprado",
+    em_analise: "Em análise",
+    nao_cotado: "Sem valor seu"
+  };
   const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
   const prazo = computed(() => (rodada.value ? DATA_HORA.format(new Date(rodada.value.expiraEm)) : ""));
   const aberta = computed(() => rodada.value?.situacao === "aberta");
@@ -79,6 +86,34 @@ export function useRodadaFornecedor() {
     }
   }
 
+  // Contraproposta do comprador PARA ELE (E7): itens com descricao e o valor proposto, ja formatados.
+  const itensContrapostos = computed(() => {
+    const contraproposta = rodada.value?.contraproposta;
+    if (!contraproposta || !rodada.value) return [];
+    const descricao = new Map(rodada.value.itens.map((item) => [item.conviteItemId, item.descricaoProduto]));
+    return contraproposta.itens.map((item) => ({
+      conviteItemId: item.conviteItemId,
+      descricaoProduto: descricao.get(item.conviteItemId) ?? "Item",
+      valor: MOEDA.format(Number(item.valorUnitario))
+    }));
+  });
+
+  // Aceitar vira a versao N+1 DELE; o comprador nao precisa fazer mais nada para a compra sair.
+  async function aceitar() {
+    if (!aberta.value || !itensContrapostos.value.length) return;
+    aceitando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/aceitar", { method: "POST" });
+      enviado.value = true;
+      await carregar();
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível aceitar.";
+    } finally {
+      aceitando.value = false;
+    }
+  }
+
   async function enviar() {
     if (!aberta.value) return;
     enviando.value = true;
@@ -127,12 +162,16 @@ export function useRodadaFornecedor() {
     condicaoPagamento,
     carregando,
     enviando,
+    aceitando,
     enviado,
     erro,
     prazo,
     aberta,
     totalFormatado,
     pendencias,
+    itensContrapostos,
+    ROTULO_SITUACAO,
+    aceitar,
     enviar
   };
 }

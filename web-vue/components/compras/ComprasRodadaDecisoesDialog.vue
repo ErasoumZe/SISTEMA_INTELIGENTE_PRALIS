@@ -13,9 +13,7 @@ import {
   COR_MOTIVO,
   ROTULO_MOTIVO,
   formatarValorDecisao,
-  itensParaNovaSolicitacao,
-  podeAprovarProposta,
-  totalDaProposta
+  itensParaNovaSolicitacao
 } from "~/utils/decisao-compras";
 
 const aberto = defineModel<boolean>({ required: true });
@@ -33,9 +31,8 @@ const emit = defineEmits<{
 }>();
 
 const empresaIdRef = computed(() => props.empresaId);
-const { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada } =
+const { decisoes, carregando, processando, erro, carregar, aprovar, encerrar, encerrarRodada, contrapropor } =
   useRodadaDecisoes(empresaIdRef);
-const confirmando = ref<string | null>(null);
 const confirmandoEncerrar = ref(false);
 const confirmandoEncerrarRodada = ref(false);
 
@@ -61,7 +58,6 @@ const podeEncerrarSolicitacao = computed(
 watch(
   () => [aberto.value, props.solicitacaoId] as const,
   ([visivel, solicitacaoId]) => {
-    confirmando.value = null;
     confirmandoEncerrar.value = false;
     confirmandoEncerrarRodada.value = false;
     if (visivel && solicitacaoId) void carregar(solicitacaoId);
@@ -72,11 +68,17 @@ watch(
 async function confirmarAprovacao(propostaItemId: string) {
   if (!props.solicitacaoId || !decisoes.value) return;
   const aprovou = await aprovar(decisoes.value.rodadaId, propostaItemId);
-  confirmando.value = null;
   if (aprovou) emit("mudou");
   // Em conflito (proposta superada, item ja vendido) a fila na tela esta velha: recarrega e mantem a
   // mensagem de erro, senao o Comprador continuaria vendo o botao armado sobre uma proposta morta.
   await carregar(props.solicitacaoId, !aprovou);
+}
+
+// E7: a fila recarrega para mostrar a contraproposta pendente (ou o erro, se a API recusou).
+async function contrapor(conviteId: string, rodadaItemId: string, valor: number) {
+  if (!props.solicitacaoId || !decisoes.value) return;
+  const enviou = await contrapropor(decisoes.value.rodadaId, conviteId, rodadaItemId, valor);
+  await carregar(props.solicitacaoId, !enviou);
 }
 
 async function confirmarEncerrarRodada() {
@@ -143,46 +145,20 @@ function levarParaNovaSolicitacao() {
           </div>
           <p class="text-caption text-medium-emphasis mb-0">{{ AJUDA_MOTIVO[item.motivo] }}</p>
 
-          <div v-for="proposta in item.propostas" :key="proposta.propostaItemId" class="proposta">
-            <div class="proposta__dados">
-              <span class="font-weight-medium">{{ proposta.fornecedorNome }}</span>
-              <span v-if="proposta.indisponivel" class="text-caption text-medium-emphasis">não tem o item</span>
-              <template v-else>
-                <span class="text-caption"
-                  >custo {{ formatarValorDecisao(proposta.custoFinalUnitario) }}/un
-                  <template v-if="totalDaProposta(proposta, item.quantidade) !== null"
-                    >· total {{ formatarValorDecisao(totalDaProposta(proposta, item.quantidade)) }}</template
-                  ></span
-                >
-                <span v-if="Number(proposta.freteRateado) > 0" class="text-caption text-medium-emphasis"
-                  >frete rateado {{ formatarValorDecisao(proposta.freteRateado) }}</span
-                >
-              </template>
-            </div>
-            <div v-if="podeExcecao && rodadaFechada && podeAprovarProposta(proposta)" class="proposta__acao">
-              <template v-if="confirmando === proposta.propostaItemId">
-                <span class="text-caption">Confirmar compra?</span>
-                <v-btn
-                  size="small"
-                  color="primary"
-                  variant="flat"
-                  :loading="processando"
-                  @click="confirmarAprovacao(proposta.propostaItemId)"
-                  >Confirmar</v-btn
-                >
-                <v-btn size="small" variant="text" :disabled="processando" @click="confirmando = null">Cancelar</v-btn>
-              </template>
-              <v-btn
-                v-else
-                size="small"
-                variant="tonal"
-                color="primary"
-                prepend-icon="mdi-check"
-                @click="confirmando = proposta.propostaItemId"
-                >Aprovar compra</v-btn
-              >
-            </div>
-          </div>
+          <ComprasDecisaoProposta
+            v-for="proposta in item.propostas"
+            :key="proposta.propostaItemId"
+            :proposta="proposta"
+            :quantidade="item.quantidade"
+            :rodada-item-id="item.rodadaItemId"
+            :rodada-aberta="decisoes?.status === 'aberta'"
+            :rodada-fechada="rodadaFechada"
+            :pode-editar="podeEditar"
+            :pode-excecao="podeExcecao"
+            :processando="processando"
+            @aprovar="confirmarAprovacao"
+            @contrapropor="contrapor"
+          />
           <p v-if="!item.propostas.length" class="text-caption mb-0">Nenhuma proposta recebida para este item.</p>
         </div>
       </v-card-text>

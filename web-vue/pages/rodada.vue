@@ -11,12 +11,16 @@ const {
   condicaoPagamento,
   carregando,
   enviando,
+  aceitando,
   enviado,
   erro,
   prazo,
   aberta,
   totalFormatado,
   pendencias,
+  itensContrapostos,
+  ROTULO_SITUACAO,
+  aceitar,
   enviar
 } = useRodadaFornecedor();
 </script>
@@ -57,6 +61,24 @@ const {
         <p v-else>Esta cotação podia ser respondida até {{ prazo }}. Peça um novo link ao comprador.</p>
       </div>
       <template v-else>
+        <v-alert
+          v-if="itensContrapostos.length"
+          type="info"
+          variant="tonal"
+          class="rodada__contra"
+          data-estado="contraproposta"
+        >
+          <strong>O comprador propôs novos valores</strong>
+          <ul class="rodada__contra-lista">
+            <li v-for="item in itensContrapostos" :key="item.conviteItemId">
+              {{ item.descricaoProduto }}: <strong>{{ item.valor }}</strong> por unidade
+            </li>
+          </ul>
+          <div class="rodada__contra-acoes">
+            <v-btn color="primary" variant="flat" :loading="aceitando" @click="aceitar">Aceitar contraproposta</v-btn>
+            <span class="text-caption">Ou ajuste os valores abaixo e envie a sua resposta.</span>
+          </div>
+        </v-alert>
         <p class="rodada__instrucao">
           Informe o <strong>valor unitário</strong> de cada produto. Não tem algum item? Marque
           <strong>Não tenho este produto</strong>.
@@ -66,6 +88,15 @@ const {
             <div class="item__cabecalho">
               <strong>{{ item.descricaoProduto }}</strong>
               <span class="text-caption text-medium-emphasis">Quantidade: {{ item.quantidade }}</span>
+              <v-chip
+                v-if="item.situacao !== 'nao_cotado'"
+                size="x-small"
+                variant="tonal"
+                label
+                :color="item.situacao === 'comprado' ? 'success' : 'info'"
+                class="item__situacao"
+                >{{ ROTULO_SITUACAO[item.situacao] }}</v-chip
+              >
             </div>
             <div class="item__campos">
               <v-text-field
@@ -77,9 +108,14 @@ const {
                 label="Valor unitário"
                 density="comfortable"
                 hide-details="auto"
-                :disabled="respostas[indice]!.indisponivel"
+                :disabled="respostas[indice]!.indisponivel || item.situacao === 'comprado'"
               />
-              <v-checkbox v-model="respostas[indice]!.indisponivel" label="Não tenho este produto" hide-details />
+              <v-checkbox
+                v-model="respostas[indice]!.indisponivel"
+                label="Não tenho este produto"
+                hide-details
+                :disabled="item.situacao === 'comprado'"
+              />
             </div>
           </div>
         </section>
@@ -200,6 +236,19 @@ const {
 .item__cabecalho {
   display: grid;
   gap: 2px;
+}
+.item__situacao {
+  justify-self: start;
+}
+.rodada__contra-lista {
+  margin: var(--cx-sp-2, 8px) 0;
+  padding-left: var(--cx-sp-4, 16px);
+}
+.rodada__contra-acoes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-2, 8px) var(--cx-sp-3, 12px);
 }
 .item__campos {
   display: grid;

@@ -52,3 +52,16 @@ export function formatarValorDecisao(valor: string | number | null): string {
   if (valor === null) return "—";
   return MOEDA.format(Number(valor));
 }
+
+/**
+ * Valor digitado pelo comprador. Com vírgula, é formato brasileiro ("1.234,50": o ponto é milhar);
+ * sem vírgula, o ponto é o decimal ("9.5" é nove e meio, nunca 95). Devolve null se não for um número
+ * positivo: a API recusa zero, negativo e valor absurdo.
+ */
+export function lerValorDigitado(texto: string): number | null {
+  const digitado = texto.trim();
+  if (!digitado) return null;
+  const limpo = digitado.includes(",") ? digitado.replace(/\./g, "").replace(",", ".") : digitado;
+  const numero = Number(limpo);
+  return Number.isFinite(numero) && numero > 0 && numero <= 9_999_999 ? numero : null;
+}
