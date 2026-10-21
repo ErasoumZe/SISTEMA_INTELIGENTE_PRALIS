@@ -7,6 +7,7 @@ import type { ProdutoEstoqueDto } from "@padaria/shared";
 // componente a passar do limite de tamanho do projeto (AGENTS 4.5).
 const props = defineProps<{
   empresaId: string;
+  empresaNome: string;
   fornecedores: Opcao[];
   produtos: ProdutoEstoqueDto[];
   podeCatalogo: boolean;
@@ -49,7 +50,9 @@ const aba = ref(props.podeCatalogo ? "catalogo" : props.podePrecoBase ? "precos"
         <v-window-item v-if="podeSolicitacoes" value="solicitacoes">
           <ComprasSolicitacoesAba
             :empresa-id="empresaId"
+            :empresa-nome="empresaNome"
             :produtos="produtos"
+            :fornecedores="fornecedores"
             :pode-criar="podeCriarSolicitacao"
             :pode-editar="podeEditarSolicitacao"
           />

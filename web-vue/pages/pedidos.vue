@@ -59,6 +59,7 @@ const podeCatalogo = computed(() => temPermissao(permissoesUsuario.value, "compr
 const podePrecoBase = computed(() => temPermissao(permissoesUsuario.value, "compras_preco_base_importar"));
 // R-221 decisao 10: solicitacao reusa as permissoes de pedido.
 const podeSolicitacoes = computed(() => temPermissao(permissoesUsuario.value, "pedidos_visualizar"));
+const empresaNome = computed(() => empresas.value.find((empresa) => empresa.id === empresaId.value)?.nome ?? "");
 const produtosFundacao = computed(() => Object.values(estoquePorProduto.value));
 const fundacaoHabilitada = ref(false);
 const { apiGet: apiGetFundacao } = useApi();
@@ -97,6 +98,7 @@ onMounted(async () => {
       <ComprasFundacaoPainel
         v-if="fundacaoHabilitada && (podeCatalogo || podePrecoBase || podeSolicitacoes)"
         :empresa-id="empresaId"
+        :empresa-nome="empresaNome"
         :fornecedores="fornecedores"
         :produtos="produtosFundacao"
         :pode-catalogo="podeCatalogo"

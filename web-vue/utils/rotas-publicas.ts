@@ -23,12 +23,19 @@ export const ROTA_ADMISSAO = "/admissao";
 // motivo: o montador do link (`linkDaCotacao`) e a allowlist precisam mudar juntos.
 export const ROTA_COTACAO = "/cotacao";
 
+// Fase 2 do Compras: a pagina publica do fornecedor na rodada multi-fornecedor. Mesma natureza da
+// cotacao (sem conta, token no cabecalho, sem AppWorkspace). O montador do link (`linkDaRodada`) e
+// esta allowlist mudam juntos. A pagina em si entra no E4; a constante ja existe porque o link e
+// gerado na abertura da rodada (E3).
+export const ROTA_RODADA = "/rodada";
+
 export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   "/login",
   "/forgot-password",
   "/reset-password",
   ROTA_ADMISSAO,
-  ROTA_COTACAO
+  ROTA_COTACAO,
+  ROTA_RODADA
 ]);
 
 // Remove barras finais, preservando a raiz. `/reset-password/` e `/reset-password//` viram

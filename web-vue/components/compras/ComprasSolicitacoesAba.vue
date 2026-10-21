@@ -6,15 +6,19 @@
  *
  * Dona do proprio carregamento/estado/erro, como as demais abas da fundacao (nao compartilham dado).
  */
-import type { ProdutoEstoqueDto, SolicitacaoDto, StatusSolicitacao } from "@padaria/shared";
+import type { ProdutoEstoqueDto, RodadaDto, SolicitacaoDto, StatusSolicitacao } from "@padaria/shared";
 import { gerarItensReposicao } from "@padaria/shared";
+import type { Opcao } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
 import { normalizarQuantidadeEditavel } from "~/utils/formatacao";
 import type { SolicitacaoForm, SolicitacaoFormItem } from "~/components/compras/ComprasSolicitacaoFormDialog.vue";
+import type { AberturaPayload } from "~/components/compras/ComprasAbrirRodadaDialog.vue";
 
 const props = defineProps<{
   empresaId: string;
+  empresaNome: string;
   produtos: ProdutoEstoqueDto[];
+  fornecedores: Opcao[];
   podeCriar: boolean;
   podeEditar: boolean;
 }>();
@@ -28,6 +32,14 @@ const sucesso = ref("");
 const dialog = ref(false);
 const editandoId = ref<string | null>(null);
 const form = reactive<SolicitacaoForm>({ itens: [{ produtoId: "", quantidade: "" }], observacao: "" });
+
+// Abertura da rodada e visualizacao dos convites (E3).
+const dialogAbrir = ref(false);
+const dialogConvites = ref(false);
+const abrindoRodada = ref(false);
+const solicitacaoAlvoId = ref<string | null>(null);
+const itensAlvo = ref<Array<{ id: string }>>([]);
+const rodadaAtual = ref<RodadaDto | null>(null);
 
 const ROTULO_STATUS: Record<StatusSolicitacao, string> = {
   rascunho: "Rascunho",
@@ -169,6 +181,75 @@ async function salvar() {
   }
 }
 
+async function abrirRodadaDe(item: SolicitacaoDto) {
+  erro.value = "";
+  try {
+    const detalhe = await apiGet<SolicitacaoDto>(`/api/compras/solicitacoes/${item.id}`);
+    solicitacaoAlvoId.value = detalhe.id;
+    itensAlvo.value = (detalhe.itens ?? []).map((linha) => ({ id: linha.id }));
+    dialogAbrir.value = true;
+  } catch (causa) {
+    erro.value = mensagemErro(causa);
+  }
+}
+
+async function confirmarAbertura(payload: AberturaPayload) {
+  if (!solicitacaoAlvoId.value) return;
+  abrindoRodada.value = true;
+  erro.value = "";
+  sucesso.value = "";
+  try {
+    const rodada = await apiPost<RodadaDto>("/api/compras/rodadas", {
+      empresaId: props.empresaId,
+      solicitacaoId: solicitacaoAlvoId.value,
+      prazoRespostaHoras: payload.prazoRespostaHoras,
+      tetoValor: payload.tetoValor,
+      convites: payload.convites
+    });
+    dialogAbrir.value = false;
+    rodadaAtual.value = rodada;
+    dialogConvites.value = true;
+    await carregar();
+    sucesso.value = "Rodada aberta. Envie os convites aos fornecedores.";
+  } catch (causa) {
+    erro.value = mensagemErro(causa);
+  } finally {
+    abrindoRodada.value = false;
+  }
+}
+
+async function verRodada(item: SolicitacaoDto) {
+  erro.value = "";
+  try {
+    const rodadas = await apiGet<Array<{ id: string }>>(
+      `/api/compras/rodadas?empresaId=${encodeURIComponent(props.empresaId)}&solicitacaoId=${encodeURIComponent(item.id)}`
+    );
+    const primeira = rodadas[0];
+    if (!primeira) {
+      erro.value = "Nenhuma rodada encontrada para esta solicitação.";
+      return;
+    }
+    rodadaAtual.value = await apiGet<RodadaDto>(
+      `/api/compras/rodadas/${primeira.id}?empresaId=${encodeURIComponent(props.empresaId)}`
+    );
+    dialogConvites.value = true;
+  } catch (causa) {
+    erro.value = mensagemErro(causa);
+  }
+}
+
+async function marcarEnviado(conviteId: string) {
+  if (!rodadaAtual.value || !conviteId) return;
+  try {
+    await apiPost(`/api/compras/rodadas/${rodadaAtual.value.id}/convites/${conviteId}/enviar`, {
+      empresaId: props.empresaId,
+      canal: "whatsapp"
+    });
+  } catch (causa) {
+    erro.value = mensagemErro(causa);
+  }
+}
+
 watch(() => props.empresaId, carregar, { immediate: true });
 </script>
 
@@ -222,6 +303,23 @@ watch(() => props.empresaId, carregar, { immediate: true });
                   @click="abrirEditar(item)"
                   >Editar</v-btn
                 >
+                <v-btn
+                  v-if="podeEditar && item.status === 'rascunho'"
+                  size="small"
+                  variant="tonal"
+                  color="primary"
+                  prepend-icon="mdi-account-multiple-plus-outline"
+                  @click="abrirRodadaDe(item)"
+                  >Abrir rodada</v-btn
+                >
+                <v-btn
+                  v-if="item.status === 'em_cotacao'"
+                  size="small"
+                  variant="text"
+                  prepend-icon="mdi-send-outline"
+                  @click="verRodada(item)"
+                  >Ver rodada</v-btn
+                >
               </div>
             </td>
           </tr>
@@ -244,6 +342,22 @@ watch(() => props.empresaId, carregar, { immediate: true });
       @adicionar="adicionar"
       @remover="remover"
       @preencher-minimo="preencherMinimo"
+    />
+
+    <ComprasAbrirRodadaDialog
+      v-model="dialogAbrir"
+      :empresa-id="empresaId"
+      :itens="itensAlvo"
+      :fornecedores="fornecedores"
+      :salvando="abrindoRodada"
+      @abrir="confirmarAbertura"
+    />
+
+    <ComprasRodadaConvitesDialog
+      v-model="dialogConvites"
+      :rodada="rodadaAtual"
+      :empresa-nome="empresaNome"
+      @enviar="marcarEnviado"
     />
   </div>
 </template>
