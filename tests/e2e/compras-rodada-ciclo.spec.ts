@@ -103,7 +103,8 @@ test.describe("ciclo de compra pela cotacao", () => {
       await page.reload();
       await celula(page, fornecedorNome, "enviado").click();
       await dialogoAberto(page).getByRole("button", { name: "Decisões" }).click();
-      return page.locator(".v-overlay--active .v-card").filter({ hasText: nomeProduto }).last();
+      // Pelo titulo do dialogo: depois de aprovar, o produto some da lista de pendentes.
+      return page.locator(".v-overlay--active .v-card").filter({ hasText: "Decisões da rodada" }).last();
     };
     let decisoes = await abrirDecisoes();
     await expect(decisoes).toContainText("Sem preço-base");
