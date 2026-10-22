@@ -101,6 +101,7 @@ export async function obterRodadaPublica(
     fornecedorNome: convite.fornecedorNome,
     empresaNome: convite.empresaNome,
     expiraEm: convite.expiraEm.toISOString(),
+    margemVariacaoPercentual: convite.margemVariacaoPercentual,
     situacao: viva ? "aberta" : "encerrada",
     itens: itens.map((item) => ({
       conviteItemId: item.conviteItemId,

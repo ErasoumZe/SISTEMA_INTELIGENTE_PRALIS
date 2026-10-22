@@ -1,5 +1,13 @@
 <script setup lang="ts">
-/** Página pública da rodada (Fase 2). A lógica de token/envio mora em useRodadaFornecedor. */
+/**
+ * Página pública da cotação (doc 57 §5), limpa como um formulário: o que pedimos e a referência, a resposta
+ * dele produto a produto, as condições opcionais. Se ele ganhou, o passo 2 (separação) aparece em cima. No
+ * fim, a lista do que a padaria compra para ele marcar o que também vende. Lógica em useRodadaFornecedor.
+ */
+import RodadaItemResposta from "~/components/rodada/RodadaItemResposta.vue";
+import RodadaProdutosQueVendo from "~/components/rodada/RodadaProdutosQueVendo.vue";
+import RodadaSeparacao from "~/components/rodada/RodadaSeparacao.vue";
+
 definePageMeta({ scrollToTop: false });
 
 const {
@@ -20,9 +28,12 @@ const {
   pendencias,
   itensContrapostos,
   ROTULO_SITUACAO,
+  requisitar,
+  carregar,
   aceitar,
   enviar
 } = useRodadaFornecedor();
+const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !enviado.value);
 </script>
 
 <template>
@@ -39,7 +50,7 @@ const {
         </p>
       </header>
 
-      <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4">{{ erro }}</v-alert>
+      <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
 
       <div v-if="carregando" class="rodada__estado" aria-busy="true">
         <v-progress-circular indeterminate color="primary" />
@@ -50,118 +61,102 @@ const {
         <h2>Link inválido</h2>
         <p>Este link não abre nenhuma cotação. Confira se ele chegou inteiro ou peça um novo ao comprador.</p>
       </div>
-      <div v-else-if="enviado || rodada.situacao === 'encerrada'" class="rodada__estado" data-estado="encerrada">
-        <v-icon
-          :icon="enviado ? 'mdi-check-circle' : 'mdi-timer-off-outline'"
-          size="56"
-          :color="enviado ? 'success' : 'warning'"
-        />
-        <h2>{{ enviado ? "Resposta enviada" : "A rodada está encerrada" }}</h2>
-        <p v-if="enviado">Recebemos seus valores. O comprador vai analisar e, se precisar, volta a falar com você.</p>
-        <p v-else>Esta cotação podia ser respondida até {{ prazo }}. Peça um novo link ao comprador.</p>
-      </div>
       <template v-else>
-        <v-alert
-          v-if="itensContrapostos.length"
-          type="info"
-          variant="tonal"
-          class="rodada__contra"
-          data-estado="contraproposta"
-        >
-          <strong>O comprador propôs novos valores</strong>
-          <ul class="rodada__contra-lista">
-            <li v-for="item in itensContrapostos" :key="item.conviteItemId">
-              {{ item.descricaoProduto }}: <strong>{{ item.valor }}</strong> por unidade
-            </li>
-          </ul>
-          <div class="rodada__contra-acoes">
-            <v-btn color="primary" variant="flat" :loading="aceitando" @click="aceitar">Aceitar contraproposta</v-btn>
-            <span class="text-caption">Ou ajuste os valores abaixo e envie a sua resposta.</span>
-          </div>
-        </v-alert>
-        <p class="rodada__instrucao">
-          Informe o <strong>valor unitário</strong> de cada produto. Não tem algum item? Marque
-          <strong>Não tenho este produto</strong>.
-        </p>
-        <section class="rodada__itens" aria-label="Produtos da cotação">
-          <div v-for="(item, indice) in rodada.itens" :key="item.conviteItemId" class="item">
-            <div class="item__cabecalho">
-              <strong>{{ item.descricaoProduto }}</strong>
-              <span class="text-caption text-medium-emphasis">Quantidade: {{ item.quantidade }}</span>
-              <v-chip
-                v-if="item.situacao !== 'nao_cotado'"
-                size="x-small"
-                variant="tonal"
-                label
-                :color="item.situacao === 'comprado' ? 'success' : 'info'"
-                class="item__situacao"
-                >{{ ROTULO_SITUACAO[item.situacao] }}</v-chip
-              >
+        <RodadaSeparacao v-if="rodada.pedido" :pedido="rodada.pedido" :requisitar="requisitar" @devolvido="carregar" />
+
+        <template v-if="respondendo">
+          <v-alert
+            v-if="itensContrapostos.length"
+            type="info"
+            variant="tonal"
+            class="rodada__contra"
+            data-estado="contraproposta"
+          >
+            <strong>O comprador propôs novos valores</strong>
+            <ul class="rodada__contra-lista">
+              <li v-for="item in itensContrapostos" :key="item.conviteItemId">
+                {{ item.descricaoProduto }}: <strong>{{ item.valor }}</strong> por unidade
+              </li>
+            </ul>
+            <div class="rodada__contra-acoes">
+              <v-btn color="primary" variant="flat" :loading="aceitando" @click="aceitar">Aceitar contraproposta</v-btn>
+              <span class="text-caption">Ou ajuste os valores abaixo e envie a sua resposta.</span>
             </div>
-            <div class="item__campos">
+          </v-alert>
+          <p class="rodada__instrucao">
+            Para cada produto, diga se tem, o <strong>valor unitário</strong> e quanto tem. Os campos com * são
+            obrigatórios.
+          </p>
+          <section class="rodada__itens" aria-label="Produtos da cotação">
+            <RodadaItemResposta
+              v-for="(item, indice) in rodada.itens"
+              :key="item.conviteItemId"
+              v-model="respostas[indice]!"
+              :item="item"
+              :margem="rodada.margemVariacaoPercentual"
+              :rotulo-situacao="ROTULO_SITUACAO"
+            />
+          </section>
+          <section class="rodada__condicoes" aria-label="Condições (opcionais)">
+            <h2 class="rodada__subtitulo">Condições (opcional)</h2>
+            <div class="rodada__grade">
               <v-text-field
-                v-model="respostas[indice]!.valor"
+                v-model="frete"
                 type="number"
+                inputmode="decimal"
                 min="0"
                 step="0.01"
                 prefix="R$"
-                label="Valor unitário"
+                label="Frete"
                 density="comfortable"
                 hide-details="auto"
-                :disabled="respostas[indice]!.indisponivel || item.situacao === 'comprado'"
               />
-              <v-checkbox
-                v-model="respostas[indice]!.indisponivel"
-                label="Não tenho este produto"
-                hide-details
-                :disabled="item.situacao === 'comprado'"
+              <v-text-field
+                v-model="prazoEntrega"
+                type="date"
+                label="Prazo de entrega"
+                density="comfortable"
+                hide-details="auto"
+              />
+              <v-text-field
+                v-model="condicaoPagamento"
+                label="Pagamento"
+                placeholder="Ex.: boleto 28 dias"
+                density="comfortable"
+                hide-details="auto"
               />
             </div>
-          </div>
-        </section>
+            <v-textarea
+              v-model="observacao"
+              rows="2"
+              auto-grow
+              label="Observação"
+              density="comfortable"
+              hide-details="auto"
+            />
+          </section>
+        </template>
+        <div v-else-if="enviado" class="rodada__estado" data-estado="enviada">
+          <v-icon icon="mdi-check-circle" size="56" color="success" />
+          <h2>Resposta enviada</h2>
+          <p>Recebemos seus valores. Se você ganhar algum produto, ele aparece aqui para separar.</p>
+        </div>
+        <div v-else-if="!rodada.pedido" class="rodada__estado" data-estado="encerrada">
+          <v-icon icon="mdi-timer-off-outline" size="56" color="warning" />
+          <h2>A cotação está encerrada</h2>
+          <p>Esta cotação podia ser respondida até {{ prazo }}.</p>
+        </div>
 
-        <section class="rodada__condicoes">
-          <v-text-field
-            v-model="frete"
-            type="number"
-            min="0"
-            step="0.01"
-            prefix="R$"
-            label="Frete (opcional)"
-            density="comfortable"
-            hide-details="auto"
-          />
-          <v-text-field
-            v-model="prazoEntrega"
-            type="date"
-            label="Prazo de entrega (opcional)"
-            density="comfortable"
-            hide-details="auto"
-          />
-          <v-text-field
-            v-model="condicaoPagamento"
-            label="Condição de pagamento (opcional)"
-            density="comfortable"
-            hide-details="auto"
-          />
-          <v-textarea
-            v-model="observacao"
-            rows="2"
-            auto-grow
-            label="Observação (opcional)"
-            density="comfortable"
-            hide-details="auto"
-          />
-        </section>
+        <RodadaProdutosQueVendo :requisitar="requisitar" />
       </template>
     </div>
 
-    <footer v-if="aberta && !carregando && !enviado" class="rodada__barra">
+    <footer v-if="respondendo && !carregando" class="rodada__barra">
       <div class="rodada__barra-conteudo">
         <div class="rodada__barra-total">
           <span>Total estimado (sem frete)</span>
           <strong>{{ totalFormatado }}</strong>
-          <small v-if="pendencias">{{ pendencias }} item(ns) sem valor</small>
+          <small v-if="pendencias">{{ pendencias }} produto(s) sem valor</small>
         </div>
         <v-btn color="primary" variant="flat" size="large" :loading="enviando" @click="enviar">Enviar resposta</v-btn>
       </div>
@@ -225,20 +220,15 @@ const {
   display: grid;
   gap: var(--cx-sp-3, 12px);
 }
-.item {
-  display: grid;
-  gap: var(--cx-sp-2, 8px);
-  padding: var(--cx-sp-4, 16px);
-  border-radius: var(--cx-r-lg, 16px);
-  background: var(--cx-surface, #fff);
-  border: 1px solid var(--cx-line, #e4e8ef);
+.rodada__subtitulo {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 650;
 }
-.item__cabecalho {
+.rodada__grade {
   display: grid;
-  gap: 2px;
-}
-.item__situacao {
-  justify-self: start;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--cx-sp-3, 12px);
 }
 .rodada__contra-lista {
   margin: var(--cx-sp-2, 8px) 0;
@@ -249,12 +239,6 @@ const {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--cx-sp-2, 8px) var(--cx-sp-3, 12px);
-}
-.item__campos {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--cx-sp-3, 12px);
-  align-items: center;
 }
 .rodada__estado {
   display: grid;
@@ -309,9 +293,6 @@ const {
 @media (max-width: 599px) {
   .rodada__empresa {
     font-size: 1.375rem;
-  }
-  .item__campos {
-    grid-template-columns: minmax(0, 1fr);
   }
   .rodada__barra-conteudo {
     flex-direction: column;

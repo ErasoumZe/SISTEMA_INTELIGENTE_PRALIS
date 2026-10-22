@@ -3,11 +3,18 @@ import { CABECALHO_DA_RODADA } from "~/utils/rodada-link";
 import { tokenDoFragmento } from "~/utils/convite-token";
 
 /**
- * Fase 2 — pagina publica do fornecedor na rodada. Mesma mecanica da cotacao: o token vem do
- * FRAGMENTO (`#t=`), e removido da barra logo apos ler, e vai no cabecalho `x-rodada-token`. Sem
- * sessao, sem cookies (`credentials: "omit"`).
+ * Página pública do fornecedor na cotação (doc 57 §5). O token vem do FRAGMENTO (`#t=`), sai da barra logo
+ * após ler e vai no cabeçalho `x-rodada-token`. Sem sessão, sem cookies (`credentials: "omit"`).
  */
-export type RespostaItemLocal = { conviteItemId: string; indisponivel: boolean; valor: string };
+export type Disponibilidade = "tenho" | "sem_estoque" | "nao_trabalha";
+export type RespostaItemLocal = {
+  conviteItemId: string;
+  disponibilidade: Disponibilidade;
+  valor: string;
+  /** Quanto ele tem; vazio = a quantidade pedida. */
+  quantidade: string;
+};
+export type RequisitarRodada = <T>(rota: string, init?: RequestInit) => Promise<T>;
 
 export function useRodadaFornecedor() {
   const { apiUrl } = useApi();
@@ -25,7 +32,7 @@ export function useRodadaFornecedor() {
   const erro = ref("");
 
   const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-  // O que o fornecedor ve de cada item (decisao 8): nunca quem comprou, por quanto, nem a base.
+  // O que o fornecedor vê de cada item: nunca quem comprou nem por quanto.
   const ROTULO_SITUACAO: Record<SituacaoItemPublica, string> = {
     comprado: "Já comprado",
     em_analise: "Em análise",
@@ -36,15 +43,19 @@ export function useRodadaFornecedor() {
   const aberta = computed(() => rodada.value?.situacao === "aberta");
 
   const totalEstimado = computed(() =>
-    respostas.value.reduce((soma, item) => (item.indisponivel ? soma : soma + (Number(item.valor) || 0)), 0)
+    respostas.value.reduce((soma, resposta, indice) => {
+      if (resposta.disponibilidade !== "tenho") return soma;
+      const pedida = Number(rodada.value?.itens[indice]?.quantidade ?? 0);
+      const quantidade = Number(resposta.quantidade) > 0 ? Number(resposta.quantidade) : pedida;
+      return soma + (Number(resposta.valor) || 0) * quantidade;
+    }, 0)
   );
   const totalFormatado = computed(() => MOEDA.format(totalEstimado.value));
-
   const pendencias = computed(
-    () => respostas.value.filter((item) => !item.indisponivel && !(Number(item.valor) > 0)).length
+    () => respostas.value.filter((item) => item.disponibilidade === "tenho" && !(Number(item.valor) > 0)).length
   );
 
-  async function requisitar<T>(rota: string, init?: RequestInit): Promise<T> {
+  const requisitar: RequisitarRodada = async <T>(rota: string, init?: RequestInit) => {
     const resposta = await fetch(`${apiUrl}${rota}`, {
       ...init,
       credentials: "omit",
@@ -53,16 +64,20 @@ export function useRodadaFornecedor() {
     const corpo = (await resposta.json().catch(() => null)) as { data?: T; title?: string } | null;
     if (!resposta.ok) throw new Error(corpo?.title || `Falha (HTTP ${resposta.status}).`);
     return corpo?.data as T;
-  }
+  };
 
   function prefill(dto: RodadaPublicaDto) {
     const anterior = new Map((dto.ultimaProposta?.itens ?? []).map((item) => [item.conviteItemId, item]));
     respostas.value = dto.itens.map((item) => {
       const feito = anterior.get(item.conviteItemId);
+      const disponibilidade: Disponibilidade = feito?.indisponivel
+        ? (feito.motivoIndisponivel ?? "sem_estoque")
+        : "tenho";
       return {
         conviteItemId: item.conviteItemId,
-        indisponivel: feito?.indisponivel ?? false,
-        valor: feito?.valorUnitario ?? ""
+        disponibilidade,
+        valor: feito?.valorUnitario ?? "",
+        quantidade: feito?.quantidadeDisponivel ?? ""
       };
     });
     frete.value = dto.ultimaProposta?.frete ?? "";
@@ -79,14 +94,14 @@ export function useRodadaFornecedor() {
       rodada.value = dto;
       prefill(dto);
     } catch (causa) {
-      erro.value = causa instanceof Error ? causa.message : "Não foi possível abrir a rodada.";
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível abrir a cotação.";
       rodada.value = null;
     } finally {
       carregando.value = false;
     }
   }
 
-  // Contraproposta do comprador PARA ELE (E7): itens com descricao e o valor proposto, ja formatados.
+  // Contraproposta do comprador PARA ELE (E7): itens com descrição e o valor proposto, já formatados.
   const itensContrapostos = computed(() => {
     const contraproposta = rodada.value?.contraproposta;
     if (!contraproposta || !rodada.value) return [];
@@ -98,7 +113,7 @@ export function useRodadaFornecedor() {
     }));
   });
 
-  // Aceitar vira a versao N+1 DELE; o comprador nao precisa fazer mais nada para a compra sair.
+  // Aceitar vira a versão N+1 DELE; o comprador não precisa fazer mais nada para a compra sair.
   async function aceitar() {
     if (!aberta.value || !itensContrapostos.value.length || aceitando.value || enviando.value) return;
     aceitando.value = true;
@@ -116,9 +131,9 @@ export function useRodadaFornecedor() {
 
   async function enviar() {
     if (!aberta.value || enviando.value || aceitando.value) return;
-    // Campo em branco nao e R$ 0,00: item sem valor precisa de preco ou de "indisponivel".
+    // Campo em branco não é R$ 0,00: item que ele tem precisa de preço.
     if (pendencias.value) {
-      erro.value = "Informe o valor de cada item ou marque como indisponível.";
+      erro.value = "Informe o valor de cada produto que você tem, ou marque que não tem.";
       return;
     }
     enviando.value = true;
@@ -132,11 +147,16 @@ export function useRodadaFornecedor() {
           observacao: observacao.value || null,
           prazoEntrega: prazoEntrega.value || null,
           condicaoPagamento: condicaoPagamento.value || null,
-          itens: respostas.value.map((item) => ({
-            conviteItemId: item.conviteItemId,
-            indisponivel: item.indisponivel,
-            valorUnitario: item.indisponivel ? null : Number(item.valor)
-          }))
+          itens: respostas.value.map((item) => {
+            const tem = item.disponibilidade === "tenho";
+            return {
+              conviteItemId: item.conviteItemId,
+              indisponivel: !tem,
+              motivoIndisponivel: tem ? null : item.disponibilidade,
+              valorUnitario: tem ? Number(item.valor) : null,
+              quantidadeDisponivel: tem && Number(item.quantidade) > 0 ? Number(item.quantidade) : null
+            };
+          })
         })
       });
       enviado.value = true;
@@ -176,6 +196,8 @@ export function useRodadaFornecedor() {
     pendencias,
     itensContrapostos,
     ROTULO_SITUACAO,
+    requisitar,
+    carregar,
     aceitar,
     enviar
   };

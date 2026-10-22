@@ -80,6 +80,8 @@ export type RodadaPublicaDto = {
   fornecedorNome: string;
   empresaNome: string;
   expiraEm: string;
+  // Doc 57 §6.3: quanto a quantidade pode variar do pedido (null = cotação antiga, sem margem).
+  margemVariacaoPercentual: number | null;
   // "aberta" quando o fornecedor ainda pode mandar; "encerrada" quando o prazo passou ou o comprador
   // fechou. Sem revelar nada do envelope do comprador.
   situacao: "aberta" | "encerrada";
