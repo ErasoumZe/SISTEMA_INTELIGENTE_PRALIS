@@ -1,5 +1,5 @@
 {
-  "id": "1d57b479-5678-41a7-8435-6c3a83a9d8c1",
+  "id": "827af9a2-d63d-4b7e-8955-c8e8022c32a1",
   "prevId": "3e4f78d7-472f-44ea-a2fa-99efa3cd2688",
   "version": "7",
   "dialect": "postgresql",
@@ -15500,7 +15500,7 @@
         },
         "pedidos_eventos_status_check": {
           "name": "pedidos_eventos_status_check",
-          "value": "\"pedidos_eventos\".\"status\" in ('a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')"
+          "value": "\"pedidos_eventos\".\"status\" in ('a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')"
         }
       },
       "isRLSEnabled": false

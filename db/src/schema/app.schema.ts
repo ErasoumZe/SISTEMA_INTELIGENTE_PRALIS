@@ -1951,7 +1951,7 @@ export const pedidosEventos = pgTable(
     ),
     check(
       "pedidos_eventos_status_check",
-      sql`${table.status} in ('a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+      sql`${table.status} in ('a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
     ),
     index("pedidos_eventos_empresa_pedido_criado_idx").on(table.empresaId, table.pedidoId, table.criadoEm)
   ]

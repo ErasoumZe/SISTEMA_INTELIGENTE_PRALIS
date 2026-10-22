@@ -62,6 +62,7 @@ CREATE TABLE "conferencias_estoque_itens" (
 --> statement-breakpoint
 ALTER TABLE "notificacoes" DROP CONSTRAINT "notificacoes_tipo_check";--> statement-breakpoint
 ALTER TABLE "pedidos" DROP CONSTRAINT "pedidos_status_check";--> statement-breakpoint
+ALTER TABLE "pedidos_eventos" DROP CONSTRAINT "pedidos_eventos_status_check";--> statement-breakpoint
 ALTER TABLE "compras_propostas_itens" ADD COLUMN "quantidade_disponivel" numeric(14, 3);--> statement-breakpoint
 ALTER TABLE "compras_propostas_itens" ADD COLUMN "motivo_indisponivel" text;--> statement-breakpoint
 ALTER TABLE "compras_rodadas" ADD COLUMN "margem_variacao_percentual" smallint;--> statement-breakpoint
@@ -97,7 +98,8 @@ ALTER TABLE "conferencias_estoque" ADD CONSTRAINT "conferencias_estoque_ranking_
 ALTER TABLE "notificacoes" ADD CONSTRAINT "notificacoes_tipo_check" CHECK ("notificacoes"."tipo" in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
         'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer'));--> statement-breakpoint
 ALTER TABLE "pedidos" ADD CONSTRAINT "pedidos_status_check" CHECK ("pedidos"."status" in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado'));--> statement-breakpoint
-ALTER TABLE "pedidos_agendas" ADD CONSTRAINT "pedidos_agendas_margem_check" CHECK ("pedidos_agendas"."margem_variacao_percentual" in (10, 20, 30, 40));
+ALTER TABLE "pedidos_agendas" ADD CONSTRAINT "pedidos_agendas_margem_check" CHECK ("pedidos_agendas"."margem_variacao_percentual" in (10, 20, 30, 40));--> statement-breakpoint
+ALTER TABLE "pedidos_eventos" ADD CONSTRAINT "pedidos_eventos_status_check" CHECK ("pedidos_eventos"."status" in ('a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado'));
 --> statement-breakpoint
 CREATE TRIGGER "compras_whatsapp_envios_set_atualizado_em"
 BEFORE UPDATE ON "compras_whatsapp_envios"
