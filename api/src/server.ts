@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { env } from "./env.js";
 import { fecharRodadasVencidas } from "./compras/compras-fechamento.service.js";
 import { materializarAgendamentos } from "./compras/compras-agendamento-agendador.js";
+import { materializarConferencias } from "./compras/conferencias-estoque-agendador.js";
 import { processarFilaWhatsapp } from "./compras/compras-whatsapp.service.js";
 import { processarTransferenciasTemporais } from "./transferencias/transferencias.service.js";
 
@@ -32,6 +33,10 @@ try {
     // Doc 56: a data de um agendamento de pedido chegou -> solicitacao para conferir + aviso no sino.
     void materializarAgendamentos(new Date(), (agendaId, erro) =>
       app.log.error({ err: erro, agendaId }, "falha ao materializar agendamento de pedido")
+    ).catch((error) => app.log.error(error));
+    // Doc 57 §1: a data de uma conferencia de estoque agendada chegou -> lista para contar + aviso no sino.
+    void materializarConferencias(new Date(), (agendaId, erro) =>
+      app.log.error({ err: erro, agendaId }, "falha ao materializar conferencia de estoque")
     ).catch((error) => app.log.error(error));
     // Doc 57 §3: a fila do WhatsApp (cotacoes e "pode entregar"). Sem provedor configurado, nao faz nada.
     void processarFilaWhatsapp((envioId, erro) =>

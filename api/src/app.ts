@@ -17,6 +17,7 @@ import { registrarRotasCompras } from "./compras/compras.controller.js";
 import { registrarRotasComprasFundacao } from "./compras/compras-fundacao.controller.js";
 import { registrarRotasComprasHistorico } from "./compras/compras-historico.controller.js";
 import { registrarRotasComprasAgendamento } from "./compras/compras-agendamento.controller.js";
+import { registrarRotasConferenciasEstoque } from "./compras/conferencias-estoque.controller.js";
 import { registrarRotasComprasSolicitacoes } from "./compras/compras-solicitacoes.controller.js";
 import { registrarRotasComprasRodadas } from "./compras/compras-rodadas.controller.js";
 import { registrarRotasComprasDecisao } from "./compras/compras-decisao.controller.js";
@@ -314,6 +315,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasComprasFundacao(app);
   await registrarRotasComprasHistorico(app);
   await registrarRotasComprasAgendamento(app);
+  await registrarRotasConferenciasEstoque(app);
   await registrarRotasComprasSolicitacoes(app);
   await registrarRotasComprasRodadas(app);
   await registrarRotasComprasDecisao(app);

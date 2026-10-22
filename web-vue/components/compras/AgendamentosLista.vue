@@ -62,7 +62,8 @@ function confirmarMover() {
             }}</strong>
             <span class="text-body-2" data-campo="resumo">{{ agenda.resumo }} · às {{ agenda.inicioHora }}</span>
             <span class="text-caption text-medium-emphasis">
-              {{ agenda.produtos.length }} produto(s) · resposta em {{ prazo(agenda.prazoRespostaHoras) }} · responsável
+              {{ agenda.produtos.length }} produto(s) · resposta em {{ prazo(agenda.prazoRespostaHoras) }} · variação
+              {{ agenda.margemVariacaoPercentual }}% · responsável
               {{ agenda.responsavelNome }}
             </span>
           </div>

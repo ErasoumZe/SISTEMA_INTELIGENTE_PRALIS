@@ -301,18 +301,15 @@ export async function listarAgendamentos(empresaId: string, perfil: PerfilUsuari
 
 // --- lista de produtos com as bolinhas -----------------------------------------------------------
 
-export async function listarProdutosDoAgendamento(
-  empresaId: string,
-  perfil: PerfilUsuario,
-  agora = new Date()
-): Promise<ProdutosAgendamentoDto> {
-  validarEmpresa(perfil, empresaId);
+/**
+ * Os rankings das bolinhas (doc 56 §2.1): top 20% dos ultimos 3 meses em venda, gasto de compra e lucro.
+ * Tambem e o recorte "mais vendidos / mais comprados / mais lucro" da conferencia de estoque (doc 57 §1).
+ */
+export async function rankingsDaEmpresa(empresaId: string, agora = new Date()) {
   const hoje = localDoInstante(agora, FUSO_PADRAO).data;
   const [ano, mes, dia] = hoje.split("-").map(Number) as [number, number, number];
   const desde = new Date(Date.UTC(ano, mes - 1 - MESES_BOLINHAS, dia)).toISOString().slice(0, 10);
-  const [estoque, grupos, vendidos, comprados, margens] = await Promise.all([
-    listarEstoqueProdutosRepository({ empresaId }),
-    gruposDaEmpresaRepository(empresaId),
+  const [vendidos, comprados, margens] = await Promise.all([
     quantidadeVendidaRepository(empresaId, desde),
     compradoPorCustoRepository(empresaId, desde),
     margensDosProdutosRepository(empresaId)
@@ -329,7 +326,20 @@ export async function listarProdutosDoAgendamento(
     if (produto.custo === null || produto.precoVenda === null) continue;
     lucro.set(produto.id, (Number(produto.precoVenda) - Number(produto.custo)) * (vendido.get(produto.id) ?? 0));
   }
-  const [maisVende, maisCompra, maisLucro] = [topoDoRanking(vendido), topoDoRanking(gasto), topoDoRanking(lucro)];
+  return { maisVende: topoDoRanking(vendido), maisCompra: topoDoRanking(gasto), maisLucro: topoDoRanking(lucro) };
+}
+
+export async function listarProdutosDoAgendamento(
+  empresaId: string,
+  perfil: PerfilUsuario,
+  agora = new Date()
+): Promise<ProdutosAgendamentoDto> {
+  validarEmpresa(perfil, empresaId);
+  const [estoque, grupos, { maisVende, maisCompra, maisLucro }] = await Promise.all([
+    listarEstoqueProdutosRepository({ empresaId }),
+    gruposDaEmpresaRepository(empresaId),
+    rankingsDaEmpresa(empresaId, agora)
+  ]);
   return {
     produtos: estoque.map((produto) => ({
       ...produto,
