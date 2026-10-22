@@ -1,26 +1,18 @@
 <script setup lang="ts">
-import type {
-  AgendamentoDto,
-  AgendamentoOcorrenciaDto,
-  AgendamentoPayload,
-  AuthSession,
-  RodadaDto
-} from "@padaria/shared";
+import type { AgendamentoDto, AgendamentoOcorrenciaDto, AgendamentoPayload, AuthSession } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
-import AgendamentoConferirDialog from "~/components/compras/AgendamentoConferirDialog.vue";
 import AgendamentoPedidoCard from "~/components/compras/AgendamentoPedidoCard.vue";
 import AgendamentoProdutosLista from "~/components/compras/AgendamentoProdutosLista.vue";
 import AgendamentosLista from "~/components/compras/AgendamentosLista.vue";
-import ComprasRodadaConvitesDialog from "~/components/compras/ComprasRodadaConvitesDialog.vue";
 import { useAgendamentoPedidos } from "~/composables/useAgendamentoPedidos";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 
-// Agendamento de pedido (PROJECT_BRAIN/56), módulo próprio de Compras: o pedido do dia para conferir, o
-// card do agendamento, a lista de produtos (com filtros e bolinhas) e os agendamentos salvos.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 57), módulo próprio de Compras: o card do agendamento, a lista
+// de produtos (com filtros e bolinhas) e os agendamentos salvos. Na data, o servidor envia sozinho.
 const router = useRouter();
-const { apiGet, apiPost, carregarSessao } = useApi();
+const { apiGet, carregarSessao } = useApi();
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
 const empresaId = ref("");
@@ -36,21 +28,11 @@ const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesab
   () => Boolean(caixaStatus.value?.caixaAberto)
 );
 const podeGerir = computed(() => temPermissao("agendamento_pedidos_gerir"));
-const podeEnviar = computed(() => podeGerir.value && temPermissao("pedidos_editar"));
 
 const agenda = useAgendamentoPedidos(empresaId);
-const { agendamentos, paraConferir, produtos, grupos, fornecedores, carregando } = agenda;
+const { agendamentos, produtos, grupos, carregando } = agenda;
 const marcados = ref<Record<string, string>>({});
 const editando = ref<AgendamentoDto | null>(null);
-const conferindo = ref<string | null>(null);
-const dialogConferir = ref(false);
-const rodada = ref<RodadaDto | null>(null);
-const empresaNome = computed(() => empresas.value.find((empresa) => empresa.id === empresaId.value)?.nome ?? "");
-const FORMATO = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo",
-  dateStyle: "short",
-  timeStyle: "short"
-});
 
 function notificar(text: string, color = "success") {
   Object.assign(snackbar, { text, color, show: true });
@@ -94,27 +76,6 @@ async function salvar(payload: AgendamentoPayload, aPartirDe: string | undefined
     salvando.value = false;
   }
 }
-function conferir(id: string) {
-  conferindo.value = id;
-  dialogConferir.value = true;
-}
-async function aoEnviar(nova: RodadaDto) {
-  rodada.value = nova;
-  notificar("Pedido enviado. Mande o link a cada fornecedor pelo WhatsApp.");
-  await agenda.carregarAgenda();
-}
-async function marcarConviteEnviado(conviteId: string) {
-  if (!rodada.value) return;
-  await executar(
-    () =>
-      apiPost(`/api/compras/rodadas/${rodada.value!.id}/convites/${conviteId}/enviar`, {
-        empresaId: empresaId.value,
-        canal: "whatsapp"
-      }).then(() => undefined),
-    "Envio registrado."
-  );
-}
-
 const encerrar = (item: AgendamentoDto) => executar(() => agenda.encerrar(item.id), "Agendamento encerrado.");
 const cancelarData = (item: AgendamentoDto, data: AgendamentoOcorrenciaDto) =>
   executar(() => agenda.cancelarData(item.id, data.previstoPara), "Data excluída.");
@@ -170,27 +131,9 @@ onMounted(async () => {
     <div class="d-grid ga-4">
       <AppCabecalhoTela
         titulo="Agendamento de pedidos"
-        subtitulo="Escolha os produtos, a repetição e o prazo do fornecedor. Na data, você confere e envia."
+        subtitulo="Escolha os produtos, a repetição, o prazo e a variação. Na data, a cotação sai pelo WhatsApp."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-
-      <v-card v-if="paraConferir.length" color="primary" variant="tonal" data-secao="para-conferir">
-        <v-card-title class="d-flex align-center ga-2">
-          <v-icon icon="mdi-bell-ring-outline" />
-          Pedidos para conferir ({{ paraConferir.length }})
-        </v-card-title>
-        <v-card-text class="d-grid ga-2">
-          <div v-for="item in paraConferir" :key="item.id" class="conferir">
-            <span
-              ><strong>{{ item.grupoNome }}</strong> · {{ FORMATO.format(new Date(item.dataAtual)) }} ·
-              {{ item.totalItens }} item(ns) com quantidade</span
-            >
-            <v-btn v-if="podeEnviar" size="small" color="primary" variant="flat" @click="conferir(item.id)"
-              >Conferir e enviar</v-btn
-            >
-          </div>
-        </v-card-text>
-      </v-card>
 
       <AgendamentoPedidoCard
         v-if="podeGerir"
@@ -215,31 +158,6 @@ onMounted(async () => {
       />
     </div>
 
-    <AgendamentoConferirDialog
-      v-model="dialogConferir"
-      :empresa-id="empresaId"
-      :ocorrencia-id="conferindo"
-      :produtos="produtos"
-      :fornecedores="fornecedores"
-      @enviado="aoEnviar"
-    />
-    <ComprasRodadaConvitesDialog
-      :model-value="rodada !== null"
-      :rodada="rodada"
-      :empresa-nome="empresaNome"
-      @update:model-value="(valor: boolean) => !valor && (rodada = null)"
-      @enviar="marcarConviteEnviado"
-    />
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
-
-<style scoped>
-.conferir {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-</style>

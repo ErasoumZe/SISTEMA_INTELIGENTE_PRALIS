@@ -1,24 +1,13 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
 import { mascararWhatsapp } from "~/utils/formatacao";
-import { rotuloDoTipoDePedido } from "~/utils/pedido-origem";
+import { rotuloDoTipoDePedido, rotuloStatusPedido } from "~/utils/pedido-origem";
 
 const props = defineProps<{ pedidos: PedidoDto[] }>();
 const emit = defineEmits<{ abrir: [id: string] }>();
 const busca = ref("");
 // O pedido nasce da rodada ja confirmado: a fila abre onde ele esta (o legado em andamento tem as abas proprias).
 const situacaoSelecionada = ref<PedidoStatus>("confirmado");
-const rotulosStatus: Record<PedidoStatus, string> = {
-  rascunho: "Legado: rascunho",
-  aprovado: "Legado: aprovado",
-  a_fazer: "A fazer",
-  enviado: "Enviado",
-  retornado: "Retornado",
-  confirmado: "Confirmado",
-  recebido_parcial: "Recebido parcialmente",
-  recebido: "Recebido",
-  cancelado: "Cancelado"
-};
 const situacoesOperacionais: PedidoStatus[] = [
   "a_fazer",
   "enviado",
@@ -78,7 +67,7 @@ function quando(valor: string | null) {
           aria-label="Etapas do ciclo de pedido"
         >
           <v-tab v-for="contagem in contagens" :key="contagem.status" :value="contagem.status">
-            {{ rotulosStatus[contagem.status] }} <span class="pedidos-fila__contagem">{{ contagem.total }}</span>
+            {{ rotuloStatusPedido(contagem.status) }} <span class="pedidos-fila__contagem">{{ contagem.total }}</span>
           </v-tab>
         </v-tabs>
       </div>
@@ -113,7 +102,9 @@ function quando(valor: string | null) {
               </td>
               <td>{{ rotuloDoTipoDePedido(pedido.tipo) }}</td>
               <td>
-                <v-chip :color="corStatus(pedido.status)" size="small" label>{{ rotulosStatus[pedido.status] }}</v-chip>
+                <v-chip :color="corStatus(pedido.status)" size="small" label>{{
+                  rotuloStatusPedido(pedido.status)
+                }}</v-chip>
               </td>
               <td>{{ pedido.totalItens }}</td>
               <td>{{ quando(pedido.dataAgendada) }}</td>
@@ -139,7 +130,9 @@ function quando(valor: string | null) {
                   {{ rotuloDoTipoDePedido(pedido.tipo) }}
                 </div>
               </div>
-              <v-chip :color="corStatus(pedido.status)" size="small" label>{{ rotulosStatus[pedido.status] }}</v-chip>
+              <v-chip :color="corStatus(pedido.status)" size="small" label>{{
+                rotuloStatusPedido(pedido.status)
+              }}</v-chip>
             </div>
             <div class="d-flex justify-space-between text-body-2">
               <span>{{ pedido.totalItens }} item(ns)</span><span>{{ quando(pedido.dataAgendada) }}</span>

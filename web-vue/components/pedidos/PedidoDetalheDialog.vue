@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
 import { formatarQuantidade } from "~/utils/formatacao";
-import { pedidoEhLegado, rotuloDoTipoDePedido } from "~/utils/pedido-origem";
+import {
+  corStatusPedido as corStatus,
+  pedidoEhLegado,
+  rotuloDoTipoDePedido,
+  rotuloStatusPedido
+} from "~/utils/pedido-origem";
 
 const aberto = defineModel<boolean>({ default: false });
 defineProps<{
@@ -16,28 +21,10 @@ const emit = defineEmits<{
   receber: [];
 }>();
 
-const rotulosStatus: Record<PedidoStatus, string> = {
-  rascunho: "Legado: rascunho",
-  aprovado: "Legado: aprovado",
-  a_fazer: "A fazer",
-  enviado: "Enviado",
-  retornado: "Retornado",
-  confirmado: "Confirmado",
-  recebido_parcial: "Recebido parcialmente",
-  recebido: "Recebido",
-  cancelado: "Cancelado"
-};
 const etapasLegado: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
-const etapasRodada: PedidoStatus[] = ["confirmado", "recebido_parcial", "recebido"];
-// O pedido da rodada nasce confirmado: as etapas anteriores (a fazer, enviado, retornado) nao existem para ele.
+const etapasRodada: PedidoStatus[] = ["cotado", "retornado", "confirmado", "recebido_parcial", "recebido"];
+// O pedido da rodada nasce cotado (doc 57 §4): o fornecedor separa, devolve e o comprador confirma.
 const etapasDe = (pedido: PedidoDto) => (pedidoEhLegado(pedido.tipo) ? etapasLegado : etapasRodada);
-function corStatus(status: PedidoStatus) {
-  if (status === "recebido") return "success";
-  if (status === "recebido_parcial" || status === "confirmado") return "info";
-  if (status === "cancelado") return "error";
-  if (status === "retornado") return "warning";
-  return "secondary";
-}
 function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
   if (pedido.status === "cancelado" || pedido.status === "rascunho" || pedido.status === "aprovado")
     return pedido.status === etapa;
@@ -57,7 +44,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             {{ rotuloDoTipoDePedido(pedido.tipo) }}
           </p>
         </div>
-        <v-chip :color="corStatus(pedido.status)" size="small">{{ rotulosStatus[pedido.status] }}</v-chip>
+        <v-chip :color="corStatus(pedido.status)" size="small">{{ rotuloStatusPedido(pedido.status) }}</v-chip>
       </v-card-title>
       <v-card-text class="pedido-detalhe__corpo">
         <v-alert v-if="pedido.status === 'rascunho' || pedido.status === 'aprovado'" type="warning" variant="tonal">
@@ -80,7 +67,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             :color="etapaAtual(pedido, etapa) ? corStatus(etapa) : undefined"
             :variant="etapaAtual(pedido, etapa) ? 'tonal' : 'outlined'"
             size="small"
-            >{{ rotulosStatus[etapa] }}</v-chip
+            >{{ rotuloStatusPedido(etapa) }}</v-chip
           >
         </div>
         <div class="pedido-detalhe__tabela d-none d-sm-block">
@@ -128,7 +115,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             v-for="evento in pedido.eventos"
             :key="evento.id"
             data-evento="pedido"
-            :title="`${rotulosStatus[evento.status]} · ${evento.criadoPorNome}`"
+            :title="`${rotuloStatusPedido(evento.status)} · ${evento.criadoPorNome}`"
             :subtitle="`${new Date(evento.criadoEm).toLocaleString('pt-BR')} · ${evento.observacao ?? 'Sem observação'}`"
           />
         </v-list>

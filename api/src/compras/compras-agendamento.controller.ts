@@ -4,7 +4,6 @@ import {
   agendamentosQuerySchema,
   editarAgendamentoSchema,
   encerrarAgendamentoSchema,
-  enviarOcorrenciaSchema,
   moverOcorrenciaSchema,
   ocorrenciaAgendamentoSchema,
   produtosAgendamentoQuerySchema
@@ -14,22 +13,18 @@ import { exigirPermissao } from "../auth/guards.js";
 import {
   cancelarOcorrencia,
   criarAgendamento,
-  detalharEnvio,
   editarAgendamento,
   encerrarAgendamento,
-  enviarOcorrencia,
   listarAgendamentos,
-  listarParaConferir,
   listarProdutosDoAgendamento,
   moverOcorrencia
 } from "./compras-agendamento.service.js";
 
-// Agendamento de pedido (PROJECT_BRAIN/56). Ver = `agendamento_pedidos_visualizar`; mexer na agenda =
-// `agendamento_pedidos_gerir`. Conferir e ENVIAR abre a rodada, entao exige tambem `pedidos_editar`.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 57). Ver = `agendamento_pedidos_visualizar`; mexer na agenda =
+// `agendamento_pedidos_gerir`. Na data, o agendador abre a cotacao sozinho (doc 57 §2).
 const BASE = "/api/compras/agendamentos";
 const ver = { preHandler: exigirPermissao("agendamento_pedidos_visualizar") };
 const gerir = { preHandler: exigirPermissao("agendamento_pedidos_gerir") };
-const enviar = { preHandler: [exigirPermissao("agendamento_pedidos_gerir"), exigirPermissao("pedidos_editar")] };
 
 export async function registrarRotasComprasAgendamento(app: FastifyInstance): Promise<void> {
   app.get(BASE, ver, async (request) => {
@@ -39,10 +34,6 @@ export async function registrarRotasComprasAgendamento(app: FastifyInstance): Pr
   app.get(`${BASE}/produtos`, ver, async (request) => {
     const { empresaId } = produtosAgendamentoQuerySchema.parse(request.query);
     return ok(await listarProdutosDoAgendamento(empresaId, request.perfilUsuario!));
-  });
-  app.get(`${BASE}/para-conferir`, ver, async (request) => {
-    const { empresaId } = agendamentosQuerySchema.parse(request.query);
-    return ok(await listarParaConferir(empresaId, request.perfilUsuario!));
   });
 
   app.post(BASE, gerir, async (request, reply) => {
@@ -68,16 +59,5 @@ export async function registrarRotasComprasAgendamento(app: FastifyInstance): Pr
     const { id } = apiIdParamsSchema.parse(request.params);
     await moverOcorrencia(id, moverOcorrenciaSchema.parse(request.body), request.perfilUsuario!);
     return semConteudo(reply);
-  });
-
-  app.get(`${BASE}/ocorrencias/:id/envio`, enviar, async (request) => {
-    const { id } = apiIdParamsSchema.parse(request.params);
-    const { empresaId } = agendamentosQuerySchema.parse(request.query);
-    return ok(await detalharEnvio(id, empresaId, request.perfilUsuario!));
-  });
-  app.post(`${BASE}/ocorrencias/:id/enviar`, enviar, async (request, reply) => {
-    const { id } = apiIdParamsSchema.parse(request.params);
-    const rodada = await enviarOcorrencia(id, enviarOcorrenciaSchema.parse(request.body), request.perfilUsuario!);
-    return reply.status(201).send(ok(rodada));
   });
 }

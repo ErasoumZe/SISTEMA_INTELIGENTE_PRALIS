@@ -11,37 +11,28 @@ import {
   type AgendamentoOcorrenciaDto,
   type AgendamentoPayload,
   type EditarAgendamentoPayload,
-  type EnviarOcorrenciaPayload,
-  type EnvioOcorrenciaDto,
-  type OcorrenciaParaConferirDto,
   type ProdutosAgendamentoDto,
   type RegraRecorrencia,
   type TerminoRecorrencia
 } from "@padaria/shared/compras";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { conflito, erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
+import { conflito, erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { buscarEmpresaComprasRepository } from "./compras-rodadas.repository.js";
 import { listarEstoqueProdutosRepository } from "./compras.repository.js";
-import { abrirRodada } from "./compras-rodadas.service.js";
-import { atualizarSolicitacao, obterSolicitacao } from "./compras-solicitacoes.service.js";
 import {
   atualizarAgendaRepository,
   buscarAgendaRepository,
-  buscarOcorrenciaRepository,
   cancelarSolicitacaoDoAgendamentoRepository,
   compradoPorCustoRepository,
   criarAgendaRepository,
   encerrarAgendaNaDataRepository,
   encerrarAgendaRepository,
-  fornecedoresDoCatalogoRepository,
   gruposDaEmpresaRepository,
-  itensDaSolicitacaoRepository,
   listarAgendasRepository,
   margensDosProdutosRepository,
   ocorrenciaPorPrevistoRepository,
   ocorrenciasDasAgendasRepository,
-  ocorrenciasParaConferirRepository,
   produtosDaEmpresaRepository,
   produtosDasAgendasRepository,
   quantidadeVendidaRepository,
@@ -123,6 +114,7 @@ async function validarPayload(payload: AgendamentoPayload, perfil: PerfilUsuario
     regra: payload.regra,
     ...colunasDoTermino(payload.termino),
     prazoRespostaHoras: payload.prazoRespostaHoras,
+    margemVariacaoPercentual: payload.margemVariacaoPercentual,
     produtos: payload.produtos.map((produto) => ({
       produtoId: produto.produtoId,
       quantidadePadrao: produto.quantidadePadrao ?? null
@@ -188,7 +180,7 @@ async function exigirDataDaSerie(id: string, empresaId: string, previstoPara: Da
   return agenda;
 }
 
-/** "Excluir so esta". Data que ja virou pedido para conferir: a solicitacao do dia tambem e cancelada. */
+/** "Excluir so esta": vale para uma data que ainda nao aconteceu (a que aconteceu ja esta com os fornecedores). */
 export async function cancelarOcorrencia(
   id: string,
   dados: { empresaId: string; previstoPara: string },
@@ -293,6 +285,7 @@ export async function listarAgendamentos(empresaId: string, perfil: PerfilUsuari
       termino,
       resumo: resumoRecorrencia(agenda.regra, inicio.data, termino),
       prazoRespostaHoras: agenda.prazoRespostaHoras,
+      margemVariacaoPercentual: agenda.margemVariacaoPercentual,
       status: agenda.status,
       produtos: produtos
         .filter((produto) => produto.agendaId === agenda.id)
@@ -304,116 +297,6 @@ export async function listarAgendamentos(empresaId: string, perfil: PerfilUsuari
       proximas
     };
   });
-}
-
-export async function listarParaConferir(empresaId: string, perfil: PerfilUsuario) {
-  validarEmpresa(perfil, empresaId);
-  const linhas = await ocorrenciasParaConferirRepository(empresaId);
-  const contagens = await Promise.all(
-    linhas.map((linha) =>
-      linha.solicitacaoId ? itensDaSolicitacaoRepository(linha.solicitacaoId) : Promise.resolve([])
-    )
-  );
-  return linhas.map(
-    (linha, indice): OcorrenciaParaConferirDto => ({
-      id: linha.id,
-      agendaId: linha.agendaId,
-      resumo: linha.grupoNome,
-      grupoNome: linha.grupoNome,
-      dataAtual: linha.dataAtual.toISOString(),
-      solicitacaoId: linha.solicitacaoId!,
-      prazoRespostaHoras: linha.prazoRespostaHoras,
-      totalItens: contagens[indice]!.length
-    })
-  );
-}
-
-/** A conferencia: os produtos do agendamento + os da solicitacao, com os fornecedores do catalogo. */
-export async function detalharEnvio(id: string, empresaId: string, perfil: PerfilUsuario): Promise<EnvioOcorrenciaDto> {
-  validarEmpresa(perfil, empresaId);
-  const ocorrencia = await buscarOcorrenciaRepository(id, empresaId);
-  if (!ocorrencia || !ocorrencia.solicitacaoId) throw naoEncontrado("Pedido agendado nao encontrado");
-  if (ocorrencia.situacao !== "aguardando_conferencia")
-    throw conflito("Este pedido nao esta mais para conferir", "OCCURRENCE_NOT_PENDING");
-  const [itensSolicitacao, produtosDaAgenda, estoque] = await Promise.all([
-    itensDaSolicitacaoRepository(ocorrencia.solicitacaoId),
-    produtosDasAgendasRepository([ocorrencia.agendaId]),
-    listarEstoqueProdutosRepository({ empresaId })
-  ]);
-  const quantidadePorProduto = new Map(itensSolicitacao.map((item) => [item.produtoId, item.quantidade]));
-  const produtoIds = [
-    ...new Set([...produtosDaAgenda.map((produto) => produto.produtoId), ...quantidadePorProduto.keys()])
-  ];
-  const fornecedores = await fornecedoresDoCatalogoRepository(empresaId, produtoIds);
-  const estoquePorId = new Map(estoque.map((produto) => [produto.id, produto]));
-  return {
-    ocorrenciaId: ocorrencia.id,
-    solicitacaoId: ocorrencia.solicitacaoId,
-    prazoRespostaHoras: ocorrencia.prazoRespostaHoras,
-    itens: produtoIds.map((produtoId) => {
-      const produto = estoquePorId.get(produtoId);
-      return {
-        produtoId,
-        descricao: produto?.descricao ?? "Produto",
-        quantidade: quantidadePorProduto.get(produtoId) ?? "",
-        estoqueAtual: produto?.quantidadeEstoque ?? null,
-        estoqueMax: produto?.estoqueMax ?? null,
-        fornecedores: fornecedores
-          .filter((fornecedor) => fornecedor.produtoId === produtoId)
-          .map((fornecedor) => ({
-            fornecedorId: fornecedor.fornecedorId,
-            nome: fornecedor.nome,
-            whatsapp: fornecedor.whatsapp,
-            situacao: fornecedor.situacao,
-            precoOfertado: fornecedor.precoOfertado
-          }))
-      };
-    })
-  };
-}
-
-/**
- * Envio da conferencia: grava as quantidades finais na solicitacao e abre a rodada com cada fornecedor
- * recebendo SO os seus produtos. A ocorrencia vira "enviada" dentro da mesma transacao da rodada
- * (compras-rodadas.service). Devolve a rodada com os links para o WhatsApp.
- */
-export async function enviarOcorrencia(id: string, payload: EnviarOcorrenciaPayload, perfil: PerfilUsuario) {
-  validarEmpresa(perfil, payload.empresaId);
-  const ocorrencia = await buscarOcorrenciaRepository(id, payload.empresaId);
-  if (!ocorrencia || !ocorrencia.solicitacaoId) throw naoEncontrado("Pedido agendado nao encontrado");
-  if (ocorrencia.situacao !== "aguardando_conferencia")
-    throw conflito("Este pedido nao esta mais para conferir", "OCCURRENCE_NOT_PENDING");
-  const produtosDosItens = new Set(payload.itens.map((item) => item.produtoId));
-  for (const convite of payload.convites)
-    for (const produtoId of convite.produtoIds)
-      if (!produtosDosItens.has(produtoId))
-        throw erroValidacao("Fornecedor com produto que nao esta no pedido", "PRODUCT_NOT_IN_ORDER");
-  const semFornecedor = [...produtosDosItens].filter(
-    (produtoId) => !payload.convites.some((convite) => convite.produtoIds.includes(produtoId))
-  );
-  if (semFornecedor.length)
-    throw naoProcessavel("Escolha um fornecedor para cada produto", "PRODUCT_WITHOUT_SUPPLIER", semFornecedor);
-
-  await atualizarSolicitacao(
-    ocorrencia.solicitacaoId,
-    { empresaId: payload.empresaId, observacao: null, itens: payload.itens },
-    perfil
-  );
-  const solicitacao = await obterSolicitacao(ocorrencia.solicitacaoId, perfil);
-  const itemPorProduto = new Map((solicitacao.itens ?? []).map((item) => [item.produtoId, item.id]));
-  return abrirRodada(
-    {
-      empresaId: payload.empresaId,
-      solicitacaoId: ocorrencia.solicitacaoId,
-      prazoRespostaHoras: ocorrencia.prazoRespostaHoras,
-      tetoValor: null,
-      convites: payload.convites.map((convite) => ({
-        fornecedorId: convite.fornecedorId,
-        solicitacaoItemIds: convite.produtoIds.map((produtoId) => itemPorProduto.get(produtoId)!)
-      }))
-    },
-    perfil
-  );
 }
 
 // --- lista de produtos com as bolinhas -----------------------------------------------------------

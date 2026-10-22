@@ -31,6 +31,7 @@ export type AgendaEntrada = {
   terminoEm: string | null;
   terminoQuantidade: number | null;
   prazoRespostaHoras: number;
+  margemVariacaoPercentual: number;
   produtos: Array<{ produtoId: string; quantidadePadrao: number | null }>;
 };
 
@@ -51,6 +52,7 @@ const colunasAgenda = {
   terminoEm: pedidosAgendas.terminoEm,
   terminoQuantidade: pedidosAgendas.terminoQuantidade,
   prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras,
+  margemVariacaoPercentual: pedidosAgendas.margemVariacaoPercentual,
   status: pedidosAgendas.status,
   criadoEm: pedidosAgendas.criadoEm
 };
@@ -161,6 +163,7 @@ export async function criarAgendaRepository(
       terminoEm: input.terminoEm,
       terminoQuantidade: input.terminoQuantidade,
       prazoRespostaHoras: input.prazoRespostaHoras,
+      margemVariacaoPercentual: input.margemVariacaoPercentual,
       serieAnteriorId: input.serieAnteriorId,
       criadoPor: input.criadoPor
     })
@@ -200,7 +203,8 @@ export async function atualizarAgendaRepository(id: string, input: AgendaEntrada
       terminoTipo: input.terminoTipo,
       terminoEm: input.terminoEm,
       terminoQuantidade: input.terminoQuantidade,
-      prazoRespostaHoras: input.prazoRespostaHoras
+      prazoRespostaHoras: input.prazoRespostaHoras,
+      margemVariacaoPercentual: input.margemVariacaoPercentual
     })
     .where(eq(pedidosAgendas.id, id));
   await substituirProdutosDaAgenda(input.empresaId, id, input.produtos, tx);
@@ -292,8 +296,10 @@ export async function criarSolicitacaoDoAgendamentoRepository(
     })
     .returning({ id: comprasSolicitacoes.id });
   if (!solicitacao) throw new Error("Solicitacao nao criada");
-  if (input.itens.length)
-    await tx.insert(comprasSolicitacoesItens).values(
+  if (!input.itens.length) return { id: solicitacao.id, itens: [] };
+  const itens = await tx
+    .insert(comprasSolicitacoesItens)
+    .values(
       input.itens.map((item) => ({
         empresaId: input.empresaId,
         solicitacaoId: solicitacao.id,
@@ -304,8 +310,9 @@ export async function criarSolicitacaoDoAgendamentoRepository(
         estoqueMin: item.estoqueMin === null ? null : String(item.estoqueMin),
         estoqueMax: item.estoqueMax === null ? null : String(item.estoqueMax)
       }))
-    );
-  return solicitacao;
+    )
+    .returning({ id: comprasSolicitacoesItens.id, produtoId: comprasSolicitacoesItens.produtoId });
+  return { id: solicitacao.id, itens };
 }
 
 export async function cancelarSolicitacaoDoAgendamentoRepository(solicitacaoId: string, tx: TransacaoBanco) {
@@ -340,59 +347,13 @@ export async function agendasAtivasRepository(db: ExecutorBanco = banco) {
       regra: pedidosAgendas.regra,
       terminoTipo: pedidosAgendas.terminoTipo,
       terminoEm: pedidosAgendas.terminoEm,
-      terminoQuantidade: pedidosAgendas.terminoQuantidade
+      terminoQuantidade: pedidosAgendas.terminoQuantidade,
+      prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras,
+      margemVariacaoPercentual: pedidosAgendas.margemVariacaoPercentual
     })
     .from(pedidosAgendas)
     .innerJoin(gruposMercadorias, eq(gruposMercadorias.id, pedidosAgendas.grupoMercadoriaId))
     .where(eq(pedidosAgendas.status, "ativa"));
-}
-
-export async function ocorrenciasParaConferirRepository(empresaId: string, db: ExecutorBanco = banco) {
-  return db
-    .select({
-      id: pedidosAgendaOcorrencias.id,
-      agendaId: pedidosAgendaOcorrencias.agendaId,
-      dataAtual: pedidosAgendaOcorrencias.dataAtual,
-      solicitacaoId: pedidosAgendaOcorrencias.solicitacaoId,
-      prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras,
-      grupoNome: gruposMercadorias.nome
-    })
-    .from(pedidosAgendaOcorrencias)
-    .innerJoin(pedidosAgendas, eq(pedidosAgendas.id, pedidosAgendaOcorrencias.agendaId))
-    .innerJoin(gruposMercadorias, eq(gruposMercadorias.id, pedidosAgendas.grupoMercadoriaId))
-    .where(
-      and(
-        eq(pedidosAgendaOcorrencias.empresaId, empresaId),
-        eq(pedidosAgendaOcorrencias.situacao, "aguardando_conferencia")
-      )
-    )
-    .orderBy(asc(pedidosAgendaOcorrencias.dataAtual));
-}
-
-export async function buscarOcorrenciaRepository(id: string, empresaId: string, db: ExecutorBanco = banco) {
-  const [linha] = await db
-    .select({
-      id: pedidosAgendaOcorrencias.id,
-      agendaId: pedidosAgendaOcorrencias.agendaId,
-      situacao: pedidosAgendaOcorrencias.situacao,
-      solicitacaoId: pedidosAgendaOcorrencias.solicitacaoId,
-      prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras
-    })
-    .from(pedidosAgendaOcorrencias)
-    .innerJoin(pedidosAgendas, eq(pedidosAgendas.id, pedidosAgendaOcorrencias.agendaId))
-    .where(and(eq(pedidosAgendaOcorrencias.id, id), eq(pedidosAgendaOcorrencias.empresaId, empresaId)))
-    .limit(1);
-  return linha ?? null;
-}
-
-export async function itensDaSolicitacaoRepository(solicitacaoId: string, db: ExecutorBanco = banco) {
-  return db
-    .select({
-      produtoId: comprasSolicitacoesItens.produtoId,
-      quantidade: comprasSolicitacoesItens.quantidade
-    })
-    .from(comprasSolicitacoesItens)
-    .where(eq(comprasSolicitacoesItens.solicitacaoId, solicitacaoId));
 }
 
 /** Fornecedores com vinculo APROVADO no catalogo, por produto (doc 56 §7, decisao 3). */

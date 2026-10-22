@@ -7,8 +7,9 @@ import {
   type TerminoRecorrencia
 } from "./recorrencia.js";
 
-// Agendamento de pedido (PROJECT_BRAIN/56): o comprador marca os produtos, define a recorrencia e o prazo
-// de resposta. Na data, nasce a solicitacao para ele conferir e enviar; o sistema nao envia sozinho.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 57): o comprador marca os produtos, define a recorrencia, o prazo
+// de resposta e a margem de quantidade. Na data, o sistema abre a cotacao e manda o WhatsApp para cada
+// fornecedor do catalogo; produto sem fornecedor fica "A fazer" em Pedidos.
 
 const uuid = z.string().uuid();
 const empresa = z.object({ empresaId: uuid });
@@ -38,6 +39,8 @@ export const agendamentoPayloadSchema = empresa.extend({
   regra: regraRecorrenciaSchema,
   termino: terminoRecorrenciaSchema,
   prazoRespostaHoras: z.number().int().min(1).max(720),
+  // Doc 57 §6.3: quanto a quantidade entregue pode variar, para menos e para mais (10, 20, 30 ou 40%).
+  margemVariacaoPercentual: z.union([z.literal(10), z.literal(20), z.literal(30), z.literal(40)]).default(10),
   produtos: z.array(agendamentoProdutoSchema).min(1).max(500).refine(unicosPorProduto, "Produto repetido")
 });
 
@@ -51,26 +54,8 @@ export const agendamentosQuerySchema = empresa;
 
 export const produtosAgendamentoQuerySchema = empresa;
 
-/** Envio da conferencia: quantidades finais, produtos acrescentados e, por fornecedor, os itens dele. */
-export const enviarOcorrenciaSchema = empresa.extend({
-  itens: z
-    .array(z.object({ produtoId: uuid, quantidade: z.number().positive().max(9_999_999) }))
-    .min(1)
-    .max(500)
-    .refine(unicosPorProduto, "Produto repetido"),
-  convites: z
-    .array(z.object({ fornecedorId: uuid, produtoIds: z.array(uuid).min(1) }))
-    .min(1)
-    .max(100)
-    .refine(
-      (convites) => new Set(convites.map((convite) => convite.fornecedorId)).size === convites.length,
-      "Fornecedor repetido"
-    )
-});
-
 export type AgendamentoPayload = z.infer<typeof agendamentoPayloadSchema>;
 export type EditarAgendamentoPayload = z.infer<typeof editarAgendamentoSchema>;
-export type EnviarOcorrenciaPayload = z.infer<typeof enviarOcorrenciaSchema>;
 
 export type SituacaoOcorrencia = "prevista" | "agendada" | "aguardando_conferencia" | "enviada" | "cancelada";
 
@@ -94,42 +79,10 @@ export type AgendamentoDto = {
   termino: TerminoRecorrencia;
   resumo: string;
   prazoRespostaHoras: number;
+  margemVariacaoPercentual: number;
   status: "ativa" | "encerrada";
   produtos: Array<{ produtoId: string; descricao: string; quantidadePadrao: string | null }>;
   proximas: AgendamentoOcorrenciaDto[];
-};
-
-export type OcorrenciaParaConferirDto = {
-  id: string;
-  agendaId: string;
-  resumo: string;
-  grupoNome: string;
-  dataAtual: string;
-  solicitacaoId: string;
-  prazoRespostaHoras: number;
-  totalItens: number;
-};
-
-export type FornecedorSugeridoDto = {
-  fornecedorId: string;
-  nome: string;
-  whatsapp: string | null;
-  situacao: "ativo" | "inativo";
-  precoOfertado: string | null;
-};
-
-export type EnvioOcorrenciaDto = {
-  ocorrenciaId: string;
-  solicitacaoId: string;
-  prazoRespostaHoras: number;
-  itens: Array<{
-    produtoId: string;
-    descricao: string;
-    quantidade: string;
-    estoqueAtual: string | null;
-    estoqueMax: string | null;
-    fornecedores: FornecedorSugeridoDto[];
-  }>;
 };
 
 /** O produto da lista de baixo: o mesmo retrato do estoque + as bolinhas (doc 56 §2.1). */

@@ -42,6 +42,7 @@ export async function criarPedidoRapido(payload: PedidoRapidoPayload, perfil: Pe
       solicitacaoId,
       prazoRespostaHoras: payload.prazoRespostaHoras ?? null,
       tetoValor: payload.tetoValor ?? null,
+      margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
       convites: [
         { fornecedorId: payload.fornecedorId, solicitacaoItemIds: (solicitacao.itens ?? []).map((item) => item.id) }
       ]

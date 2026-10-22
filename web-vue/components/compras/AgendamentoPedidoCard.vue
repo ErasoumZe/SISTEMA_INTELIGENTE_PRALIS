@@ -4,13 +4,16 @@ import {
   type AgendamentoDto,
   type AgendamentoPayload,
   type GrupoAgendamentoDto,
+  type MargemVariacao,
   type RegraRecorrencia,
   type TerminoRecorrencia
 } from "@padaria/shared";
+import MargemVariacaoCampo from "~/components/compras/MargemVariacaoCampo.vue";
 import RecorrenciaCampo from "~/components/compras/RecorrenciaCampo.vue";
 
-// O card "Agendamento de pedido" (doc 56 §2.2): grupo e subgrupo, quando começa, a repetição, o tempo que
-// o fornecedor tem para responder, e Salvar/Cancelar. Os produtos vêm marcados da lista de baixo.
+// O card "Agendamento de pedido" (doc 56 §2.2, doc 57 §2): grupo e subgrupo, quando começa, a repetição, o
+// tempo que o fornecedor tem para responder, a variação de quantidade aceita, e Salvar/Cancelar. Os produtos
+// vêm marcados da lista de baixo.
 const props = defineProps<{
   empresaId: string;
   grupos: GrupoAgendamentoDto[];
@@ -32,6 +35,7 @@ const form = reactive({
   inicioData: amanha(),
   inicioHora: "08:00",
   prazo: 24 as number,
+  margem: 10 as MargemVariacao,
   aPartirDe: ""
 });
 const regra = ref<RegraRecorrencia>({ tipo: "padrao", frequencia: "semanal", intervalo: 1 });
@@ -47,7 +51,15 @@ const PRAZOS = PRAZO_RESPOSTA_ATALHOS.map((horas) => ({
 }));
 
 function limpar() {
-  Object.assign(form, { grupo: "", subgrupo: "", inicioData: amanha(), inicioHora: "08:00", prazo: 24, aPartirDe: "" });
+  Object.assign(form, {
+    grupo: "",
+    subgrupo: "",
+    inicioData: amanha(),
+    inicioHora: "08:00",
+    prazo: 24,
+    margem: 10,
+    aPartirDe: ""
+  });
   regra.value = { tipo: "padrao", frequencia: "semanal", intervalo: 1 };
   termino.value = { tipo: "nunca" };
   erro.value = "";
@@ -64,6 +76,7 @@ watch(
       inicioData: agenda.inicioData,
       inicioHora: agenda.inicioHora,
       prazo: agenda.prazoRespostaHoras,
+      margem: agenda.margemVariacaoPercentual as MargemVariacao,
       aPartirDe: agenda.proximas[0] ? diaLocal(new Date(agenda.proximas[0].dataAtual)) : hoje()
     });
     regra.value = agenda.regra;
@@ -98,6 +111,7 @@ function salvar() {
       regra: regra.value,
       termino: termino.value,
       prazoRespostaHoras: prazo,
+      margemVariacaoPercentual: form.margem,
       produtos: Object.entries(props.produtosMarcados).map(([produtoId, quantidade]) => ({
         produtoId,
         quantidadePadrao: quantidade && Number(quantidade) > 0 ? Number(quantidade) : null
@@ -117,7 +131,8 @@ defineExpose({ limpar });
       {{ editando ? "Editar agendamento de pedido" : "Agendamento de pedido" }}
     </v-card-title>
     <v-card-subtitle class="text-wrap">
-      Na data, o pedido aparece aqui para você conferir e enviar aos fornecedores. Nada é enviado sozinho.
+      Na data, o sistema manda a cotação pelo WhatsApp a cada fornecedor do catálogo, só com os produtos dele. Produto
+      sem fornecedor fica “A fazer” em Pedidos.
     </v-card-subtitle>
     <v-card-text class="d-grid ga-4">
       <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
@@ -172,6 +187,7 @@ defineExpose({ limpar });
               >{{ atalho.title }}</v-chip
             >
           </div>
+          <MargemVariacaoCampo v-model="form.margem" />
           <v-text-field
             v-if="editando"
             v-model="form.aPartirDe"

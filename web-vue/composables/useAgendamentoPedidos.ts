@@ -3,48 +3,30 @@ import type {
   AgendamentoPayload,
   EditarAgendamentoPayload,
   GrupoAgendamentoDto,
-  OcorrenciaParaConferirDto,
   ProdutoAgendamentoDto,
   ProdutosAgendamentoDto
 } from "@padaria/shared";
-import type { Opcao } from "~/types/padaria";
 
-// Agendamento de pedido (PROJECT_BRAIN/56): dados e acoes do modulo. A tela so organiza; as regras moram no
-// servidor (recorrencia, datas, quem recebe o que).
+// Agendamento de pedido (PROJECT_BRAIN/56 e 57): dados e acoes do modulo. A tela so organiza; as regras
+// moram no servidor (recorrencia, datas, quem recebe o que). Na data, o servidor envia sozinho.
 export function useAgendamentoPedidos(empresaId: Ref<string>) {
   const { apiGet, apiPost, apiPut } = useApi();
 
   const agendamentos = ref<AgendamentoDto[]>([]);
-  const paraConferir = ref<OcorrenciaParaConferirDto[]>([]);
   const produtos = ref<ProdutoAgendamentoDto[]>([]);
   const grupos = ref<GrupoAgendamentoDto[]>([]);
-  const fornecedores = ref<Opcao[]>([]);
   const carregando = ref(false);
 
   const base = "/api/compras/agendamentos";
   const query = () => `?empresaId=${encodeURIComponent(empresaId.value)}`;
   let requisicao = 0;
 
-  async function carregarFornecedores(): Promise<Opcao[]> {
-    const todos: Opcao[] = [];
-    for (let pagina = 1; pagina <= 20; pagina += 1) {
-      const lote = await apiGet<Opcao[]>(`/api/fornecedores${query()}&page=${pagina}&pageSize=100`);
-      todos.push(...lote);
-      if (lote.length < 100) break;
-    }
-    return todos;
-  }
-
-  /** A agenda e o "para conferir" mudam a cada acao; produtos e fornecedores so na troca de empresa. */
+  /** A agenda muda a cada acao; os produtos so na troca de empresa. */
   async function carregarAgenda() {
     const token = requisicao;
-    const [lista, conferir] = await Promise.all([
-      apiGet<AgendamentoDto[]>(`${base}${query()}`),
-      apiGet<OcorrenciaParaConferirDto[]>(`${base}/para-conferir${query()}`)
-    ]);
+    const lista = await apiGet<AgendamentoDto[]>(`${base}${query()}`);
     if (token !== requisicao) return;
     agendamentos.value = lista;
-    paraConferir.value = conferir;
   }
 
   async function carregarTudo() {
@@ -52,18 +34,15 @@ export function useAgendamentoPedidos(empresaId: Ref<string>) {
     const token = (requisicao += 1);
     carregando.value = true;
     agendamentos.value = [];
-    paraConferir.value = [];
     produtos.value = [];
     try {
-      const [catalogo, listaFornecedores] = await Promise.all([
+      const [catalogo] = await Promise.all([
         apiGet<ProdutosAgendamentoDto>(`${base}/produtos${query()}`),
-        carregarFornecedores(),
         carregarAgenda()
       ]);
       if (token !== requisicao) return;
       produtos.value = catalogo.produtos;
       grupos.value = catalogo.grupos;
-      fornecedores.value = listaFornecedores;
     } finally {
       if (token === requisicao) carregando.value = false;
     }
@@ -94,10 +73,8 @@ export function useAgendamentoPedidos(empresaId: Ref<string>) {
 
   return {
     agendamentos,
-    paraConferir,
     produtos,
     grupos,
-    fornecedores,
     carregando,
     carregarTudo,
     carregarAgenda,

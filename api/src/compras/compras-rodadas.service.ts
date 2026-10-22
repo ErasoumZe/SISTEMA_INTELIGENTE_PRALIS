@@ -11,7 +11,7 @@ import type {
 } from "@padaria/shared/compras";
 import { expiracaoCotacao, podeConvidar } from "@padaria/shared";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { marcarOcorrenciaEnviadaRepository } from "./compras-agendamento.repository.js";
 import { enfileirarEnviosRepository } from "./compras-whatsapp.repository.js";
@@ -49,12 +49,21 @@ function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
  * `permitirSemConvites`: o agendamento abre a rodada mesmo quando nenhum produto tem fornecedor — os itens
  * ficam "A fazer" para o comprador escolher o fornecedor.
  */
-export async function abrirRodada(
+export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsuario): Promise<RodadaDto> {
+  validarEmpresa(perfil, payload.empresaId);
+  return executarEmTransacao((tx) => abrirRodadaNaTransacao(payload, perfil.usuarioId, tx));
+}
+
+/**
+ * O miolo de abrirRodada, dentro de uma transacao que ja existe: o agendador (doc 57 §2) abre a rodada na
+ * MESMA transacao da data do agendamento. Quem chama ja validou a empresa.
+ */
+export async function abrirRodadaNaTransacao(
   payload: AbrirRodadaPayload,
-  perfil: PerfilUsuario,
+  usuarioId: string,
+  tx: TransacaoBanco,
   opcoes: { permitirSemConvites?: boolean } = {}
 ): Promise<RodadaDto> {
-  validarEmpresa(perfil, payload.empresaId);
   if (!payload.convites.length && !opcoes.permitirSemConvites)
     throw erroValidacao("Convide ao menos um fornecedor", "SEM_CONVITES");
   // Fornecedor repetido no mesmo convite-set e erro de montagem.
@@ -63,7 +72,7 @@ export async function abrirRodada(
     throw erroValidacao("O mesmo fornecedor aparece duas vezes", "FORNECEDOR_DUPLICADO");
   }
 
-  return executarEmTransacao(async (tx) => {
+  {
     await travarRodadaDaSolicitacao(payload.solicitacaoId, tx);
     const solicitacao = await buscarSolicitacaoParaRodadaRepository(payload.solicitacaoId, payload.empresaId, tx);
     if (!solicitacao) throw naoEncontrado("Solicitacao nao encontrada");
@@ -132,7 +141,7 @@ export async function abrirRodada(
         fusoHorario,
         tetoValor: payload.tetoValor ?? null,
         margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
-        abertaPor: perfil.usuarioId,
+        abertaPor: usuarioId,
         itens: itensEnvelope,
         convites: convitesParaCriar
       },
@@ -150,7 +159,7 @@ export async function abrirRodada(
     await marcarSolicitacaoEmCotacaoRepository(payload.solicitacaoId, payload.empresaId, tx);
     // Solicitacao que nasceu de um agendamento (doc 56): o pedido do dia passa a "enviado" na MESMA
     // transacao da rodada — nunca fica "para conferir" com a cotacao ja na rua.
-    await marcarOcorrenciaEnviadaRepository(payload.solicitacaoId, perfil.usuarioId, tx);
+    await marcarOcorrenciaEnviadaRepository(payload.solicitacaoId, usuarioId, tx);
 
     // Monta o DTO de resposta (com os itens do envelope e os convites, incluindo o token em claro).
     const rodadaItemIdPorSolicitacaoItem = new Map(criada.itens.map((item) => [item.solicitacaoItemId, item.id]));
@@ -203,7 +212,7 @@ export async function abrirRodada(
       itens,
       convites
     };
-  });
+  }
 }
 
 export async function listarRodadas(query: RodadasQuery, perfil: PerfilUsuario): Promise<RodadaResumoDto[]> {

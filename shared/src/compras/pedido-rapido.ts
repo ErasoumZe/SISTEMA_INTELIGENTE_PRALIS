@@ -16,6 +16,11 @@ export const pedidoRapidoPayloadSchema = z.object({
     .optional()
     .nullable(),
   tetoValor: z.coerce.number().positive().max(999_999_999).optional().nullable(),
+  // Doc 57 §6.3: variacao de quantidade aceita na separacao (10, 20, 30 ou 40%). Vazio = 10%.
+  margemVariacaoPercentual: z
+    .union([z.literal(10), z.literal(20), z.literal(30), z.literal(40)])
+    .optional()
+    .nullable(),
   itens: z
     .array(
       z.object({

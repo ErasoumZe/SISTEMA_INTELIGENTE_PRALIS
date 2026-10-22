@@ -1,4 +1,5 @@
-import type { AuthSession, PedidoDto, PedidoStatus, ProdutoEstoqueDto } from "@padaria/shared";
+import { rotuloStatusPedido } from "~/utils/pedido-origem";
+import type { AuthSession, PedidoDto, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
@@ -37,17 +38,6 @@ export function usePedidos() {
   const podeCriar = computed(() => temPermissao("pedidos_criar"));
   const podeEditar = computed(() => temPermissao("pedidos_editar"));
   const podeReceber = computed(() => temPermissao("pedidos_aprovar"));
-  const rotulosStatus: Record<PedidoStatus, string> = {
-    rascunho: "Legado: rascunho",
-    aprovado: "Legado: aprovado",
-    a_fazer: "A fazer",
-    enviado: "Enviado",
-    retornado: "Retornado",
-    confirmado: "Confirmado",
-    recebido_parcial: "Recebido parcialmente",
-    recebido: "Recebido",
-    cancelado: "Cancelado"
-  };
 
   function notificar(text: string, color = "success") {
     snackbar.text = text;
@@ -111,7 +101,7 @@ export function usePedidos() {
     transicionando.value = true;
     try {
       await apiPost(`/api/pedidos/${detalhe.value.id}/situacao`, { status });
-      notificar(`Pedido marcado como ${rotulosStatus[status]}.`);
+      notificar(`Pedido marcado como ${rotuloStatusPedido(status)}.`);
       await carregarDados();
       await verPedido(detalhe.value.id);
       return true;

@@ -63,7 +63,8 @@ function rotuloTipo(tipo: Notificacao["tipo"]) {
     mensagem_admin: "Administração",
     campanha: "Campanha",
     compras_decisao_pendente: "Compras",
-    compras_agendamento_conferir: "Compras"
+    compras_agendamento_conferir: "Compras",
+    conferencia_estoque_fazer: "Estoque"
   }[tipo];
 }
 </script>
