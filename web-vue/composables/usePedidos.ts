@@ -1,14 +1,14 @@
 import { rotuloStatusPedido } from "~/utils/pedido-origem";
-import type { AuthSession, PedidoDto, ProdutoEstoqueDto } from "@padaria/shared";
+import type { AuthSession, PainelComprasDto, PedidoDto, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 /**
- * Estado e operacoes da fila de pedidos; os dialogs ficam apenas como apresentacao. Depois do E8
- * (R-221) o pedido nasce da rodada de cotacao: aqui so se le, se cancela e se RECEBE. Criar, editar,
- * sugerir, enviar cotacao e confirmar na mao eram o segundo caminho de compra e foram removidos.
+ * Estado e operacoes da tela de Pedidos (doc 57 §4): a matriz fornecedor x situacao, o detalhe do pedido,
+ * a confirmacao (Comprado) e o recebimento. O pedido nasce da cotacao (agendamento ou pedido rapido);
+ * criar, editar e enviar na mao eram o segundo caminho de compra e foram removidos.
  */
 export function usePedidos() {
   const router = useRouter();
@@ -23,6 +23,7 @@ export function usePedidos() {
   const erro = ref("");
   const snackbar = reactive({ show: false, text: "", color: "success" });
   const pedidos = ref<PedidoDto[]>([]);
+  const painel = ref<PainelComprasDto>({ semFornecedor: [], decisoes: [], convites: [] });
   const detalhe = ref<PedidoDto | null>(null);
   const dialogDetalhe = ref(false);
   const dialogRecebimento = ref(false);
@@ -69,8 +70,9 @@ export function usePedidos() {
     if (!empresaId.value) return;
     empresaCarregando.value = true;
     try {
-      [pedidos.value, fornecedores.value, estoquePorProduto.value] = await Promise.all([
+      [pedidos.value, painel.value, fornecedores.value, estoquePorProduto.value] = await Promise.all([
         apiGet<PedidoDto[]>(`/api/pedidos${query()}`),
+        apiGet<PainelComprasDto>(`/api/compras/painel${query()}`),
         carregarFornecedores(),
         carregarEstoque()
       ]);
@@ -108,6 +110,21 @@ export function usePedidos() {
     } catch (causa) {
       notificar(mensagemErro(causa), "error");
       return false;
+    } finally {
+      transicionando.value = false;
+    }
+  }
+  /** Doc 57 §5: Comprado. O fornecedor recebe o "pode entregar" pelo WhatsApp. */
+  async function confirmarPedido() {
+    if (!detalhe.value) return;
+    transicionando.value = true;
+    try {
+      await apiPost(`/api/pedidos/${detalhe.value.id}/confirmar`, { empresaId: empresaId.value });
+      notificar("Compra confirmada. O fornecedor recebe o aviso pelo WhatsApp.");
+      await carregarDados();
+      await verPedido(detalhe.value.id);
+    } catch (causa) {
+      notificar(mensagemErro(causa), "error");
     } finally {
       transicionando.value = false;
     }
@@ -180,6 +197,7 @@ export function usePedidos() {
     erro,
     snackbar,
     pedidos,
+    painel,
     detalhe,
     dialogDetalhe,
     dialogRecebimento,
@@ -193,7 +211,10 @@ export function usePedidos() {
     podeEditar,
     podeReceber,
     trocarEmpresa,
+    carregarDados,
+    notificar,
     verPedido,
+    confirmarPedido,
     abrirRecebimento,
     mudarSituacao,
     confirmarRecebimento

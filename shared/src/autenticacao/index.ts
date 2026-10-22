@@ -263,6 +263,8 @@ export const permissoes = [
   "menu_conferencias_estoque_desabilitado",
   "menu_agendamento_pedidos_mostrar",
   "menu_agendamento_pedidos_desabilitado",
+  "menu_cadastro_compras_mostrar",
+  "menu_cadastro_compras_desabilitado",
   "menu_relatorio_dre_mostrar",
   "menu_relatorio_dre_desabilitado",
   "menu_clientes_mostrar",

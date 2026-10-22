@@ -23,6 +23,7 @@ export const idsMenuConfiguraveis = [
   "estoque_produtos",
   "conferencias_estoque",
   "agendamento_pedidos",
+  "cadastro_compras",
   "relatorio_dre",
   "clientes",
   "fornecedores",

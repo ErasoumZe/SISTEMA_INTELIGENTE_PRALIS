@@ -151,6 +151,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "agendamento_pedidos_visualizar",
     icone: "mdi-calendar-sync-outline"
   },
+  // Doc 57 §4: catalogo fornecedor-produto, historico de compras e preco-base sairam da tela de Pedidos.
+  cadastro_compras: {
+    id: "cadastro_compras",
+    titulo: "Cadastro de compras",
+    permissao: "compras_catalogo_gerir",
+    icone: "mdi-database-cog-outline"
+  },
   relatorio_dre: {
     id: "relatorio_dre",
     titulo: "Relatórios de DRE",
@@ -569,6 +576,7 @@ export const secoesPermissoes = [
       "menu_estoque_produtos",
       "menu_conferencias_estoque",
       "menu_agendamento_pedidos",
+      "menu_cadastro_compras",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",

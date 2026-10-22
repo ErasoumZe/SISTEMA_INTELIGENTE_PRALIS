@@ -15,11 +15,15 @@ defineProps<{
   podeReceber: boolean;
   transicionando: boolean;
 }>();
-// Depois do E8 o unico ato manual sobre a situacao e cancelar; confirmar nasce da rodada.
+// Doc 57 §5: o pedido da rodada nasce cotado; o comprador confirma (Comprado) depois que o fornecedor
+// devolve a quantidade real (retornado), ou ja no cotado. Cancelar continua manual.
 const emit = defineEmits<{
   situacao: [status: "cancelado"];
+  confirmar: [];
   receber: [];
 }>();
+const podeConfirmar = (pedido: PedidoDto) =>
+  !pedidoEhLegado(pedido.tipo) && (pedido.status === "cotado" || pedido.status === "retornado");
 
 const etapasLegado: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
 const etapasRodada: PedidoStatus[] = ["cotado", "retornado", "confirmado", "recebido_parcial", "recebido"];
@@ -58,7 +62,24 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           data-legado="pedido"
         >
           Pedido do fluxo antigo: não é mais editado, enviado nem confirmado. Só pode ser cancelado. Para comprar de
-          novo, use o Pedido rápido ou uma solicitação.
+          novo, use o Pedido rápido.
+        </v-alert>
+        <v-alert
+          v-else-if="!pedidoEhLegado(pedido.tipo) && pedido.status === 'cotado'"
+          type="info"
+          variant="tonal"
+          density="compact"
+        >
+          O fornecedor ganhou e está separando. Quando ele devolver a quantidade real, o pedido fica “Retornado” para
+          você confirmar.
+        </v-alert>
+        <v-alert
+          v-else-if="!pedidoEhLegado(pedido.tipo) && pedido.status === 'retornado'"
+          type="warning"
+          variant="tonal"
+          density="compact"
+        >
+          O fornecedor devolveu as quantidades reais. Confira e confirme: ele recebe o “pode entregar” pelo WhatsApp.
         </v-alert>
         <div v-if="pedido.status !== 'rascunho' && pedido.status !== 'aprovado'" class="pedido-detalhe__etapas">
           <v-chip
@@ -121,6 +142,16 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
         </v-list>
       </v-card-text>
       <v-card-actions class="pedido-detalhe__acoes flex-wrap">
+        <v-btn
+          v-if="podeEditar && podeConfirmar(pedido)"
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-check-decagram"
+          :loading="transicionando"
+          data-acao="confirmar-pedido"
+          @click="emit('confirmar')"
+          >Confirmar compra</v-btn
+        >
         <v-btn
           v-if="podeReceber && ['confirmado', 'recebido_parcial'].includes(pedido.status)"
           color="success"

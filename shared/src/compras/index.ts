@@ -99,3 +99,4 @@ export * from "./historico.js";
 export * from "./recorrencia.js";
 export * from "./agendamento.js";
 export * from "./conferencia.js";
+export * from "./painel.js";

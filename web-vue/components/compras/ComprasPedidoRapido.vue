@@ -37,8 +37,9 @@ const estoquePorProduto = computed<Record<string, ProdutoEstoqueDto>>(() =>
 );
 const reposicaoDisponivel = computed(() => itensDeReposicaoDoEstoque(props.produtos).length > 0);
 
-function abrir() {
-  form.itens = [{ produtoId: "", quantidade: "" }];
+/** Abre o pedido rapido; com `itens`, ja vem preenchido (ex.: o que sobrou de uma cotacao sem vencedor). */
+function abrir(itens: Array<{ produtoId: string; quantidade: string }> = []) {
+  form.itens = itens.length ? itens.map((item) => ({ ...item })) : [{ produtoId: "", quantidade: "" }];
   form.observacao = "";
   form.fornecedorId = "";
   form.margem = 10;
@@ -78,11 +79,13 @@ async function enviar() {
     salvando.value = false;
   }
 }
+
+defineExpose({ abrir });
 </script>
 
 <template>
   <div class="pedido-rapido">
-    <v-btn color="primary" variant="flat" prepend-icon="mdi-lightning-bolt" @click="abrir">Pedido rápido</v-btn>
+    <v-btn color="primary" variant="flat" prepend-icon="mdi-lightning-bolt" @click="abrir()">Pedido rápido</v-btn>
     <v-alert v-if="erro && !dialog" type="error" variant="tonal" density="compact" closable @click:close="erro = ''">{{
       erro
     }}</v-alert>

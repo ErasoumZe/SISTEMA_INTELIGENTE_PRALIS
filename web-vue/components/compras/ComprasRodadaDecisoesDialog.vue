@@ -2,7 +2,7 @@
 /**
  * Fila de decisão do Comprador (R-221, E6): o que ficou sem vencedor na rodada, por quê, e o que cada
  * fornecedor ofereceu. Daqui o Comprador aprova uma compra por exceção (permissão própria), encerra a
- * solicitação ou leva os itens que sobraram para uma NOVA solicitação — não existe segunda rodada.
+ * solicitação ou leva os itens que sobraram para um Pedido rápido com outro fornecedor — não existe segunda rodada.
  *
  * Aprovar é irreversível (vira pedido confirmado), por isso pede confirmação na própria linha.
  */
@@ -187,7 +187,7 @@ function levarParaNovaSolicitacao() {
           variant="text"
           prepend-icon="mdi-playlist-plus"
           @click="levarParaNovaSolicitacao"
-          >Nova solicitação com os pendentes</v-btn
+          >Pedido rápido com os pendentes</v-btn
         >
         <template v-if="podeEncerrarSolicitacao">
           <template v-if="confirmandoEncerrar">
