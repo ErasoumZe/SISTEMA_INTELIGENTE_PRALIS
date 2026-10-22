@@ -58,26 +58,49 @@ próprio no menu de Compras**. Vale para todas as telas de Compras.
   confere e **confirma** → **Comprado**; o fornecedor recebe pelo WhatsApp o ok para entregar.
 - O recebimento confere **exatamente o que foi confirmado** (os 5,2 kg), nunca o pedido original.
 
-## 6. Decisões tomadas na implementação (José confirma)
+### 5.1 O fornecedor marca o que também vende (José, 22/10)
+
+A página do link mostra, além da cotação, a **lista de produtos que a padaria compra**. O fornecedor marca o que ele
+também vende; o vínculo nasce **aprovado** (origem fornecedor) e, **a partir da próxima cotação**, ele recebe esses
+produtos. Ex.: a Mercearia do Lu recebe a cotação do abacaxi; o Bahamas, a da mortadela e a do abacaxi. Só acrescenta:
+desmarcar continua sendo no catálogo, pelo comprador. _Substitui, para este caso, o "vínculo nasce pendente" do doc 53._
+
+## 6. Decisões tomadas na implementação
 
 1. "A fazer" também mostra o que a rodada não resolveu (item sem resposta, acima da referência, sem referência),
-   com a decisão do comprador que já existe (exceção com a rodada fechada, doc 54).
-2. A contagem da conferência **não mexe no estoque**: registra o contado e mostra a diferença (doc 53: só a aprovação
-   de Compras/Gerência/Admin movimenta). _Pergunta 2 do envio de 22/10._
-3. Fornecedor com **menos** do que o pedido: ganha o item com a quantidade que tem (o comprador vê a diferença ao
-   confirmar). _Pergunta 3 do envio de 22/10._
+   com a decisão do comprador que já existe (exceção com a rodada fechada, doc 54). Daí, os pendentes podem ir para
+   um **Pedido rápido** com outro fornecedor.
+2. **Confirmado por José (22/10): a contagem só registra.** Mostra o contado e a diferença, não mexe no estoque.
+3. **Confirmado por José (22/10): margem de variação de 10, 20, 30 ou 40%**, escolhida no agendamento de pedido e no
+   Pedido rápido (padrão 10%), **para menos e para mais, nos dois passos**. No passo 1, quem informa quantidade fora
+   da faixa não ganha sozinho (vai para a decisão do comprador); no passo 2, a separação fora da faixa é recusada.
+   Cotação aberta antes da margem existir aceita até a quantidade pedida, nunca a mais.
 4. "Não trabalho mais" fica registrado na resposta; o vínculo do catálogo **não** é desligado sozinho.
 5. Envio automático sem o WhatsApp configurado: a mensagem fica **pendente** e a tela avisa; quando a conexão
-   existir, a fila envia sozinha. O link manual só aparece se o envio falhar (contingência).
-6. Agendamento de pedido: o produto entra com a quantidade padrão ou a sugestão do estoque (máximo − saldo); se
-   não houver nenhuma das duas, a tela exige a quantidade padrão.
-7. "Nova solicitação" manual com vários fornecedores sai da tela de Pedidos: o ad-hoc vira um agendamento para
-   agora (repetição "Nunca") ou o Pedido rápido.
+   existir, a fila envia sozinha. O link manual só aparece com o WhatsApp desconectado ou com falha (contingência).
+   O token do link é trocado na hora do envio: o link que saiu no WhatsApp é o único válido.
+6. Agendamento de pedido: o produto entra com a quantidade padrão ou a sugestão do estoque (máximo − saldo); sem
+   nenhuma das duas, **não entra naquela data**. Se nada entrar, a data passa sem abrir cotação.
+7. A aba "Solicitações" e o "abrir rodada" manual saíram da tela. Pedido fora da agenda = Pedido rápido. As rotas da
+   API (`/api/compras/solicitacoes`, `POST /api/compras/rodadas`) ficam: o Pedido rápido e os testes as usam.
+8. A exceção aprovada pelo comprador também nasce **cotada** (o fornecedor separa e devolve, como na compra
+   automática).
+9. Conferência: quem conta é o responsável da agenda ou quem tem permissão de agendar conferências; concluir exige
+   todos os produtos contados. Editar a agenda vale para as próximas datas; o que já nasceu fica.
 
 ## 7. Conectividade (José executa ou faz junto)
 
 WhatsApp: integração por API — **Meta WhatsApp Cloud API** (oficial, exige modelos de mensagem aprovados) **ou** um
 gateway por webhook (Z-API, Evolution, n8n). Passo a passo e variáveis no relatório de entrega.
+
+A API escolhe pelo `WHATSAPP_PROVEDOR` (`desligado` | `meta` | `webhook`; `teste` só nos testes):
+
+- `meta`: `WHATSAPP_META_TOKEN`, `WHATSAPP_META_TELEFONE_ID`, e os modelos `WHATSAPP_META_MODELO_COTACAO` (padrão
+  `cotacao_compra`, 4 variáveis: fornecedor, empresa, prazo, link) e `WHATSAPP_META_MODELO_CONFIRMACAO` (padrão
+  `pedido_confirmado`, 3 variáveis: fornecedor, empresa, itens), idioma `WHATSAPP_META_IDIOMA` (padrão `pt_BR`).
+- `webhook`: `WHATSAPP_WEBHOOK_URL` e `WHATSAPP_WEBHOOK_TOKEN` (Bearer); o corpo é `{ telefone, mensagem, tipo }`.
+
+A fila tenta 5 vezes por mensagem (tick de 60 s); depois fica "Falhou" e o comprador reenvia.
 
 ## 8. Schema
 
@@ -94,3 +117,23 @@ na resposta do fornecedor; fila de envio do WhatsApp; agenda e itens da conferê
 | Doc 54 E5: compra automática nasce **confirmada**                                        | Nasce **cotada**; confirma depois do ajuste do fornecedor (§5) |
 | Doc 53: recontagem cega                                                                  | A contagem mostra a quantidade em estoque (§2)                 |
 | Pedidos com painel de catálogo/preço-base/solicitações e fila em abas                    | Pedido rápido + matriz (§4); cadastro em módulo próprio (§1)   |
+| Conferência agendada para uma data só (sem lista de produtos)                            | Agenda com recorrência, lista com saldo e contagem (§2)        |
+
+## 10. Pergunta aberta — a referência pode SUBIR? (José / Rodrigo decidem)
+
+A regra do §5 foi implementada ao pé da letra: no fechamento, a referência de cada produto passa a ser a **menor
+oferta** da rodada, **mesmo que ela seja maior que a referência anterior** (todas as ofertas a 12 com referência 10 →
+a próxima referência é 12). A regra antiga (R-218) dizia "a base só desce".
+
+- **Se a referência pode subir:** acompanha o mercado (preço que subiu de verdade). Risco: com um fornecedor só, ele
+  oferece alto numa rodada e na seguinte ganha sozinho a esse preço.
+- **Se só desce:** protege contra esse risco; quando o mercado sobe, tudo cai na decisão do comprador.
+
+Até a decisão, vale o comportamento implementado (pode subir). Mudar é uma linha no fechamento
+(`compras-fechamento.service.ts`) e os testes de fechamento.
+
+## 11. Estado da implementação (22/10/2026)
+
+Branch `feat/compras-fase2-solicitacao-rodada-20261021`, só local. Migration 0067 aplicada **só no banco de dev**.
+Telas, API, agendadores e testes de unidade e integração entregues; o WhatsApp sai quando a conexão for configurada
+(variáveis no relatório de entrega). Produção: nada aplicado.
