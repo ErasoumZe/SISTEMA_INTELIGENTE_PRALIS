@@ -96,7 +96,11 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/rodada",
   "/api/rodada/responder",
   // E7: aceitar a contraproposta do comprador, pelo mesmo token.
-  "/api/rodada/aceitar"
+  "/api/rodada/aceitar",
+  // Doc 57: o passo 2 (separacao com a quantidade real) e a lista do que a padaria compra, onde o
+  // fornecedor marca o que tambem vende. GET e POST de /produtos dividem a entrada.
+  "/api/rodada/separacao",
+  "/api/rodada/produtos"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {

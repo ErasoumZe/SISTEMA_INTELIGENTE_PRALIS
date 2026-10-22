@@ -27,6 +27,7 @@ export type PropostaParaAdjudicacao = {
   fornecedorId: string;
   rodadaStatus: string;
   tetoValor: string | null;
+  margemVariacaoPercentual: number | null;
   abertaPor: string;
   frete: string | null;
   itens: Array<{
@@ -36,6 +37,7 @@ export type PropostaParaAdjudicacao = {
     indisponivel: boolean;
     valorUnitario: string | null;
     quantidade: string;
+    quantidadeDisponivel: string | null;
     precoBaseValor: string | null;
     produtoId: string;
     descricaoProduto: string;
@@ -61,6 +63,7 @@ export async function carregarPropostaParaAdjudicacaoRepository(
       solicitacaoId: comprasRodadas.solicitacaoId,
       rodadaStatus: comprasRodadas.status,
       tetoValor: comprasRodadas.tetoValor,
+      margemVariacaoPercentual: comprasRodadas.margemVariacaoPercentual,
       abertaPor: comprasRodadas.abertaPor,
       fornecedorId: comprasRodadasConvites.fornecedorId
     })
@@ -79,6 +82,7 @@ export async function carregarPropostaParaAdjudicacaoRepository(
       valorUnitario: comprasPropostasItens.valorUnitario,
       rodadaItemId: comprasRodadasItens.id,
       quantidade: comprasRodadasItens.quantidade,
+      quantidadeDisponivel: comprasPropostasItens.quantidadeDisponivel,
       precoBaseValor: comprasRodadasItens.precoBaseValor,
       produtoId: comprasSolicitacoesItens.produtoId,
       descricaoProduto: comprasSolicitacoesItens.descricaoProduto,
@@ -102,6 +106,7 @@ export async function carregarPropostaParaAdjudicacaoRepository(
     fornecedorId: proposta.fornecedorId,
     rodadaStatus: proposta.rodadaStatus,
     tetoValor: proposta.tetoValor,
+    margemVariacaoPercentual: proposta.margemVariacaoPercentual,
     abertaPor: proposta.abertaPor,
     frete: proposta.frete,
     itens
@@ -132,7 +137,7 @@ export async function somaAutomaticaDaRodadaRepository(rodadaId: string, tx: Tra
   return linhas.reduce((soma, linha) => soma + Number(linha.custoFinalUnitario) * Number(linha.quantidade), 0);
 }
 
-export async function pedidoConfirmadoDaRodadaRepository(
+export async function pedidoCotadoDaRodadaRepository(
   rodadaId: string,
   fornecedorId: string,
   tx: TransacaoBanco
@@ -141,7 +146,9 @@ export async function pedidoConfirmadoDaRodadaRepository(
     .select({ id: pedidos.id })
     .from(pedidos)
     .where(
-      and(eq(pedidos.rodadaId, rodadaId), eq(pedidos.fornecedorId, fornecedorId), eq(pedidos.status, "confirmado"))
+      // Doc 57 §5: o item ganho entra no pedido que o fornecedor ainda esta SEPARANDO (cotado). Depois que ele
+      // devolveu (retornado) ou o comprador confirmou, um item novo abre outro pedido.
+      and(eq(pedidos.rodadaId, rodadaId), eq(pedidos.fornecedorId, fornecedorId), eq(pedidos.status, "cotado"))
     )
     .limit(1)
     // Trava o pedido antes de anexar item: se o recebimento mudar o status entre a leitura e a escrita,
@@ -150,7 +157,7 @@ export async function pedidoConfirmadoDaRodadaRepository(
   return pedido?.id ?? null;
 }
 
-export async function criarPedidoConfirmadoRepository(
+export async function criarPedidoCotadoRepository(
   input: {
     empresaId: string;
     solicitacaoId: string;
@@ -173,7 +180,9 @@ export async function criarPedidoConfirmadoRepository(
       empresaId: input.empresaId,
       fornecedorId: input.fornecedorId,
       tipo: "rodada",
-      status: "confirmado",
+      // Doc 57 §5: nasce COTADO (o item e dele); vira confirmado so quando o comprador confirma depois do
+      // ajuste da separacao.
+      status: "cotado",
       recorrencia: "nenhuma",
       solicitacaoId: input.solicitacaoId,
       rodadaId: input.rodadaId,
@@ -187,7 +196,7 @@ export async function criarPedidoConfirmadoRepository(
   await tx.insert(pedidosEventos).values({
     empresaId: input.empresaId,
     pedidoId: pedido.id,
-    status: "confirmado",
+    status: "cotado",
     observacao: aprovadoPor ? "Compra aprovada pelo comprador" : "Compra automatica",
     criadoPor: aprovadoPor,
     propostaId: input.propostaId

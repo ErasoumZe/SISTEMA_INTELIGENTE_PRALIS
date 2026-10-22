@@ -14,6 +14,8 @@ import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { marcarOcorrenciaEnviadaRepository } from "./compras-agendamento.repository.js";
+import { enfileirarEnviosRepository } from "./compras-whatsapp.repository.js";
+import { telefoneParaWhatsapp } from "../whatsapp/whatsapp-provedor.js";
 import {
   buscarEmpresaComprasRepository,
   buscarFornecedoresParaConviteRepository,
@@ -42,9 +44,19 @@ function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
 }
 
-export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsuario): Promise<RodadaDto> {
+/**
+ * Abre a rodada e poe os convites na fila do WhatsApp (doc 57 §3: o sistema envia, ninguem copia link).
+ * `permitirSemConvites`: o agendamento abre a rodada mesmo quando nenhum produto tem fornecedor — os itens
+ * ficam "A fazer" para o comprador escolher o fornecedor.
+ */
+export async function abrirRodada(
+  payload: AbrirRodadaPayload,
+  perfil: PerfilUsuario,
+  opcoes: { permitirSemConvites?: boolean } = {}
+): Promise<RodadaDto> {
   validarEmpresa(perfil, payload.empresaId);
-  if (!payload.convites.length) throw erroValidacao("Convide ao menos um fornecedor", "SEM_CONVITES");
+  if (!payload.convites.length && !opcoes.permitirSemConvites)
+    throw erroValidacao("Convide ao menos um fornecedor", "SEM_CONVITES");
   // Fornecedor repetido no mesmo convite-set e erro de montagem.
   const fornecedorIds = payload.convites.map((convite) => convite.fornecedorId);
   if (new Set(fornecedorIds).size !== fornecedorIds.length) {
@@ -119,10 +131,20 @@ export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsu
         expiraEm,
         fusoHorario,
         tetoValor: payload.tetoValor ?? null,
+        margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
         abertaPor: perfil.usuarioId,
         itens: itensEnvelope,
         convites: convitesParaCriar
       },
+      tx
+    );
+    await enfileirarEnviosRepository(
+      criada.convites.map((convite) => ({
+        empresaId: payload.empresaId,
+        tipo: "convite" as const,
+        conviteId: convite.id,
+        telefone: telefoneParaWhatsapp(fornecedorPorId.get(convite.fornecedorId)!.whatsapp ?? "")
+      })),
       tx
     );
     await marcarSolicitacaoEmCotacaoRepository(payload.solicitacaoId, payload.empresaId, tx);

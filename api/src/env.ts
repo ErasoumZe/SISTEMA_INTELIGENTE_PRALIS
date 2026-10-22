@@ -66,7 +66,19 @@ const envSchema = z.object({
     .string()
     .default("08351168000153")
     .transform((valor) => valor.replace(/\D/g, ""))
-    .refine((valor) => valor.length === 14, "NOTAS_FISCAIS_COMPANY deve ter 14 digitos (CNPJ da contabilidade)")
+    .refine((valor) => valor.length === 14, "NOTAS_FISCAIS_COMPANY deve ter 14 digitos (CNPJ da contabilidade)"),
+  // Envio automatico das cotacoes pelo WhatsApp (doc 57 §3). `desligado`: as mensagens ficam na fila e a
+  // tela avisa. `meta`: WhatsApp Cloud API oficial (modelos aprovados). `webhook`: um gateway (Z-API,
+  // Evolution, n8n) recebe {telefone, mensagem}. `teste`: so para os testes automatizados.
+  WHATSAPP_PROVEDOR: z.enum(["desligado", "meta", "webhook", "teste"]).default("desligado"),
+  WHATSAPP_META_TOKEN: envOpcionalNaoVazio,
+  WHATSAPP_META_TELEFONE_ID: envOpcionalNaoVazio,
+  WHATSAPP_META_VERSAO_API: z.string().trim().min(1).default("v21.0"),
+  WHATSAPP_META_MODELO_COTACAO: z.string().trim().min(1).default("cotacao_compra"),
+  WHATSAPP_META_MODELO_CONFIRMACAO: z.string().trim().min(1).default("pedido_confirmado"),
+  WHATSAPP_META_IDIOMA: z.string().trim().min(1).default("pt_BR"),
+  WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
+  WHATSAPP_WEBHOOK_TOKEN: envOpcionalNaoVazio
 });
 
 export const env = envSchema.parse(process.env);

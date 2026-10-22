@@ -12,7 +12,7 @@ import { rodadaItensAdjudicadosRepository } from "./compras-adjudicacao.reposito
 import { solicitacaoDaRodadaRepository } from "./compras-decisao.repository.js";
 import {
   atualizarStatusSolicitacaoRepository,
-  comprasAutomaticasDaRodadaRepository,
+  menoresOfertasDaRodadaRepository,
   encerrarConvitesDaRodadaRepository,
   fecharRodadaRepository,
   listarRodadasVencidasRepository,
@@ -44,7 +44,7 @@ const NAO_FECHADA = (rodadaId: string): ResultadoFechamento => ({
  *
  * O que muda, tudo ou nada: rodada -> fechada (motivo 'prazo', sem autor humano); convites ainda
  * abertos -> encerrado; solicitacao -> comprada/parcialmente_comprada; base vigente dos itens
- * comprados AUTOMATICAMENTE passa a ser o custo final pago; aviso no sino se sobrou item sem vencedor.
+ * da rodada passa a ser o menor valor oferecido (doc 57); aviso no sino se sobrou item sem vencedor.
  */
 export function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): Promise<ResultadoFechamento> {
   return fecharRodada(rodada, { motivo: "prazo" }, agora);
@@ -93,11 +93,11 @@ async function fecharRodada(
       tx
     );
 
-    // Decisao 12: a base nova e o que a padaria PAGOU (custo final gravado da adjudicacao). Custo zero
-    // e produto inativo ficam fora da base, como na importacao (R-220).
+    // Doc 57 §5: a referencia nova e o MENOR valor oferecido na rodada (de qualquer fornecedor). Produto
+    // inativo fica fora, como na importacao (R-220).
     let basesAtualizadas = 0;
-    const paraBase = (await comprasAutomaticasDaRodadaRepository(travada.id, tx))
-      .filter((compra) => compra.produtoAtivo && Number(compra.custoFinalUnitario) > 0)
+    const paraBase = (await menoresOfertasDaRodadaRepository(travada.id, tx))
+      .filter((oferta) => oferta.produtoAtivo)
       // Ordem fixa por produto: duas rodadas que trocam bases dos mesmos produtos nao se travam em ABBA.
       .sort((a, b) => a.produtoId.localeCompare(b.produtoId));
     // Rodadas de solicitacoes DIFERENTES nao compartilham a advisory da solicitacao; a troca da base e
@@ -108,7 +108,7 @@ async function fecharRodada(
         {
           empresaId: travada.empresaId,
           produtoId: compra.produtoId,
-          valor: compra.custoFinalUnitario,
+          valor: compra.valor,
           rodadaId: travada.id,
           criadoPor: travada.abertaPor,
           agora

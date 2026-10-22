@@ -48,3 +48,24 @@ export function calcularCustoFinal(itens: ItemParaCusto[], frete: number): Custo
     return { ref: item.ref, freteRateado: Number(freteRateado.toFixed(2)), custoFinalUnitario, compraAutomatica };
   });
 }
+
+/** Margens de variacao de quantidade que o comprador escolhe (doc 57, José 22/10). */
+export const MARGENS_VARIACAO = [10, 20, 30, 40] as const;
+export type MargemVariacao = (typeof MARGENS_VARIACAO)[number];
+
+/**
+ * Limites aceitos para a quantidade (para menos e para mais) com a margem da rodada. Sem margem (rodada
+ * de antes da regra): qualquer quantidade ate a pedida.
+ */
+export function limitesDaMargem(pedida: number, margem: number | null): { minimo: number; maximo: number } {
+  if (margem === null) return { minimo: 0, maximo: pedida };
+  const arredondar = (valor: number) => Math.round(valor * 1000) / 1000;
+  return { minimo: arredondar(pedida * (1 - margem / 100)), maximo: arredondar(pedida * (1 + margem / 100)) };
+}
+
+export function quantidadeDentroDaMargem(pedida: number, informada: number, margem: number | null): boolean {
+  if (!(informada > 0)) return false;
+  const { minimo, maximo } = limitesDaMargem(pedida, margem);
+  // Tolerancia de arredondamento de 3 casas (numeric(14,3)).
+  return informada >= minimo - 0.0005 && informada <= maximo + 0.0005;
+}

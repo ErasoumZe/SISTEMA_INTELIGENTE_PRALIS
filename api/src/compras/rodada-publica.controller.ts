@@ -1,8 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { ok } from "@padaria/shared/api";
 import { TETO_RODADA, tokenDaRodada } from "./rodada-http.js";
-import { aceitarContrapropostaPublica, obterRodadaPublica, responderRodadaPublica } from "./rodada-publica.service.js";
+import {
+  aceitarContrapropostaPublica,
+  autenticarConvitePorToken,
+  marcarProdutosQueVende,
+  obterRodadaPublica,
+  produtosParaFornecedor,
+  responderRodadaPublica
+} from "./rodada-publica.service.js";
 import { itensCompradosDoConvite, processarCompraAutomatica } from "./compras-adjudicacao.service.js";
+import { pedidoPublicoDoConvite, registrarSeparacao } from "./compras-separacao.service.js";
 
 /**
  * Fase 2 — rotas PUBLICAS da rodada do fornecedor. Autenticam pelo cabecalho `x-rodada-token`, tem
@@ -13,7 +21,7 @@ export async function registrarRotasRodadaPublica(app: FastifyInstance): Promise
   // `no-store`: a resposta chega por aparelho de terceiro; nenhum cache nem historico guarda.
   app.get("/api/rodada", TETO_RODADA, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
-    return ok(await obterRodadaPublica(tokenDaRodada(request), itensCompradosDoConvite));
+    return ok(await obterRodadaPublica(tokenDaRodada(request), itensCompradosDoConvite, pedidoPublicoDoConvite));
   });
 
   app.post("/api/rodada/responder", TETO_RODADA, async (request, reply) => {
@@ -40,5 +48,24 @@ export async function registrarRotasRodadaPublica(app: FastifyInstance): Promise
       request.log.error(causa, "falha na compra automatica; item cai para decisao no fechamento");
     }
     return ok({ versao });
+  });
+
+  // Doc 57 §5 — passo 2: o fornecedor separou e devolve a quantidade real do que ganhou. A regra mora no
+  // modulo do comprador (pedido/adjudicacao); aqui so se autentica o token.
+  app.post("/api/rodada/separacao", TETO_RODADA, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const convite = await autenticarConvitePorToken(tokenDaRodada(request));
+    await registrarSeparacao(convite.conviteId, request.body ?? {});
+    return ok({ status: "retornado" });
+  });
+
+  // Doc 57 §5.1 — a lista do que a padaria compra; o fornecedor marca o que tambem vende.
+  app.get("/api/rodada/produtos", TETO_RODADA, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return ok(await produtosParaFornecedor(tokenDaRodada(request)));
+  });
+  app.post("/api/rodada/produtos", TETO_RODADA, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return ok(await marcarProdutosQueVende(tokenDaRodada(request), request.body ?? {}));
   });
 }

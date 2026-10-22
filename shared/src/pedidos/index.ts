@@ -11,6 +11,8 @@ export const pedidoStatus = [
   "aprovado",
   "a_fazer",
   "enviado",
+  // Doc 57 §5: o fornecedor ganhou os itens e esta separando (pode ajustar a quantidade real).
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",
@@ -20,6 +22,7 @@ export const pedidoStatus = [
 export const pedidoStatusNovo = [
   "a_fazer",
   "enviado",
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",

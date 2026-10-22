@@ -1,7 +1,7 @@
 // MODULO DO COMPRADOR — orquestra a compra automatica (Fase 2, decisoes 1/5/12/14). Disparado pelo
 // controller publico logo apos a resposta do fornecedor ser gravada. NAO e importado pelo modulo
 // publico (isolamento). Transacao propria, serializada pela advisory da rodada.
-import { calcularCustoFinal, type ItemParaCusto } from "@padaria/shared/compras";
+import { calcularCustoFinal, quantidadeDentroDaMargem, type ItemParaCusto } from "@padaria/shared/compras";
 import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { falhaTecnica } from "../erros.js";
@@ -12,11 +12,11 @@ import {
   carregarPropostaParaAdjudicacaoRepository,
   conviteItensCompradosRepository,
   marcarConviteAguardandoCompradorRepository,
-  criarPedidoConfirmadoRepository,
+  criarPedidoCotadoRepository,
   gravarCustoPropostaItemRepository,
   inserirAdjudicacaoRepository,
   inserirItemPedidoRepository,
-  pedidoConfirmadoDaRodadaRepository,
+  pedidoCotadoDaRodadaRepository,
   rodadaItensAdjudicadosRepository,
   somaAutomaticaDaRodadaRepository
 } from "./compras-adjudicacao.repository.js";
@@ -25,7 +25,8 @@ export type ResultadoCompraAutomatica = { comprados: number; pendentes: number }
 
 /**
  * Processa a compra automatica da ULTIMA resposta de um fornecedor. Item com custo final <= preco-base
- * congelado e dentro do teto nasce comprado e confirmado (pedido consolidado por fornecedor); o resto
+ * congelado, dentro do teto e da margem de quantidade nasce comprado e COTADO (doc 57: o fornecedor ainda
+ * ajusta a quantidade real na separacao e o comprador confirma); o resto
  * (acima da base, sem base, ou barrado pelo teto) vira pendencia no sino do Comprador.
  *
  * Nunca lanca para o chamador publico: a resposta do fornecedor ja foi gravada e nao pode ser perdida
@@ -55,10 +56,16 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
       .sort((a, b) => a.rodadaItemId.localeCompare(b.rodadaItemId));
     if (!livres.length) return { comprados: 0, pendentes: 0 };
 
+    // Doc 57 (margem): o fornecedor responde quanto TEM. Vale o que ele tem se estiver dentro da margem da
+    // rodada (para menos e para mais); fora dela, o item nao e comprado sozinho.
+    const quantidadeDe = (item: (typeof livres)[number]) =>
+      item.quantidadeDisponivel === null ? Number(item.quantidade) : Number(item.quantidadeDisponivel);
+    const dentroDaMargem = (item: (typeof livres)[number]) =>
+      quantidadeDentroDaMargem(Number(item.quantidade), quantidadeDe(item), proposta.margemVariacaoPercentual);
     const entrada: ItemParaCusto[] = livres.map((item) => ({
       ref: item.rodadaItemId,
       valorUnitario: Number(item.valorUnitario),
-      quantidade: Number(item.quantidade),
+      quantidade: quantidadeDe(item),
       precoBaseValor: item.precoBaseValor === null ? null : Number(item.precoBaseValor)
     }));
     const custos = calcularCustoFinal(entrada, Number(proposta.frete ?? 0));
@@ -89,17 +96,17 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
 
     for (const item of livres) {
       const custo = custoPorRodadaItem.get(item.rodadaItemId)!;
-      const quantidade = Number(item.quantidade);
+      const quantidade = quantidadeDe(item);
       const totalItem = Math.round(custo.custoFinalUnitario * quantidade * 100);
       const cabeNoTeto = tetoCentavos === null || acumulado + totalItem <= tetoCentavos;
-      if (!custo.compraAutomatica || !cabeNoTeto) {
+      if (!custo.compraAutomatica || !cabeNoTeto || !dentroDaMargem(item)) {
         pendentes += 1;
         continue;
       }
       if (!pedidoId) {
         pedidoId =
-          (await pedidoConfirmadoDaRodadaRepository(proposta.rodadaId, proposta.fornecedorId, tx)) ??
-          (await criarPedidoConfirmadoRepository(
+          (await pedidoCotadoDaRodadaRepository(proposta.rodadaId, proposta.fornecedorId, tx)) ??
+          (await criarPedidoCotadoRepository(
             {
               empresaId: proposta.empresaId,
               solicitacaoId: proposta.solicitacaoId,
@@ -117,7 +124,7 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
           fornecedorId: proposta.fornecedorId,
           produtoId: item.produtoId,
           descricaoProduto: item.descricaoProduto,
-          quantidade: item.quantidade,
+          quantidade: String(quantidade),
           estoqueAtual: item.estoqueAtual,
           estoqueMin: item.estoqueMin,
           estoqueMax: item.estoqueMax
@@ -132,7 +139,7 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
           fornecedorId: proposta.fornecedorId,
           pedidoId,
           pedidoItemId,
-          quantidade: item.quantidade,
+          quantidade: String(quantidade),
           custoFinalUnitario: custo.custoFinalUnitario,
           precoBaseValor: item.precoBaseValor,
           modo: "automatica",

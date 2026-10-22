@@ -4,10 +4,17 @@
 // consegue construir o tipo e nao compila a chamada.
 import { createHash } from "node:crypto";
 import type { DadosExternos } from "@padaria/shared/api";
-import type { RespostaItemPublica, ResponderRodadaPayload, RodadaPublicaDto } from "@padaria/shared/compras";
+import type {
+  PedidoPublicoDto,
+  ProdutoParaFornecedorDto,
+  RespostaItemPublica,
+  ResponderRodadaPayload,
+  RodadaPublicaDto
+} from "@padaria/shared/compras";
 import {
   contrapropostaVigente,
   itensDoAceite,
+  produtosDoFornecedorPayloadSchema,
   responderRodadaPayloadSchema,
   situacaoDoItemParaFornecedor
 } from "@padaria/shared/compras";
@@ -20,10 +27,12 @@ import {
   criarPropostaFornecedorRepository,
   itensDoConviteRepository,
   marcarConviteRespondidoRepository,
+  produtosParaFornecedorRepository,
   proximaVersaoRepository,
   travarConvitePorHashRepository,
   ultimaPropostaDoConviteRepository,
   versoesDoConviteRepository,
+  vincularProdutosDoFornecedorRepository,
   type ConvitePublicoLinha
 } from "./rodada-publica.repository.js";
 
@@ -65,14 +74,17 @@ function rodadaViva(convite: ConviteAutenticado): boolean {
  */
 export async function obterRodadaPublica(
   token: string | undefined,
-  itensComprados: (conviteId: string) => Promise<Set<string>>
+  itensComprados: (conviteId: string) => Promise<Set<string>>,
+  // Doc 57 §5 (passo 2): o pedido que ele ja ganhou. Tambem INJETADO — e leitura de pedido/adjudicacao.
+  pedidoDoConvite: (conviteId: string) => Promise<PedidoPublicoDto | null>
 ): Promise<RodadaPublicaDto> {
   const convite = await autenticarConvitePorToken(token);
-  const [itens, ultima, versoes, comprados] = await Promise.all([
+  const [itens, ultima, versoes, comprados, pedido] = await Promise.all([
     itensDoConviteRepository(convite.conviteId),
     ultimaPropostaDoConviteRepository(convite.conviteId),
     versoesDoConviteRepository(convite.conviteId),
-    itensComprados(convite.conviteId)
+    itensComprados(convite.conviteId),
+    pedidoDoConvite(convite.conviteId)
   ]);
   const viva = rodadaViva(convite);
   const precificados = new Set(
@@ -94,6 +106,7 @@ export async function obterRodadaPublica(
       conviteItemId: item.conviteItemId,
       descricaoProduto: item.descricaoProduto,
       quantidade: item.quantidade,
+      referencia: item.referencia,
       situacao: situacaoDoItemParaFornecedor({
         comprado: comprados.has(item.conviteItemId),
         ofereceuPreco: precificados.has(item.conviteItemId)
@@ -110,10 +123,13 @@ export async function obterRodadaPublica(
           itens: ultima.itens.map((item) => ({
             conviteItemId: item.conviteItemId,
             indisponivel: item.indisponivel,
-            valorUnitario: item.valorUnitario
+            motivoIndisponivel: item.motivoIndisponivel,
+            valorUnitario: item.valorUnitario,
+            quantidadeDisponivel: item.quantidadeDisponivel
           }))
         }
-      : null
+      : null,
+    pedido
   };
 }
 
@@ -158,7 +174,9 @@ export async function responderRodadaPublica(
         itens: payload.itens.map((item: RespostaItemPublica) => ({
           conviteItemId: item.conviteItemId,
           indisponivel: item.indisponivel,
-          valorUnitario: item.indisponivel ? null : (item.valorUnitario ?? null)
+          motivoIndisponivel: item.indisponivel ? (item.motivoIndisponivel ?? "sem_estoque") : null,
+          valorUnitario: item.indisponivel ? null : (item.valorUnitario ?? null),
+          quantidadeDisponivel: item.indisponivel ? null : (item.quantidadeDisponivel ?? null)
         }))
       },
       tx
@@ -205,15 +223,51 @@ export async function aceitarContrapropostaPublica(
         observacao: ultima.observacao,
         prazoEntrega: ultima.prazoEntrega,
         condicaoPagamento: ultima.condicaoPagamento,
-        itens: itensDoAceite(ultimaDoFornecedor, contraproposta).map((item) => ({
-          conviteItemId: item.conviteItemId,
-          indisponivel: item.indisponivel,
-          valorUnitario: item.valorUnitario === null ? null : Number(item.valorUnitario)
-        }))
+        itens: itensDoAceite(ultimaDoFornecedor, contraproposta).map((item) => {
+          const anterior = ultima.itens.find((linha) => linha.conviteItemId === item.conviteItemId);
+          return {
+            conviteItemId: item.conviteItemId,
+            indisponivel: item.indisponivel,
+            motivoIndisponivel: item.indisponivel ? (anterior?.motivoIndisponivel ?? "sem_estoque") : null,
+            valorUnitario: item.valorUnitario === null ? null : Number(item.valorUnitario),
+            quantidadeDisponivel:
+              item.indisponivel || !anterior?.quantidadeDisponivel ? null : Number(anterior.quantidadeDisponivel)
+          };
+        })
       },
       tx
     );
     await marcarConviteRespondidoRepository(travado.id, travado.empresaId, tx);
     return { versao, propostaId };
   });
+}
+
+// --- doc 57 §5.1: o que mais o fornecedor vende ----------------------------------------------------
+
+/** A lista do que a padaria compra (so nome e grupo), marcando o que este fornecedor ja vende. */
+export async function produtosParaFornecedor(token: string | undefined): Promise<ProdutoParaFornecedorDto[]> {
+  const convite = await autenticarConvitePorToken(token);
+  const linhas = await produtosParaFornecedorRepository(convite.empresaId, convite.fornecedorId);
+  return linhas.map((linha) => ({
+    produtoId: linha.produtoId,
+    descricao: linha.descricao ?? "Produto",
+    grupo: linha.grupo,
+    jaVende: linha.vinculo === "aprovado" || linha.vinculo === "pendente"
+  }));
+}
+
+/** Ele marca o que vende: a partir da proxima cotacao, recebe tambem esses produtos. */
+export async function marcarProdutosQueVende(
+  token: string | undefined,
+  body: DadosExternos
+): Promise<{ vinculados: number }> {
+  const payload = produtosDoFornecedorPayloadSchema.parse(body ?? {});
+  const convite = await autenticarConvitePorToken(token);
+  const vinculados = await executarEmTransacao((tx) =>
+    vincularProdutosDoFornecedorRepository(
+      { empresaId: convite.empresaId, fornecedorId: convite.fornecedorId, produtoIds: payload.produtoIds },
+      tx
+    )
+  );
+  return { vinculados };
 }

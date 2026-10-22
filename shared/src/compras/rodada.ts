@@ -31,6 +31,11 @@ export const abrirRodadaPayloadSchema = z.object({
     .nullable(),
   // Teto de compra automatica da rodada (decisao 14). null = sem teto.
   tetoValor: z.coerce.number().positive().optional().nullable(),
+  // Doc 57: variacao de quantidade aceita (10, 20, 30 ou 40%). Vazio = 10%.
+  margemVariacaoPercentual: z
+    .union([z.literal(10), z.literal(20), z.literal(30), z.literal(40)])
+    .optional()
+    .nullable(),
   convites: z.array(abrirRodadaConviteSchema).min(1)
 });
 
@@ -104,3 +109,6 @@ export type RodadaDto = {
   itens: RodadaItemDto[];
   convites: RodadaConviteDto[];
 };
+
+/** Doc 57 §5: o comprador confirma o pedido cotado ou retornado (Comprado). */
+export const confirmarPedidoPayloadSchema = z.object({ empresaId: uuid });

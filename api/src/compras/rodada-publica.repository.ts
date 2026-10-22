@@ -3,7 +3,7 @@
 // vencedores. A regra em scripts/verificar-arquitetura.mjs quebra o build se isto for violado. Tudo
 // aqui parte do CONVITE e desce pela fronteira fisica do isolamento (convites_itens); nunca ha
 // envelope do comprador nem proposta de concorrente.
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   comprasConvitesItens,
   comprasPropostas,
@@ -13,7 +13,11 @@ import {
   comprasRodadasItens,
   comprasSolicitacoesItens,
   empresas,
-  fornecedores
+  fornecedores,
+  fornecedoresProdutos,
+  fornecedoresProdutosEventos,
+  gruposMercadorias,
+  produtos
 } from "@padaria/db/schema";
 import type { VersaoDoConvite } from "@padaria/shared/compras";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
@@ -75,9 +79,17 @@ export async function travarConvitePorHashRepository(
   return convite ?? null;
 }
 
-export type ItemPublicoLinha = { conviteItemId: string; descricaoProduto: string; quantidade: string };
+export type ItemPublicoLinha = {
+  conviteItemId: string;
+  descricaoProduto: string;
+  quantidade: string;
+  referencia: string | null;
+};
 
-/** Itens do convite (quantidade do envelope + descricao). NUNCA o preco-base. */
+/**
+ * Itens do convite: quantidade do envelope, descricao e o valor de REFERENCIA congelado na abertura (doc 57
+ * §5: o fornecedor ve o ultimo valor pago ou cotado; quem responder igual ou menor primeiro ganha).
+ */
 export async function itensDoConviteRepository(
   conviteId: string,
   db: ExecutorBanco = banco
@@ -86,7 +98,8 @@ export async function itensDoConviteRepository(
     .select({
       conviteItemId: comprasConvitesItens.id,
       descricaoProduto: comprasSolicitacoesItens.descricaoProduto,
-      quantidade: comprasRodadasItens.quantidade
+      quantidade: comprasRodadasItens.quantidade,
+      referencia: comprasRodadasItens.precoBaseValor
     })
     .from(comprasConvitesItens)
     .innerJoin(comprasRodadasItens, eq(comprasRodadasItens.id, comprasConvitesItens.rodadaItemId))
@@ -101,7 +114,13 @@ export type UltimaPropostaLinha = {
   observacao: string | null;
   prazoEntrega: string | null;
   condicaoPagamento: string | null;
-  itens: Array<{ conviteItemId: string; indisponivel: boolean; valorUnitario: string | null }>;
+  itens: Array<{
+    conviteItemId: string;
+    indisponivel: boolean;
+    motivoIndisponivel: "sem_estoque" | "nao_trabalha" | null;
+    valorUnitario: string | null;
+    quantidadeDisponivel: string | null;
+  }>;
 };
 
 /** A ultima proposta DO FORNECEDOR neste convite (ele ve so o que e dele; a contraproposta vem a parte). */
@@ -133,7 +152,9 @@ export async function ultimaPropostaDoConviteRepository(
     .select({
       conviteItemId: comprasPropostasItens.conviteItemId,
       indisponivel: comprasPropostasItens.indisponivel,
-      valorUnitario: comprasPropostasItens.valorUnitario
+      motivoIndisponivel: comprasPropostasItens.motivoIndisponivel,
+      valorUnitario: comprasPropostasItens.valorUnitario,
+      quantidadeDisponivel: comprasPropostasItens.quantidadeDisponivel
     })
     .from(comprasPropostasItens)
     .where(eq(comprasPropostasItens.propostaId, proposta.id));
@@ -174,7 +195,13 @@ export async function criarPropostaFornecedorRepository(
     observacao: string | null;
     prazoEntrega: string | null;
     condicaoPagamento: string | null;
-    itens: Array<{ conviteItemId: string; indisponivel: boolean; valorUnitario: number | null }>;
+    itens: Array<{
+      conviteItemId: string;
+      indisponivel: boolean;
+      motivoIndisponivel?: "sem_estoque" | "nao_trabalha" | null;
+      valorUnitario: number | null;
+      quantidadeDisponivel?: number | null;
+    }>;
   },
   tx: TransacaoBanco
 ): Promise<string> {
@@ -201,8 +228,11 @@ export async function criarPropostaFornecedorRepository(
       propostaId: proposta.id,
       conviteItemId: item.conviteItemId,
       indisponivel: item.indisponivel,
+      motivoIndisponivel: item.indisponivel ? (item.motivoIndisponivel ?? null) : null,
       // custo_final/frete_rateado ficam null: o rateio e a comparacao com a base sao do comprador (E5).
-      valorUnitario: item.valorUnitario === null ? null : String(item.valorUnitario)
+      valorUnitario: item.valorUnitario === null ? null : String(item.valorUnitario),
+      quantidadeDisponivel:
+        item.indisponivel || item.quantidadeDisponivel == null ? null : String(item.quantidadeDisponivel)
     }))
   );
   return proposta.id;
@@ -245,4 +275,71 @@ export async function versoesDoConviteRepository(
     versoes.push({ versao: proposta.versao, autorTipo: proposta.autorTipo, itens });
   }
   return versoes;
+}
+
+// --- doc 57 §5.1: o fornecedor diz o que mais ele vende -------------------------------------------
+
+/** Os produtos ativos da padaria (so nome e grupo) e se ESTE fornecedor ja esta vinculado a cada um. */
+export async function produtosParaFornecedorRepository(
+  empresaId: string,
+  fornecedorId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      produtoId: produtos.id,
+      descricao: produtos.descricao,
+      grupo: gruposMercadorias.nome,
+      vinculo: fornecedoresProdutos.status
+    })
+    .from(produtos)
+    .leftJoin(gruposMercadorias, eq(gruposMercadorias.id, produtos.grupoMercadoriaId))
+    .leftJoin(
+      fornecedoresProdutos,
+      and(eq(fornecedoresProdutos.produtoId, produtos.id), eq(fornecedoresProdutos.fornecedorId, fornecedorId))
+    )
+    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.status, "ativo")))
+    .orderBy(asc(produtos.descricao));
+}
+
+/**
+ * O fornecedor marca o que vende: o vinculo nasce APROVADO (José, 22/10: a partir da proxima cotacao ele ja
+ * recebe aquele produto). Vinculo que ja existe (inclusive rejeitado pelo comprador) nao e tocado.
+ */
+export async function vincularProdutosDoFornecedorRepository(
+  input: { empresaId: string; fornecedorId: string; produtoIds: string[] },
+  tx: TransacaoBanco
+): Promise<number> {
+  const validos = await tx
+    .select({ id: produtos.id })
+    .from(produtos)
+    .where(and(eq(produtos.empresaId, input.empresaId), inArray(produtos.id, input.produtoIds)));
+  if (!validos.length) return 0;
+  const criados = await tx
+    .insert(fornecedoresProdutos)
+    .values(
+      validos.map((produto) => ({
+        empresaId: input.empresaId,
+        fornecedorId: input.fornecedorId,
+        produtoId: produto.id,
+        status: "aprovado" as const,
+        origem: "fornecedor" as const,
+        aprovadoEm: new Date(),
+        observacao: "Marcado pelo fornecedor na página da cotação"
+      }))
+    )
+    .onConflictDoNothing()
+    .returning({ id: fornecedoresProdutos.id });
+  if (criados.length)
+    await tx.insert(fornecedoresProdutosEventos).values(
+      criados.map((vinculo) => ({
+        empresaId: input.empresaId,
+        fornecedorProdutoId: vinculo.id,
+        statusAnterior: null,
+        statusNovo: "aprovado" as const,
+        atorTipo: "fornecedor" as const,
+        observacao: "Marcado pelo fornecedor na página da cotação"
+      }))
+    );
+  return criados.length;
 }

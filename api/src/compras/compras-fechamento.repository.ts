@@ -1,14 +1,15 @@
 // MODULO DO COMPRADOR — fechamento da rodada por prazo (Fase 2, R-221 decisoes 6 e 12). Le e grava
 // preco-base e adjudicacao, entao NUNCA e importado pelo modulo publico do fornecedor.
-import { and, eq, inArray, isNull, lte, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import {
-  comprasAdjudicacoes,
+  comprasConvitesItens,
+  comprasPropostas,
+  comprasPropostasItens,
   comprasRodadas,
   comprasRodadasConvites,
   comprasRodadasItens,
   comprasSolicitacoes,
   comprasSolicitacoesItens,
-  pedidos,
   produtos,
   produtosPrecosBase
 } from "@padaria/db/schema";
@@ -108,45 +109,61 @@ export async function atualizarStatusSolicitacaoRepository(
     .where(and(eq(comprasSolicitacoes.id, input.solicitacaoId), eq(comprasSolicitacoes.empresaId, input.empresaId)));
 }
 
-export type CompraAutomaticaDaRodada = {
+export type MenorOfertaDaRodada = {
   produtoId: string;
   produtoAtivo: boolean;
-  custoFinalUnitario: string;
+  valor: string;
 };
 
 /**
- * O que a rodada comprou SOZINHA (decisao 12 + recomendacao aprovada por Jose em 21/10/2026): so a
- * compra automatica alimenta a base. Compra aprovada pelo Comprador e excecao acima do envelope
- * por definicao; virar base subiria, em silencio, o teto da pre-autorizacao da rodada seguinte.
+ * Doc 57 §5 (José, 22/10/2026): a referencia da proxima compra e o MENOR valor oferecido na rodada, de
+ * qualquer fornecedor (venceu ou nao). Vale a ULTIMA versao enviada de cada fornecedor; item indisponivel
+ * ou sem valor nao conta. Substitui a regra anterior (so a compra automatica virava base).
  */
-export async function comprasAutomaticasDaRodadaRepository(
+export async function menoresOfertasDaRodadaRepository(
   rodadaId: string,
   tx: TransacaoBanco
-): Promise<CompraAutomaticaDaRodada[]> {
+): Promise<MenorOfertaDaRodada[]> {
   const linhas = await tx
     .select({
+      conviteId: comprasPropostas.conviteId,
+      versao: comprasPropostas.versao,
       produtoId: comprasSolicitacoesItens.produtoId,
       produtoStatus: produtos.status,
-      custoFinalUnitario: comprasAdjudicacoes.custoFinalUnitario
+      valorUnitario: comprasPropostasItens.valorUnitario,
+      indisponivel: comprasPropostasItens.indisponivel
     })
-    .from(comprasAdjudicacoes)
-    .innerJoin(comprasRodadasItens, eq(comprasRodadasItens.id, comprasAdjudicacoes.rodadaItemId))
+    .from(comprasPropostasItens)
+    .innerJoin(comprasPropostas, eq(comprasPropostas.id, comprasPropostasItens.propostaId))
+    .innerJoin(comprasConvitesItens, eq(comprasConvitesItens.id, comprasPropostasItens.conviteItemId))
+    .innerJoin(comprasRodadasItens, eq(comprasRodadasItens.id, comprasConvitesItens.rodadaItemId))
     .innerJoin(comprasSolicitacoesItens, eq(comprasSolicitacoesItens.id, comprasRodadasItens.solicitacaoItemId))
     .innerJoin(produtos, eq(produtos.id, comprasSolicitacoesItens.produtoId))
-    .innerJoin(pedidos, eq(pedidos.id, comprasAdjudicacoes.pedidoId))
     .where(
       and(
         eq(comprasRodadasItens.rodadaId, rodadaId),
-        eq(comprasAdjudicacoes.modo, "automatica"),
-        // Base e o que a padaria PAGOU: compra automatica cancelada antes do vencimento nao conta.
-        ne(pedidos.status, "cancelado")
+        eq(comprasPropostas.autorTipo, "fornecedor"),
+        eq(comprasPropostas.status, "enviada")
       )
     );
-  return linhas.map((linha) => ({
-    produtoId: linha.produtoId,
-    produtoAtivo: linha.produtoStatus === "ativo",
-    custoFinalUnitario: linha.custoFinalUnitario
-  }));
+  // So a ultima versao de cada fornecedor vale (uma oferta retirada nao vira referencia).
+  const ultimaVersao = new Map<string, number>();
+  for (const linha of linhas)
+    ultimaVersao.set(linha.conviteId, Math.max(ultimaVersao.get(linha.conviteId) ?? 0, linha.versao));
+  const menor = new Map<string, MenorOfertaDaRodada>();
+  for (const linha of linhas) {
+    if (linha.versao !== ultimaVersao.get(linha.conviteId) || linha.indisponivel || linha.valorUnitario === null)
+      continue;
+    if (!(Number(linha.valorUnitario) > 0)) continue;
+    const atual = menor.get(linha.produtoId);
+    if (!atual || Number(linha.valorUnitario) < Number(atual.valor))
+      menor.set(linha.produtoId, {
+        produtoId: linha.produtoId,
+        produtoAtivo: linha.produtoStatus === "ativo",
+        valor: linha.valorUnitario
+      });
+  }
+  return [...menor.values()];
 }
 
 /**

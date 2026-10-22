@@ -13,10 +13,10 @@ import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import {
-  criarPedidoConfirmadoRepository,
+  criarPedidoCotadoRepository,
   inserirAdjudicacaoRepository,
   inserirItemPedidoRepository,
-  pedidoConfirmadoDaRodadaRepository,
+  pedidoCotadoDaRodadaRepository,
   rodadaItensAdjudicadosRepository
 } from "./compras-adjudicacao.repository.js";
 import {
@@ -138,8 +138,8 @@ export async function aprovarExcecao(
     if (adjudicados.has(alvo.rodadaItemId)) throw conflito("Este item ja tem vencedor", "ITEM_JA_ADJUDICADO");
 
     const pedidoId =
-      (await pedidoConfirmadoDaRodadaRepository(alvo.rodadaId, alvo.fornecedorId, tx)) ??
-      (await criarPedidoConfirmadoRepository(
+      (await pedidoCotadoDaRodadaRepository(alvo.rodadaId, alvo.fornecedorId, tx)) ??
+      (await criarPedidoCotadoRepository(
         {
           empresaId: payload.empresaId,
           solicitacaoId: alvo.solicitacaoId,
