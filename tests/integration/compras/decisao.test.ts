@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { fecharRodadaPorPrazo } from "../../../api/src/compras/compras-fechamento.service.js";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN_A = "11111111-1111-4111-8111-11111111c001";
 const FORN_B = "11111111-1111-4111-8111-11111111c002";
@@ -54,6 +55,9 @@ describe("fila de decisao e excecao integration (E6)", () => {
       [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
     );
   }, 120_000);
+
+  // Doc 57 §5: o fechamento grava a menor oferta como base; cada caso comeca da base importada.
+  beforeEach(() => restaurarBaseImportada(idsTeste.empresaA, [idsTeste.produto, PRODUTO_2], PRECO_BASE));
 
   afterAll(async () => {
     await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);
@@ -234,7 +238,7 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect((await aprovar(rodada.id, item.propostas[0]!.propostaItemId)).statusCode).toBe(200);
   });
 
-  it("aprova a excecao: pedido confirmado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
+  it("aprova a excecao: pedido cotado, adjudicacao do comprador, base pela menor oferta; o mesmo item nao vende duas vezes", async () => {
     const { rodada, solicitacaoId } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
@@ -249,7 +253,8 @@ describe("fila de decisao e excecao integration (E6)", () => {
       "select status, tipo from pedidos where id = $1",
       [pedidoId]
     );
-    expect(pedido).toMatchObject({ status: "confirmado", tipo: "rodada" });
+    // Doc 57 §5: a excecao tambem nasce cotada; o fornecedor separa e o comprador confirma depois.
+    expect(pedido).toMatchObject({ status: "cotado", tipo: "rodada" });
     const adjudicacao = await consultarUm<{ modo: string; aprovado_por: string | null; custo: string }>(
       "select modo, aprovado_por, custo_final_unitario as custo from compras_adjudicacoes where rodada_item_id = $1",
       [item.rodadaItemId]
@@ -257,19 +262,19 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect(adjudicacao?.modo).toBe("comprador");
     expect(adjudicacao?.aprovado_por).toBeTruthy();
     expect(Number(adjudicacao?.custo)).toBe(12);
-    // O evento da confirmacao tem o aprovador como autor.
+    // O evento do pedido cotado tem o aprovador como autor.
     const evento = await consultarUm<{ criado_por: string | null }>(
-      "select criado_por from pedidos_eventos where pedido_id = $1 and status = 'confirmado'",
+      "select criado_por from pedidos_eventos where pedido_id = $1 and status = 'cotado'",
       [pedidoId]
     );
     expect(evento?.criado_por).toBeTruthy();
-    // Excecao nao vira base: a vigente continua a importada (10).
+    // Doc 57 §5: quem define a base e o fechamento (menor oferta = 12), nao a aprovacao da excecao.
     const base = await consultarUm<{ valor: string; origem: string }>(
       "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
       [idsTeste.empresaA, idsTeste.produto]
     );
-    expect(Number(base?.valor)).toBe(10);
-    expect(base?.origem).toBe("importacao");
+    expect(Number(base?.valor)).toBe(12);
+    expect(base?.origem).toBe("rodada");
 
     const segunda = await aprovar(rodada.id, propostaItemId);
     expect(segunda.statusCode).toBe(409);

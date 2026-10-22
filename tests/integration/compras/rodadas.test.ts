@@ -173,7 +173,7 @@ describe("compras rodadas integration (E3)", () => {
     expect(json<{ code?: string }>(resposta).code).toBe("ITEM_FORA_DA_SOLICITACAO");
   });
 
-  it("detalha a rodada e registra o envio do convite", async () => {
+  it("detalha a rodada com o status do WhatsApp e reenvia o convite pela fila (doc 57 §3)", async () => {
     const solicitacao = await criarSolicitacao();
     const itemId = solicitacao.itens[0]!.id;
     const abrir = await post("/api/compras/rodadas", {
@@ -184,19 +184,33 @@ describe("compras rodadas integration (E3)", () => {
     const rodada = json<{ data: { id: string; convites: Array<{ id: string }> } }>(abrir).data;
     const conviteId = rodada.convites[0]!.id;
 
-    const detalhe = json<{ data: { itens: unknown[]; convites: Array<{ id: string; rodadaItemIds: string[] }> } }>(
-      await get(`/api/compras/rodadas/${rodada.id}?empresaId=${idsTeste.empresaA}`)
-    ).data;
+    const detalhe = json<{
+      data: {
+        itens: unknown[];
+        whatsappConectado: boolean;
+        convites: Array<{ id: string; rodadaItemIds: string[]; whatsapp: { status: string } | null }>;
+      };
+    }>(await get(`/api/compras/rodadas/${rodada.id}?empresaId=${idsTeste.empresaA}`)).data;
     expect(detalhe.itens).toHaveLength(1);
     expect(detalhe.convites[0]?.rodadaItemIds).toHaveLength(1);
+    // Abrir ja pos o convite na fila; sem provedor configurado ele espera (a tela avisa).
+    expect(detalhe.convites[0]?.whatsapp).toMatchObject({ status: "pendente" });
+    expect(detalhe.whatsappConectado).toBe(false);
 
-    const enviar = await post(`/api/compras/rodadas/${rodada.id}/convites/${conviteId}/enviar`, {
+    const reenviar = await post(`/api/compras/rodadas/${rodada.id}/convites/${conviteId}/reenviar`, {
+      empresaId: idsTeste.empresaA
+    });
+    expect(reenviar.statusCode, reenviar.body).toBe(204);
+    const envios = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_whatsapp_envios where convite_id = $1",
+      [conviteId]
+    );
+    expect(envios?.total).toBe("2");
+    // O "marcar enviado" manual acabou: so existe o envio pelo sistema.
+    const antigo = await post(`/api/compras/rodadas/${rodada.id}/convites/${conviteId}/enviar`, {
       empresaId: idsTeste.empresaA,
       canal: "whatsapp"
     });
-    expect(enviar.statusCode, enviar.body).toBe(204);
-    await expect(
-      consultarUm("select id from compras_rodadas_convites where id = $1 and enviado_em is not null", [conviteId])
-    ).resolves.toBeTruthy();
+    expect(antigo.statusCode).toBe(404);
   });
 });

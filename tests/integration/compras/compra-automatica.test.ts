@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN_A = "11111111-1111-4111-8111-11111111aa01";
 const FORN_B = "11111111-1111-4111-8111-11111111aa02";
@@ -38,6 +39,9 @@ describe("compra automatica integration (E5)", () => {
       [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
     );
   }, 120_000);
+
+  // Doc 57 §5: o fechamento grava a menor oferta como base; cada caso comeca da base importada.
+  beforeEach(() => restaurarBaseImportada(idsTeste.empresaA, [idsTeste.produto], PRECO_BASE));
 
   afterAll(async () => {
     await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);
@@ -103,19 +107,19 @@ describe("compra automatica integration (E5)", () => {
     return dto.itens[0]!.conviteItemId;
   }
 
-  it("item com custo final <= base nasce comprado e confirmado, com adjudicacao e custo gravado", async () => {
+  it("item com custo final <= base nasce comprado e cotado, com adjudicacao e custo gravado", async () => {
     const rodada = await abrir({ fornecedores: [FORN_A] });
     const token = rodada.convites[0]!.token;
     const item = await conviteItemId(token);
     const resp = await responder(token, { itens: [{ conviteItemId: item, indisponivel: false, valorUnitario: 8 }] });
     expect(resp.statusCode, resp.body).toBe(200);
 
-    // Pedido confirmado tipo rodada para o fornecedor A.
+    // Doc 57 §5: o pedido do vencedor nasce cotado (ele separa e devolve; o comprador confirma).
     const pedido = await consultarUm<{ id: string; status: string }>(
       "select id, status from pedidos where rodada_id = $1 and fornecedor_id = $2",
       [rodada.id, FORN_A]
     );
-    expect(pedido?.status).toBe("confirmado");
+    expect(pedido?.status).toBe("cotado");
     // Adjudicacao automatica do item.
     const adj = await consultarUm<{ modo: string; custo_final_unitario: string }>(
       "select a.modo, a.custo_final_unitario from compras_adjudicacoes a join compras_rodadas_itens ri on ri.id = a.rodada_item_id where ri.rodada_id = $1",

@@ -5,9 +5,9 @@ import { idsTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 import { materializarAgendamentos } from "../../../api/src/compras/compras-agendamento-agendador.js";
 
-// Agendamento de pedido (PROJECT_BRAIN/56): agenda -> na data, solicitacao para conferir + sino -> o
-// comprador confere e envia (cada fornecedor recebe SO os seus produtos) -> pedido "enviado". O agendador
-// nunca envia nada sozinho e nunca cria a mesma data duas vezes.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 57): agenda -> na data, a cotacao abre sozinha e cada fornecedor
+// do catalogo (com WhatsApp) recebe SO os seus produtos pela fila; produto sem fornecedor fica "A fazer" e o
+// responsavel e avisado. O agendador nunca cria a mesma data duas vezes.
 
 const FORNECEDOR = "11111111-1111-4111-8111-11111111a601";
 const SEGUNDO = "11111111-1111-4111-8111-11111111a602";
@@ -107,115 +107,96 @@ describe("agendamento de pedido integration", () => {
     expect(prazo.statusCode).toBe(400);
   });
 
-  it("na data, cria a solicitacao para conferir e avisa no sino, uma vez so", async () => {
+  const depoisDoInicio = () => new Date(new Date(`${diaLocal(1)}T11:00:00.000Z`).getTime() + 60_000);
+  const materializar = (agora: Date) =>
+    materializarAgendamentos(agora, (_, erro) => {
+      throw erro;
+    });
+
+  it("na data, abre a cotacao sozinha: cada fornecedor do catalogo entra na fila do WhatsApp, uma vez so", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
-    const id = await criar();
-    const depoisDoInicio = new Date(new Date(`${diaLocal(1)}T11:00:00.000Z`).getTime() + 60_000);
+    const id = await criar({ margemVariacaoPercentual: 20 });
 
-    await materializarAgendamentos(depoisDoInicio, (_, erro) => {
-      throw erro;
-    });
-    await materializarAgendamentos(depoisDoInicio, (_, erro) => {
-      throw erro;
-    });
+    await materializar(depoisDoInicio());
+    await materializar(depoisDoInicio());
 
-    const ocorrencias = await consultarTodos<{ situacao: string; solicitacao_id: string }>(
-      "select situacao, solicitacao_id from pedidos_agenda_ocorrencias where agenda_id = $1",
+    const ocorrencias = await consultarTodos<{ situacao: string; solicitacao_id: string; enviada_por: string | null }>(
+      "select situacao, solicitacao_id, enviada_por from pedidos_agenda_ocorrencias where agenda_id = $1",
       [id]
     );
     expect(ocorrencias).toHaveLength(1);
-    expect(ocorrencias[0]?.situacao).toBe("aguardando_conferencia");
-    const solicitacao = await consultarUm<{ origem: string; status: string; itens: string }>(
-      "select s.origem, s.status, (select count(*) from compras_solicitacoes_itens i where i.solicitacao_id = s.id)::text as itens from compras_solicitacoes s where s.id = $1",
+    expect(ocorrencias[0]).toMatchObject({ situacao: "enviada" });
+    expect(ocorrencias[0]?.enviada_por).toBeTruthy();
+    const solicitacao = await consultarUm<{ origem: string; status: string }>(
+      "select origem, status from compras_solicitacoes where id = $1",
       [ocorrencias[0]!.solicitacao_id]
     );
-    expect(solicitacao).toEqual({ origem: "agendamento", status: "rascunho", itens: "1" });
+    expect(solicitacao).toEqual({ origem: "agendamento", status: "em_cotacao" });
+    // O prazo e a margem que o fornecedor ve sao os do agendamento.
+    const rodada = await consultarUm<{ id: string; prazo_resposta_horas: number; margem_variacao_percentual: number }>(
+      "select id, prazo_resposta_horas, margem_variacao_percentual from compras_rodadas where solicitacao_id = $1",
+      [ocorrencias[0]!.solicitacao_id]
+    );
+    expect(rodada).toMatchObject({ prazo_resposta_horas: 12, margem_variacao_percentual: 20 });
+    // Os dois fornecedores aprovados no catalogo recebem o produto, cada um com o seu convite na fila.
+    const envios = await consultarTodos<{ fornecedor_id: string; tipo: string; status: string; telefone: string }>(
+      "select c.fornecedor_id, e.tipo, e.status, e.telefone from compras_whatsapp_envios e join compras_rodadas_convites c on c.id = e.convite_id where c.rodada_id = $1 order by e.telefone",
+      [rodada!.id]
+    );
+    expect(envios.map((envio) => envio.fornecedor_id).sort()).toEqual([FORNECEDOR, SEGUNDO].sort());
+    expect(envios.every((envio) => envio.tipo === "convite" && envio.status === "pendente")).toBe(true);
+    expect(envios[0]?.telefone).toBe("5511999995501");
+    // Todo produto tinha fornecedor: nada ficou "A fazer", ninguem precisou ser avisado.
     const sino = await consultarTodos("select id from notificacoes where tipo = 'compras_agendamento_conferir'", []);
-    expect(sino).toHaveLength(1);
-    // Nada foi enviado: nenhuma rodada nasceu sozinha.
-    const rodadas = await consultarUm<{ total: string }>(
-      "select count(*)::text as total from compras_rodadas where solicitacao_id = $1",
-      [ocorrencias[0]!.solicitacao_id]
-    );
-    expect(rodadas?.total).toBe("0");
+    expect(sino).toHaveLength(0);
   });
 
-  it("o comprador confere, acrescenta e envia: cada fornecedor recebe os seus produtos", async () => {
-    const para = json<{ data: Array<{ id: string; solicitacaoId: string; prazoRespostaHoras: number }> }>(
-      await pedir("GET", `/api/compras/agendamentos/para-conferir?empresaId=${idsTeste.empresaA}`)
-    ).data;
-    expect(para).toHaveLength(1);
-    const ocorrenciaId = para[0]!.id;
-
-    const envio = json<{
-      data: { itens: Array<{ produtoId: string; quantidade: string; fornecedores: Array<{ fornecedorId: string }> }> };
-    }>(
-      await pedir("GET", `/api/compras/agendamentos/ocorrencias/${ocorrenciaId}/envio?empresaId=${idsTeste.empresaA}`)
-    ).data;
-    expect(envio.itens).toHaveLength(1);
-    expect(Number(envio.itens[0]?.quantidade)).toBe(3);
-    expect(envio.itens[0]?.fornecedores.map((fornecedor) => fornecedor.fornecedorId).sort()).toEqual(
-      [FORNECEDOR, SEGUNDO].sort()
-    );
-
-    const enviado = await pedir("POST", `/api/compras/agendamentos/ocorrencias/${ocorrenciaId}/enviar`, {
-      empresaId: idsTeste.empresaA,
-      itens: [{ produtoId: idsTeste.produto, quantidade: 5 }],
-      convites: [
-        { fornecedorId: FORNECEDOR, produtoIds: [idsTeste.produto] },
-        { fornecedorId: SEGUNDO, produtoIds: [idsTeste.produto] }
-      ]
-    });
-    expect(enviado.statusCode, enviado.body).toBe(201);
-    const rodada = json<{ data: { prazoRespostaHoras: number | null; convites: Array<{ token: string }> } }>(
-      enviado
-    ).data;
-    expect(rodada.convites).toHaveLength(2);
-    // O prazo que o fornecedor ve e o do agendamento.
-    expect(rodada.prazoRespostaHoras).toBe(12);
-
-    const ocorrencia = await consultarUm<{ situacao: string; enviada_por: string | null }>(
-      "select situacao, enviada_por from pedidos_agenda_ocorrencias where id = $1",
-      [ocorrenciaId]
-    );
-    expect(ocorrencia?.situacao).toBe("enviada");
-    expect(ocorrencia?.enviada_por).toBeTruthy();
-    const item = await consultarUm<{ quantidade: string }>(
-      "select quantidade from compras_solicitacoes_itens where solicitacao_id = $1",
-      [para[0]!.solicitacaoId]
-    );
-    expect(Number(item?.quantidade)).toBe(5);
-
-    const repetido = await pedir("POST", `/api/compras/agendamentos/ocorrencias/${ocorrenciaId}/enviar`, {
-      empresaId: idsTeste.empresaA,
-      itens: [{ produtoId: idsTeste.produto, quantidade: 5 }],
-      convites: [{ fornecedorId: FORNECEDOR, produtoIds: [idsTeste.produto] }]
-    });
-    expect(repetido.statusCode).toBe(409);
+  it("produto sem fornecedor no catalogo fica A fazer em Pedidos e o responsavel e avisado no sino", async () => {
+    await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("update fornecedores_produtos set status = 'pendente' where empresa_id = $1", [
+      idsTeste.empresaA
+    ]);
+    try {
+      await criar();
+      await materializar(depoisDoInicio());
+      const painel = json<{ data: { semFornecedor: Array<{ produtoId: string; quantidade: string }> } }>(
+        await pedir("GET", `/api/compras/painel?empresaId=${idsTeste.empresaA}`)
+      ).data;
+      expect(painel.semFornecedor).toEqual([expect.objectContaining({ produtoId: idsTeste.produto })]);
+      expect(Number(painel.semFornecedor[0]?.quantidade)).toBe(3);
+      const sino = await consultarTodos<{ titulo: string }>(
+        "select titulo from notificacoes where tipo = 'compras_agendamento_conferir'",
+        []
+      );
+      expect(sino).toHaveLength(1);
+      expect(sino[0]?.titulo).toContain("A fazer");
+    } finally {
+      await executarSql("update fornecedores_produtos set status = 'aprovado' where empresa_id = $1", [
+        idsTeste.empresaA
+      ]);
+      await executarSql("delete from notificacoes where tipo = 'compras_agendamento_conferir'", []);
+    }
   });
 
-  it("produto sem quantidade nao entra sozinho, mas aparece na conferencia; sem fornecedor nao envia", async () => {
+  it("produto sem quantidade nao entra; sem nada a pedir, a data passa sem abrir cotacao", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("update produtos set estoque_max = null where id = $1", [idsTeste.produto]);
-    await criar({ produtos: [{ produtoId: idsTeste.produto, quantidadePadrao: null }] });
-    await materializarAgendamentos(new Date(new Date(`${diaLocal(1)}T11:00:00.000Z`).getTime() + 60_000), (_, erro) => {
-      throw erro;
-    });
-    const para = json<{ data: Array<{ id: string; totalItens: number }> }>(
-      await pedir("GET", `/api/compras/agendamentos/para-conferir?empresaId=${idsTeste.empresaA}`)
-    ).data;
-    expect(para[0]?.totalItens).toBe(0);
-    const envio = json<{ data: { itens: Array<{ quantidade: string }> } }>(
-      await pedir("GET", `/api/compras/agendamentos/ocorrencias/${para[0]!.id}/envio?empresaId=${idsTeste.empresaA}`)
-    ).data;
-    expect(envio.itens).toEqual([expect.objectContaining({ quantidade: "" })]);
-
-    const semFornecedor = await pedir("POST", `/api/compras/agendamentos/ocorrencias/${para[0]!.id}/enviar`, {
-      empresaId: idsTeste.empresaA,
-      itens: [{ produtoId: idsTeste.produto, quantidade: 2 }],
-      convites: [{ fornecedorId: FORNECEDOR, produtoIds: [] }]
-    });
-    expect(semFornecedor.statusCode).toBe(400);
+    const id = await criar({ produtos: [{ produtoId: idsTeste.produto, quantidadePadrao: null }] });
+    await materializar(depoisDoInicio());
+    const ocorrencia = await consultarUm<{ situacao: string; solicitacao_id: string }>(
+      "select situacao, solicitacao_id from pedidos_agenda_ocorrencias where agenda_id = $1",
+      [id]
+    );
+    expect(ocorrencia?.situacao).toBe("cancelada");
+    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
+      ocorrencia!.solicitacao_id
+    ]);
+    expect(solicitacao?.status).toBe("cancelada");
+    const rodadas = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_rodadas where solicitacao_id = $1",
+      [ocorrencia!.solicitacao_id]
+    );
+    expect(rodadas?.total).toBe("0");
   });
 
   it("cancela e move uma data (so esta), e o agendador respeita as duas", async () => {
@@ -254,9 +235,7 @@ describe("agendamento de pedido integration", () => {
   it("editar depois que uma data aconteceu cria a nova serie a partir da data (esta e as futuras)", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
     const id = await criar({ regra: { tipo: "padrao", frequencia: "diaria", intervalo: 1 } });
-    await materializarAgendamentos(new Date(new Date(`${diaLocal(1)}T11:00:00.000Z`).getTime() + 60_000), (_, erro) => {
-      throw erro;
-    });
+    await materializar(depoisDoInicio());
     const editada = await pedir("PUT", `/api/compras/agendamentos/${id}`, {
       ...corpo({ inicioData: diaLocal(3), prazoRespostaHoras: 24 }),
       aPartirDe: diaLocal(3)
@@ -299,8 +278,7 @@ describe("agendamento de pedido integration", () => {
     const cookieSem = await cookieSessao(contexto.app, "semPermissao");
     for (const url of [
       `/api/compras/agendamentos?empresaId=${idsTeste.empresaA}`,
-      `/api/compras/agendamentos/produtos?empresaId=${idsTeste.empresaA}`,
-      `/api/compras/agendamentos/para-conferir?empresaId=${idsTeste.empresaA}`
+      `/api/compras/agendamentos/produtos?empresaId=${idsTeste.empresaA}`
     ]) {
       expect((await pedir("GET", url, undefined, cookieSem)).statusCode, url).toBe(403);
     }

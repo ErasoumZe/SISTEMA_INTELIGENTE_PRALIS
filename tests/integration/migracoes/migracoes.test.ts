@@ -318,16 +318,16 @@ describe("migracoes integration", () => {
       "compras_rodadas",
       "compras_rodadas_convites",
       "compras_solicitacoes",
-      "configuracoes_menu_empresas",
-      // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
-      // aprovado/rejeitado).
-      "fornecedores_produtos",
-      "funcoes_operacionais",
       // Doc 57 (0067): a fila do WhatsApp muda de status; a agenda da conferencia e encerrada; a
       // conferencia ganhou conclusao (saiu da lista "com coluna e sem gatilho").
       "compras_whatsapp_envios",
       "conferencias_agendas",
       "conferencias_estoque",
+      "configuracoes_menu_empresas",
+      // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
+      // aprovado/rejeitado).
+      "fornecedores_produtos",
+      "funcoes_operacionais",
       // Doc 56 (0066): a ocorrencia do agendamento muda de situacao (conferir -> enviada/cancelada) e a
       // serie e encerrada ao editar "esta e as futuras".
       "pedidos_agenda_ocorrencias",

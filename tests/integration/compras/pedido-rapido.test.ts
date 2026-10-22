@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN_OK = "11111111-1111-4111-8111-11111111e001";
 const FORN_SEM_ZAP = "11111111-1111-4111-8111-11111111e002";
@@ -39,6 +40,9 @@ describe("pedido rapido integration (E8 — fornecedor unico vira rodada)", () =
       [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
     );
   }, 120_000);
+
+  // Doc 57 §5: o fechamento grava a menor oferta como base; cada caso comeca da base importada.
+  beforeEach(() => restaurarBaseImportada(idsTeste.empresaA, [idsTeste.produto], PRECO_BASE));
 
   afterAll(async () => {
     await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);
@@ -116,7 +120,7 @@ describe("pedido rapido integration (E8 — fornecedor unico vira rodada)", () =
       "select status, tipo from pedidos where rodada_id = $1",
       [rodada.id]
     );
-    expect(pedido).toMatchObject({ status: "confirmado", tipo: "rodada" });
+    expect(pedido).toMatchObject({ status: "cotado", tipo: "rodada" });
   });
 
   it("fornecedor sem WhatsApp ou inativo e recusado ANTES de criar a solicitacao (nada fica para tras)", async () => {

@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { fecharRodadaPorPrazo } from "../../../api/src/compras/compras-fechamento.service.js";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN_A = "11111111-1111-4111-8111-11111111d001";
 const FORN_B = "11111111-1111-4111-8111-11111111d002";
@@ -48,6 +49,9 @@ describe("contraproposta versionada integration (E7)", () => {
       [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
     );
   }, 120_000);
+
+  // Doc 57 §5: o fechamento grava a menor oferta como base; cada caso comeca da base importada.
+  beforeEach(() => restaurarBaseImportada(idsTeste.empresaA, [idsTeste.produto], PRECO_BASE));
 
   afterAll(async () => {
     await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);

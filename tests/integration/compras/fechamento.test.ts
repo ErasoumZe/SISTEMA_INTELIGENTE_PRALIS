@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { fecharRodadaPorPrazo, fecharRodadasVencidas } from "../../../api/src/compras/compras-fechamento.service.js";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN = "11111111-1111-4111-8111-11111111b001";
 const PRODUTO_2 = "11111111-1111-4111-8111-11111111b002";
@@ -45,6 +46,9 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
       [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
     );
   }, 120_000);
+
+  // Doc 57 §5: o fechamento grava a menor oferta como base; cada caso comeca da base importada.
+  beforeEach(() => restaurarBaseImportada(idsTeste.empresaA, [idsTeste.produto, PRODUTO_2], PRECO_BASE));
 
   afterAll(async () => {
     await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);
@@ -157,7 +161,7 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     return linha!.solicitacao_id;
   }
 
-  it("fecha no prazo: comprado fica comprado, sem-base cai na fila, solicitacao parcial, base so do que foi comprado", async () => {
+  it("fecha no prazo: comprado fica comprado, sem-base cai na fila, solicitacao parcial, base = menor oferta", async () => {
     const { rodada, solicitacaoId } = await abrir();
     const token = rodada.convites[0]!.token;
     // 8 <= base 10 -> compra sozinha; o segundo produto nao tem base -> vai para decisao.
@@ -168,7 +172,8 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
       { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
       depois
     );
-    expect(resultado).toMatchObject({ fechada: true, comprados: 1, pendentes: 1, basesAtualizadas: 1 });
+    // Doc 57 §5: os dois produtos ganham a menor oferta como referencia (8 e 5).
+    expect(resultado).toMatchObject({ fechada: true, comprados: 1, pendentes: 1, basesAtualizadas: 2 });
 
     const fechada = await rodadaDe(rodada.id);
     expect(fechada?.status).toBe("fechada");
@@ -188,13 +193,13 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect(solicitacao?.status).toBe("parcialmente_comprada");
     expect(solicitacao?.encerrada_em).toBeNull();
 
-    // O comprado permanece comprado: pedido confirmado e adjudicacao intactos.
+    // O comprado permanece comprado: o pedido segue cotado (doc 57 §5: o fornecedor separa e devolve).
     const pedido = await consultarUm<{ status: string }>("select status from pedidos where rodada_id = $1", [
       rodada.id
     ]);
-    expect(pedido?.status).toBe("confirmado");
+    expect(pedido?.status).toBe("cotado");
 
-    // Decisao 12: a base vigente agora e o custo pago (8), e a anterior (10) ficou no historico.
+    // Doc 57 §5: a base vigente agora e a menor oferta (8), e a anterior (10) ficou no historico.
     const vigente = await consultarUm<{ valor: string; origem: string; rodada_id: string | null }>(
       "select valor, origem, rodada_id from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
       [idsTeste.empresaA, idsTeste.produto]
@@ -207,13 +212,13 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
       [PRECO_BASE]
     );
     expect(anterior?.valido_ate).not.toBeNull();
-    // O produto sem compra nao ganha base: oferta nao comprada nao aperta a rodada seguinte.
-    await expect(
-      consultarUm("select id from produtos_precos_base where empresa_id = $1 and produto_id = $2", [
-        idsTeste.empresaA,
-        PRODUTO_2
-      ])
-    ).resolves.toBeNull();
+    // Doc 57 §5: o produto sem compra tambem ganha a menor oferta (5) como referencia da proxima rodada.
+    const semBase = await consultarUm<{ valor: string; origem: string }>(
+      "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, PRODUTO_2]
+    );
+    expect(Number(semBase?.valor)).toBe(5);
+    expect(semBase?.origem).toBe("rodada");
 
     // Decisao 14: o que sobrou cai no sino do Comprador.
     await expect(
@@ -253,7 +258,7 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect(Number(basesDepois?.total)).toBe(Number(bases?.total));
   });
 
-  it("proposta acima da base nao compra e nao vira base; a solicitacao fica parcial", async () => {
+  it("proposta acima da base nao compra, mas a menor oferta vira a referencia; a solicitacao fica parcial", async () => {
     const { rodada, solicitacaoId } = await abrir();
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const antes = await consultarUm<{ id: string }>(
@@ -264,12 +269,14 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
       { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
       new Date(Date.now() + 2 * HORA)
     );
-    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 0 });
-    const depois = await consultarUm<{ id: string }>(
-      "select id from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 2 });
+    // Doc 57 §5, ao pe da letra: a referencia passa a ser a menor oferta, mesmo acima da anterior (12 > 10).
+    const depois = await consultarUm<{ id: string; valor: string }>(
+      "select id, valor from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
       [idsTeste.empresaA, idsTeste.produto]
     );
-    expect(depois?.id).toBe(antes?.id);
+    expect(depois?.id).not.toBe(antes?.id);
+    expect(Number(depois?.valor)).toBe(12);
     const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
       solicitacaoId
     ]);
@@ -369,7 +376,7 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect((await bases())?.total).toBe(antes + 1);
   });
 
-  it("compra aprovada pelo comprador (excecao) nao vira base, antes nem depois", async () => {
+  it("compra aprovada pelo comprador (excecao) nao mexe na base: so o fechamento troca a referencia", async () => {
     const { rodada, solicitacaoId } = await abrir();
     // 100 > base vigente: nao compra sozinho; o segundo produto nao tem base.
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 100, segundo: 5 });
@@ -378,12 +385,13 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
         "select id, valor from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
         [idsTeste.empresaA, idsTeste.produto]
       );
-    const baseAntes = await vigente();
     const resultado = await fecharRodadaPorPrazo(
       { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
       new Date(Date.now() + 2 * HORA)
     );
-    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 0 });
+    expect(resultado).toMatchObject({ fechada: true, comprados: 0, pendentes: 2, basesAtualizadas: 2 });
+    const baseAntes = await vigente();
+    expect(Number(baseAntes?.valor)).toBe(100);
 
     const fila = json<{ data: { itens: Array<{ produtoId: string; propostas: Array<{ propostaItemId: string }> }> } }>(
       await contexto.app.inject({
@@ -399,7 +407,7 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     });
     expect(aprovar.statusCode, aprovar.body).toBe(200);
 
-    // Comprou por excecao a 100 (base ~1): se isso virasse base, o teto da pre-autorizacao subiria.
+    // Aprovar a excecao nao grava outra base: a vigente continua a do fechamento.
     const baseDepois = await vigente();
     expect(baseDepois?.id).toBe(baseAntes?.id);
     expect(Number(baseDepois?.valor)).toBe(Number(baseAntes?.valor));
