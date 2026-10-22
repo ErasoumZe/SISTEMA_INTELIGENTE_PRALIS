@@ -39,12 +39,15 @@ export const abrirRodadaPayloadSchema = z.object({
   convites: z.array(abrirRodadaConviteSchema).min(1)
 });
 
-// Envio marca o convite como enviado e devolve o link por token (WhatsApp ou copia). O token sai uma
-// unica vez, na abertura; aqui so registramos o disparo.
-export const enviarConvitePayloadSchema = z.object({
+// Doc 57 §2: o comprador escolhe o fornecedor de um item "A fazer"; o sistema manda pelo WhatsApp.
+export const convidarFornecedorPayloadSchema = z.object({
   empresaId: uuid,
-  canal: z.enum(["whatsapp", "copia"]).default("whatsapp")
+  fornecedorId: uuid,
+  rodadaItemIds: z.array(uuid).min(1).max(500)
 });
+
+/** Manda o link de novo (token novo; o anterior deixa de valer). */
+export const reenviarConvitePayloadSchema = z.object({ empresaId: uuid });
 
 export const rodadasQuerySchema = z.object({
   empresaId: uuid,
@@ -54,7 +57,7 @@ export const rodadasQuerySchema = z.object({
 
 export type AbrirRodadaConvite = z.infer<typeof abrirRodadaConviteSchema>;
 export type AbrirRodadaPayload = z.infer<typeof abrirRodadaPayloadSchema>;
-export type EnviarConvitePayload = z.infer<typeof enviarConvitePayloadSchema>;
+export type ConvidarFornecedorPayload = z.infer<typeof convidarFornecedorPayloadSchema>;
 export type RodadasQuery = z.infer<typeof rodadasQuerySchema>;
 
 export type RodadaItemDto = {
@@ -77,6 +80,8 @@ export type RodadaConviteDto = {
   respondidoEm: string | null;
   // Itens (rodadaItemId) atribuidos a este convite.
   rodadaItemIds: string[];
+  // Ultimo envio pelo WhatsApp (doc 57 §3). Nulo: nada foi para a fila ainda.
+  whatsapp: { status: "pendente" | "enviado" | "falhou"; erro: string | null } | null;
   // Token em claro do fornecedor; so vem no retorno da abertura (o token sai uma unica vez). O front
   // monta o link publico a partir dele, como na cotacao.
   token?: string;
@@ -108,6 +113,8 @@ export type RodadaDto = {
   abertaEm: string;
   itens: RodadaItemDto[];
   convites: RodadaConviteDto[];
+  // Falso: o WhatsApp da empresa ainda nao esta conectado; o link tem de ser mandado a mao.
+  whatsappConectado: boolean;
 };
 
 /** Doc 57 §5: o comprador confirma o pedido cotado ou retornado (Comprado). */

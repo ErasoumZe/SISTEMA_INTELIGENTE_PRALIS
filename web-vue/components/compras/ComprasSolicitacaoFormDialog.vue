@@ -8,14 +8,20 @@
  * pura `pendenciasDeTeto` do servidor: o comprador ve o impedimento antes de salvar, nao no 422.
  */
 import { podeConvidar } from "@padaria/shared";
-import type { ProdutoEstoqueDto } from "@padaria/shared";
+import type { MargemVariacao, ProdutoEstoqueDto } from "@padaria/shared";
+import MargemVariacaoCampo from "~/components/compras/MargemVariacaoCampo.vue";
 import PedidoItemLinha from "~/components/pedidos/PedidoItemLinha.vue";
 import type { Opcao } from "~/types/padaria";
 import { formatarQuantidade } from "~/utils/formatacao";
 
 export type SolicitacaoFormItem = { produtoId: string; quantidade: string };
-// `fornecedorId` so existe no PEDIDO RAPIDO (R-221 decisao 2): a solicitacao comum nao tem fornecedor.
-export type SolicitacaoForm = { itens: SolicitacaoFormItem[]; observacao: string; fornecedorId?: string };
+// `fornecedorId` e `margem` so existem no PEDIDO RAPIDO (R-221 decisao 2, doc 57 §6.3).
+export type SolicitacaoForm = {
+  itens: SolicitacaoFormItem[];
+  observacao: string;
+  fornecedorId?: string;
+  margem?: MargemVariacao;
+};
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{
@@ -102,6 +108,7 @@ const impedimento = computed(() => {
           hide-details="auto"
           data-campo="fornecedor-rapido"
         />
+        <MargemVariacaoCampo v-if="rapido && form.margem !== undefined" v-model="form.margem" />
         <div class="solicitacao-form__secao">
           <span class="solicitacao-form__secao-titulo">Itens da solicitação</span>
           <div class="d-flex ga-2 flex-wrap">

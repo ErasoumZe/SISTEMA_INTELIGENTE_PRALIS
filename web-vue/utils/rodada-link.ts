@@ -16,19 +16,3 @@ export function linkDaRodada(origem: string, token: string): string {
   if (!origem.trim() || !limpo) return "";
   return new URL(`${ROTA_RODADA}#t=${encodeURIComponent(limpo)}`, origem).toString();
 }
-
-/** Mensagem curta de WhatsApp — o conteudo da cotacao mora no link, nao no texto. */
-export function mensagemDaRodada(entrada: {
-  fornecedorNome: string;
-  empresaNome: string;
-  totalItens: number;
-  link: string;
-  prazo: string;
-}): string {
-  return [
-    `Olá, ${entrada.fornecedorNome}!`,
-    `A ${entrada.empresaNome} abriu uma cotação de ${entrada.totalItens} item(ns).`,
-    `Envie seus valores por este link: ${entrada.link}`,
-    `O link vale até ${entrada.prazo}.`
-  ].join("\n\n");
-}

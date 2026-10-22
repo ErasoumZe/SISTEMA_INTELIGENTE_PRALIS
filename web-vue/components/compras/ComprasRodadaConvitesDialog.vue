@@ -1,58 +1,72 @@
 <script setup lang="ts">
 /**
- * Convites da rodada: logo apos a abertura (com o token em claro, para montar o link) ou ao reabrir
- * uma rodada ja em cotacao (sem token — so status). O token sai uma unica vez; por isso o link so
- * aparece quando o convite traz `token`.
+ * Convites da rodada (doc 57 §3): o sistema manda o link pelo WhatsApp, e aqui o comprador vê se saiu, se
+ * está na fila ou se falhou, e pode reenviar. Copiar o link é o plano B: só aparece com o WhatsApp
+ * desconectado ou com falha, e só logo após a abertura (o token sai uma única vez).
  */
 import type { RodadaConviteDto, RodadaDto } from "@padaria/shared";
-import { linkDaRodada, mensagemDaRodada } from "~/utils/rodada-link";
+import { mensagemErro } from "~/utils/domain";
+import { linkDaRodada } from "~/utils/rodada-link";
 
 const aberto = defineModel<boolean>({ required: true });
-const props = defineProps<{ rodada: RodadaDto | null; empresaNome: string }>();
-const emit = defineEmits<{ enviar: [conviteId: string] }>();
+const props = defineProps<{ rodada: RodadaDto | null; empresaId: string }>();
+const emit = defineEmits<{ reenviado: [] }>();
+const { apiPost } = useApi();
 
 const copiado = ref<string | null>(null);
+const reenviando = ref<string | null>(null);
+const erro = ref("");
 const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const ROTULO_STATUS: Record<string, string> = {
-  aberto: "Aberto",
-  aguardando_comprador: "Aguardando comprador",
+  aberto: "Aguardando resposta",
+  aguardando_comprador: "Respondeu",
   encerrado: "Encerrado",
   revogado: "Revogado"
 };
 
-const origem = computed(() => (typeof window !== "undefined" ? window.location.origin : ""));
 const prazo = computed(() => (props.rodada ? DATA_HORA.format(new Date(props.rodada.expiraEm)) : ""));
 const totalItens = computed(() => props.rodada?.itens.length ?? 0);
 
-function link(token: string | undefined): string {
-  return token ? linkDaRodada(origem.value, token) : "";
+function envio(convite: RodadaConviteDto): { texto: string; cor: string; icone: string } {
+  if (!convite.whatsapp) return { texto: "Não enviado", cor: "secondary", icone: "mdi-clock-outline" };
+  if (convite.whatsapp.status === "enviado")
+    return { texto: "Enviado pelo WhatsApp", cor: "success", icone: "mdi-whatsapp" };
+  if (convite.whatsapp.status === "falhou") return { texto: "Falhou", cor: "error", icone: "mdi-alert-circle-outline" };
+  return props.rodada?.whatsappConectado
+    ? { texto: "Na fila do WhatsApp", cor: "info", icone: "mdi-progress-clock" }
+    : { texto: "WhatsApp não conectado", cor: "warning", icone: "mdi-link-off" };
 }
 
-async function copiar(conviteId: string, token: string | undefined) {
-  const url = link(token);
-  if (!url) return;
+const planoB = (convite: RodadaConviteDto) =>
+  Boolean(convite.token) && (!props.rodada?.whatsappConectado || convite.whatsapp?.status === "falhou");
+const podeReenviar = (convite: RodadaConviteDto) =>
+  convite.status === "aberto" || convite.status === "aguardando_comprador";
+
+async function copiar(convite: RodadaConviteDto) {
+  if (!convite.token) return;
   try {
-    await navigator.clipboard.writeText(url);
-    copiado.value = conviteId;
-    setTimeout(() => (copiado.value = copiado.value === conviteId ? null : copiado.value), 1500);
+    await navigator.clipboard.writeText(linkDaRodada(window.location.origin, convite.token));
+    copiado.value = convite.id;
+    setTimeout(() => (copiado.value = copiado.value === convite.id ? null : copiado.value), 1500);
   } catch {
     copiado.value = null;
   }
 }
 
-function whatsapp(convite: RodadaConviteDto) {
-  const url = link(convite.token);
-  const texto = mensagemDaRodada({
-    fornecedorNome: convite.fornecedorNome,
-    empresaNome: props.empresaNome,
-    totalItens: totalItens.value,
-    link: url,
-    prazo: prazo.value
-  });
-  const digitos = (convite.fornecedorWhatsapp ?? "").replace(/\D/g, "");
-  const base = digitos ? `https://wa.me/55${digitos}` : "https://wa.me/";
-  window.open(`${base}?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
-  emit("enviar", convite.id);
+async function reenviar(convite: RodadaConviteDto) {
+  if (!props.rodada) return;
+  reenviando.value = convite.id;
+  erro.value = "";
+  try {
+    await apiPost(`/api/compras/rodadas/${props.rodada.id}/convites/${convite.id}/reenviar`, {
+      empresaId: props.empresaId
+    });
+    emit("reenviado");
+  } catch (causa) {
+    erro.value = mensagemErro(causa);
+  } finally {
+    reenviando.value = null;
+  }
 }
 </script>
 
@@ -61,41 +75,60 @@ function whatsapp(convite: RodadaConviteDto) {
     <v-card v-if="rodada">
       <v-card-title class="d-flex align-center ga-2">
         <v-icon icon="mdi-send-outline" color="primary" />
-        Convites da rodada #{{ rodada.numero }}
+        Convites da cotação #{{ rodada.numero }}
       </v-card-title>
       <v-card-subtitle>Prazo até {{ prazo }} · {{ totalItens }} item(ns)</v-card-subtitle>
       <v-card-text class="d-grid ga-3">
-        <v-alert type="info" variant="tonal" density="compact">
-          Envie o link a cada fornecedor. Ele vale uma única vez por convite e você vê o link agora — ao reabrir a
-          rodada, só o status permanece.
+        <v-alert v-if="!rodada.whatsappConectado" type="warning" variant="tonal" density="compact">
+          O WhatsApp da empresa ainda não está conectado: as mensagens ficam na fila. Enquanto isso, copie o link de
+          cada fornecedor e mande você mesmo.
         </v-alert>
-        <div v-for="convite in rodada.convites" :key="convite.id" class="convite">
+        <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
+        <p v-if="!rodada.convites.length" class="text-body-2 text-medium-emphasis">
+          Nenhum fornecedor convidado: os itens estão “A fazer” em Pedidos.
+        </p>
+        <div v-for="convite in rodada.convites" :key="convite.id" class="convite" data-bloco="convite">
           <div class="convite__topo">
             <div>
               <strong>{{ convite.fornecedorNome }}</strong>
               <span v-if="convite.fornecedorWhatsapp" class="text-caption text-medium-emphasis ml-2">{{
                 convite.fornecedorWhatsapp
               }}</span>
+              <div class="text-caption text-medium-emphasis">
+                {{ convite.rodadaItemIds.length }} item(ns) · {{ ROTULO_STATUS[convite.status] ?? convite.status }}
+              </div>
             </div>
-            <v-chip size="x-small" variant="tonal" label>{{ ROTULO_STATUS[convite.status] ?? convite.status }}</v-chip>
+            <v-chip
+              size="small"
+              variant="tonal"
+              label
+              :color="envio(convite).cor"
+              :prepend-icon="envio(convite).icone"
+              >{{ envio(convite).texto }}</v-chip
+            >
           </div>
-          <div v-if="convite.token" class="convite__acoes">
-            <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-whatsapp" @click="whatsapp(convite)"
-              >WhatsApp</v-btn
+          <p v-if="convite.whatsapp?.status === 'falhou' && convite.whatsapp.erro" class="text-caption text-error">
+            {{ convite.whatsapp.erro }}
+          </p>
+          <div class="convite__acoes">
+            <v-btn
+              v-if="podeReenviar(convite)"
+              size="small"
+              variant="tonal"
+              color="primary"
+              prepend-icon="mdi-send-variant-outline"
+              :loading="reenviando === convite.id"
+              @click="reenviar(convite)"
+              >Reenviar</v-btn
             >
             <v-btn
+              v-if="planoB(convite)"
               size="small"
               variant="text"
               :prepend-icon="copiado === convite.id ? 'mdi-check' : 'mdi-content-copy'"
-              @click="copiar(convite.id, convite.token)"
+              @click="copiar(convite)"
               >{{ copiado === convite.id ? "Copiado" : "Copiar link" }}</v-btn
             >
-            <v-btn size="small" variant="text" @click="emit('enviar', convite.id)">Marcar enviado</v-btn>
-          </div>
-          <div v-else class="text-caption text-medium-emphasis">
-            {{
-              convite.enviadoEm ? "Enviado em " + DATA_HORA.format(new Date(convite.enviadoEm)) : "Ainda não enviado"
-            }}
           </div>
         </div>
       </v-card-text>
@@ -121,6 +154,7 @@ function whatsapp(convite: RodadaConviteDto) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--cx-sp-2);
 }
 

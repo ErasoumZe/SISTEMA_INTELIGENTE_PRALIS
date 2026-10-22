@@ -2,8 +2,8 @@
 /**
  * Pedido rápido (R-221 decisão 2): o pedido de um fornecedor só. NÃO é um segundo caminho de compra:
  * cria uma solicitação `rapida` e abre uma rodada com UM convite; o fornecedor responde pelo link e a
- * compra sai pelo mesmo portão de qualquer rodada (preço-base, teto, adjudicação). Depois de enviar, a
- * tela mostra o convite para mandar o link pelo WhatsApp — o token só aparece agora.
+ * compra sai pelo mesmo portão de qualquer rodada (preço-base, teto, adjudicação). O sistema manda o link
+ * pelo WhatsApp (doc 57 §3); a tela mostra se saiu.
  */
 import type { ProdutoEstoqueDto, RodadaDto } from "@padaria/shared";
 import type { SolicitacaoForm } from "~/components/compras/ComprasSolicitacaoFormDialog.vue";
@@ -28,7 +28,8 @@ const rodada = ref<RodadaDto | null>(null);
 const form = reactive<SolicitacaoForm>({
   itens: [{ produtoId: "", quantidade: "" }],
   observacao: "",
-  fornecedorId: ""
+  fornecedorId: "",
+  margem: 10
 });
 
 const estoquePorProduto = computed<Record<string, ProdutoEstoqueDto>>(() =>
@@ -40,6 +41,7 @@ function abrir() {
   form.itens = [{ produtoId: "", quantidade: "" }];
   form.observacao = "";
   form.fornecedorId = "";
+  form.margem = 10;
   erro.value = "";
   dialog.value = true;
 }
@@ -62,6 +64,7 @@ async function enviar() {
       empresaId: props.empresaId,
       fornecedorId: form.fornecedorId,
       observacao: form.observacao || null,
+      margemVariacaoPercentual: form.margem ?? 10,
       itens: form.itens
         .filter((item) => item.produtoId && Number(item.quantidade) > 0)
         .map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade) }))
@@ -73,18 +76,6 @@ async function enviar() {
     erro.value = mensagemErro(causa);
   } finally {
     salvando.value = false;
-  }
-}
-
-async function marcarEnviado(conviteId: string) {
-  if (!rodada.value || !conviteId) return;
-  try {
-    await apiPost(`/api/compras/rodadas/${rodada.value.id}/convites/${conviteId}/enviar`, {
-      empresaId: props.empresaId,
-      canal: "whatsapp"
-    });
-  } catch (causa) {
-    erro.value = mensagemErro(causa);
   }
 }
 </script>
@@ -112,12 +103,7 @@ async function marcarEnviado(conviteId: string) {
       @preencher-minimo="preencherMinimo"
     />
 
-    <ComprasRodadaConvitesDialog
-      v-model="dialogConvites"
-      :rodada="rodada"
-      :empresa-nome="empresaNome"
-      @enviar="marcarEnviado"
-    />
+    <ComprasRodadaConvitesDialog v-model="dialogConvites" :rodada="rodada" :empresa-id="empresaId" />
   </div>
 </template>
 

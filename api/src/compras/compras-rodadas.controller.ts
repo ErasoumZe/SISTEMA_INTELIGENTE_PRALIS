@@ -1,9 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { abrirRodadaPayloadSchema, enviarConvitePayloadSchema, rodadasQuerySchema } from "@padaria/shared/compras";
+import {
+  abrirRodadaPayloadSchema,
+  convidarFornecedorPayloadSchema,
+  reenviarConvitePayloadSchema,
+  rodadasQuerySchema
+} from "@padaria/shared/compras";
 import { apiIdParamsSchema, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
-import { abrirRodada, enviarConvite, listarRodadas, obterRodada } from "./compras-rodadas.service.js";
+import { convidarFornecedor, reenviarConvite } from "./compras-convidar.service.js";
+import { abrirRodada, listarRodadas, obterRodada } from "./compras-rodadas.service.js";
 
 const rodadaParamsSchema = z.object({ id: z.string().uuid(), conviteId: z.string().uuid() });
 const empresaQuerySchema = z.object({ empresaId: z.string().uuid() });
@@ -28,12 +34,29 @@ export async function registrarRotasComprasRodadas(app: FastifyInstance): Promis
   });
 
   app.post(
-    "/api/compras/rodadas/:id/convites/:conviteId/enviar",
+    "/api/compras/rodadas/:id/convites/:conviteId/reenviar",
     { preHandler: exigirPermissao("pedidos_editar") },
     async (request, reply) => {
       const { id, conviteId } = rodadaParamsSchema.parse(request.params);
-      await enviarConvite(id, conviteId, enviarConvitePayloadSchema.parse(request.body), request.perfilUsuario!);
+      const { empresaId } = reenviarConvitePayloadSchema.parse(request.body);
+      await reenviarConvite(id, conviteId, empresaId, request.perfilUsuario!);
       return semConteudo(reply);
+    }
+  );
+
+  // Doc 57 §2: item "A fazer" ganha o fornecedor escolhido pelo comprador.
+  app.post(
+    "/api/compras/rodadas/:id/convidar",
+    { preHandler: exigirPermissao("pedidos_editar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const convite = await convidarFornecedor(
+        id,
+        convidarFornecedorPayloadSchema.parse(request.body),
+        request.perfilUsuario!
+      );
+      reply.code(201);
+      return ok(convite);
     }
   );
 }

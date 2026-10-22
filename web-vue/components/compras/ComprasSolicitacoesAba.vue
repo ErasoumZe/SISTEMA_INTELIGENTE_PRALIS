@@ -233,18 +233,6 @@ async function verRodada(item: SolicitacaoDto) {
   }
 }
 
-async function marcarEnviado(conviteId: string) {
-  if (!rodadaAtual.value || !conviteId) return;
-  try {
-    await apiPost(`/api/compras/rodadas/${rodadaAtual.value.id}/convites/${conviteId}/enviar`, {
-      empresaId: props.empresaId,
-      canal: "whatsapp"
-    });
-  } catch (causa) {
-    erro.value = mensagemErro(causa);
-  }
-}
-
 watch(() => props.empresaId, carregar, { immediate: true });
 </script>
 
@@ -360,12 +348,7 @@ watch(() => props.empresaId, carregar, { immediate: true });
       @abrir="confirmarAbertura"
     />
 
-    <ComprasRodadaConvitesDialog
-      v-model="dialogConvites"
-      :rodada="rodadaAtual"
-      :empresa-nome="empresaNome"
-      @enviar="marcarEnviado"
-    />
+    <ComprasRodadaConvitesDialog v-model="dialogConvites" :rodada="rodadaAtual" :empresa-id="empresaId" />
 
     <ComprasRodadaDecisoesDialog
       v-model="dialogDecisoes"

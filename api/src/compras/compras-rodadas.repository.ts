@@ -347,15 +347,3 @@ export async function travarConviteRepository(
     .for("update");
   return convite ?? null;
 }
-
-export async function marcarConviteEnviadoRepository(
-  conviteId: string,
-  empresaId: string,
-  canal: string,
-  tx: TransacaoBanco
-): Promise<void> {
-  await tx
-    .update(comprasRodadasConvites)
-    .set({ whatsappEnviado: canal, enviadoEm: new Date() })
-    .where(and(eq(comprasRodadasConvites.id, conviteId), eq(comprasRodadasConvites.empresaId, empresaId)));
-}

@@ -2,7 +2,6 @@ import { createHash, randomBytes } from "node:crypto";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   AbrirRodadaPayload,
-  EnviarConvitePayload,
   RodadaConviteDto,
   RodadaDto,
   RodadaItemDto,
@@ -15,7 +14,8 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { marcarOcorrenciaEnviadaRepository } from "./compras-agendamento.repository.js";
 import { enfileirarEnviosRepository } from "./compras-whatsapp.repository.js";
-import { telefoneParaWhatsapp } from "../whatsapp/whatsapp-provedor.js";
+import { provedorConfigurado, telefoneParaWhatsapp } from "../whatsapp/whatsapp-provedor.js";
+import { ultimoEnvioDosConvitesRepository } from "./compras-whatsapp.repository.js";
 import {
   buscarEmpresaComprasRepository,
   buscarFornecedoresParaConviteRepository,
@@ -24,10 +24,8 @@ import {
   criarRodadaRepository,
   detalharRodadaRepository,
   listarRodadasRepository,
-  marcarConviteEnviadoRepository,
   marcarSolicitacaoEmCotacaoRepository,
   proximoNumeroRodadaRepository,
-  travarConviteRepository,
   travarRodadaDaSolicitacao,
   type ConviteParaCriar,
   type ItemEnvelope
@@ -72,147 +70,147 @@ export async function abrirRodadaNaTransacao(
     throw erroValidacao("O mesmo fornecedor aparece duas vezes", "FORNECEDOR_DUPLICADO");
   }
 
-  {
-    await travarRodadaDaSolicitacao(payload.solicitacaoId, tx);
-    const solicitacao = await buscarSolicitacaoParaRodadaRepository(payload.solicitacaoId, payload.empresaId, tx);
-    if (!solicitacao) throw naoEncontrado("Solicitacao nao encontrada");
-    if (solicitacao.status !== "rascunho") {
-      throw erroValidacao("So e possivel abrir rodada de solicitacao em rascunho", "SOLICITACAO_NAO_ABRIVEL");
-    }
+  await travarRodadaDaSolicitacao(payload.solicitacaoId, tx);
+  const solicitacao = await buscarSolicitacaoParaRodadaRepository(payload.solicitacaoId, payload.empresaId, tx);
+  if (!solicitacao) throw naoEncontrado("Solicitacao nao encontrada");
+  if (solicitacao.status !== "rascunho") {
+    throw erroValidacao("So e possivel abrir rodada de solicitacao em rascunho", "SOLICITACAO_NAO_ABRIVEL");
+  }
 
-    const itensValidos = new Set(solicitacao.itens.map((item) => item.id));
-    for (const convite of payload.convites) {
-      for (const solicitacaoItemId of convite.solicitacaoItemIds) {
-        if (!itensValidos.has(solicitacaoItemId)) {
-          throw erroValidacao("Item do convite nao pertence a solicitacao", "ITEM_FORA_DA_SOLICITACAO");
-        }
+  const itensValidos = new Set(solicitacao.itens.map((item) => item.id));
+  for (const convite of payload.convites) {
+    for (const solicitacaoItemId of convite.solicitacaoItemIds) {
+      if (!itensValidos.has(solicitacaoItemId)) {
+        throw erroValidacao("Item do convite nao pertence a solicitacao", "ITEM_FORA_DA_SOLICITACAO");
       }
     }
+  }
 
-    // Convidar exige fornecedor ativo e WhatsApp valido (R-221 decisao 11); o erro nomeia o campo.
-    const fornecedores = await buscarFornecedoresParaConviteRepository(payload.empresaId, fornecedorIds, tx);
-    const fornecedorPorId = new Map(fornecedores.map((fornecedor) => [fornecedor.id, fornecedor]));
-    for (const fornecedorId of fornecedorIds) {
-      const fornecedor = fornecedorPorId.get(fornecedorId);
-      if (!fornecedor) throw erroValidacao("Fornecedor nao pertence a empresa informada", "INVALID_SUPPLIER");
-      const motivo = podeConvidar({
-        situacao: fornecedor.situacao as "ativo" | "inativo",
-        whatsapp: fornecedor.whatsapp
-      });
-      if (motivo) throw naoProcessavel(`${fornecedor.nome}: ${motivo}`, "FORNECEDOR_NAO_CONVIDAVEL");
-    }
-
-    // Snapshot do preco-base vigente por produto (envelope congelado).
-    const produtoIds = solicitacao.itens.map((item) => item.produtoId);
-    const precoBasePorProduto = await buscarPrecosBaseVigentesRepository(payload.empresaId, produtoIds, tx);
-    const itensEnvelope: ItemEnvelope[] = solicitacao.itens.map((item) => {
-      const base = precoBasePorProduto.get(item.produtoId);
-      return {
-        solicitacaoItemId: item.id,
-        quantidade: item.quantidade,
-        precoBaseId: base?.id ?? null,
-        precoBaseValor: base?.valor ?? null
-      };
+  // Convidar exige fornecedor ativo e WhatsApp valido (R-221 decisao 11); o erro nomeia o campo.
+  const fornecedores = await buscarFornecedoresParaConviteRepository(payload.empresaId, fornecedorIds, tx);
+  const fornecedorPorId = new Map(fornecedores.map((fornecedor) => [fornecedor.id, fornecedor]));
+  for (const fornecedorId of fornecedorIds) {
+    const fornecedor = fornecedorPorId.get(fornecedorId);
+    if (!fornecedor) throw erroValidacao("Fornecedor nao pertence a empresa informada", "INVALID_SUPPLIER");
+    const motivo = podeConvidar({
+      situacao: fornecedor.situacao as "ativo" | "inativo",
+      whatsapp: fornecedor.whatsapp
     });
+    if (motivo) throw naoProcessavel(`${fornecedor.nome}: ${motivo}`, "FORNECEDOR_NAO_CONVIDAVEL");
+  }
 
-    const empresa = await buscarEmpresaComprasRepository(payload.empresaId, tx);
-    const abertaEm = new Date();
-    // Precedencia do prazo (decisao 3): override da rodada > config da empresa > 2 dias uteis (R-216).
-    const horas = payload.prazoRespostaHoras ?? empresa?.comprasPrazoRespostaHoras ?? null;
-    const expiraEm = horas !== null ? new Date(abertaEm.getTime() + horas * 3_600_000) : expiracaoCotacao(abertaEm);
-    const fusoHorario = empresa?.fusoHorario ?? "America/Sao_Paulo";
-    const numero = await proximoNumeroRodadaRepository(payload.solicitacaoId, tx);
-
-    // Token por convite: em claro so aqui; o banco guarda o hash.
-    const tokenPorFornecedor = new Map(fornecedorIds.map((id) => [id, randomBytes(BYTES_DO_TOKEN).toString("hex")]));
-    const convitesParaCriar: ConviteParaCriar[] = payload.convites.map((convite) => ({
-      fornecedorId: convite.fornecedorId,
-      tokenHash: hashTokenRodada(tokenPorFornecedor.get(convite.fornecedorId)!),
-      solicitacaoItemIds: convite.solicitacaoItemIds
-    }));
-
-    const criada = await criarRodadaRepository(
-      {
-        empresaId: payload.empresaId,
-        solicitacaoId: payload.solicitacaoId,
-        numero,
-        prazoRespostaHoras: payload.prazoRespostaHoras ?? null,
-        expiraEm,
-        fusoHorario,
-        tetoValor: payload.tetoValor ?? null,
-        margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
-        abertaPor: usuarioId,
-        itens: itensEnvelope,
-        convites: convitesParaCriar
-      },
-      tx
-    );
-    await enfileirarEnviosRepository(
-      criada.convites.map((convite) => ({
-        empresaId: payload.empresaId,
-        tipo: "convite" as const,
-        conviteId: convite.id,
-        telefone: telefoneParaWhatsapp(fornecedorPorId.get(convite.fornecedorId)!.whatsapp ?? "")
-      })),
-      tx
-    );
-    await marcarSolicitacaoEmCotacaoRepository(payload.solicitacaoId, payload.empresaId, tx);
-    // Solicitacao que nasceu de um agendamento (doc 56): o pedido do dia passa a "enviado" na MESMA
-    // transacao da rodada — nunca fica "para conferir" com a cotacao ja na rua.
-    await marcarOcorrenciaEnviadaRepository(payload.solicitacaoId, usuarioId, tx);
-
-    // Monta o DTO de resposta (com os itens do envelope e os convites, incluindo o token em claro).
-    const rodadaItemIdPorSolicitacaoItem = new Map(criada.itens.map((item) => [item.solicitacaoItemId, item.id]));
-    const produtoPorSolicitacaoItem = new Map(solicitacao.itens.map((item) => [item.id, item]));
-    const solicitacaoItemPorConvite = new Map(
-      payload.convites.map((convite) => [convite.fornecedorId, convite.solicitacaoItemIds])
-    );
-
-    const itens: RodadaItemDto[] = criada.itens.map((item) => {
-      const origem = produtoPorSolicitacaoItem.get(item.solicitacaoItemId)!;
-      const base = precoBasePorProduto.get(origem.produtoId);
-      return {
-        id: item.id,
-        solicitacaoItemId: item.solicitacaoItemId,
-        produtoId: origem.produtoId,
-        descricaoProduto: origem.descricaoProduto,
-        quantidade: origem.quantidade,
-        precoBaseValor: base?.valor ?? null
-      };
-    });
-    const convites: RodadaConviteDto[] = criada.convites.map((convite) => {
-      const fornecedor = fornecedorPorId.get(convite.fornecedorId)!;
-      const solicitacaoItemIds = solicitacaoItemPorConvite.get(convite.fornecedorId) ?? [];
-      return {
-        id: convite.id,
-        fornecedorId: convite.fornecedorId,
-        fornecedorNome: fornecedor.nome,
-        fornecedorWhatsapp: fornecedor.whatsapp,
-        status: "aberto",
-        enviadoEm: null,
-        respondidoEm: null,
-        rodadaItemIds: solicitacaoItemIds
-          .map((solicitacaoItemId) => rodadaItemIdPorSolicitacaoItem.get(solicitacaoItemId))
-          .filter((id): id is string => Boolean(id)),
-        token: tokenPorFornecedor.get(convite.fornecedorId)!
-      };
-    });
-
+  // Snapshot do preco-base vigente por produto (envelope congelado).
+  const produtoIds = solicitacao.itens.map((item) => item.produtoId);
+  const precoBasePorProduto = await buscarPrecosBaseVigentesRepository(payload.empresaId, produtoIds, tx);
+  const itensEnvelope: ItemEnvelope[] = solicitacao.itens.map((item) => {
+    const base = precoBasePorProduto.get(item.produtoId);
     return {
-      id: criada.rodadaId,
+      solicitacaoItemId: item.id,
+      quantidade: item.quantidade,
+      precoBaseId: base?.id ?? null,
+      precoBaseValor: base?.valor ?? null
+    };
+  });
+
+  const empresa = await buscarEmpresaComprasRepository(payload.empresaId, tx);
+  const abertaEm = new Date();
+  // Precedencia do prazo (decisao 3): override da rodada > config da empresa > 2 dias uteis (R-216).
+  const horas = payload.prazoRespostaHoras ?? empresa?.comprasPrazoRespostaHoras ?? null;
+  const expiraEm = horas !== null ? new Date(abertaEm.getTime() + horas * 3_600_000) : expiracaoCotacao(abertaEm);
+  const fusoHorario = empresa?.fusoHorario ?? "America/Sao_Paulo";
+  const numero = await proximoNumeroRodadaRepository(payload.solicitacaoId, tx);
+
+  // Token por convite: em claro so aqui; o banco guarda o hash.
+  const tokenPorFornecedor = new Map(fornecedorIds.map((id) => [id, randomBytes(BYTES_DO_TOKEN).toString("hex")]));
+  const convitesParaCriar: ConviteParaCriar[] = payload.convites.map((convite) => ({
+    fornecedorId: convite.fornecedorId,
+    tokenHash: hashTokenRodada(tokenPorFornecedor.get(convite.fornecedorId)!),
+    solicitacaoItemIds: convite.solicitacaoItemIds
+  }));
+
+  const criada = await criarRodadaRepository(
+    {
       empresaId: payload.empresaId,
       solicitacaoId: payload.solicitacaoId,
       numero,
-      status: "aberta",
       prazoRespostaHoras: payload.prazoRespostaHoras ?? null,
-      expiraEm: expiraEm.toISOString(),
+      expiraEm,
       fusoHorario,
-      tetoValor: payload.tetoValor !== null && payload.tetoValor !== undefined ? String(payload.tetoValor) : null,
-      abertaEm: abertaEm.toISOString(),
-      itens,
-      convites
+      tetoValor: payload.tetoValor ?? null,
+      margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
+      abertaPor: usuarioId,
+      itens: itensEnvelope,
+      convites: convitesParaCriar
+    },
+    tx
+  );
+  await enfileirarEnviosRepository(
+    criada.convites.map((convite) => ({
+      empresaId: payload.empresaId,
+      tipo: "convite" as const,
+      conviteId: convite.id,
+      telefone: telefoneParaWhatsapp(fornecedorPorId.get(convite.fornecedorId)!.whatsapp ?? "")
+    })),
+    tx
+  );
+  await marcarSolicitacaoEmCotacaoRepository(payload.solicitacaoId, payload.empresaId, tx);
+  // Solicitacao que nasceu de um agendamento (doc 56): o pedido do dia passa a "enviado" na MESMA
+  // transacao da rodada — nunca fica "para conferir" com a cotacao ja na rua.
+  await marcarOcorrenciaEnviadaRepository(payload.solicitacaoId, usuarioId, tx);
+
+  // Monta o DTO de resposta (com os itens do envelope e os convites, incluindo o token em claro).
+  const rodadaItemIdPorSolicitacaoItem = new Map(criada.itens.map((item) => [item.solicitacaoItemId, item.id]));
+  const produtoPorSolicitacaoItem = new Map(solicitacao.itens.map((item) => [item.id, item]));
+  const solicitacaoItemPorConvite = new Map(
+    payload.convites.map((convite) => [convite.fornecedorId, convite.solicitacaoItemIds])
+  );
+
+  const itens: RodadaItemDto[] = criada.itens.map((item) => {
+    const origem = produtoPorSolicitacaoItem.get(item.solicitacaoItemId)!;
+    const base = precoBasePorProduto.get(origem.produtoId);
+    return {
+      id: item.id,
+      solicitacaoItemId: item.solicitacaoItemId,
+      produtoId: origem.produtoId,
+      descricaoProduto: origem.descricaoProduto,
+      quantidade: origem.quantidade,
+      precoBaseValor: base?.valor ?? null
     };
-  }
+  });
+  const convites: RodadaConviteDto[] = criada.convites.map((convite) => {
+    const fornecedor = fornecedorPorId.get(convite.fornecedorId)!;
+    const solicitacaoItemIds = solicitacaoItemPorConvite.get(convite.fornecedorId) ?? [];
+    return {
+      id: convite.id,
+      fornecedorId: convite.fornecedorId,
+      fornecedorNome: fornecedor.nome,
+      fornecedorWhatsapp: fornecedor.whatsapp,
+      status: "aberto",
+      enviadoEm: null,
+      respondidoEm: null,
+      rodadaItemIds: solicitacaoItemIds
+        .map((solicitacaoItemId) => rodadaItemIdPorSolicitacaoItem.get(solicitacaoItemId))
+        .filter((id): id is string => Boolean(id)),
+      whatsapp: { status: "pendente", erro: null },
+      token: tokenPorFornecedor.get(convite.fornecedorId)!
+    };
+  });
+
+  return {
+    id: criada.rodadaId,
+    empresaId: payload.empresaId,
+    solicitacaoId: payload.solicitacaoId,
+    numero,
+    status: "aberta",
+    prazoRespostaHoras: payload.prazoRespostaHoras ?? null,
+    expiraEm: expiraEm.toISOString(),
+    fusoHorario,
+    tetoValor: payload.tetoValor !== null && payload.tetoValor !== undefined ? String(payload.tetoValor) : null,
+    abertaEm: abertaEm.toISOString(),
+    itens,
+    convites,
+    whatsappConectado: provedorConfigurado()
+  };
 }
 
 export async function listarRodadas(query: RodadasQuery, perfil: PerfilUsuario): Promise<RodadaResumoDto[]> {
@@ -244,6 +242,7 @@ export async function obterRodada(rodadaId: string, empresaId: string, perfil: P
   const detalhe = await detalharRodadaRepository(rodadaId, empresaId);
   if (!detalhe) throw naoEncontrado("Rodada nao encontrada");
   const { cabecalho, itens, convites, rodadaItensPorConvite } = detalhe;
+  const envios = await ultimoEnvioDosConvitesRepository(convites.map((convite) => convite.id));
   return {
     id: cabecalho.id,
     empresaId: cabecalho.empresaId,
@@ -271,24 +270,14 @@ export async function obterRodada(rodadaId: string, empresaId: string, perfil: P
       status: convite.status,
       enviadoEm: convite.enviadoEm ? convite.enviadoEm.toISOString() : null,
       respondidoEm: convite.respondidoEm ? convite.respondidoEm.toISOString() : null,
-      rodadaItemIds: rodadaItensPorConvite.get(convite.id) ?? []
-    }))
+      rodadaItemIds: rodadaItensPorConvite.get(convite.id) ?? [],
+      whatsapp: envios.has(convite.id)
+        ? {
+            status: envios.get(convite.id)!.status as "pendente" | "enviado" | "falhou",
+            erro: envios.get(convite.id)!.ultimoErro
+          }
+        : null
+    })),
+    whatsappConectado: provedorConfigurado()
   };
-}
-
-export async function enviarConvite(
-  rodadaId: string,
-  conviteId: string,
-  payload: EnviarConvitePayload,
-  perfil: PerfilUsuario
-): Promise<void> {
-  validarEmpresa(perfil, payload.empresaId);
-  await executarEmTransacao(async (tx) => {
-    const convite = await travarConviteRepository(conviteId, payload.empresaId, tx);
-    if (!convite || convite.rodadaId !== rodadaId) throw naoEncontrado("Convite nao encontrado");
-    if (convite.status === "revogado" || convite.status === "encerrado") {
-      throw erroValidacao("Convite nao esta mais aberto", "CONVITE_NAO_ABERTO");
-    }
-    await marcarConviteEnviadoRepository(conviteId, payload.empresaId, payload.canal, tx);
-  });
 }
