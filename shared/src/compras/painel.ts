@@ -52,6 +52,8 @@ export type DecisaoPendenteDto = {
 export type ConviteEnviadoDto = {
   conviteId: string;
   rodadaId: string;
+  /** A fila de decisao (contraproposta, encerrar agora) abre pela solicitacao. */
+  solicitacaoId: string;
   rodadaNumero: number;
   fornecedorId: string;
   fornecedorNome: string;

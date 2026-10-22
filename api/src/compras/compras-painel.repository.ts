@@ -63,6 +63,7 @@ export async function convitesAbertosRepository(empresaId: string, db: ExecutorB
       conviteId: comprasRodadasConvites.id,
       status: comprasRodadasConvites.status,
       rodadaId: comprasRodadas.id,
+      solicitacaoId: comprasRodadas.solicitacaoId,
       rodadaNumero: comprasRodadas.numero,
       expiraEm: comprasRodadas.expiraEm,
       fornecedorId: fornecedores.id,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ColunaPainel, DecisaoPendenteDto, LinhaPainel, RodadaDto } from "@padaria/shared";
+import type { ColunaPainel, LinhaPainel, RodadaDto, StatusSolicitacao } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import ComprasPedidoRapido from "~/components/compras/ComprasPedidoRapido.vue";
@@ -65,7 +65,8 @@ const pedidoRapido = ref<InstanceType<typeof ComprasPedidoRapido> | null>(null);
 const dialogCelula = ref(false);
 const celula = ref<{ linha: LinhaPainel; coluna: ColunaPainel } | null>(null);
 const rodada = ref<RodadaDto | null>(null);
-const decisao = ref<DecisaoPendenteDto | null>(null);
+// A fila de decisao: cotacao aberta (contrapropor, encerrar agora) ou fechada com item sem vencedor.
+const decisao = ref<{ solicitacaoId: string; status: StatusSolicitacao } | null>(null);
 
 function abrirCelula(linha: LinhaPainel, coluna: ColunaPainel) {
   celula.value = { linha, coluna };
@@ -135,7 +136,7 @@ function novoPedidoRapido(itens: Array<{ produtoId: string; quantidade: string }
       :pode-editar="podeEditar"
       @pedido="verPedido"
       @rodada="verRodada"
-      @decidir="(item: DecisaoPendenteDto) => (decisao = item)"
+      @decidir="(solicitacaoId: string, status: StatusSolicitacao) => (decisao = { solicitacaoId, status })"
       @convidado="aposConvite"
     />
     <ComprasRodadaConvitesDialog
@@ -149,7 +150,7 @@ function novoPedidoRapido(itens: Array<{ produtoId: string; quantidade: string }
       :model-value="decisao !== null"
       :empresa-id="empresaId"
       :solicitacao-id="decisao?.solicitacaoId ?? null"
-      :solicitacao-status="decisao ? 'parcialmente_comprada' : null"
+      :solicitacao-status="decisao?.status ?? null"
       :pode-excecao="podeExcecao"
       :pode-editar="podeEditar"
       :pode-criar="podePedidoRapido"

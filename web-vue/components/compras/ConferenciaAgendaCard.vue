@@ -28,14 +28,15 @@ const DIA_LOCAL = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paul
 const hoje = () => DIA_LOCAL.format(new Date());
 const amanha = () => DIA_LOCAL.format(new Date(Date.now() + 86_400_000));
 
+// Vazio e null: com "" o Vuetify trata o campo como preenchido e mostra o "x" de limpar.
 const form = reactive({
-  grupo: "",
-  subgrupo: "",
+  grupo: null as string | null,
+  subgrupo: null as string | null,
   ranking: null as RankingConferencia | null,
-  areaEstoque: "",
-  localEstoque: "",
-  localVenda: "",
-  responsavelId: "",
+  areaEstoque: null as string | null,
+  localEstoque: null as string | null,
+  localVenda: null as string | null,
+  responsavelId: null as string | null,
   inicioData: amanha(),
   inicioHora: "07:00",
   observacao: ""
@@ -51,13 +52,13 @@ const subgrupos = computed(() =>
 
 function limpar() {
   Object.assign(form, {
-    grupo: "",
-    subgrupo: "",
+    grupo: null,
+    subgrupo: null,
     ranking: null,
-    areaEstoque: "",
-    localEstoque: "",
-    localVenda: "",
-    responsavelId: "",
+    areaEstoque: null,
+    localEstoque: null,
+    localVenda: null,
+    responsavelId: null,
     inicioData: amanha(),
     inicioHora: "07:00",
     observacao: ""
@@ -73,12 +74,12 @@ watch(
     if (!agenda) return limpar();
     const grupo = props.opcoes.grupos.find((item) => item.id === agenda.grupoMercadoriaId);
     Object.assign(form, {
-      grupo: grupo?.grupoPaiId ?? agenda.grupoMercadoriaId ?? "",
-      subgrupo: grupo?.grupoPaiId ? agenda.grupoMercadoriaId : "",
+      grupo: grupo?.grupoPaiId ?? agenda.grupoMercadoriaId,
+      subgrupo: grupo?.grupoPaiId ? agenda.grupoMercadoriaId : null,
       ranking: agenda.ranking,
-      areaEstoque: agenda.areaEstoque ?? "",
-      localEstoque: agenda.localEstoque ?? "",
-      localVenda: agenda.localVenda ?? "",
+      areaEstoque: agenda.areaEstoque,
+      localEstoque: agenda.localEstoque,
+      localVenda: agenda.localVenda,
       responsavelId: agenda.responsavelId,
       inicioData: agenda.inicioData,
       inicioHora: agenda.inicioHora,
@@ -92,7 +93,7 @@ watch(
 watch(
   () => form.grupo,
   () => {
-    if (!subgrupos.value.some((item) => item.id === form.subgrupo)) form.subgrupo = "";
+    if (!subgrupos.value.some((item) => item.id === form.subgrupo)) form.subgrupo = null;
   }
 );
 
@@ -126,7 +127,7 @@ defineExpose({ limpar });
 
 <template>
   <v-card variant="outlined" data-secao="agenda-conferencia">
-    <v-card-title class="d-flex align-center ga-2">
+    <v-card-title class="d-flex align-center ga-2 text-wrap">
       <v-icon icon="mdi-calendar-sync-outline" color="primary" />
       {{ editando ? "Editar agendamento de conferência" : "Agendar conferência de estoque" }}
     </v-card-title>

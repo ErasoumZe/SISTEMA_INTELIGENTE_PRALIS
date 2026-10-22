@@ -13,7 +13,7 @@ import {
  * Agendamento de pedido (PROJECT_BRAIN/56), no navegador: marcar produto na lista, montar a repetição
  * personalizada (segunda e quinta, como "bebidas duas vezes por semana"), o prazo do fornecedor, salvar, ver
  * as próximas datas, excluir só uma data e excluir todas as futuras. E as 4 larguras sem rolagem lateral.
- * Conferir e enviar na data é coberto pela integração (o agendador roda no tempo do servidor).
+ * O envio automático na data é coberto pela integração (o agendador roda no tempo do servidor).
  */
 async function escolherNoSelect(page: Page, raiz: Locator, rotulo: string, opcao?: string | RegExp) {
   await raiz
@@ -84,6 +84,10 @@ test.describe("agendamento de pedido", () => {
     await expect(card.locator('[data-campo="resumo-recorrencia"]')).toHaveText("Toda semana na(s) segunda e quinta");
     await card.getByRole("group", { name: "Atalhos do tempo de resposta" }).getByText("12 horas").click();
     await expect(card.getByRole("spinbutton", { name: "Tempo de resposta da cotação (horas)" })).toHaveValue("12");
+    // Doc 57 §6.3: a variação aceita na quantidade (padrão 10%).
+    const margem = card.getByRole("radiogroup", { name: "Variação aceita na quantidade" });
+    await margem.getByRole("radio", { name: "20%" }).click();
+    await expect(margem.getByRole("radio", { name: "20%" })).toHaveAttribute("aria-checked", "true");
 
     // 3) Salva: aparece na lista com o resumo e as proximas 6 datas. O agendamento novo e o id que nao
     // existia antes (o banco de desenvolvimento guarda os de execucoes anteriores).
@@ -99,6 +103,7 @@ test.describe("agendamento de pedido", () => {
     const agenda = page.locator(`[data-agenda="${novoId}"]`);
     await expect(agenda).toContainText("Toda semana na(s) segunda e quinta");
     await expect(agenda).toContainText("resposta em 12 h");
+    await expect(agenda).toContainText("variação 20%");
     await expect(agenda.locator(".v-chip")).toHaveCount(6);
 
     // 4) Excluir so esta: a primeira data fica riscada; as outras continuam.

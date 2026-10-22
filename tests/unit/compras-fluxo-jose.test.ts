@@ -89,6 +89,7 @@ describe("matriz de Pedidos (doc 57 §4)", () => {
         {
           conviteId: "c1",
           rodadaId: "r1",
+          solicitacaoId: "s1",
           rodadaNumero: 1,
           fornecedorId: "f1",
           fornecedorNome: "Bahamas",

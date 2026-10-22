@@ -55,7 +55,7 @@ test.describe("historico de compras por fornecedor e produto", () => {
     ].join("\r\n");
 
     await entrar(page, USUARIOS.compras);
-    await irParaTela(page, "/pedidos", "Pedidos");
+    await irParaTela(page, "/cadastro_compras", "Cadastro de compras");
     await page.getByRole("tab", { name: "Histórico de compras" }).click();
 
     // 1) Importar abre a analise sozinha, e NADA foi gravado ainda.

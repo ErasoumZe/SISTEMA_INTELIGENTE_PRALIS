@@ -7,6 +7,7 @@ import {
   ROTULO_COLUNA_PAINEL,
   type ColunaPainel,
   type DecisaoPendenteDto,
+  type StatusSolicitacao,
   type LinhaPainel,
   type PainelComprasDto,
   type PedidoDto
@@ -28,7 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   pedido: [id: string];
   rodada: [rodadaId: string];
-  decidir: [decisao: DecisaoPendenteDto];
+  decidir: [solicitacaoId: string, status: StatusSolicitacao];
   convidado: [nome: string];
 }>();
 
@@ -63,7 +64,7 @@ const aFazerSemFornecedor = computed(() => props.coluna === "a_fazer" && fornece
           :fornecedores="fornecedores"
           :pode-editar="podeEditar"
           @convidado="(nome: string) => emit('convidado', nome)"
-          @decidir="(decisao: DecisaoPendenteDto) => emit('decidir', decisao)"
+          @decidir="(decisao: DecisaoPendenteDto) => emit('decidir', decisao.solicitacaoId, 'parcialmente_comprada')"
         />
 
         <div
@@ -80,7 +81,16 @@ const aFazerSemFornecedor = computed(() => props.coluna === "a_fazer" && fornece
               <template v-if="convite.whatsapp"> · {{ ROTULO_ENVIO[convite.whatsapp] }}</template>
             </div>
           </div>
-          <v-btn size="small" variant="tonal" @click="emit('rodada', convite.rodadaId)">Ver convite</v-btn>
+          <div class="d-flex flex-wrap ga-1">
+            <v-btn
+              v-if="podeEditar"
+              size="small"
+              variant="text"
+              @click="emit('decidir', convite.solicitacaoId, 'em_cotacao')"
+              >Decisões</v-btn
+            >
+            <v-btn size="small" variant="tonal" @click="emit('rodada', convite.rodadaId)">Ver convite</v-btn>
+          </div>
         </div>
 
         <div v-for="pedido in pedidosDaCelula" :key="pedido.id" class="celula__linha" data-bloco="pedido-celula">

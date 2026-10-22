@@ -126,7 +126,7 @@ defineExpose({ limpar });
 
 <template>
   <v-card variant="outlined" data-secao="card-agendamento">
-    <v-card-title class="d-flex align-center ga-2">
+    <v-card-title class="d-flex align-center ga-2 text-wrap">
       <v-icon icon="mdi-calendar-sync-outline" color="primary" />
       {{ editando ? "Editar agendamento de pedido" : "Agendamento de pedido" }}
     </v-card-title>

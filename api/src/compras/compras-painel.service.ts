@@ -42,6 +42,7 @@ export async function obterPainelCompras(empresaId: string, perfil: PerfilUsuari
     convites: convites.map((convite) => ({
       conviteId: convite.conviteId,
       rodadaId: convite.rodadaId,
+      solicitacaoId: convite.solicitacaoId,
       rodadaNumero: convite.rodadaNumero,
       fornecedorId: convite.fornecedorId,
       fornecedorNome: convite.fornecedorNome,

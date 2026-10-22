@@ -37,7 +37,7 @@ function confirmarEncerrar() {
 
 <template>
   <v-card variant="outlined" data-secao="agendas-conferencia">
-    <v-card-title class="d-flex align-center ga-2">
+    <v-card-title class="d-flex align-center ga-2 text-wrap">
       <v-icon icon="mdi-calendar-month-outline" color="primary" />
       Agendamentos de conferência
     </v-card-title>
