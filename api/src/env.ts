@@ -77,7 +77,11 @@ const envSchema = z.object({
   WHATSAPP_META_MODELO_COTACAO: z.string().trim().min(1).default("cotacao_compra"),
   WHATSAPP_META_MODELO_CONFIRMACAO: z.string().trim().min(1).default("pedido_confirmado"),
   WHATSAPP_META_IDIOMA: z.string().trim().min(1).default("pt_BR"),
-  WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
+  // O compose sempre manda a variavel (vazia quando nao ha gateway): vazio e ausente, nao URL invalida.
+  WHATSAPP_WEBHOOK_URL: z.preprocess(
+    (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
+    z.string().url().optional()
+  ),
   WHATSAPP_WEBHOOK_TOKEN: envOpcionalNaoVazio
 });
 
