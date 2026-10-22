@@ -21,6 +21,7 @@ import {
   travarRodadaRepository,
   type RodadaVencida
 } from "./compras-fechamento.repository.js";
+import { buscarPrecosBaseVigentesRepository } from "./compras-rodadas.repository.js";
 
 export type ResultadoFechamento = {
   rodadaId: string;
@@ -29,6 +30,9 @@ export type ResultadoFechamento = {
   pendentes: number;
   basesAtualizadas: number;
 };
+
+/** O preco-base e numeric(14,4): compara em inteiros (decimos de milesimo), nunca em ponto flutuante. */
+const emDezMilesimos = (valor: string) => Math.round(Number(valor) * 10_000);
 
 const NAO_FECHADA = (rodadaId: string): ResultadoFechamento => ({
   rodadaId,
@@ -44,7 +48,8 @@ const NAO_FECHADA = (rodadaId: string): ResultadoFechamento => ({
  *
  * O que muda, tudo ou nada: rodada -> fechada (motivo 'prazo', sem autor humano); convites ainda
  * abertos -> encerrado; solicitacao -> comprada/parcialmente_comprada; base vigente dos itens
- * da rodada passa a ser o menor valor oferecido (doc 57); aviso no sino se sobrou item sem vencedor.
+ * da rodada passa a ser o menor valor oferecido, so se for menor que a vigente (doc 57); aviso no sino
+ * se sobrou item sem vencedor.
  */
 export function fecharRodadaPorPrazo(rodada: RodadaVencida, agora: Date): Promise<ResultadoFechamento> {
   return fecharRodada(rodada, { motivo: "prazo" }, agora);
@@ -93,16 +98,27 @@ async function fecharRodada(
       tx
     );
 
-    // Doc 57 §5: a referencia nova e o MENOR valor oferecido na rodada (de qualquer fornecedor). Produto
-    // inativo fica fora, como na importacao (R-220).
+    // Doc 57 §5 e §10 (José, 22/10): a referencia nova e o MENOR valor oferecido na rodada (de qualquer
+    // fornecedor), mas ela SO DESCE — oferta acima da referencia vigente nao a troca. Produto sem referencia
+    // ganha a menor oferta. Produto inativo fica fora, como na importacao (R-220).
     let basesAtualizadas = 0;
-    const paraBase = (await menoresOfertasDaRodadaRepository(travada.id, tx))
+    const menores = (await menoresOfertasDaRodadaRepository(travada.id, tx))
       .filter((oferta) => oferta.produtoAtivo)
       // Ordem fixa por produto: duas rodadas que trocam bases dos mesmos produtos nao se travam em ABBA.
       .sort((a, b) => a.produtoId.localeCompare(b.produtoId));
     // Rodadas de solicitacoes DIFERENTES nao compartilham a advisory da solicitacao; a troca da base e
-    // do produto da empresa, entao ela serializa pela trava da base (a mesma da carga inicial).
-    if (paraBase.length) await tx.execute(sqlTravarPrecoBaseDaEmpresa(travada.empresaId));
+    // do produto da empresa, entao ela serializa pela trava da base (a mesma da carga inicial). A vigente e
+    // lida DEPOIS da trava, para comparar com o valor que realmente vale.
+    if (menores.length) await tx.execute(sqlTravarPrecoBaseDaEmpresa(travada.empresaId));
+    const vigentes = await buscarPrecosBaseVigentesRepository(
+      travada.empresaId,
+      menores.map((oferta) => oferta.produtoId),
+      tx
+    );
+    const paraBase = menores.filter((oferta) => {
+      const vigente = vigentes.get(oferta.produtoId);
+      return !vigente || emDezMilesimos(oferta.valor) < emDezMilesimos(vigente.valor);
+    });
     for (const compra of paraBase) {
       await substituirPrecoBaseRepository(
         {

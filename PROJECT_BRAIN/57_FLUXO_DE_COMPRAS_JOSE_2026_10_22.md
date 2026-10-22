@@ -51,8 +51,9 @@ próprio no menu de Compras**. Vale para todas as telas de Compras.
   trabalho mais com este produto"**. Frete, forma de pagamento, prazo de entrega e observação ficam, **opcionais**.
 - **Quem responder primeiro com valor igual ou menor que a referência ganha o item** e salva a cotação: o item é
   dele nesta rodada, mesmo que outro responda mais barato depois.
-- **Na próxima compra, a referência passa a ser o MENOR valor oferecido na rodada** (de qualquer fornecedor). Vale
-  para todo produto; com um fornecedor só, não há disputa, mas a regra é a mesma.
+- **Na próxima compra, a referência passa a ser o MENOR valor oferecido na rodada** (de qualquer fornecedor), **desde
+  que ele seja menor que a referência atual: a referência só desce** (§10). Produto sem referência ganha a menor
+  oferta. Vale para todo produto; com um fornecedor só, não há disputa, mas a regra é a mesma.
 - **Dois passos.** (1) valor e quantidade → salva → se ganhou, o item fica com ele (**Cotado**). (2) Ele separa a
   mercadoria e **ajusta a quantidade real** (pediu 5 kg, separou 5,2 kg) e envia → **Retornado**. O comprador
   confere e **confirma** → **Comprado**; o fornecedor recebe pelo WhatsApp o ok para entregar.
@@ -113,24 +114,24 @@ na resposta do fornecedor; fila de envio do WhatsApp; agenda e itens da conferê
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | Doc 52 §5 / 53 / 56 §4: "recorrência nunca envia cotação"; "o comprador confere e envia" | Envio automático na data (§3)                                  |
 | R-221 decisão 8: o fornecedor não vê o preço-base                                        | O fornecedor vê o valor de referência (§5)                     |
-| Doc 54 E6 / R-218: base nova = custo da compra automática; "base só desce"               | Base nova = menor valor oferecido na rodada (§5)               |
+| Doc 54 E6: base nova = custo da compra automática                                        | Menor valor oferecido na rodada, e só se descer (§5, §10)      |
 | Doc 54 E5: compra automática nasce **confirmada**                                        | Nasce **cotada**; confirma depois do ajuste do fornecedor (§5) |
 | Doc 53: recontagem cega                                                                  | A contagem mostra a quantidade em estoque (§2)                 |
 | Pedidos com painel de catálogo/preço-base/solicitações e fila em abas                    | Pedido rápido + matriz (§4); cadastro em módulo próprio (§1)   |
 | Conferência agendada para uma data só (sem lista de produtos)                            | Agenda com recorrência, lista com saldo e contagem (§2)        |
 
-## 10. Pergunta aberta — a referência pode SUBIR? (José / Rodrigo decidem)
+## 10. Decisão — a referência só DESCE (José, 22/10/2026)
 
-A regra do §5 foi implementada ao pé da letra: no fechamento, a referência de cada produto passa a ser a **menor
-oferta** da rodada, **mesmo que ela seja maior que a referência anterior** (todas as ofertas a 12 com referência 10 →
-a próxima referência é 12). A regra antiga (R-218) dizia "a base só desce".
+No fechamento, cada produto compara a **menor oferta** da rodada com a referência vigente:
 
-- **Se a referência pode subir:** acompanha o mercado (preço que subiu de verdade). Risco: com um fornecedor só, ele
-  oferece alto numa rodada e na seguinte ganha sozinho a esse preço.
-- **Se só desce:** protege contra esse risco; quando o mercado sobe, tudo cai na decisão do comprador.
+- menor oferta **menor** que a referência → a referência passa a ser a menor oferta;
+- menor oferta **igual ou maior** → a referência **fica como está** (ofertas a 12 com referência 10: continua 10);
+- produto **sem referência** → ganha a menor oferta.
 
-Até a decisão, vale o comportamento implementado (pode subir). Mudar é uma linha no fechamento
-(`compras-fechamento.service.ts`) e os testes de fechamento.
+Motivo: com um fornecedor só, uma oferta alta numa rodada não pode virar o preço que ele ganha sozinho na seguinte.
+Quando o mercado sobe de verdade, as ofertas caem na decisão do comprador (exceção), e a exceção não vira referência.
+Mantém a regra da R-218 ("a base só desce"). Código: `compras-fechamento.service.ts` (comparação em décimos de
+milésimo, o preço-base é numeric(14,4)); testes em `tests/integration/compras/fechamento.test.ts`.
 
 ## 11. Estado da implementação (22/10/2026)
 

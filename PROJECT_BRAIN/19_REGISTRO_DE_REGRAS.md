@@ -1268,6 +1268,10 @@ Implementação é aditiva e protegida por feature flag; legado permanece legív
 integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0062
 (renumerada para 0062 ao integrar a main) e no documento 53; nada foi publicado em produção.
 
+> **Nota de 22/10/2026 (José, doc 57 §10):** a base nova passa a ser a **menor oferta da rodada** (não mais só o custo
+> da compra automática), mas **continua só descendo**: oferta igual ou maior que a vigente não troca a base; produto
+> sem base ganha a menor oferta.
+
 ### R-219 — Seleção manual de fornecedores na rodada (José, 20/10/2026)
 
 Ao enviar uma cotação, Compras terá um seletor múltiplo. Os vínculos aprovados do catálogo servem como

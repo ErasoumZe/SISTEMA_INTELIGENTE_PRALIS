@@ -238,7 +238,7 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect((await aprovar(rodada.id, item.propostas[0]!.propostaItemId)).statusCode).toBe(200);
   });
 
-  it("aprova a excecao: pedido cotado, adjudicacao do comprador, base pela menor oferta; o mesmo item nao vende duas vezes", async () => {
+  it("aprova a excecao: pedido cotado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
     const { rodada, solicitacaoId } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
@@ -268,13 +268,13 @@ describe("fila de decisao e excecao integration (E6)", () => {
       [pedidoId]
     );
     expect(evento?.criado_por).toBeTruthy();
-    // Doc 57 §5: quem define a base e o fechamento (menor oferta = 12), nao a aprovacao da excecao.
+    // Excecao nao vira base, e a menor oferta (12) e maior que a referencia (10): ela so desce (doc 57 §10).
     const base = await consultarUm<{ valor: string; origem: string }>(
       "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
       [idsTeste.empresaA, idsTeste.produto]
     );
-    expect(Number(base?.valor)).toBe(12);
-    expect(base?.origem).toBe("rodada");
+    expect(Number(base?.valor)).toBe(10);
+    expect(base?.origem).toBe("importacao");
 
     const segunda = await aprovar(rodada.id, propostaItemId);
     expect(segunda.statusCode).toBe(409);
