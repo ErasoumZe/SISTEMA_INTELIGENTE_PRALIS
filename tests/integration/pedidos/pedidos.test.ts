@@ -11,8 +11,9 @@ const IMPORTACAO_ITEM = "11111111-1111-4111-8111-11111111f003";
 const PRECO_BASE = "11111111-1111-4111-8111-11111111f004";
 
 /**
- * Pedidos depois do E8 (R-221): o pedido NASCE da rodada de cotacao, ja confirmado (compra automatica
- * ou excecao do comprador); sobram so ler, cancelar e RECEBER. Aqui o pedido vem do caminho real —
+ * Pedidos depois do E8 (R-221) e do doc 57: o pedido NASCE da rodada de cotacao como COTADO (compra automatica
+ * ou excecao do comprador); o comprador confirma (Comprado) e so entao se RECEBE. Sobram ler, confirmar,
+ * cancelar e receber. Aqui o pedido vem do caminho real —
  * solicitacao, rodada, resposta do fornecedor dentro da base — nao de SQL semeado.
  */
 describe("pedidos integration (Compras, pos-E8)", () => {
@@ -83,7 +84,10 @@ describe("pedidos integration (Compras, pos-E8)", () => {
     ]))!.quantidade_estoque;
 
   /** O pedido NASCE da rodada: solicitacao -> rodada -> resposta dentro da base -> compra automatica. */
-  async function criarPedidoDaRodada(quantidade: number): Promise<{ pedidoId: string; itemId: string }> {
+  async function criarPedidoDaRodada(
+    quantidade: number,
+    { confirmar = true }: { confirmar?: boolean } = {}
+  ): Promise<{ pedidoId: string; itemId: string }> {
     const criar = await post("/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
       itens: [{ produtoId: idsTeste.produto, quantidade }]
@@ -114,11 +118,15 @@ describe("pedidos integration (Compras, pos-E8)", () => {
       solicitacaoId
     ]);
     const item = await consultarUm<{ id: string }>("select id from pedidos_itens where pedido_id = $1", [pedido!.id]);
+    if (confirmar) {
+      const confirmado = await post(`/api/pedidos/${pedido!.id}/confirmar`, { empresaId: idsTeste.empresaA });
+      expect(confirmado.statusCode, confirmado.body).toBe(204);
+    }
     return { pedidoId: pedido!.id, itemId: item!.id };
   }
 
   it("a compra NAO move estoque: so o recebimento, parcial e idempotente, soma so a conferencia", async () => {
-    const { pedidoId, itemId } = await criarPedidoDaRodada(5);
+    const { pedidoId, itemId } = await criarPedidoDaRodada(5, { confirmar: false });
 
     const detalhe = await get(`/api/pedidos/${pedidoId}`);
     assertOk(detalhe);
@@ -131,13 +139,22 @@ describe("pedidos integration (Compras, pos-E8)", () => {
         eventos: Array<{ status: string; criadoPorNome: string }>;
       };
     }>(detalhe).data;
-    expect(inicial).toMatchObject({ status: "confirmado", tipo: "rodada", fornecedorId: FORN });
+    expect(inicial).toMatchObject({ status: "cotado", tipo: "rodada", fornecedorId: FORN });
     expect(inicial.itens[0]?.quantidadeRecebida).toBe("0");
-    // R-213: comprar nao move estoque. O evento de confirmacao e do fornecedor, pelo link (nao "Sistema").
+    // R-213: comprar nao move estoque. O evento de cotado e do fornecedor, pelo link (nao "Sistema").
     expect(await estoque()).toBe("0.000");
-    expect(inicial.eventos.find((evento) => evento.status === "confirmado")?.criadoPorNome).toBe(
+    expect(inicial.eventos.find((evento) => evento.status === "cotado")?.criadoPorNome).toBe(
       "Pedidos Forn (pelo link)"
     );
+    // Doc 57 §5: cotado ainda nao recebe; so depois que o comprador confirma (Comprado).
+    const cedo = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: "11111111-1111-4111-8111-11111111f0ff",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
+    });
+    expect(cedo.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await estoque()).toBe("0.000");
+    const confirmar = await post(`/api/pedidos/${pedidoId}/confirmar`, { empresaId: idsTeste.empresaA });
+    expect(confirmar.statusCode, confirmar.body).toBe(204);
 
     const primeiroRecebimento = {
       idempotenciaChave: "00000000-0000-4000-8000-000000000901",
