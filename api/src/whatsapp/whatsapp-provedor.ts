@@ -1,4 +1,5 @@
 import { env } from "../env.js";
+import { parametroDeModelo } from "./texto-whatsapp.js";
 
 // Envio pelo WhatsApp (doc 57 §3): o sistema manda a cotação ao fornecedor, ninguém copia link. Provedor
 // escolhido por variável de ambiente; sem configuração, nada sai e a fila espera (a tela avisa).
@@ -53,7 +54,12 @@ async function enviarPelaMeta(mensagem: MensagemWhatsapp): Promise<ResultadoEnvi
       template: {
         name: modelo,
         language: { code: env.WHATSAPP_META_IDIOMA },
-        components: [{ type: "body", parameters: mensagem.parametros.map((texto) => ({ type: "text", text: texto })) }]
+        components: [
+          {
+            type: "body",
+            parameters: mensagem.parametros.map((texto) => ({ type: "text", text: parametroDeModelo(texto) }))
+          }
+        ]
       }
     }
   );

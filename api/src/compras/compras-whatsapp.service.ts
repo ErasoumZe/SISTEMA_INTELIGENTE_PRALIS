@@ -3,6 +3,7 @@ import type { DadosExternos } from "@padaria/shared/api";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { env } from "../env.js";
 import { enviarWhatsapp, provedorConfigurado, type MensagemWhatsapp } from "../whatsapp/whatsapp-provedor.js";
+import { resumoDosItens } from "../whatsapp/texto-whatsapp.js";
 import { hashTokenRodada } from "./compras-rodadas.service.js";
 import {
   dadosDoConviteParaEnvioRepository,
@@ -58,7 +59,7 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
   if (envio.tipo === "pedido_confirmado" && envio.pedidoId) {
     const dados = await dadosDoPedidoParaEnvioRepository(envio.pedidoId, tx);
     if (!dados) return null;
-    const resumo = dados.itens.map((item) => `${quantidadeBr(item.quantidade)} ${item.descricao}`).join("; ");
+    const resumo = resumoDosItens(dados.itens.map((item) => `${quantidadeBr(item.quantidade)} ${item.descricao}`));
     return {
       telefone: envio.telefone,
       tipo: "pedido_confirmado",
