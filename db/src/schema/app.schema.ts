@@ -10,6 +10,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  smallint,
   text,
   time,
   timestamp,
@@ -30,7 +31,7 @@ import type {
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
-import type { RegraRecorrencia } from "@padaria/shared/compras";
+import type { RankingConferencia, RegraRecorrencia } from "@padaria/shared/compras";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -1909,7 +1910,7 @@ export const pedidos = pgTable(
     // rascunho/aprovado ficam somente para leitura de historico, sem escritor no fluxo novo.
     check(
       "pedidos_status_check",
-      sql`${table.status} in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+      sql`${table.status} in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
     ),
     check("pedidos_recorrencia_check", sql`${table.recorrencia} in ('nenhuma', 'semanal', 'quinzenal', 'mensal')`),
     index("pedidos_empresa_status_idx").on(table.empresaId, table.status),
@@ -1998,15 +1999,140 @@ export const conferenciasEstoque = pgTable(
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
     criadoEm,
-    atualizadoEm
+    atualizadoEm,
+    // Doc 57 §2: a conferencia do dia nasce de uma agenda, tem quem conta e um recorte por ranking.
+    agendaId: uuid("agenda_id").references((): AnyPgColumn => conferenciasAgendas.id, { onDelete: "set null" }),
+    previstoPara: timestamp("previsto_para", { withTimezone: true }),
+    responsavelId: text("responsavel_id").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    ranking: text("ranking").$type<RankingConferencia | null>(),
+    concluidaPor: text("concluida_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    concluidaEm: timestamp("concluida_em", { withTimezone: true })
   },
   (table) => [
     check("conferencias_estoque_status_check", sql`${table.status} in ('agendada', 'cancelada', 'concluida')`),
+    check(
+      "conferencias_estoque_ranking_check",
+      sql`${table.ranking} is null or ${table.ranking} in ('mais_vendidos', 'mais_comprados', 'mais_lucro')`
+    ),
+    unique("conferencias_estoque_agenda_data_unica").on(table.agendaId, table.previstoPara),
     check(
       "conferencias_estoque_curva_abc_check",
       sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`
     ),
     index("conferencias_estoque_empresa_agendada_idx").on(table.empresaId, table.agendadaPara)
+  ]
+);
+
+// Doc 57 §2: agendamento de conferencia de estoque, com a mesma recorrencia do agendamento de pedido.
+export const conferenciasAgendas = pgTable(
+  "conferencias_agendas",
+  {
+    id: idUuid,
+    empresaId,
+    // Quem conta: recebe o aviso no sino na data.
+    responsavelId: text("responsavel_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id, { onDelete: "restrict" }),
+    ranking: text("ranking").$type<RankingConferencia | null>(),
+    areaEstoque: text("area_estoque"),
+    localEstoque: text("local_estoque"),
+    localVenda: text("local_venda"),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fusoHorario: text("fuso_horario").notNull(),
+    regra: jsonb("regra").$type<RegraRecorrencia>().notNull(),
+    terminoTipo: text("termino_tipo").$type<"nunca" | "data" | "quantidade">().notNull().default("nunca"),
+    terminoEm: date("termino_em"),
+    terminoQuantidade: integer("termino_quantidade"),
+    observacao: text("observacao"),
+    status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
+    encerradaEm: timestamp("encerrada_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "conferencias_agendas_ranking_check",
+      sql`${table.ranking} is null or ${table.ranking} in ('mais_vendidos', 'mais_comprados', 'mais_lucro')`
+    ),
+    check("conferencias_agendas_status_check", sql`${table.status} in ('ativa', 'encerrada')`),
+    check(
+      "conferencias_agendas_encerramento_check",
+      sql`(${table.status} = 'encerrada') = (${table.encerradaEm} is not null)`
+    ),
+    check("conferencias_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "conferencias_agendas_termino_check",
+      sql`(${table.terminoTipo} = 'nunca' and ${table.terminoEm} is null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'data' and ${table.terminoEm} is not null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'quantidade' and ${table.terminoQuantidade} between 1 and 999 and ${table.terminoEm} is null)`
+    ),
+    index("conferencias_agendas_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+// A contagem: o saldo do sistema no momento e o que foi contado. NAO move estoque (doc 57 §6.2).
+export const conferenciasEstoqueItens = pgTable(
+  "conferencias_estoque_itens",
+  {
+    id: idUuid,
+    empresaId,
+    conferenciaId: uuid("conferencia_id")
+      .notNull()
+      .references(() => conferenciasEstoque.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").notNull(),
+    saldoSistema: numeric("saldo_sistema", { precision: 14, scale: 3 }).notNull(),
+    quantidadeContada: numeric("quantidade_contada", { precision: 14, scale: 3 }),
+    contadoPor: text("contado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    contadoEm: timestamp("contado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("conferencias_estoque_itens_unico").on(table.conferenciaId, table.produtoId),
+    foreignKey({
+      name: "conferencias_estoque_itens_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check(
+      "conferencias_estoque_itens_contagem_check",
+      sql`${table.quantidadeContada} is null or ${table.quantidadeContada} >= 0`
+    ),
+    check(
+      "conferencias_estoque_itens_autoria_check",
+      sql`(${table.quantidadeContada} is null) = (${table.contadoPor} is null and ${table.contadoEm} is null)`
+    )
+  ]
+);
+
+// Doc 57 §3: o sistema envia pelo WhatsApp (ninguem copia link). Fila de saida, processada no tick de Compras.
+export const comprasWhatsappEnvios = pgTable(
+  "compras_whatsapp_envios",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").$type<"convite" | "pedido_confirmado">().notNull(),
+    conviteId: uuid("convite_id").references((): AnyPgColumn => comprasRodadasConvites.id, { onDelete: "cascade" }),
+    pedidoId: uuid("pedido_id").references((): AnyPgColumn => pedidos.id, { onDelete: "cascade" }),
+    telefone: text("telefone").notNull(),
+    status: text("status").$type<"pendente" | "enviado" | "falhou">().notNull().default("pendente"),
+    tentativas: integer("tentativas").notNull().default(0),
+    ultimoErro: text("ultimo_erro"),
+    mensagemExternaId: text("mensagem_externa_id"),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("compras_whatsapp_envios_tipo_check", sql`${table.tipo} in ('convite', 'pedido_confirmado')`),
+    check("compras_whatsapp_envios_status_check", sql`${table.status} in ('pendente', 'enviado', 'falhou')`),
+    check(
+      "compras_whatsapp_envios_referencia_check",
+      sql`(${table.tipo} = 'convite' and ${table.conviteId} is not null) or (${table.tipo} = 'pedido_confirmado' and ${table.pedidoId} is not null)`
+    ),
+    check("compras_whatsapp_envios_tentativas_check", sql`${table.tentativas} >= 0`),
+    index("compras_whatsapp_envios_status_idx").on(table.status, table.criadoEm),
+    index("compras_whatsapp_envios_convite_idx").on(table.conviteId)
   ]
 );
 
@@ -3224,6 +3350,7 @@ export const notificacoes = pgTable(
         | "lancamento_vencimento"
         | "compras_decisao_pendente"
         | "compras_agendamento_conferir"
+        | "conferencia_estoque_fazer"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -3251,7 +3378,7 @@ export const notificacoes = pgTable(
     check(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
-        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir')`
+        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(
@@ -4620,6 +4747,7 @@ export const pedidosAgendas = pgTable(
     terminoEm: date("termino_em"),
     terminoQuantidade: integer("termino_quantidade"),
     prazoRespostaHoras: integer("prazo_resposta_horas").notNull(),
+    margemVariacaoPercentual: smallint("margem_variacao_percentual").notNull().default(10),
     status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
     serieAnteriorId: uuid("serie_anterior_id").references((): AnyPgColumn => pedidosAgendas.id, {
       onDelete: "restrict"
@@ -4644,6 +4772,7 @@ export const pedidosAgendas = pgTable(
       sql`(${table.status} = 'encerrada') = (${table.encerradaEm} is not null)`
     ),
     check("pedidos_agendas_prazo_check", sql`${table.prazoRespostaHoras} between 1 and 720`),
+    check("pedidos_agendas_margem_check", sql`${table.margemVariacaoPercentual} in (10, 20, 30, 40)`),
     check("pedidos_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
     check(
       "pedidos_agendas_termino_check",
@@ -4746,6 +4875,9 @@ export const comprasRodadas = pgTable(
     fusoHorario: text("fuso_horario").notNull(),
     // Decisao 14: teto de compra automatica da rodada. null = sem teto.
     tetoValor: numeric("teto_valor", { precision: 14, scale: 2 }),
+    // Doc 57: variacao de quantidade aceita (para menos e para mais, na resposta e na separacao). Null = rodada
+    // de antes da regra (sem limite).
+    margemVariacaoPercentual: smallint("margem_variacao_percentual"),
     abertaPor: text("aberta_por")
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
@@ -4758,6 +4890,10 @@ export const comprasRodadas = pgTable(
     atualizadoEm
   },
   (table) => [
+    check(
+      "compras_rodadas_margem_check",
+      sql`${table.margemVariacaoPercentual} is null or ${table.margemVariacaoPercentual} in (10, 20, 30, 40)`
+    ),
     check("compras_rodadas_status_check", sql`${table.status} in ('aberta', 'fechada', 'cancelada')`),
     check("compras_rodadas_prazo_check", sql`${table.prazoRespostaHoras} is null or ${table.prazoRespostaHoras} > 0`),
     check("compras_rodadas_teto_check", sql`${table.tetoValor} is null or ${table.tetoValor} > 0`),
@@ -4963,10 +5099,21 @@ export const comprasPropostasItens = pgTable(
     // GRAVADO, nao recalculado na leitura: e o numero comparado com o preco-base e o que alimenta a
     // base nova. Forma de dinheiro congelada com a linha.
     custoFinalUnitario: numeric("custo_final_unitario", { precision: 14, scale: 4 }),
-    totalFinal: numeric("total_final", { precision: 14, scale: 2 })
+    totalFinal: numeric("total_final", { precision: 14, scale: 2 }),
+    // Doc 57 §5: quanto o fornecedor TEM do produto, e por que nao tem ("sem estoque" ou "nao trabalha mais").
+    quantidadeDisponivel: numeric("quantidade_disponivel", { precision: 14, scale: 3 }),
+    motivoIndisponivel: text("motivo_indisponivel").$type<"sem_estoque" | "nao_trabalha">()
   },
   (table) => [
     check("compras_propostas_itens_valor_check", sql`${table.valorUnitario} is null or ${table.valorUnitario} >= 0`),
+    check(
+      "compras_propostas_itens_quantidade_disponivel_check",
+      sql`${table.quantidadeDisponivel} is null or ${table.quantidadeDisponivel} > 0`
+    ),
+    check(
+      "compras_propostas_itens_motivo_check",
+      sql`${table.motivoIndisponivel} is null or (${table.indisponivel} and ${table.motivoIndisponivel} in ('sem_estoque', 'nao_trabalha'))`
+    ),
     check(
       "compras_propostas_itens_desconto_tipo_check",
       sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('valor', 'percentual')`

@@ -48,10 +48,6 @@ function tabelasDoArrayDa0002(): string[] {
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
   "campanhas",
-  // Conferencia nasce apenas como agenda; nao ha escritor de atualizacao de status nesta entrega.
-  // Quando a contagem fisica ganhar conclusao/cancelamento, ela precisa sair desta lista com o
-  // trigger correspondente na mesma vertical.
-  "conferencias_estoque",
   "fechamentos_caixa_relatorios_maquininha",
   "maquininhas",
   "notas_fiscais",
@@ -327,6 +323,11 @@ describe("migracoes integration", () => {
       // aprovado/rejeitado).
       "fornecedores_produtos",
       "funcoes_operacionais",
+      // Doc 57 (0067): a fila do WhatsApp muda de status; a agenda da conferencia e encerrada; a
+      // conferencia ganhou conclusao (saiu da lista "com coluna e sem gatilho").
+      "compras_whatsapp_envios",
+      "conferencias_agendas",
+      "conferencias_estoque",
       // Doc 56 (0066): a ocorrencia do agendamento muda de situacao (conferir -> enviada/cancelada) e a
       // serie e encerrada ao editar "esta e as futuras".
       "pedidos_agenda_ocorrencias",

@@ -98,3 +98,4 @@ export * from "./pedido-rapido.js";
 export * from "./historico.js";
 export * from "./recorrencia.js";
 export * from "./agendamento.js";
+export * from "./conferencia.js";

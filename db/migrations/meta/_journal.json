@@ -470,6 +470,13 @@
       "when": 1792623053514,
       "tag": "0066_compras_agendamento_pedidos",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792676340328,
+      "tag": "0067_compras_fluxo_jose",
+      "breakpoints": true
     }
   ]
 }
