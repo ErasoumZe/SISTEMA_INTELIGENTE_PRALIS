@@ -109,6 +109,12 @@ a necessidade.
 
 - [73 — Vínculo obrigatório de operador, PDV e turno (20/10/2026)](73_VINCULO_OPERADOR_PDV_TURNO_2026_10_20.md): operador de Caixa abre exclusivamente o PDV e o turno configurados; usuários globais não recebem vínculo operacional.
 
+## Handoff e continuidade
+
+- [74 — Handoff mestre para Claude Desktop (22/10/2026)](74_HANDOFF_MASTER_CLAUDE_DESKTOP_2026_10_22.md): mapa sanitizado da `main`, arquitetura, Caixa, PROJECT_BRAIN, Obsidian, GitHub, CI e Coolify para continuidade sem usar pastas históricas.
+
+- [75 — Prompt mestre para Claude Desktop (22/10/2026)](75_PROMPT_MASTER_CLAUDE_DESKTOP_2026_10_22.md): prompt pronto para colar, com regras de fonte única, segurança, Caixa, qualidade e publicação.
+
 ## Documento adicional
 
 - [35 — Lume, assistente futuro do Caixa](35_LUME_ASSISTENTE_CAIXA.md): escopo futuro, governança e limites da primeira base de FAQs.

@@ -1,8 +1,8 @@
 # 73 — Vínculo obrigatório de operador, PDV e turno
 
 **Data:** 20/10/2026
-**Status:** implementado em branch; aguarda validação completa e PR.
-**Branch:** `feat/caixa-vinculo-pdv-turno-20261020`
+**Status:** integrado na `main` pela [PR #198](https://github.com/ErasoumZe/SISTEMA_INTELIGENTE_PRALIS/pull/198), commit `42f795a`. Deploy, aplicação da migration e cadastro operacional dos oito operadores continuam atos separados.
+**Branch de origem:** `feat/caixa-vinculo-pdv-turno-20261020`
 
 ## Decisão operacional
 
