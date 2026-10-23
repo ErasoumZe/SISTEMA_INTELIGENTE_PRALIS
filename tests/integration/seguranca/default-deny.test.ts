@@ -61,11 +61,15 @@ describe("seguranca default-deny integration", () => {
       "/api/admissao/ficha",
       "/api/admissao/ficha/enviar",
       "/api/auth/*",
-      "/api/cotacao",
-      "/api/cotacao/enviar",
       "/api/integracoes",
       "/api/integracoes/conciliacao",
       "/api/me",
+      "/api/rodada",
+      "/api/rodada/aceitar",
+      // Doc 57 §5 e §5.1: o fornecedor devolve a separacao e marca o que vende, pelo mesmo token do convite.
+      "/api/rodada/produtos",
+      "/api/rodada/responder",
+      "/api/rodada/separacao",
       "/api/sessao",
       "/health"
     ]);

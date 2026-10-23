@@ -145,6 +145,19 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "conferencias_estoque_visualizar",
     icone: "mdi-clipboard-check-outline"
   },
+  agendamento_pedidos: {
+    id: "agendamento_pedidos",
+    titulo: "Agendamento de pedidos",
+    permissao: "agendamento_pedidos_visualizar",
+    icone: "mdi-calendar-sync-outline"
+  },
+  // Doc 57 §4: catalogo fornecedor-produto, historico de compras e preco-base sairam da tela de Pedidos.
+  cadastro_compras: {
+    id: "cadastro_compras",
+    titulo: "Cadastro de compras",
+    permissao: "compras_catalogo_gerir",
+    icone: "mdi-database-cog-outline"
+  },
   relatorio_dre: {
     id: "relatorio_dre",
     titulo: "Relatórios de DRE",
@@ -546,6 +559,7 @@ export const secoesPermissoes = [
       "cadastro_produtos",
       "estoque_produtos",
       "conferencias_estoque",
+      "agendamento_pedidos",
       // Permissoes da fundacao do novo Compras (migration 0060): catalogo fornecedor-produto e
       // carga do preco-base. Sem um prefixo aqui elas ficavam FORA de todas as secoes, e a tela de
       // Permissoes nao as mostrava — ninguem conseguia conceder o acesso pela interface, so pelo
@@ -561,6 +575,8 @@ export const secoesPermissoes = [
       "menu_produtos",
       "menu_estoque_produtos",
       "menu_conferencias_estoque",
+      "menu_agendamento_pedidos",
+      "menu_cadastro_compras",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",

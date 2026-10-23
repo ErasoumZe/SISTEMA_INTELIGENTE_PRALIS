@@ -22,7 +22,18 @@ export async function listarNotificacoes(empresaId: string, perfil: PerfilUsuari
     valor: item.valor == null ? null : deCentavos(paraCentavos(item.valor)),
     verificadoEm: item.verificadoEm?.toISOString() ?? null,
     criadoEm: item.criadoEm.toISOString(),
-    detalhes: detalhesPorReferencia.get(item.referenciaId)
+    // Compras (R-221 decisao 14): a referencia e a rodada; o sino so precisa levar o Comprador a tela
+    // de Pedidos, onde mora a fila de decisao.
+    // Agendamento de pedido (doc 57 §2): produto sem fornecedor ficou "A fazer"; o sino leva a Pedidos.
+    // Conferencia de estoque agendada (doc 57 §1): leva a tela de conferencias.
+    detalhes:
+      item.tipo === "compras_decisao_pendente"
+        ? { setor: "Compras", descricao: null, dataVencimento: null, rota: "/pedidos" }
+        : item.tipo === "compras_agendamento_conferir"
+          ? { setor: "Compras", descricao: null, dataVencimento: null, rota: "/pedidos" }
+          : item.tipo === "conferencia_estoque_fazer"
+            ? { setor: "Estoque", descricao: null, dataVencimento: null, rota: "/conferencias_estoque" }
+            : detalhesPorReferencia.get(item.referenciaId)
   }));
 }
 

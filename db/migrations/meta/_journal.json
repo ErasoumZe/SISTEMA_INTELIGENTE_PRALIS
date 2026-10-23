@@ -442,6 +442,41 @@
       "when": 1792548195770,
       "tag": "0062_magical_mother_askani",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792592018633,
+      "tag": "0063_compras_fase2_rodada",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792592041534,
+      "tag": "0064_compras_fase2_drop_referencia",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792614105047,
+      "tag": "0065_compras_historico_precos",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792623053514,
+      "tag": "0066_compras_agendamento_pedidos",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792676483390,
+      "tag": "0067_compras_fluxo_jose",
+      "breakpoints": true
     }
   ]
 }

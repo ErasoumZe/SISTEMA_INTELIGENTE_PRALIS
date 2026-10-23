@@ -1,5 +1,8 @@
 # 52 — Recorrência de Compras como Calendário
 
+> **21/10/2026:** a tela e as decisões novas estão no doc 56 (agendamento de pedido), que resolve a pergunta do
+> §6 (opção 1: o comprador confere e envia) e amplia a recorrência (término por quantidade e datas avulsas).
+
 > Decisão de José em 19/10/2026. Este documento define a regra-alvo e o limite da primeira
 > vertical. Nenhuma migration foi gerada ou aplicada; nenhum deploy foi executado.
 

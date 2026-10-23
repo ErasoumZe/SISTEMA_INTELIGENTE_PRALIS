@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, gte, lt, or } from "drizzle-orm";
 import {
-  conferenciasEstoque,
   estoqueMovimentos,
   gruposMercadorias,
   pedidosRecebimentos,
@@ -9,8 +8,6 @@ import {
   unidadesMedida
 } from "@padaria/db/schema";
 import type {
-  ConferenciaEstoqueDto,
-  ConferenciaEstoquePayload,
   EstoqueMovimentoDto,
   EstoqueMovimentosQuery,
   EstoqueProdutosQuery,
@@ -107,51 +104,4 @@ export async function listarEstoqueProdutosRepository(
     curvaAbc: linha.curvaAbc,
     unidade: linha.unidade
   }));
-}
-
-export async function listarConferenciasEstoqueRepository(
-  empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<ConferenciaEstoqueDto[]> {
-  const linhas = await db
-    .select({
-      id: conferenciasEstoque.id,
-      empresaId: conferenciasEstoque.empresaId,
-      grupoMercadoriaId: conferenciasEstoque.grupoMercadoriaId,
-      grupo: gruposMercadorias.nome,
-      areaEstoque: conferenciasEstoque.areaEstoque,
-      localVenda: conferenciasEstoque.localVenda,
-      localEstoque: conferenciasEstoque.localEstoque,
-      curvaAbc: conferenciasEstoque.curvaAbc,
-      agendadaPara: conferenciasEstoque.agendadaPara,
-      observacao: conferenciasEstoque.observacao,
-      status: conferenciasEstoque.status,
-      criadoEm: conferenciasEstoque.criadoEm
-    })
-    .from(conferenciasEstoque)
-    .leftJoin(gruposMercadorias, eq(gruposMercadorias.id, conferenciasEstoque.grupoMercadoriaId))
-    .where(eq(conferenciasEstoque.empresaId, empresaId))
-    .orderBy(desc(conferenciasEstoque.agendadaPara));
-  return linhas.map((linha) => ({
-    ...linha,
-    curvaAbc: linha.curvaAbc,
-    status: linha.status as ConferenciaEstoqueDto["status"],
-    agendadaPara: linha.agendadaPara.toISOString(),
-    criadoEm: linha.criadoEm.toISOString()
-  }));
-}
-
-export async function criarConferenciaEstoqueRepository(
-  input: ConferenciaEstoquePayload & { criadoPor: string },
-  db: ExecutorBanco = banco
-): Promise<{ id: string }> {
-  const [conferencia] = await db
-    .insert(conferenciasEstoque)
-    .values({
-      ...input,
-      agendadaPara: new Date(input.agendadaPara)
-    })
-    .returning({ id: conferenciasEstoque.id });
-  if (!conferencia) throw new Error("Conferencia de estoque nao criada");
-  return conferencia;
 }

@@ -247,7 +247,18 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               :model-value="formCadastro.whatsapp"
               label="WhatsApp"
               maxlength="15"
+              hint="Opcional no cadastro; obrigatório só para convidar o fornecedor para uma cotação."
+              persistent-hint
               @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'fornecedores'" cols="12" md="6">
+            <v-switch
+              v-model="formCadastro.ativo"
+              color="primary"
+              label="Fornecedor ativo"
+              hint="Fornecedor inativo não aparece no seletor de cotação."
+              persistent-hint
             />
           </v-col>
           <template v-if="cadastroTela === 'empresas'">

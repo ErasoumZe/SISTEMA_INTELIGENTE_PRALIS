@@ -1256,12 +1256,21 @@ A base inicial vem uma única vez de `ÚLTIMO MENOR CUSTO`, pareada por código/
 normalizada, com relatório de ambiguidades antes da aplicação. Depois, a base vigente é o menor custo
 final válido da rodada mais recentemente encerrada e pode subir ou cair; o histórico é preservado.
 
+> **Nota de ajuste (R-221 decisão 12 e E6, 21/10/2026).** A base nova não é "o menor custo de todas as
+> propostas": é o custo final do que foi **comprado automaticamente** na rodada. Como a compra
+> automática exige custo ≤ base e a exceção do Comprador não vira base, a base vinda de rodada **só
+> desce**; só a carga inicial/reimportação a sobe. Pergunta aberta no documento 54 (item 3).
+
 Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Meta Cloud API e só muda
 para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
 
 Implementação é aditiva e protegida por feature flag; legado permanece legível. Cada fase exige SQL
 integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0062
 (renumerada para 0062 ao integrar a main) e no documento 53; nada foi publicado em produção.
+
+> **Nota de 22/10/2026 (José, doc 57 §10):** a base nova passa a ser a **menor oferta da rodada** (não mais só o custo
+> da compra automática), mas **continua só descendo**: oferta igual ou maior que a vigente não troca a base; produto
+> sem base ganha a menor oferta.
 
 ### R-219 — Seleção manual de fornecedores na rodada (José, 20/10/2026)
 
@@ -1321,6 +1330,25 @@ contrato completo, com entidades, máquinas de estado, concorrência e ordem de 
 13. **Cancelar compra automática não re-licita** o item na mesma rodada; vira nova solicitação.
 14. **Freio:** aviso no sino a cada compra automática **mais** teto de valor por rodada que a
     interrompe.
+
+**Adendo da execução do E6 (José, 21/10/2026).** Três lacunas do contrato foram fechadas ao implementar
+o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
+
+- **Base (decisão 12) só nasce de compra automática.** Exceção aprovada pelo Comprador, por definição
+  acima do envelope, não vira base: virar base subiria em silêncio o teto da pré-autorização seguinte.
+- **Item que sobrou na fila** tem duas saídas: encerrar a solicitação (`encerrada`) ou levar os itens
+  para uma **nova** solicitação. Não há segunda rodada sobre a mesma necessidade.
+- **A rodada fecha no prazo ou quando o Comprador a encerra** ("Encerrar rodada agora", motivo
+  `comprador`; decisão de José em 21/10, depois do plano original "só no prazo"). Não há fechamento
+  automático ao completar.
+- **A exceção do Comprador só vale com a rodada fechada** (José, 21/10): com ela aberta, aprovar
+  travaria o item contra uma oferta melhor que chegasse depois. No período aberto, o caminho é a
+  contraproposta (E7). Isso fecha a pergunta 1 do documento 54.
+- **E7 e E8 executados em 21/10/2026** (documento 54): contraproposta versionada pelo mesmo link; remoção
+  do caminho legado de compra (a cotação por link da R-216 deixa de existir), pedido rápido como rodada
+  de um fornecedor e fim da flag `COMPRAS_NOVO_FLUXO`.
+- A revisão do E6 levantou 11 perguntas que o código decidiu em silêncio; estão no documento 54, ao fim
+  de "Ainda sem decisão", para José confirmar.
 
 ## §4 · Como isto deixa de ser mais um documento
 

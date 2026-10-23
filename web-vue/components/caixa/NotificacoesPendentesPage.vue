@@ -21,12 +21,15 @@ const categorias = [
   { title: "Transferências", value: "transferencia" },
   { title: "Quebras de caixa", value: "quebra_caixa" },
   { title: "Mensagens", value: "mensagem_admin" },
-  { title: "Campanhas", value: "campanha" }
+  { title: "Campanhas", value: "campanha" },
+  { title: "Compras", value: "compras" }
 ];
 function correspondeCategoria(item: Notificacao) {
   return (
     categoria.value === "todas" ||
-    (categoria.value === "transferencia" ? item.tipo.startsWith("transferencia_") : item.tipo === categoria.value)
+    (categoria.value === "transferencia" || categoria.value === "compras"
+      ? item.tipo.startsWith(`${categoria.value}_`)
+      : item.tipo === categoria.value)
   );
 }
 const filtradas = computed(() => {
@@ -58,7 +61,10 @@ function rotuloTipo(tipo: Notificacao["tipo"]) {
     transferencia_divergencia: "Transferência",
     transferencia_prazo_confirmacao: "Transferência",
     mensagem_admin: "Administração",
-    campanha: "Campanha"
+    campanha: "Campanha",
+    compras_decisao_pendente: "Compras",
+    compras_agendamento_conferir: "Compras",
+    conferencia_estoque_fazer: "Estoque"
   }[tipo];
 }
 </script>

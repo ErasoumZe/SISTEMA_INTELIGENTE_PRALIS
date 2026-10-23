@@ -29,7 +29,7 @@ export type Banco = typeof bancoBase;
 export type TransacaoBanco = Parameters<Parameters<Banco["transaction"]>[0]>[0];
 export type ExecutorBanco = Banco | TransacaoBanco;
 
-export const banco = bancoBase;
+export const banco: Banco = bancoBase;
 
 export async function executarEmTransacao<T>(callback: (tx: TransacaoBanco) => Promise<T> | T) {
   return banco.transaction(async (tx) => {

@@ -54,7 +54,11 @@ export function useTransferenciaFormulario() {
     return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value?.ehContaPdv);
   });
   const destinoSemPdv = computed(() => {
-    return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value && !contaDestinoSelecionada.value.ehContaPdv);
+    return Boolean(
+      contaOrigemSelecionada.value?.ehCofre &&
+      contaDestinoSelecionada.value &&
+      !contaDestinoSelecionada.value.ehContaPdv
+    );
   });
   const composicaoMaloteInformada = computed(
     () => form.value.valorEspecieDeclarado.trim() !== "" && form.value.valorMoedasDeclarado.trim() !== ""

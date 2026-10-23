@@ -38,7 +38,8 @@ export async function salvarFornecedor(id: string | null, body: DadosExternos) {
     empresaId: dados.empresaId,
     nome: dados.nome.trim(),
     documento: apenasDigitos(dados.documento),
-    whatsapp: dados.whatsapp ? apenasDigitos(dados.whatsapp) : null
+    whatsapp: dados.whatsapp ? apenasDigitos(dados.whatsapp) : null,
+    situacao: dados.situacao
   });
 }
 

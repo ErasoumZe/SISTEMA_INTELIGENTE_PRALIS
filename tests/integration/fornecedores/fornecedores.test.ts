@@ -46,6 +46,35 @@ describe("fornecedores integration", () => {
       ])
     ).resolves.toBeTruthy();
   });
+
+  // R-219: fornecedor nasce ativo por default e a situacao faz round-trip na edicao.
+  it("Deve_PersistirSituacao_Quando_InformadaNaCriacaoEEdicao", async () => {
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/fornecedores",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Fornecedor situacao" }
+    });
+    expect(criado.statusCode, criado.body).toBe(201);
+    const id = json<{ data: { id: string } }>(criado).data.id;
+    // Default: ativo.
+    await expect(
+      consultarUm("select id from fornecedores where id = $1 and situacao = 'ativo'", [id])
+    ).resolves.toBeTruthy();
+
+    const inativado = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/fornecedores/${id}`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Fornecedor situacao", situacao: "inativo" }
+    });
+    expect(inativado.statusCode).toBe(204);
+    await expect(
+      consultarUm("select id from fornecedores where id = $1 and situacao = 'inativo'", [id])
+    ).resolves.toBeTruthy();
+
+    await executarSql("delete from fornecedores where id = $1", [id]);
+  });
 });
 
 describe("fornecedores importacao/exportacao integration", () => {

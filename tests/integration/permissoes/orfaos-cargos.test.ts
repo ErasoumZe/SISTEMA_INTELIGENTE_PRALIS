@@ -39,6 +39,7 @@ describe("permissoes: matriz de orfaos por cargo (referencia de producao)", () =
     const acoesCriticas = [
       "mercadorias_aprovar",
       "pedidos_aprovar",
+      "compras_excecao_aprovar",
       "notas_fiscais_importar",
       "despesas_editar",
       "retiradas_editar",

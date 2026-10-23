@@ -12,7 +12,6 @@ import {
 import { apiIdParamsSchema, criadoId, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
 import { erroValidacao } from "../erros.js";
-import { env } from "../env.js";
 import { linhasDePrecoBaseDoXlsx } from "./compras-preco-base-xlsx.js";
 import {
   analisarImportacaoPrecoBase,
@@ -27,11 +26,6 @@ import {
 } from "./compras-fundacao.service.js";
 
 export async function registrarRotasComprasFundacao(app: FastifyInstance): Promise<void> {
-  app.get("/api/compras/fundacao/status", { preHandler: exigirPermissao("pedidos_visualizar") }, async () =>
-    ok({ habilitado: env.COMPRAS_NOVO_FLUXO })
-  );
-  if (!env.COMPRAS_NOVO_FLUXO) return;
-
   app.get(
     "/api/compras/catalogo-fornecedores",
     { preHandler: exigirPermissao("compras_catalogo_gerir") },

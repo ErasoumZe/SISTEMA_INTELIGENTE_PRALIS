@@ -61,7 +61,14 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
   {
     // R-215: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
     titulo: "Compras",
-    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "fornecedores"]
+    ids: [
+      "estoque_produtos",
+      "conferencias_estoque",
+      "agendamento_pedidos",
+      "pedidos",
+      "cadastro_compras",
+      "fornecedores"
+    ]
   },
   {
     // Resultados – Relatorios + Diferenca de fechamento.

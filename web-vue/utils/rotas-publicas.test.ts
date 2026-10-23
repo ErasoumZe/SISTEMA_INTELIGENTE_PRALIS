@@ -32,10 +32,11 @@ describe("ehRotaPublica · demais rotas publicas", () => {
   it("a allowlist tem exatamente as rotas publicas decididas", () => {
     expect([...ROTAS_PUBLICAS].sort()).toEqual([
       "/admissao",
-      "/cotacao",
       "/forgot-password",
       "/login",
-      "/reset-password"
+      "/reset-password",
+      // R-221: resposta do fornecedor a rodada multi-fornecedor (o token do convite e a credencial).
+      "/rodada"
     ]);
   });
 });

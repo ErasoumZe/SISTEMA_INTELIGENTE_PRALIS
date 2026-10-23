@@ -73,12 +73,13 @@ function mensagemErroApi(body: unknown) {
 }
 
 async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body?: unknown) {
-  const executar = () => fetch(`${apiUrl}${rota}`, {
-    method,
-    credentials: "include",
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  const executar = () =>
+    fetch(`${apiUrl}${rota}`, {
+      method,
+      credentials: "include",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
   let resposta: Response;
   try {
     resposta = await executar();

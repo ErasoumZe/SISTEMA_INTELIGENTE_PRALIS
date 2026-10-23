@@ -48,10 +48,6 @@ function tabelasDoArrayDa0002(): string[] {
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
   "campanhas",
-  // Conferencia nasce apenas como agenda; nao ha escritor de atualizacao de status nesta entrega.
-  // Quando a contagem fisica ganhar conclusao/cancelamento, ela precisa sair desta lista com o
-  // trigger correspondente na mesma vertical.
-  "conferencias_estoque",
   "fechamentos_caixa_relatorios_maquininha",
   "maquininhas",
   "notas_fiscais",
@@ -316,11 +312,26 @@ describe("migracoes integration", () => {
       // aplicada) e os itens sao reavaliados, entao as duas tabelas tem `atualizado_em`.
       "compras_importacoes_preco_base",
       "compras_importacoes_preco_base_itens",
+      // R-221 (0063): rodada multi-fornecedor. Solicitacao, rodada, convite e proposta mudam de
+      // estado ao longo do ciclo, entao tem `atualizado_em`.
+      "compras_propostas",
+      "compras_rodadas",
+      "compras_rodadas_convites",
+      "compras_solicitacoes",
+      // Doc 57 (0067): a fila do WhatsApp muda de status; a agenda da conferencia e encerrada; a
+      // conferencia ganhou conclusao (saiu da lista "com coluna e sem gatilho").
+      "compras_whatsapp_envios",
+      "conferencias_agendas",
+      "conferencias_estoque",
       "configuracoes_menu_empresas",
       // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
       // aprovado/rejeitado).
       "fornecedores_produtos",
       "funcoes_operacionais",
+      // Doc 56 (0066): a ocorrencia do agendamento muda de situacao (conferir -> enviada/cancelada) e a
+      // serie e encerrada ao editar "esta e as futuras".
+      "pedidos_agenda_ocorrencias",
+      "pedidos_agendas",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
       "pedidos_cotacoes"
     ]);

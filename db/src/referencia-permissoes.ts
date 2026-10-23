@@ -38,6 +38,8 @@ const permissaoAcessoPorTela = {
   perdas_sobras: "perdas_sobras_visualizar",
   estoque_produtos: "estoque_produtos_visualizar",
   conferencias_estoque: "conferencias_estoque_visualizar",
+  agendamento_pedidos: "agendamento_pedidos_visualizar",
+  cadastro_compras: "compras_catalogo_gerir",
   relatorio_dre: "relatorio_dre_visualizar",
   clientes: "cadastro_clientes_visualizar",
   fornecedores: "cadastro_fornecedores_visualizar",
@@ -212,6 +214,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "perdas_sobras",
       "estoque_produtos",
       "conferencias_estoque",
+      "agendamento_pedidos",
+      "cadastro_compras",
       "relatorio_dre",
       "clientes",
       "admissoes_testes"
@@ -231,6 +235,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "pedidos_aprovar",
       "compras_catalogo_gerir",
       "compras_preco_base_importar",
+      "compras_excecao_aprovar",
+      "agendamento_pedidos_gerir",
       "retiradas_criar",
       "retiradas_editar",
       "notas_fiscais_importar",
@@ -266,14 +272,25 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     ]
   }),
   Compras: permissoesDoCargo({
-    ativas: ["pedidos", "estoque_produtos", "conferencias_estoque", "mercadorias", "fornecedores", "produtos"],
+    ativas: [
+      "pedidos",
+      "estoque_produtos",
+      "conferencias_estoque",
+      "agendamento_pedidos",
+      "cadastro_compras",
+      "mercadorias",
+      "fornecedores",
+      "produtos"
+    ],
     extras: [
       "pedidos_criar",
       "pedidos_editar",
       "pedidos_aprovar",
       "compras_catalogo_gerir",
       "compras_preco_base_importar",
+      "compras_excecao_aprovar",
       "conferencias_estoque_agendar",
+      "agendamento_pedidos_gerir",
       "mercadorias_criar",
       "mercadorias_discriminar",
       "cadastro_fornecedores_criar",

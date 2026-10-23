@@ -1,15 +1,18 @@
 import { z } from "zod";
-import type { CotacaoResumoDto } from "../compras/cotacao.js";
 
 const uuidSchema = z.string().uuid();
 
-export const pedidoTipos = ["manual", "automatico"] as const;
+// `manual` e `automatico` sao so de LEITURA (pedidos criados antes do E8); `rodada` e o unico tipo que nasce
+// hoje (compra automatica ou excecao do comprador, R-221).
+export const pedidoTipos = ["manual", "automatico", "rodada"] as const;
 // Os dois primeiros valores sao somente leitura para pedidos criados antes do modulo Compras.
 export const pedidoStatus = [
   "rascunho",
   "aprovado",
   "a_fazer",
   "enviado",
+  // Doc 57 §5: o fornecedor ganhou os itens e esta separando (pode ajustar a quantidade real).
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",
@@ -19,6 +22,7 @@ export const pedidoStatus = [
 export const pedidoStatusNovo = [
   "a_fazer",
   "enviado",
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",
@@ -31,38 +35,10 @@ export type PedidoStatus = (typeof pedidoStatus)[number];
 export type PedidoStatusNovo = (typeof pedidoStatusNovo)[number];
 export type PedidoRecorrencia = (typeof pedidoRecorrencias)[number];
 
-export const pedidoItemPayloadSchema = z.object({
-  produtoId: uuidSchema,
-  quantidade: z.coerce.number().positive()
-});
-
-const agendamentoPedidoSchema = z.object({
-  dataAgendada: z.string().min(10).optional().nullable(),
-  recorrencia: z.enum(pedidoRecorrencias).default("nenhuma")
-});
-
-export const pedidoPayloadSchema = agendamentoPedidoSchema.extend({
-  empresaId: uuidSchema,
-  fornecedorId: uuidSchema,
-  observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z.array(pedidoItemPayloadSchema).min(1)
-});
-
-export const pedidoEdicaoPayloadSchema = agendamentoPedidoSchema.extend({
-  fornecedorId: uuidSchema.optional(),
-  observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z.array(pedidoItemPayloadSchema).min(1)
-});
-
-export const gerarPedidoAutomaticoPayloadSchema = agendamentoPedidoSchema.extend({
-  empresaId: uuidSchema,
-  fornecedorId: uuidSchema
-});
-
 export const pedidoSituacaoPayloadSchema = z.object({
-  // R-216: "Enviado" so nasce da cotacao gerada e "Retornado" so da resposta do fornecedor. A troca
-  // manual fica restrita a decidir: confirmar a negociacao ou cancelar o pedido.
-  status: z.enum(["confirmado", "cancelado"]),
+  // Depois do E8 (R-221) o unico ato manual sobre a situacao e CANCELAR. "Confirmado" nasce da rodada
+  // (compra automatica ou excecao do comprador); nao existe mais confirmar na mao.
+  status: z.enum(["cancelado"]),
   observacao: z.string().trim().max(1_000).optional().nullable()
 });
 
@@ -84,9 +60,6 @@ export const pedidosQuerySchema = z.object({
   status: z.enum(pedidoStatus).optional()
 });
 
-export type PedidoPayload = z.infer<typeof pedidoPayloadSchema>;
-export type PedidoEdicaoPayload = z.infer<typeof pedidoEdicaoPayloadSchema>;
-export type GerarPedidoAutomaticoPayload = z.infer<typeof gerarPedidoAutomaticoPayloadSchema>;
 export type PedidoSituacaoPayload = z.infer<typeof pedidoSituacaoPayloadSchema>;
 export type PedidoRecebimentoPayload = z.infer<typeof pedidoRecebimentoPayloadSchema>;
 export type PedidosQuery = z.infer<typeof pedidosQuerySchema>;
@@ -107,7 +80,7 @@ export type PedidoEventoDto = {
   id: string;
   status: PedidoStatusNovo;
   observacao: string | null;
-  /** Nulo quando o ato foi do fornecedor pelo link de cotacao (R-216); o nome vem preenchido assim mesmo. */
+  /** Nulo quando o ato foi do fornecedor pelo link (compra automatica ou cotacao legada); o nome vem preenchido assim mesmo. */
   criadoPor: string | null;
   // Quem agiu precisa ser legivel na tela: o id sozinho nao responde "quem enviou" nem "quem recebeu".
   criadoPorNome: string;
@@ -130,8 +103,6 @@ export type PedidoDto = {
   aprovadoEm: string | null;
   itens?: PedidoItemDto[];
   eventos?: PedidoEventoDto[];
-  /** Cotacao mais recente do pedido (R-216), so no detalhe. */
-  cotacao?: CotacaoResumoDto | null;
 };
 
 export type ProdutoEstoque = {

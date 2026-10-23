@@ -5,77 +5,157 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-describe("pedidos integration (Compras)", () => {
+const FORN = "11111111-1111-4111-8111-11111111f001";
+const IMPORTACAO = "11111111-1111-4111-8111-11111111f002";
+const IMPORTACAO_ITEM = "11111111-1111-4111-8111-11111111f003";
+const PRECO_BASE = "11111111-1111-4111-8111-11111111f004";
+
+/**
+ * Pedidos depois do E8 (R-221) e do doc 57: o pedido NASCE da rodada de cotacao como COTADO (compra automatica
+ * ou excecao do comprador); o comprador confirma (Comprado) e so entao se RECEBE. Sobram ler, confirmar,
+ * cancelar e receber. Aqui o pedido vem do caminho real —
+ * solicitacao, rodada, resposta do fornecedor dentro da base — nao de SQL semeado.
+ */
+describe("pedidos integration (Compras, pos-E8)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    await executarSql(
+      "update produtos set quantidade_estoque = '0', estoque_min = null, estoque_max = null where id = $1",
+      [idsTeste.produto]
+    );
+    await executarSql(
+      "insert into fornecedores (id, empresa_id, nome, whatsapp, situacao) values ($1,$2,'Pedidos Forn','11999997701','ativo') on conflict (id) do nothing",
+      [FORN, idsTeste.empresaA]
+    );
+    await executarSql(
+      "insert into compras_importacoes_preco_base (id, empresa_id, nome_arquivo, hash_arquivo, status, total_linhas, criado_por) values ($1,$2,'base.xlsx',$3,'aplicada',1,(select usuario_id from perfis_usuarios limit 1)) on conflict (id) do nothing",
+      [IMPORTACAO, idsTeste.empresaA, "8".repeat(64)]
+    );
+    await executarSql(
+      "insert into compras_importacoes_preco_base_itens (id, importacao_id, numero_linha, descricao_informada, descricao_normalizada, valor_informado, produto_id, resultado) values ($1,$2,1,'Produto','produto','10.0000',$3,'correspondencia') on conflict (id) do nothing",
+      [IMPORTACAO_ITEM, IMPORTACAO, idsTeste.produto]
+    );
+    await executarSql(
+      "insert into produtos_precos_base (id, empresa_id, produto_id, valor, origem, importacao_item_id, valido_desde, criado_por) values ($1,$2,$3,'10.0000','importacao',$4, now() - interval '1 day', (select usuario_id from perfis_usuarios limit 1)) on conflict (id) do nothing",
+      [PRECO_BASE, idsTeste.empresaA, idsTeste.produto, IMPORTACAO_ITEM]
+    );
   }, 120_000);
 
   afterAll(async () => {
+    const pedidosDaRodada = "select id from pedidos where empresa_id = $1 and tipo = 'rodada'";
+    await executarSql("delete from compras_adjudicacoes where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql(
+      `delete from estoque_movimentos where pedido_item_id in (select id from pedidos_itens where pedido_id in (${pedidosDaRodada}))`,
+      [idsTeste.empresaA]
+    );
+    await executarSql(`delete from pedidos_recebimentos where pedido_id in (${pedidosDaRodada})`, [idsTeste.empresaA]);
+    await executarSql(`delete from pedidos_eventos where pedido_id in (${pedidosDaRodada})`, [idsTeste.empresaA]);
+    await executarSql("delete from pedidos where empresa_id = $1 and tipo = 'rodada'", [idsTeste.empresaA]);
+    await executarSql("delete from notificacoes where tipo = 'compras_decisao_pendente'", []);
+    await executarSql("delete from compras_propostas where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from compras_rodadas_convites where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from compras_rodadas_itens where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from produtos_precos_base where empresa_id = $1 and produto_id = $2", [
+      idsTeste.empresaA,
+      idsTeste.produto
+    ]);
+    await executarSql("delete from compras_rodadas where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from compras_solicitacoes where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql("delete from compras_importacoes_preco_base_itens where id = $1", [IMPORTACAO_ITEM]);
+    await executarSql("delete from compras_importacoes_preco_base where id = $1", [IMPORTACAO]);
+    await executarSql("delete from fornecedores where id = $1", [FORN]);
+    await executarSql("update produtos set quantidade_estoque = '0' where id = $1", [idsTeste.produto]);
     await contexto.fechar();
   });
+
   function post(url: string, payload: object) {
     return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
   }
-
-  /** Leva o pedido a Retornado pelo unico caminho que existe: link gerado e resposta do fornecedor. */
-  async function responderCotacao(pedidoId: string, valorUnitario: string) {
-    const gerado = await post(`/api/pedidos/${pedidoId}/cotacoes`, {});
-    expect(gerado.statusCode, gerado.body).toBe(201);
-    const token = json<{ data: { token: string } }>(gerado).data.token;
-    const cabecalho = { "x-cotacao-token": token };
-    const aberta = await contexto.app.inject({ method: "GET", url: "/api/cotacao", headers: cabecalho });
-    const itens = json<{ data: { itens: Array<{ pedidoItemId: string }> } }>(aberta).data.itens;
-    const envio = await contexto.app.inject({
-      method: "POST",
-      url: "/api/cotacao/enviar",
-      headers: cabecalho,
-      payload: { itens: itens.map((item) => ({ pedidoItemId: item.pedidoItemId, valorUnitario })) }
-    });
-    expect(envio.statusCode, envio.body).toBe(204);
+  function get(url: string) {
+    return contexto.app.inject({ method: "GET", url, headers: { cookie: cookieAdmin } });
   }
+  const estoque = async () =>
+    (await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
+      idsTeste.produto
+    ]))!.quantidade_estoque;
 
-  it("recebe parcialmente uma compra, soma so a conferencia e e idempotente", async () => {
-    const criar = await post("/api/pedidos", {
+  /** O pedido NASCE da rodada: solicitacao -> rodada -> resposta dentro da base -> compra automatica. */
+  async function criarPedidoDaRodada(
+    quantidade: number,
+    { confirmar = true }: { confirmar?: boolean } = {}
+  ): Promise<{ pedidoId: string; itemId: string }> {
+    const criar = await post("/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
-      fornecedorId: idsTeste.fornecedor,
-      recorrencia: "nenhuma",
-      itens: [{ produtoId: idsTeste.produto, quantidade: 5 }]
+      itens: [{ produtoId: idsTeste.produto, quantidade }]
     });
     expect(criar.statusCode, criar.body).toBe(201);
-    const pedidoId = json<{ data: { id: string } }>(criar).data.id;
-
-    const detalheInicial = await contexto.app.inject({
-      method: "GET",
-      url: `/api/pedidos/${pedidoId}`,
-      headers: { cookie: cookieAdmin }
-    });
-    assertOk(detalheInicial);
-    const inicial = json<{
-      data: { status: string; fornecedorId: string; itens: Array<{ id: string; quantidadeRecebida: string }> };
-    }>(detalheInicial).data;
-    expect(inicial).toMatchObject({ status: "a_fazer", fornecedorId: idsTeste.fornecedor });
-    expect(inicial.itens[0]?.quantidadeRecebida).toBe("0");
-    expect(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    ).toBe("0.000");
-
-    // R-216: Enviado nasce do link de cotacao e Retornado da resposta do fornecedor.
-    await responderCotacao(pedidoId, "10.00");
-    const confirmacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
-    expect(confirmacao.statusCode, confirmacao.body).toBe(204);
-
-    const pedidoConfirmado = json<{ data: { itens: Array<{ id: string }> } }>(
-      await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
+    const solicitacaoId = json<{ data: { id: string } }>(criar).data.id;
+    const solicitacao = json<{ data: { itens: Array<{ id: string }> } }>(
+      await get(`/api/compras/solicitacoes/${solicitacaoId}`)
     ).data;
-    const itemId = pedidoConfirmado.itens[0]!.id;
+    const rodada = await post("/api/compras/rodadas", {
+      empresaId: idsTeste.empresaA,
+      solicitacaoId,
+      convites: [{ fornecedorId: FORN, solicitacaoItemIds: solicitacao.itens.map((item) => item.id) }]
+    });
+    expect(rodada.statusCode, rodada.body).toBe(201);
+    const token = json<{ data: { convites: Array<{ token: string }> } }>(rodada).data.convites[0]!.token;
+    const publico = json<{ data: { itens: Array<{ conviteItemId: string }> } }>(
+      await contexto.app.inject({ method: "GET", url: "/api/rodada", headers: { "x-rodada-token": token } })
+    ).data;
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/rodada/responder",
+      headers: { "x-rodada-token": token },
+      payload: { itens: [{ conviteItemId: publico.itens[0]!.conviteItemId, indisponivel: false, valorUnitario: 8 }] }
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const pedido = await consultarUm<{ id: string }>("select id from pedidos where solicitacao_id = $1", [
+      solicitacaoId
+    ]);
+    const item = await consultarUm<{ id: string }>("select id from pedidos_itens where pedido_id = $1", [pedido!.id]);
+    if (confirmar) {
+      const confirmado = await post(`/api/pedidos/${pedido!.id}/confirmar`, { empresaId: idsTeste.empresaA });
+      expect(confirmado.statusCode, confirmado.body).toBe(204);
+    }
+    return { pedidoId: pedido!.id, itemId: item!.id };
+  }
+
+  it("a compra NAO move estoque: so o recebimento, parcial e idempotente, soma so a conferencia", async () => {
+    const { pedidoId, itemId } = await criarPedidoDaRodada(5, { confirmar: false });
+
+    const detalhe = await get(`/api/pedidos/${pedidoId}`);
+    assertOk(detalhe);
+    const inicial = json<{
+      data: {
+        status: string;
+        tipo: string;
+        fornecedorId: string;
+        itens: Array<{ id: string; quantidadeRecebida: string }>;
+        eventos: Array<{ status: string; criadoPorNome: string }>;
+      };
+    }>(detalhe).data;
+    expect(inicial).toMatchObject({ status: "cotado", tipo: "rodada", fornecedorId: FORN });
+    expect(inicial.itens[0]?.quantidadeRecebida).toBe("0");
+    // R-213: comprar nao move estoque. O evento de cotado e do fornecedor, pelo link (nao "Sistema").
+    expect(await estoque()).toBe("0.000");
+    expect(inicial.eventos.find((evento) => evento.status === "cotado")?.criadoPorNome).toBe(
+      "Pedidos Forn (pelo link)"
+    );
+    // Doc 57 §5: cotado ainda nao recebe; so depois que o comprador confirma (Comprado).
+    const cedo = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: "11111111-1111-4111-8111-11111111f0ff",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
+    });
+    expect(cedo.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await estoque()).toBe("0.000");
+    const confirmar = await post(`/api/pedidos/${pedidoId}/confirmar`, { empresaId: idsTeste.empresaA });
+    expect(confirmar.statusCode, confirmar.body).toBe(204);
+
     const primeiroRecebimento = {
       idempotenciaChave: "00000000-0000-4000-8000-000000000901",
       itens: [{ pedidoItemId: itemId, quantidadeConferida: 3 }]
@@ -86,33 +166,20 @@ describe("pedidos integration (Compras)", () => {
       status: "recebido_parcial",
       duplicado: false
     });
-    expect(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    ).toBe("3.000");
+    expect(await estoque()).toBe("3.000");
 
     const retry = await post(`/api/pedidos/${pedidoId}/recebimentos`, primeiroRecebimento);
     assertOk(retry);
     expect(json<{ data: { duplicado: boolean } }>(retry).data.duplicado).toBe(true);
-    expect(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    ).toBe("3.000");
+    expect(await estoque()).toBe("3.000");
     const aposPrimeiro = json<{ data: { itens: Array<{ quantidadeRecebida: string; quantidadePendente: string }> } }>(
-      await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
+      await get(`/api/pedidos/${pedidoId}`)
     ).data;
     expect(aposPrimeiro.itens[0]).toMatchObject({ quantidadeRecebida: "3", quantidadePendente: "2" });
-    const extrato = await contexto.app.inject({
-      method: "GET",
-      url: `/api/compras/estoque/movimentos?empresaId=${idsTeste.empresaA}&produtoId=${idsTeste.produto}`,
-      headers: { cookie: cookieAdmin }
-    });
+
+    const extrato = await get(
+      `/api/compras/estoque/movimentos?empresaId=${idsTeste.empresaA}&produtoId=${idsTeste.produto}`
+    );
     assertOk(extrato);
     const movimento = json<{
       data: Array<{
@@ -124,9 +191,8 @@ describe("pedidos integration (Compras)", () => {
         recebidoPorNome: string;
         recebidoEm: string;
       }>;
-    }>(extrato).data[0];
+    }>(extrato).data.find((linha) => linha.pedidoId === pedidoId);
     expect(movimento).toMatchObject({
-      pedidoId,
       produtoId: idsTeste.produto,
       quantidade: "3.000",
       saldoAnterior: "0.000",
@@ -140,13 +206,7 @@ describe("pedidos integration (Compras)", () => {
       itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
     });
     assertProblem(chaveComOutraIntencao, 400, "IDEMPOTENCIA_CONFLITO");
-    expect(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    ).toBe("3.000");
+    expect(await estoque()).toBe("3.000");
 
     const finalizar = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
       idempotenciaChave: "00000000-0000-4000-8000-000000000902",
@@ -157,13 +217,7 @@ describe("pedidos integration (Compras)", () => {
       status: "recebido",
       duplicado: false
     });
-    expect(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    ).toBe("5.000");
+    expect(await estoque()).toBe("5.000");
     expect(
       (
         await consultarUm<{ total: string }>(
@@ -174,89 +228,67 @@ describe("pedidos integration (Compras)", () => {
     ).toBe("2");
   });
 
-  it("pedido manual respeita o maximo e sugestao cria A fazer", async () => {
-    await executarSql(
-      "update produtos set quantidade_estoque = '5', estoque_min = '10', estoque_max = '100' where id = $1",
-      [idsTeste.produto]
-    );
-    const gerar = await post("/api/pedidos/gerar-sugestao", {
-      empresaId: idsTeste.empresaA,
-      fornecedorId: idsTeste.fornecedor
-    });
-    assertOk(gerar);
-    const { id, totalItens } = json<{ data: { id: string; totalItens: number } }>(gerar).data;
-    expect(totalItens).toBeGreaterThanOrEqual(1);
-    expect(
-      await consultarUm<{ status: string; tipo: string }>("select status, tipo from pedidos where id = $1", [id])
-    ).toMatchObject({
-      status: "a_fazer",
-      tipo: "automatico"
-    });
+  it("pedido legado (a fazer, enviado, retornado) so pode ser cancelado: nao recebe e nao confirma na mao", async () => {
+    for (const status of ["a_fazer", "enviado", "retornado"]) {
+      const legado = await consultarUm<{ id: string }>(
+        `insert into pedidos (empresa_id, fornecedor_id, tipo, status, recorrencia, criado_por)
+         values ($1, $2, 'manual', $3, 'nenhuma', (select usuario_id from perfis_usuarios limit 1)) returning id`,
+        [idsTeste.empresaA, FORN, status]
+      );
+      const pedidoId = legado!.id;
+      // Confirmar na mao deixou de existir: o contrato so aceita cancelar.
+      const confirmar = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
+      expect(confirmar.statusCode, status).toBe(400);
+      const receber = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+        idempotenciaChave: crypto.randomUUID(),
+        itens: [{ pedidoItemId: idsTeste.empresaA, quantidadeConferida: 1 }]
+      });
+      expect(receber.statusCode, status).toBe(400);
+      const cancelar = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "cancelado" });
+      expect(cancelar.statusCode, `${status}: ${cancelar.body}`).toBe(204);
+      expect(
+        (await consultarUm<{ status: string }>("select status from pedidos where id = $1", [pedidoId]))?.status
+      ).toBe("cancelado");
+      await executarSql("delete from pedidos_eventos where pedido_id = $1", [pedidoId]);
+      await executarSql("delete from pedidos where id = $1", [pedidoId]);
+    }
   });
 
-  it("recusa pedido manual que ultrapassa estoque maximo", async () => {
-    const criar = await post("/api/pedidos", {
-      empresaId: idsTeste.empresaA,
-      fornecedorId: idsTeste.fornecedor,
-      itens: [{ produtoId: idsTeste.produto, quantidade: 96 }]
-    });
-    assertProblem(criar, 400);
-  });
-
-  it("recusa saltar Enviado para Confirmado e receber antes da confirmacao", async () => {
-    const criar = await post("/api/pedidos", {
-      empresaId: idsTeste.empresaA,
-      fornecedorId: idsTeste.fornecedor,
-      itens: [{ produtoId: idsTeste.produto, quantidade: 1 }]
-    });
-    expect(criar.statusCode, criar.body).toBe(201);
-    const pedidoId = json<{ data: { id: string } }>(criar).data.id;
-    const itemId = json<{ data: { itens: Array<{ id: string }> } }>(
-      await contexto.app.inject({ method: "GET", url: `/api/pedidos/${pedidoId}`, headers: { cookie: cookieAdmin } })
-    ).data.itens[0]!.id;
-
-    const antes = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+  it("cancelar pedido confirmado vale, e depois de cancelado nao recebe", async () => {
+    const { pedidoId, itemId } = await criarPedidoDaRodada(1);
+    expect((await post(`/api/pedidos/${pedidoId}/situacao`, { status: "cancelado" })).statusCode).toBe(204);
+    const receber = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
       idempotenciaChave: "00000000-0000-4000-8000-000000000903",
       itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
     });
-    assertProblem(antes, 400, "PEDIDO_NAO_RECEBIVEL");
+    assertProblem(receber, 400, "PEDIDO_NAO_RECEBIVEL");
+  });
 
-    expect((await post(`/api/pedidos/${pedidoId}/cotacoes`, {})).statusCode).toBe(201);
-    const salto = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
-    assertProblem(salto, 400, "TRANSICAO_PEDIDO_INVALIDA");
+  it("os caminhos de compra legados deixaram de existir (nao ha segundo caminho)", async () => {
+    const empresaId = idsTeste.empresaA;
+    const alvos: Array<{ method: "POST" | "PUT" | "GET"; url: string; payload?: object }> = [
+      { method: "POST", url: "/api/pedidos", payload: { empresaId, fornecedorId: FORN, itens: [] } },
+      { method: "POST", url: "/api/pedidos/gerar-sugestao", payload: { empresaId, fornecedorId: FORN } },
+      { method: "PUT", url: `/api/pedidos/${empresaId}`, payload: { itens: [] } },
+      { method: "POST", url: `/api/pedidos/${empresaId}/cotacoes`, payload: {} },
+      { method: "GET", url: "/api/cotacao" },
+      { method: "POST", url: "/api/cotacao/enviar", payload: {} }
+    ];
+    for (const alvo of alvos) {
+      const resposta = await contexto.app.inject({
+        method: alvo.method,
+        url: alvo.url,
+        headers: { cookie: cookieAdmin, "x-cotacao-token": "qualquer" },
+        ...(alvo.payload ? { payload: alvo.payload } : {})
+      });
+      expect(resposta.statusCode, `${alvo.method} ${alvo.url}`).toBe(404);
+    }
   });
 
   it("recusa a mesma chave concorrente em pedidos diferentes sem duplicar estoque", async () => {
-    async function criarPedidoConfirmado() {
-      const criar = await post("/api/pedidos", {
-        empresaId: idsTeste.empresaA,
-        fornecedorId: idsTeste.fornecedor,
-        recorrencia: "nenhuma",
-        itens: [{ produtoId: idsTeste.produto, quantidade: 1 }]
-      });
-      expect(criar.statusCode, criar.body).toBe(201);
-      const pedidoId = json<{ data: { id: string } }>(criar).data.id;
-      await responderCotacao(pedidoId, "10.00");
-      const confirmacao = await post(`/api/pedidos/${pedidoId}/situacao`, { status: "confirmado" });
-      expect(confirmacao.statusCode, confirmacao.body).toBe(204);
-      const detalhe = await contexto.app.inject({
-        method: "GET",
-        url: `/api/pedidos/${pedidoId}`,
-        headers: { cookie: cookieAdmin }
-      });
-      assertOk(detalhe);
-      const itemId = json<{ data: { itens: Array<{ id: string }> } }>(detalhe).data.itens[0]!.id;
-      return { pedidoId, itemId };
-    }
-
-    const [primeiro, segundo] = await Promise.all([criarPedidoConfirmado(), criarPedidoConfirmado()]);
-    const saldoAntes = Number(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    );
+    const primeiro = await criarPedidoDaRodada(1);
+    const segundo = await criarPedidoDaRodada(1);
+    const saldoAntes = Number(await estoque());
     const chave = "00000000-0000-4000-8000-000000000904";
     const respostas = await Promise.all([
       post(`/api/pedidos/${primeiro.pedidoId}/recebimentos`, {
@@ -272,14 +304,7 @@ describe("pedidos integration (Compras)", () => {
     expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([200, 400]);
     const conflito = respostas.find((resposta) => resposta.statusCode === 400)!;
     assertProblem(conflito, 400, "IDEMPOTENCIA_CONFLITO");
-    const saldoDepois = Number(
-      (
-        await consultarUm<{ quantidade_estoque: string }>("select quantidade_estoque from produtos where id = $1", [
-          idsTeste.produto
-        ])
-      )?.quantidade_estoque
-    );
-    expect(saldoDepois).toBe(saldoAntes + 1);
+    expect(Number(await estoque())).toBe(saldoAntes + 1);
     expect(
       (
         await consultarUm<{ total: string }>(
