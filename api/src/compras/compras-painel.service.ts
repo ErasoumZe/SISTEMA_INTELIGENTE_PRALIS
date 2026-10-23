@@ -42,8 +42,15 @@ async function ofertasEmCotacao(empresaId: string, produtoId?: string) {
     const vencedor = vencedores.get(item.rodadaItemId);
     // Cotacao fechada: so interessa o que ainda espera decisao (o comprado ja foi para Pedidos finalizados).
     if (item.rodadaStatus !== "aberta" && vencedor) continue;
-    const doItem = respostas.filter((resposta) => resposta.conviteItemId === convite.conviteItemId);
+    const doConviteItem = respostas.filter((resposta) => resposta.conviteItemId === convite.conviteItemId);
+    const doItem = doConviteItem.filter((resposta) => resposta.autorTipo === "fornecedor");
     const enviada = doItem.filter((resposta) => resposta.status === "enviada").sort((a, b) => b.versao - a.versao)[0];
+    // Contraproposta do comprador mais nova que a ultima resposta do fornecedor: ainda espera por ele.
+    const contraproposta = doConviteItem
+      .filter((resposta) => resposta.autorTipo === "comprador" && resposta.status === "enviada")
+      .sort((a, b) => b.versao - a.versao)[0];
+    const contrapropostaPendente =
+      contraproposta && contraproposta.versao > (enviada?.versao ?? 0) ? contraproposta.valorUnitario : null;
     const rascunho = doItem.some((resposta) => resposta.status === "rascunho");
     const custo = enviada ? (enviada.custoFinalUnitario ?? enviada.valorUnitario) : null;
     const situacao = situacaoDaOferta({
@@ -57,6 +64,8 @@ async function ofertasEmCotacao(empresaId: string, produtoId?: string) {
       produtoId: item.produtoId,
       descricao: item.descricao,
       rodadaId: item.rodadaId,
+      rodadaItemId: item.rodadaItemId,
+      conviteId: convite.conviteId,
       rodadaNumero: item.rodadaNumero,
       solicitacaoId: item.solicitacaoId,
       rodadaAberta: item.rodadaStatus === "aberta",
@@ -69,7 +78,8 @@ async function ofertasEmCotacao(empresaId: string, produtoId?: string) {
       valorUnitario: enviada?.valorUnitario ?? null,
       custoFinalUnitario: enviada?.custoFinalUnitario ?? null,
       indisponivel: enviada?.indisponivel ?? false,
-      propostaItemId: enviada?.propostaItemId ?? null
+      propostaItemId: enviada?.propostaItemId ?? null,
+      contrapropostaUnitario: contrapropostaPendente
     });
   }
   return ofertas;

@@ -1,93 +1,71 @@
 <script setup lang="ts">
-import type { ColunaPainel, LinhaPainel, RodadaDto, StatusSolicitacao } from "@padaria/shared";
-import { temPermissao } from "@padaria/shared";
+import type { ProdutoEmCotacaoDto } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import ComprasPedidoRapido from "~/components/compras/ComprasPedidoRapido.vue";
-import ComprasRodadaConvitesDialog from "~/components/compras/ComprasRodadaConvitesDialog.vue";
-import ComprasRodadaDecisoesDialog from "~/components/compras/ComprasRodadaDecisoesDialog.vue";
-import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
-import PedidoRecebimentoDialog from "~/components/pedidos/PedidoRecebimentoDialog.vue";
-import PedidosCelulaDialog from "~/components/pedidos/PedidosCelulaDialog.vue";
-import PedidosMatriz from "~/components/pedidos/PedidosMatriz.vue";
-import { usePedidos } from "~/composables/usePedidos";
-import { itemPorTela, mensagemErro } from "~/utils/domain";
+import CotacaoAcoesDialog from "~/components/cotacao/CotacaoAcoesDialog.vue";
+import CotacaoMatriz from "~/components/cotacao/CotacaoMatriz.vue";
+import CotacaoProdutoDialog from "~/components/cotacao/CotacaoProdutoDialog.vue";
+import { useCotacaoPorFornecedor } from "~/composables/useCotacaoPorFornecedor";
+import { itemPorTela } from "~/utils/domain";
 
 /**
- * Pedidos (doc 57 §4, José 22/10/2026): limpa. Em cima o Pedido rápido; embaixo a matriz fornecedor x
- * situação (A fazer, Enviado, Cotado, Retornado, Comprado, Recebido parcialmente, Recebido). Catálogo,
- * histórico e preço-base moram no módulo "Cadastro de compras". O recebimento físico é a única entrada de
- * estoque (R-213).
+ * Cotação por fornecedor (doc 58 §4, Rodrigo 23/10/2026): em cima o Pedido urgente; embaixo os produtos em
+ * cotação e onde cada fornecedor está (Enviado, Cotado, Retornado, Com aumento, Comprado). O que foi comprado
+ * segue para Pedidos finalizados, onde também se recebe. Catálogo, histórico e preço-base moram no "Cadastro de
+ * compras".
  */
 const {
   sessao,
   empresas,
-  fornecedores,
   empresaId,
   caixaStatus,
   carregando,
   empresaCarregando,
   erro,
   snackbar,
-  pedidos,
   painel,
-  detalhe,
-  dialogDetalhe,
-  dialogRecebimento,
-  transicionando,
-  recebendo,
+  fornecedores,
   estoquePorProduto,
   telasPermitidas,
   telasDesabilitadasMenu,
   motivosTelasDesabilitadas,
   podeCriar,
   podeEditar,
-  podeReceber,
+  podeExcecao,
   trocarEmpresa,
   carregarDados,
-  notificar,
-  verPedido,
-  abrirRecebimento,
-  mudarSituacao,
-  confirmarRecebimento
-} = usePedidos();
-const { apiGet } = useApi();
+  recarregarPainel
+} = useCotacaoPorFornecedor();
 
-const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
-// R-221 decisao 10: aprovar compra fora do envelope pre-autorizado tem permissao propria.
-const podeExcecao = computed(() => temPermissao(permissoesUsuario.value, "compras_excecao_aprovar"));
-// O pedido rapido cria a solicitacao (pedidos_criar) E abre a rodada (pedidos_editar).
-const podePedidoRapido = computed(() => podeCriar.value && podeEditar.value);
+// O Pedido urgente cria a solicitação (pedidos_criar) E abre a cotação (pedidos_editar).
+const podePedidoUrgente = computed(() => podeCriar.value && podeEditar.value);
 const empresaNome = computed(() => empresas.value.find((empresa) => empresa.id === empresaId.value)?.nome ?? "");
 const produtos = computed(() => Object.values(estoquePorProduto.value));
 
-const pedidoRapido = ref<InstanceType<typeof ComprasPedidoRapido> | null>(null);
-const dialogCelula = ref(false);
-const celula = ref<{ linha: LinhaPainel; coluna: ColunaPainel } | null>(null);
-const rodada = ref<RodadaDto | null>(null);
-// A fila de decisao: cotacao aberta (contrapropor, encerrar agora) ou fechada com item sem vencedor.
-const decisao = ref<{ solicitacaoId: string; status: StatusSolicitacao } | null>(null);
+const pedidoUrgente = ref<InstanceType<typeof ComprasPedidoRapido> | null>(null);
+const produtoAberto = ref<string | null>(null);
+const rodadaAberta = ref<string | null>(null);
+const bolinhas = computed(() => {
+  const produto = painel.value.produtos.find((linha) => linha.produtoId === produtoAberto.value);
+  return produto
+    ? { maisVende: produto.maisVende, maisCompra: produto.maisCompra, maisLucro: produto.maisLucro }
+    : null;
+});
 
-function abrirCelula(linha: LinhaPainel, coluna: ColunaPainel) {
-  celula.value = { linha, coluna };
-  dialogCelula.value = true;
+function abrirProduto(produto: ProdutoEmCotacaoDto) {
+  produtoAberto.value = produto.produtoId;
 }
-async function verRodada(rodadaId: string) {
-  try {
-    rodada.value = await apiGet<RodadaDto>(
-      `/api/compras/rodadas/${rodadaId}?empresaId=${encodeURIComponent(empresaId.value)}`
-    );
-  } catch (causa) {
-    notificar(mensagemErro(causa), "error");
-  }
+function verOfertas(produtoId: string) {
+  rodadaAberta.value = null;
+  produtoAberto.value = produtoId;
 }
-async function aposConvite(nome: string) {
-  notificar(`Enviado para ${nome}. Ele recebe a cotação pelo WhatsApp.`);
-  await carregarDados();
+function verAcoes(rodadaId: string) {
+  produtoAberto.value = null;
+  rodadaAberta.value = rodadaId;
 }
-function novoPedidoRapido(itens: Array<{ produtoId: string; quantidade: string }>) {
-  decisao.value = null;
-  dialogCelula.value = false;
-  pedidoRapido.value?.abrir(itens);
+function novoPedidoUrgente(itens: Array<{ produtoId: string; quantidade: string }>) {
+  rodadaAberta.value = null;
+  pedidoUrgente.value?.abrir(itens);
 }
 </script>
 
@@ -109,68 +87,42 @@ function novoPedidoRapido(itens: Array<{ produtoId: string; quantidade: string }
     <div class="d-grid ga-5">
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos?.titulo ?? ''"
-        subtitulo="Cada fornecedor e em que pé está cada compra, da cotação ao recebimento."
+        subtitulo="Cada produto em cotação e quantos fornecedores estão em cada situação."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <ComprasPedidoRapido
-        v-if="podePedidoRapido"
-        ref="pedidoRapido"
+        v-if="podePedidoUrgente"
+        ref="pedidoUrgente"
         :empresa-id="empresaId"
         :empresa-nome="empresaNome"
         :produtos="produtos"
         :fornecedores="fornecedores"
         @criado="carregarDados"
       />
-      <PedidosMatriz :pedidos="pedidos" :painel="painel" :carregando="empresaCarregando" @abrir="abrirCelula" />
+      <CotacaoMatriz :produtos="painel.produtos" :carregando="empresaCarregando" @abrir="abrirProduto" />
     </div>
 
-    <PedidosCelulaDialog
-      v-model="dialogCelula"
-      :linha="celula?.linha ?? null"
-      :coluna="celula?.coluna ?? null"
-      :pedidos="pedidos"
-      :painel="painel"
-      :fornecedores="fornecedores"
+    <CotacaoProdutoDialog
+      :model-value="produtoAberto !== null"
       :empresa-id="empresaId"
+      :produto-id="produtoAberto"
+      :bolinhas="bolinhas"
       :pode-editar="podeEditar"
-      @pedido="verPedido"
-      @rodada="verRodada"
-      @decidir="(solicitacaoId: string, status: StatusSolicitacao) => (decisao = { solicitacaoId, status })"
-      @convidado="aposConvite"
-    />
-    <ComprasRodadaConvitesDialog
-      :model-value="rodada !== null"
-      :rodada="rodada"
-      :empresa-id="empresaId"
-      @update:model-value="(valor: boolean) => !valor && (rodada = null)"
-      @reenviado="rodada && verRodada(rodada.id)"
-    />
-    <ComprasRodadaDecisoesDialog
-      :model-value="decisao !== null"
-      :empresa-id="empresaId"
-      :solicitacao-id="decisao?.solicitacaoId ?? null"
-      :solicitacao-status="decisao?.status ?? null"
       :pode-excecao="podeExcecao"
-      :pode-editar="podeEditar"
-      :pode-criar="podePedidoRapido"
-      @update:model-value="(valor: boolean) => !valor && (decisao = null)"
-      @mudou="carregarDados"
-      @nova-solicitacao="novoPedidoRapido"
+      @update:model-value="(valor: boolean) => !valor && (produtoAberto = null)"
+      @mudou="recarregarPainel"
+      @acoes="verAcoes"
     />
-    <PedidoRecebimentoDialog
-      v-model="dialogRecebimento"
-      :pedido="detalhe"
-      :salvando="recebendo"
-      @confirmar="confirmarRecebimento"
-    />
-    <PedidoDetalheDialog
-      v-model="dialogDetalhe"
-      :pedido="detalhe"
+    <CotacaoAcoesDialog
+      :model-value="rodadaAberta !== null"
+      :empresa-id="empresaId"
+      :rodada-id="rodadaAberta"
       :pode-editar="podeEditar"
-      :pode-receber="podeReceber"
-      :transicionando="transicionando"
-      @situacao="mudarSituacao"
-      @receber="abrirRecebimento"
+      :pode-criar="podePedidoUrgente"
+      @update:model-value="(valor: boolean) => !valor && (rodadaAberta = null)"
+      @mudou="recarregarPainel"
+      @produto="verOfertas"
+      @nova-solicitacao="novoPedidoUrgente"
     />
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>

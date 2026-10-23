@@ -58,7 +58,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           data-legado="pedido"
         >
           Pedido do fluxo antigo: não é mais editado, enviado nem confirmado. Só pode ser cancelado. Para comprar de
-          novo, use o Pedido rápido.
+          novo, use o Pedido urgente.
         </v-alert>
         <div v-if="pedido.status !== 'rascunho' && pedido.status !== 'aprovado'" class="pedido-detalhe__etapas">
           <v-chip

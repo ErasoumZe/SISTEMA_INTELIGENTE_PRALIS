@@ -267,6 +267,8 @@ export const permissoes = [
   "menu_cadastro_compras_desabilitado",
   "menu_solicitacao_compra_mostrar",
   "menu_solicitacao_compra_desabilitado",
+  "menu_pedidos_finalizados_mostrar",
+  "menu_pedidos_finalizados_desabilitado",
   "menu_relatorio_dre_mostrar",
   "menu_relatorio_dre_desabilitado",
   "menu_clientes_mostrar",

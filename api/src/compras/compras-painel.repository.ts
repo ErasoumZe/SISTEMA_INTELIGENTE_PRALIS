@@ -66,7 +66,7 @@ export async function convitesDosItensRepository(rodadaItemIds: string[], db: Ex
     .where(inArray(comprasConvitesItens.rodadaItemId, rodadaItemIds));
 }
 
-/** As respostas do fornecedor (enviadas e rascunho) por item do convite. */
+/** As respostas do fornecedor (enviadas e rascunho) e as contrapropostas do comprador, por item do convite. */
 export async function respostasDosItensRepository(conviteItemIds: string[], db: ExecutorBanco = banco) {
   if (!conviteItemIds.length) return [];
   return db
@@ -74,6 +74,7 @@ export async function respostasDosItensRepository(conviteItemIds: string[], db: 
       conviteItemId: comprasPropostasItens.conviteItemId,
       propostaItemId: comprasPropostasItens.id,
       versao: comprasPropostas.versao,
+      autorTipo: comprasPropostas.autorTipo,
       status: comprasPropostas.status,
       indisponivel: comprasPropostasItens.indisponivel,
       valorUnitario: comprasPropostasItens.valorUnitario,
@@ -82,9 +83,7 @@ export async function respostasDosItensRepository(conviteItemIds: string[], db: 
     })
     .from(comprasPropostasItens)
     .innerJoin(comprasPropostas, eq(comprasPropostas.id, comprasPropostasItens.propostaId))
-    .where(
-      and(inArray(comprasPropostasItens.conviteItemId, conviteItemIds), eq(comprasPropostas.autorTipo, "fornecedor"))
-    );
+    .where(inArray(comprasPropostasItens.conviteItemId, conviteItemIds));
 }
 
 /** Quem ganhou cada item. */

@@ -126,7 +126,20 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "relatorio_advertencias_visualizar",
     icone: "mdi-clipboard-check"
   },
-  pedidos: { id: "pedidos", titulo: "Pedidos", permissao: "pedidos_visualizar", icone: "mdi-clipboard-list" },
+  // Doc 58 §4: a antiga tela Pedidos virou a Cotacao por fornecedor (o id "pedidos" fica, por causa das permissoes).
+  pedidos: {
+    id: "pedidos",
+    titulo: "Cotação por fornecedor",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-clipboard-list"
+  },
+  // Doc 58 §5: o que ja foi comprado — a caminho e recebido. O recebimento acontece aqui.
+  pedidos_finalizados: {
+    id: "pedidos_finalizados",
+    titulo: "Pedidos finalizados",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-truck-check-outline"
+  },
   perdas_sobras: {
     id: "perdas_sobras",
     titulo: "Perdas e sobras",
@@ -585,6 +598,7 @@ export const secoesPermissoes = [
       "menu_agendamento_pedidos",
       "menu_cadastro_compras",
       "menu_solicitacao_compra",
+      "menu_pedidos_finalizados",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",

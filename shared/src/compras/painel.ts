@@ -68,6 +68,8 @@ export type PainelComprasDto = { produtos: ProdutoEmCotacaoDto[] };
 
 export type OfertaDoProdutoDto = {
   rodadaId: string;
+  rodadaItemId: string;
+  conviteId: string;
   rodadaNumero: number;
   solicitacaoId: string;
   rodadaAberta: boolean;
@@ -82,6 +84,8 @@ export type OfertaDoProdutoDto = {
   indisponivel: boolean;
   /** A proposta que se aceita em "Com aumento". null quando nao ha resposta enviada. */
   propostaItemId: string | null;
+  /** Contraproposta do comprador que o fornecedor ainda nao respondeu. */
+  contrapropostaUnitario: string | null;
 };
 
 export type CotacaoDoProdutoDto = {
