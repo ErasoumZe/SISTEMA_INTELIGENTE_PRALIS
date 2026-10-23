@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -10,6 +11,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  smallint,
   text,
   time,
   timestamp,
@@ -502,6 +504,11 @@ export const turnos = pgTable(
     etiqueta: text("etiqueta").$type<EtiquetaTurno>(),
     diasSemana: text("dias_semana").array().$type<DiaSemana[]>(),
     ativo: boolean("ativo").notNull().default(true),
+    // E3 (M5) — vínculo do turno com o Questor. NULL até a Conplus informar a escala da empresa.
+    questorCodigoEscala: text("questor_codigo_escala"),
+    questorTipoJornada: smallint("questor_tipo_jornada"),
+    questorTempoParcial: smallint("questor_tempo_parcial"),
+    questorRegimeJornada: smallint("questor_regime_jornada"),
     criadoEm,
     atualizadoEm
   },
@@ -512,6 +519,23 @@ export const turnos = pgTable(
     // percebe esta migration.
     unique("turnos_id_empresa_unica").on(table.id, table.empresaId),
     check("turnos_etiqueta_check", sql`${table.etiqueta} is null or ${table.etiqueta} in ('M', 'T', 'I')`),
+    // E3 (M5): domínios do layout oficial (B.CODIGOESCALA Inteiro 6, TIPOJORNADA, TEMPOPARCIAL, REGIMEJOR).
+    check(
+      "turnos_questor_escala_check",
+      sql`${table.questorCodigoEscala} is null or ${table.questorCodigoEscala} ~ '^[0-9]{1,6}$'`
+    ),
+    check(
+      "turnos_questor_tipo_jornada_check",
+      sql`${table.questorTipoJornada} is null or ${table.questorTipoJornada} in (2, 3, 4, 5, 6, 7, 9)`
+    ),
+    check(
+      "turnos_questor_tempo_parcial_check",
+      sql`${table.questorTempoParcial} is null or ${table.questorTempoParcial} in (0, 1, 2, 3)`
+    ),
+    check(
+      "turnos_questor_regime_check",
+      sql`${table.questorRegimeJornada} is null or ${table.questorRegimeJornada} in (1, 2, 3, 4)`
+    ),
     // Vocabulario REUSADO de `colaboradores_jornadas.dia_da_semana`. Um segundo conjunto de nomes
     // para dia da semana seria a divergencia da regra-mae, em miniatura.
     check(
@@ -599,6 +623,10 @@ export const funcoesOperacionais = pgTable(
      * de teste cancela e arquiva em vez de apagar.
      */
     ativo: boolean("ativo").notNull().default(true),
+    // E3 (M5) — vínculo da função com o Questor. NULL até a Conplus informar; o agente nocivo é
+    // declaração do DP, sem default.
+    questorCodigoCargo: text("questor_codigo_cargo"),
+    questorAgenteNocivo: text("questor_agente_nocivo"),
     criadoEm,
     atualizadoEm
   },
@@ -609,6 +637,15 @@ export const funcoesOperacionais = pgTable(
     check("funcoes_operacionais_nome_check", sql`length(btrim(${table.nome})) > 0`),
     // Formato, nao existencia: o banco nao valida CBO contra a tabela do MTE.
     check("funcoes_operacionais_cbo_check", sql`${table.cbo} is null or ${table.cbo} ~ '^[0-9]{6}$'`),
+    // E3 (M5): A.CODIGOCARGO Inteiro 7; B.AGENTENOCIVO lista fechada da documentação.
+    check(
+      "funcoes_operacionais_questor_cargo_check",
+      sql`${table.questorCodigoCargo} is null or ${table.questorCodigoCargo} ~ '^[0-9]{1,7}$'`
+    ),
+    check(
+      "funcoes_operacionais_questor_agente_check",
+      sql`${table.questorAgenteNocivo} is null or ${table.questorAgenteNocivo} in ('00', '15', '20', '25')`
+    ),
     // Ordem do seletor: dentro da empresa, ativas primeiro, por nome.
     index("funcoes_operacionais_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
   ]
@@ -3484,6 +3521,19 @@ export const admissoesProcessosInternos = pgTable(
     exameAtualizadoEm: timestamp("exame_atualizado_em", { withTimezone: true }),
     exameAtualizadoPor: text("exame_atualizado_por").references(() => perfisUsuarios.usuarioId),
     observacoesRh: text("observacoes_rh"),
+    // E4 (M3) — dados contratuais para o Questor. Todos anuláveis e sem default: o DP preenche.
+    questorTipoSalario: smallint("questor_tipo_salario"),
+    salarioCentavos: bigint("salario_centavos", { mode: "number" }),
+    descricaoSalario: text("descricao_salario"),
+    diasExperiencia: integer("dias_experiencia"),
+    diasProrrogacao: integer("dias_prorrogacao"),
+    questorTipoContrato: text("questor_tipo_contrato"),
+    questorSindicato: text("questor_sindicato"),
+    questorTipoAdmissao: smallint("questor_tipo_admissao"),
+    pcdCotista: boolean("pcd_cotista"),
+    utilizaCtpsDigital: boolean("utiliza_ctps_digital"),
+    possuiAlvara: boolean("possui_alvara"),
+    jaExpostoAgenteNocivo: boolean("ja_exposto_agente_nocivo"),
     versao: integer("versao").notNull().default(1),
     criadoEm,
     atualizadoEm
@@ -3501,6 +3551,47 @@ export const admissoesProcessosInternos = pgTable(
     ),
     check("admissoes_processos_internos_versao_check", sql`${table.versao} > 0`),
     check("admissoes_processos_internos_ctps_uf_check", sql`${table.ctpsUf} is null or ${table.ctpsUf} ~ '^[A-Z]{2}$'`),
+    // E4 (M3): domínios e tamanhos do layout oficial (A.TIPOSALARIO, VALORSAL Numérico 16/2,
+    // DESCRSAL 999, DIACONTREXP Inteiro 5, DIAPRORROGCONTREXP Inteiro 4, CODIGOTIPOCONTR 3,
+    // CODIGOSIND 5, B.TIPOADM 1..7).
+    check(
+      "internos_questor_tipo_salario_check",
+      sql`${table.questorTipoSalario} is null or ${table.questorTipoSalario} in (1, 2, 5, 6, 7)`
+    ),
+    check(
+      "internos_salario_check",
+      sql`${table.salarioCentavos} is null or ${table.salarioCentavos} between 1 and 999999999999999`
+    ),
+    check(
+      "internos_descricao_salario_check",
+      sql`${table.descricaoSalario} is null or length(btrim(${table.descricaoSalario})) between 1 and 999`
+    ),
+    // Doc: DESCRSAL obrigatório se TIPOSALARIO = 2 (Comissão/Variável) ou 6 (Tarefa) — e não pode
+    // ser só espaços. O coalesce evita que NULL torne a expressão desconhecida (CHECK aprovaria).
+    check(
+      "internos_descricao_salario_condicional_check",
+      sql`${table.questorTipoSalario} is null or ${table.questorTipoSalario} not in (2, 6) or length(btrim(coalesce(${table.descricaoSalario}, ''))) > 0`
+    ),
+    check(
+      "internos_dias_experiencia_check",
+      sql`${table.diasExperiencia} is null or ${table.diasExperiencia} between 0 and 99999`
+    ),
+    check(
+      "internos_dias_prorrogacao_check",
+      sql`${table.diasProrrogacao} is null or ${table.diasProrrogacao} between 0 and 9999`
+    ),
+    check(
+      "internos_questor_tipo_contrato_check",
+      sql`${table.questorTipoContrato} is null or ${table.questorTipoContrato} ~ '^[0-9]{1,3}$'`
+    ),
+    check(
+      "internos_questor_sindicato_check",
+      sql`${table.questorSindicato} is null or ${table.questorSindicato} ~ '^[0-9]{1,5}$'`
+    ),
+    check(
+      "internos_questor_tipo_admissao_check",
+      sql`${table.questorTipoAdmissao} is null or ${table.questorTipoAdmissao} between 1 and 7`
+    ),
     check(
       "admissoes_processos_internos_pis_check",
       sql`${table.pisPasepNit} is null or ${table.pisPasepNit} ~ '^[0-9]{11}$'`
@@ -3684,6 +3775,15 @@ export const admissoesProcessosFicha = pgTable(
     conta: text("conta"),
     contaDigito: text("conta_digito"),
     contaTipo: text("conta_tipo"),
+    // E5 (Questor) — campos comuns do candidato. Anuláveis: o rascunho aceita tudo vazio. Os de
+    // saúde (deficiência, reabilitação) NÃO estão aqui: dependem da base legal e do aviso (Q11).
+    naturalidadeUf: text("naturalidade_uf"),
+    // Código IBGE do município do endereço (vem do ViaCEP). Conversão para o Questor depende da Q5.
+    municipioIbge: text("municipio_ibge"),
+    // Nacionalidade da lista oficial, quando a ficha diz "Estrangeira".
+    nacionalidadeEspecifica: text("nacionalidade_especifica"),
+    primeiroEmprego: boolean("primeiro_emprego"),
+    recebeSeguroDesemprego: boolean("recebe_seguro_desemprego"),
     // Ausencia de dependente e DECLARACAO, nao tabela vazia: tabela vazia tambem e "nao respondeu".
     semDependentes: boolean("sem_dependentes"),
     avisoPrivacidadeVersao: text("aviso_privacidade_versao"),
@@ -3710,6 +3810,14 @@ export const admissoesProcessosFicha = pgTable(
     check("admissoes_processos_ficha_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
     check("admissoes_processos_ficha_rg_uf_check", sql`${table.rgUf} is null or ${table.rgUf} ~ '^[A-Z]{2}$'`),
     check("admissoes_processos_ficha_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
+    check(
+      "admissoes_processos_ficha_naturalidade_uf_check",
+      sql`${table.naturalidadeUf} is null or ${table.naturalidadeUf} ~ '^[A-Z]{2}$'`
+    ),
+    check(
+      "admissoes_processos_ficha_municipio_ibge_check",
+      sql`${table.municipioIbge} is null or ${table.municipioIbge} ~ '^[0-9]{7}$'`
+    ),
     // O ciclo inteiro num CHECK so: enviada exige aceite e declaracao de dependentes; devolvida
     // exige pendencia escrita, senao o candidato recebe de volta sem saber o que corrigir.
     check(
@@ -3734,6 +3842,41 @@ export const admissoesProcessosFicha = pgTable(
   ]
 );
 
+export const admissoesProcessosFichaAnexos = pgTable(
+  "admissoes_processos_ficha_anexos",
+  {
+    id: idUuid,
+    empresaId,
+    fichaId: uuid("ficha_id")
+      .notNull()
+      .references(() => admissoesProcessosFicha.id, { onDelete: "cascade" }),
+    processoId: uuid("processo_id")
+      .notNull()
+      .references(() => admissoesProcessos.id, { onDelete: "cascade" }),
+    tipo: text("tipo").notNull(),
+    nomeOriginal: text("nome_original").notNull(),
+    nomeArquivo: text("nome_arquivo").notNull(),
+    caminho: text("caminho").notNull(),
+    mimeType: text("mime_type").notNull(),
+    tamanhoBytes: integer("tamanho_bytes").notNull(),
+    criadoEm
+  },
+  (table) => [
+    unique("admissoes_processos_ficha_anexos_ficha_tipo_unico").on(table.fichaId, table.tipo),
+    check(
+      "admissoes_processos_ficha_anexos_tipo_check",
+      sql`${table.tipo} in ('rg', 'cpf', 'titulo_eleitor', 'certidao_nascimento_casamento', 'comprovante_residencia', 'foto_3x4', 'ctps_digital', 'pis_pasep_nit', 'certificado_reservista', 'comprovante_escolaridade', 'certificados_profissionais', 'aso_admissional')`
+    ),
+    check("admissoes_processos_ficha_anexos_tamanho_check", sql`${table.tamanhoBytes} > 0`),
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_ficha_anexos_processo_empresa_fk"
+    }).onDelete("cascade"),
+    index("admissoes_processos_ficha_anexos_empresa_ficha_idx").on(table.empresaId, table.fichaId)
+  ]
+);
+
 /**
  * ADM-003 V4 â€” dependentes declarados na ficha. Zero ou muitos.
  *
@@ -3754,6 +3897,11 @@ export const admissoesProcessosDependentes = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    // E5 (Questor) — campos comuns do dependente. Fumo e álcool (saúde) NÃO estão aqui: Q11.
+    sexo: text("sexo"),
+    estadoCivil: text("estado_civil"),
+    grauInstrucao: text("grau_instrucao"),
+    nacionalidade: text("nacionalidade"),
     criadoEm,
     atualizadoEm
   },
@@ -3809,7 +3957,234 @@ export const admissoesProcessosDependentes = pgTable(
     uniqueIndex("admissoes_processos_dependentes_cpf_unico")
       .on(table.processoId, table.cpf)
       .where(sql`${table.cpf} is not null`),
+    unique("admissoes_processos_dependentes_id_processo_empresa_unico").on(table.id, table.processoId, table.empresaId),
     index("admissoes_processos_dependentes_empresa_processo_idx").on(table.empresaId, table.processoId)
+  ]
+);
+
+export const admissoesProcessosDependentesAnexos = pgTable(
+  "admissoes_processos_dependentes_anexos",
+  {
+    id: idUuid,
+    empresaId,
+    dependenteId: uuid("dependente_id").notNull(),
+    processoId: uuid("processo_id").notNull(),
+    tipo: text("tipo").notNull(),
+    nomeOriginal: text("nome_original").notNull(),
+    nomeArquivo: text("nome_arquivo").notNull(),
+    caminho: text("caminho").notNull(),
+    mimeType: text("mime_type").notNull(),
+    tamanhoBytes: integer("tamanho_bytes").notNull(),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.dependenteId, table.processoId, table.empresaId],
+      foreignColumns: [
+        admissoesProcessosDependentes.id,
+        admissoesProcessosDependentes.processoId,
+        admissoesProcessosDependentes.empresaId
+      ],
+      name: "admissoes_processos_dependentes_anexos_dependente_fk"
+    }).onDelete("cascade"),
+    uniqueIndex("admissoes_processos_dependentes_anexos_tipo_unico").on(table.dependenteId, table.tipo),
+    index("admissoes_processos_dependentes_anexos_empresa_dependente_idx").on(table.empresaId, table.dependenteId),
+    check(
+      "admissoes_processos_dependentes_anexos_tipo_check",
+      sql`${table.tipo} in ('certidao_nascimento_rg', 'cpf', 'cartao_vacina', 'comprovante_escolaridade')`
+    ),
+    check("admissoes_processos_dependentes_anexos_tamanho_check", sql`${table.tamanhoBytes} > 0`)
+  ]
+);
+
+type StatusSincronizacaoGoogle = "pendente" | "processando" | "concluida" | "falhou";
+
+export const admissoesGoogleSincronizacoes = pgTable(
+  "admissoes_google_sincronizacoes",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    status: text("status").$type<StatusSincronizacaoGoogle>().notNull().default("pendente"),
+    driveRootFolderId: text("drive_root_folder_id").notNull(),
+    driveColaboradorFolderId: text("drive_colaborador_folder_id"),
+    sheetsColaboradorRowNumber: integer("sheets_colaborador_row_number"),
+    sheetsColaboradorMetadataId: text("sheets_colaborador_metadata_id"),
+    bloqueioToken: text("bloqueio_token"),
+    bloqueioAte: timestamp("bloqueio_ate", { withTimezone: true }),
+    tentativa: integer("tentativa").notNull().default(0),
+    ultimoErroCodigo: text("ultimo_erro_codigo"),
+    ultimoErroMensagem: text("ultimo_erro_mensagem"),
+    proximaTentativaEm: timestamp("proxima_tentativa_em", { withTimezone: true }),
+    iniciadoEm: timestamp("iniciado_em", { withTimezone: true }),
+    concluidoEm: timestamp("concluido_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_google_sincronizacoes_processo_empresa_fk"
+    }).onDelete("restrict"),
+    unique("admissoes_google_sincronizacoes_processo_unico").on(table.processoId, table.empresaId),
+    unique("admissoes_google_sincronizacoes_id_processo_empresa_unico").on(table.id, table.processoId, table.empresaId),
+    check(
+      "admissoes_google_sincronizacoes_status_check",
+      sql`${table.status} in ('pendente', 'processando', 'concluida', 'falhou')`
+    ),
+    check("admissoes_google_sincronizacoes_tentativa_check", sql`${table.tentativa} >= 0`),
+    check(
+      "admissoes_google_sincronizacoes_row_check",
+      sql`${table.sheetsColaboradorRowNumber} is null or ${table.sheetsColaboradorRowNumber} > 0`
+    ),
+    index("admissoes_google_sincronizacoes_fila_idx").on(table.status, table.proximaTentativaEm, table.criadoEm)
+  ]
+);
+
+export const admissoesGoogleDependentes = pgTable(
+  "admissoes_google_dependentes",
+  {
+    id: idUuid,
+    sincronizacaoId: uuid("sincronizacao_id").notNull(),
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    dependenteId: uuid("dependente_id").notNull(),
+    status: text("status").$type<StatusSincronizacaoGoogle>().notNull().default("pendente"),
+    driveDependenteFolderId: text("drive_dependente_folder_id"),
+    sheetsRowNumber: integer("sheets_row_number"),
+    sheetsMetadataId: text("sheets_metadata_id"),
+    bloqueioToken: text("bloqueio_token"),
+    bloqueioAte: timestamp("bloqueio_ate", { withTimezone: true }),
+    tentativa: integer("tentativa").notNull().default(0),
+    ultimoErroCodigo: text("ultimo_erro_codigo"),
+    ultimoErroMensagem: text("ultimo_erro_mensagem"),
+    proximaTentativaEm: timestamp("proxima_tentativa_em", { withTimezone: true }),
+    iniciadoEm: timestamp("iniciado_em", { withTimezone: true }),
+    concluidoEm: timestamp("concluido_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.sincronizacaoId, table.processoId, table.empresaId],
+      foreignColumns: [
+        admissoesGoogleSincronizacoes.id,
+        admissoesGoogleSincronizacoes.processoId,
+        admissoesGoogleSincronizacoes.empresaId
+      ],
+      name: "admissoes_google_dependentes_sincronizacao_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.dependenteId, table.processoId, table.empresaId],
+      foreignColumns: [
+        admissoesProcessosDependentes.id,
+        admissoesProcessosDependentes.processoId,
+        admissoesProcessosDependentes.empresaId
+      ],
+      name: "admissoes_google_dependentes_dependente_fk"
+    }).onDelete("restrict"),
+    unique("admissoes_google_dependentes_unico").on(table.sincronizacaoId, table.dependenteId),
+    check(
+      "admissoes_google_dependentes_status_check",
+      sql`${table.status} in ('pendente', 'processando', 'concluida', 'falhou')`
+    ),
+    check("admissoes_google_dependentes_tentativa_check", sql`${table.tentativa} >= 0`),
+    check(
+      "admissoes_google_dependentes_row_check",
+      sql`${table.sheetsRowNumber} is null or ${table.sheetsRowNumber} > 0`
+    ),
+    index("admissoes_google_dependentes_fila_idx").on(table.status, table.proximaTentativaEm, table.criadoEm)
+  ]
+);
+
+export const admissoesGoogleArquivos = pgTable(
+  "admissoes_google_arquivos",
+  {
+    id: idUuid,
+    sincronizacaoId: uuid("sincronizacao_id").notNull(),
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    dependenteId: uuid("dependente_id"),
+    origem: text("origem").$type<"colaborador" | "dependente">().notNull(),
+    colaboradorAnexoId: uuid("colaborador_anexo_id"),
+    dependenteAnexoId: uuid("dependente_anexo_id"),
+    tipoDocumento: text("tipo_documento").notNull(),
+    driveFolderId: text("drive_folder_id"),
+    driveFileId: text("drive_file_id"),
+    driveWebViewLink: text("drive_web_view_link"),
+    status: text("status").$type<StatusSincronizacaoGoogle>().notNull().default("pendente"),
+    tentativa: integer("tentativa").notNull().default(0),
+    ultimoErroCodigo: text("ultimo_erro_codigo"),
+    ultimoErroMensagem: text("ultimo_erro_mensagem"),
+    proximaTentativaEm: timestamp("proxima_tentativa_em", { withTimezone: true }),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.sincronizacaoId, table.processoId, table.empresaId],
+      foreignColumns: [
+        admissoesGoogleSincronizacoes.id,
+        admissoesGoogleSincronizacoes.processoId,
+        admissoesGoogleSincronizacoes.empresaId
+      ],
+      name: "admissoes_google_arquivos_sincronizacao_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_google_arquivos_processo_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.dependenteId, table.processoId, table.empresaId],
+      foreignColumns: [
+        admissoesProcessosDependentes.id,
+        admissoesProcessosDependentes.processoId,
+        admissoesProcessosDependentes.empresaId
+      ],
+      name: "admissoes_google_arquivos_dependente_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.colaboradorAnexoId],
+      foreignColumns: [admissoesProcessosFichaAnexos.id],
+      name: "admissoes_google_arquivos_colaborador_anexo_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.dependenteAnexoId],
+      foreignColumns: [admissoesProcessosDependentesAnexos.id],
+      name: "admissoes_google_arquivos_dependente_anexo_fk"
+    }).onDelete("restrict"),
+    check(
+      "admissoes_google_arquivos_origem_check",
+      sql`(
+        ${table.origem} = 'colaborador'
+        and ${table.dependenteId} is null
+        and ${table.colaboradorAnexoId} is not null
+        and ${table.dependenteAnexoId} is null
+      ) or (
+        ${table.origem} = 'dependente'
+        and ${table.dependenteId} is not null
+        and ${table.colaboradorAnexoId} is null
+        and ${table.dependenteAnexoId} is not null
+      )`
+    ),
+    check(
+      "admissoes_google_arquivos_status_check",
+      sql`${table.status} in ('pendente', 'processando', 'concluida', 'falhou')`
+    ),
+    check("admissoes_google_arquivos_tentativa_check", sql`${table.tentativa} >= 0`),
+    uniqueIndex("admissoes_google_arquivos_colaborador_anexo_unico")
+      .on(table.colaboradorAnexoId)
+      .where(sql`${table.colaboradorAnexoId} is not null`),
+    uniqueIndex("admissoes_google_arquivos_dependente_anexo_unico")
+      .on(table.dependenteAnexoId)
+      .where(sql`${table.dependenteAnexoId} is not null`),
+    uniqueIndex("admissoes_google_arquivos_drive_file_unico")
+      .on(table.driveFileId)
+      .where(sql`${table.driveFileId} is not null`),
+    index("admissoes_google_arquivos_fila_idx").on(table.status, table.proximaTentativaEm, table.criadoEm)
   ]
 );
 
@@ -3841,6 +4216,10 @@ export const colaboradoresVinculos = pgTable(
     turnoHoraFim: time("turno_hora_fim"),
     turnoDiasSemana: text("turno_dias_semana").array().$type<DiaSemana[]>(),
     jornadaHorario: text("jornada_horario"),
+    // Código do contrato deste vínculo no Questor (CODIGOFUNCCONTR, inteiro de até 7 dígitos). É a
+    // coluna 1 do CSV de eventos variáveis e a chave para casar relatórios Conplus com o vínculo.
+    // Nulo até o DP informar: o Questor atribui o código na admissão, o Pralís não inventa.
+    questorCodigoContrato: text("questor_codigo_contrato"),
     criadoPor: text("criado_por")
       .notNull()
       .references(() => perfisUsuarios.usuarioId),
@@ -3853,6 +4232,13 @@ export const colaboradoresVinculos = pgTable(
       foreignColumns: [colaboradores.id, colaboradores.empresaId],
       name: "colaboradores_vinculos_colaborador_empresa_fk"
     }).onDelete("restrict"),
+    uniqueIndex("colaboradores_vinculos_empresa_questor_contrato_unico")
+      .on(table.empresaId, table.questorCodigoContrato)
+      .where(sql`${table.questorCodigoContrato} is not null`),
+    check(
+      "colaboradores_vinculos_questor_contrato_check",
+      sql`${table.questorCodigoContrato} is null or ${table.questorCodigoContrato} ~ '^[0-9]{1,7}$'`
+    ),
     foreignKey({
       columns: [table.processoId, table.empresaId],
       foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],

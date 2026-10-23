@@ -1,8 +1,4 @@
-import {
-  normalizarEstruturaMenuEmpresa,
-  type EstruturaMenuEmpresa,
-  type IdMenuConfiguravel
-} from "@padaria/shared";
+import { normalizarEstruturaMenuEmpresa, type EstruturaMenuEmpresa, type IdMenuConfiguravel } from "@padaria/shared";
 import { SECOES_MENU } from "~/utils/menu";
 
 export type SecaoMenu = EstruturaMenuEmpresa["secoes"][number];
@@ -41,6 +37,12 @@ const IDS_EXISTENTES_DP = new Set<IdMenuConfiguravel>([
   "areas_setores",
   "turnos"
 ]);
+const IDS_CONPLUS_DP: IdMenuConfiguravel[] = [
+  "conplus_folha_05",
+  "conplus_adiantamento_20",
+  "conplus_rescisoes",
+  "conplus_ferias"
+];
 
 /**
  * Uma estrutura salva nao e regravada quando uma tela nova entra no produto. Sem esta compatibilidade,
@@ -48,20 +50,22 @@ const IDS_EXISTENTES_DP = new Set<IdMenuConfiguravel>([
  * acrescenta o novo atalho na secao que ja concentra telas do DP; nao move nem altera escolhas salvas.
  */
 function incluirCentralDpEmEstruturaLegada(estrutura: EstruturaMenu): EstruturaMenu {
-  if (
-    estrutura.idsOcultos.includes(ID_CENTRAL_DP) ||
-    estrutura.secoes.some((secao) => secao.ids.includes(ID_CENTRAL_DP))
-  ) {
-    return estrutura;
-  }
+  if (estrutura.idsOcultos.includes(ID_CENTRAL_DP)) return estrutura;
   const indice = estrutura.secoes.findIndex(
     (secao) => secao.titulo === "Departamento pessoal" || secao.ids.some((id) => IDS_EXISTENTES_DP.has(id))
   );
   if (indice < 0) return estrutura;
+  const secaoDp = estrutura.secoes[indice];
+  if (!secaoDp) return estrutura;
+  const centralAusente = !secaoDp.ids.includes(ID_CENTRAL_DP);
+  const idsNovos = IDS_CONPLUS_DP.filter((id) => !estrutura.idsOcultos.includes(id) && !secaoDp.ids.includes(id));
+  if (!centralAusente && !idsNovos.length) return estrutura;
   return {
     ...estrutura,
     secoes: estrutura.secoes.map((secao, atual) =>
-      atual === indice ? { ...secao, ids: [ID_CENTRAL_DP, ...secao.ids] } : secao
+      atual === indice
+        ? { ...secao, ids: [...(centralAusente ? [ID_CENTRAL_DP] : []), ...secao.ids, ...idsNovos] }
+        : secao
     )
   };
 }

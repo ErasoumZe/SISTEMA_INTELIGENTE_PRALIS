@@ -216,6 +216,14 @@ export const permissoes = [
   "notas_fiscais_visualizar",
   "notas_fiscais_importar",
   "folha_ponto_visualizar",
+  // Folha Conplus carrega salários, eventos, rescisões e valores confidenciais. Não herda acesso de
+  // admissões nem de folha-ponto.
+  "conplus_importacoes_visualizar",
+  "conplus_importacoes_confirmar",
+  "conplus_importacoes_sincronizar",
+  "conplus_exportar_admissoes",
+  "conplus_exportar_eventos",
+  "conplus_questor_configurar",
   "menu_entradas_mostrar",
   "menu_entradas_desabilitado",
   "menu_entradas_somente_caixa_aberto",
@@ -374,6 +382,7 @@ const nomesRecursosPermissao: Record<string, string> = {
   cadastro_ingredientes: "os ingredientes",
   notas_fiscais: "as notas fiscais",
   folha_ponto: "as folhas de ponto",
+  conplus_importacoes: "as importações de folha Conplus",
   admissoes_testes: "os períodos de teste",
   admissoes_processos: "os processos de admissão",
   clientes: "os clientes",
@@ -401,6 +410,12 @@ const nomesRecursosPermissao: Record<string, string> = {
 };
 
 const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
+  conplus_importacoes_visualizar: "Permite consultar importações e valores de folha Conplus.",
+  conplus_importacoes_confirmar: "Permite confirmar e retificar importações Conplus validadas.",
+  conplus_importacoes_sincronizar: "Permite sincronizar importações Conplus com as planilhas autorizadas.",
+  conplus_exportar_admissoes: "Permite preparar exportações de admissão para o Questor.",
+  conplus_exportar_eventos: "Permite preparar exportações de eventos variáveis para o Questor.",
+  conplus_questor_configurar: "Permite configurar códigos e parâmetros Questor no Departamento Pessoal.",
   caixa_operar: "Permite abrir, operar e encaminhar o fechamento do caixa do próprio PDV.",
   caixa_alterar_horario: "Permite corrigir o horário registrado em uma operação de caixa.",
   lancamentos_recorrencia_criar: "Permite criar séries recorrentes de despesas, mercadorias e retiradas.",

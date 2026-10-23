@@ -6,9 +6,14 @@ export {
   admissoesConvites,
   admissoesProcessos,
   admissoesProcessosDependentes,
+  admissoesProcessosDependentesAnexos,
   admissoesProcessosFicha,
+  admissoesProcessosFichaAnexos,
   admissoesProcessosHistorico,
   admissoesProcessosInternos,
+  admissoesGoogleSincronizacoes,
+  admissoesGoogleDependentes,
+  admissoesGoogleArquivos,
   admissoesTestes,
   admissoesTestesHistorico
 } from "../app.schema.js";

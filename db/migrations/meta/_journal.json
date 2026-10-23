@@ -421,6 +421,83 @@
       "when": 1792161465890,
       "tag": "0059_absent_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792422373158,
+      "tag": "0060_left_george_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792426055938,
+      "tag": "0061_kind_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792513409463,
+      "tag": "0062_light_xorn",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792585113004,
+      "tag": "0063_conplus_importacoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792679633583,
+      "tag": "0064_questor_configuracao",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792679639569,
+      "tag": "0065_questor_cadastros",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792679651282,
+      "tag": "0066_questor_contrato_dp",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792685411122,
+      "tag": "0067_e5_campos_candidato",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1792691856390,
+      "tag": "0068_questor_exportacoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792692289455,
+      "tag": "0069_conplus_api_estrutura",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1792760751638,
+      "tag": "0070_eventos_layout_oficial",
+      "breakpoints": true
     }
   ]
 }

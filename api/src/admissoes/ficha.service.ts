@@ -7,6 +7,8 @@ import {
   fichaEnviarPayloadSchema,
   fichaRascunhoPayloadSchema,
   aprovarFichaPayloadSchema,
+  tiposAnexoAdmissaoObrigatorios,
+  tiposAnexoDependenteObrigatorios,
   type DadosExternos,
   type FichaPublicaDto,
   type FichaRascunhoPayload,
@@ -17,7 +19,13 @@ import { conflito, erroValidacao, foiEmbora, naoAutorizado, naoEncontrado } from
 import { env } from "../env.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
 import { hashTokenConvite } from "./convites.service.js";
-import { contarDependentesRepository, listarDependentesParaRevisaoRepository } from "./dependentes.repository.js";
+import {
+  contarDependentesRepository,
+  listarDependentesParaRevisaoRepository,
+  listarDependentesRepository
+} from "./dependentes.repository.js";
+import { listarAnexosDependenteRepository } from "./dependentes-anexos.repository.js";
+import type { AnexoDependenteDto } from "@padaria/shared/admissoes";
 import {
   atualizarFichaRepository,
   bloquearFichaRepository,
@@ -28,11 +36,13 @@ import {
   registrarAcessoConviteRepository,
   registrarEventoExternoRepository
 } from "./ficha.repository.js";
+import { listarAnexosFichaRepository } from "./anexos.repository.js";
 import {
   bloquearProcessoRepository,
   obterProcessoRepository,
   registrarEventoProcessoRepository
 } from "./processos.repository.js";
+import { sincronizarAdmissaoGoogle } from "./google-admissao-sync.service.js";
 
 /**
  * ADM-003 V3 — a ficha do candidato.
@@ -55,7 +65,6 @@ const CAMPOS_DA_FICHA: readonly (keyof CamposDaFicha)[] = [
   "sexo",
   "estadoCivil",
   "racaCor",
-  "grauInstrucao",
   "nacionalidade",
   "naturalidade",
   "nomeMae",
@@ -69,18 +78,12 @@ const CAMPOS_DA_FICHA: readonly (keyof CamposDaFicha)[] = [
   "uf",
   "telefone",
   "email",
-  "rgNumero",
-  "rgOrgao",
-  "rgUf",
-  "rgEmissao",
-  "tituloEleitor",
-  "tituloZona",
-  "tituloSecao",
-  "banco",
-  "agencia",
-  "conta",
-  "contaDigito",
-  "contaTipo"
+  "grauInstrucao",
+  "naturalidadeUf",
+  "municipioIbge",
+  "nacionalidadeEspecifica",
+  "primeiroEmprego",
+  "recebeSeguroDesemprego"
 ];
 
 /** A linha da ficha, como o repositorio a devolve. */
@@ -95,7 +98,6 @@ function camposDaLinha(ficha: LinhaDaFicha): CamposDaFicha {
     sexo: ficha.sexo,
     estadoCivil: ficha.estadoCivil,
     racaCor: ficha.racaCor,
-    grauInstrucao: ficha.grauInstrucao,
     nacionalidade: ficha.nacionalidade,
     naturalidade: ficha.naturalidade,
     nomeMae: ficha.nomeMae,
@@ -109,18 +111,12 @@ function camposDaLinha(ficha: LinhaDaFicha): CamposDaFicha {
     uf: ficha.uf,
     telefone: ficha.telefone,
     email: ficha.email,
-    rgNumero: ficha.rgNumero,
-    rgOrgao: ficha.rgOrgao,
-    rgUf: ficha.rgUf,
-    rgEmissao: ficha.rgEmissao,
-    tituloEleitor: ficha.tituloEleitor,
-    tituloZona: ficha.tituloZona,
-    tituloSecao: ficha.tituloSecao,
-    banco: ficha.banco,
-    agencia: ficha.agencia,
-    conta: ficha.conta,
-    contaDigito: ficha.contaDigito,
-    contaTipo: ficha.contaTipo
+    grauInstrucao: ficha.grauInstrucao,
+    naturalidadeUf: ficha.naturalidadeUf,
+    municipioIbge: ficha.municipioIbge,
+    nacionalidadeEspecifica: ficha.nacionalidadeEspecifica,
+    primeiroEmprego: ficha.primeiroEmprego,
+    recebeSeguroDesemprego: ficha.recebeSeguroDesemprego
   };
 }
 
@@ -156,20 +152,22 @@ export async function conviteDoToken(token: string | undefined): Promise<Convite
 
 /** Campo AUSENTE nao mexe no que esta gravado; vazio LIMPA. E a mesma regra do bloco interno. */
 function camposDoPayload(dados: Partial<CamposDaFicha>) {
-  const campos: Record<string, string | null> = {};
+  const campos: Record<string, string | boolean | null> = {};
   for (const campo of CAMPOS_DA_FICHA) {
     if (campo in dados) {
       const valor = dados[campo];
+      // Texto vazio vira NULL; booleano (E5) é gravado como veio, inclusive `false`.
       campos[campo] = valor === undefined || valor === null || valor === "" ? null : valor;
     }
   }
-  return campos;
+  return campos as Partial<CamposDaFicha>;
 }
 
 function paraDtoPublico(
   ficha: LinhaDaFicha,
   cabecalho: FichaPublicaDto["cabecalho"],
-  versaoVigente: string
+  versaoVigente: string,
+  anexos: FichaPublicaDto["anexos"]
 ): FichaPublicaDto {
   const aviso = avisoPorVersao(versaoVigente);
   return {
@@ -181,6 +179,7 @@ function paraDtoPublico(
     avisoAceitoEm: ficha.avisoAceitoEm?.toISOString() ?? null,
     avisoTexto: aviso?.texto ?? "",
     avisoVersaoVigente: versaoVigente,
+    anexos,
     cabecalho,
     campos: camposDaLinha(ficha)
   };
@@ -200,6 +199,7 @@ export async function obterFichaPublica(token: string | undefined): Promise<Fich
 
     const ficha = await obterFichaRepository(convite.processoId, convite.empresaId, tx);
     if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
+    const anexos = await listarAnexosFichaRepository(ficha.id, convite.empresaId, tx);
 
     const processo = await obterProcessoRepository(convite.processoId, convite.empresaId);
     const empresaNome = await obterNomeDaEmpresaRepository(convite.empresaId, tx);
@@ -212,7 +212,15 @@ export async function obterFichaPublica(token: string | undefined): Promise<Fich
         turnoRotulo: processo?.turnoRotulo ?? null,
         dataAdmissao: processo?.internosDataAdmissao ?? null
       },
-      versaoVigente
+      versaoVigente,
+      anexos.map((anexo) => ({
+        id: anexo.id,
+        tipo: anexo.tipo as FichaPublicaDto["anexos"][number]["tipo"],
+        nomeOriginal: anexo.nomeOriginal,
+        mimeType: anexo.mimeType,
+        tamanhoBytes: anexo.tamanhoBytes,
+        criadoEm: anexo.criadoEm.toISOString()
+      }))
     );
   });
 }
@@ -267,7 +275,7 @@ export async function enviarFicha(token: string | undefined, body: DadosExternos
     throw conflito("O aviso mudou desde que o link foi gerado. Recarregue a pagina.", "AVISO_DESATUALIZADO");
   }
 
-  return executarEmTransacao(async (tx) => {
+  const resultado = await executarEmTransacao(async (tx) => {
     const alvo = await bloquearProcessoRepository(convite.processoId, convite.empresaId, tx);
     if (!alvo) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
 
@@ -283,6 +291,29 @@ export async function enviarFicha(token: string | undefined, body: DadosExternos
     }
     if (!dados.semDependentes && quantos === 0) {
       throw conflito("Você marcou que tem dependentes, mas não cadastrou nenhum.", "DEPENDENTES_INCOERENTES");
+    }
+
+    const anexosFicha = await listarAnexosFichaRepository(ficha.id, convite.empresaId, tx);
+    const tiposAnexosFicha = new Set(anexosFicha.map((anexo) => anexo.tipo));
+    if (tiposAnexoAdmissaoObrigatorios.some((tipo) => !tiposAnexosFicha.has(tipo))) {
+      throw conflito(
+        "Envie o CPF e o comprovante de residência antes de enviar a ficha.",
+        "ANEXOS_OBRIGATORIOS_AUSENTES"
+      );
+    }
+
+    if (!dados.semDependentes) {
+      const dependentes = await listarDependentesRepository(convite.processoId, convite.empresaId, tx);
+      for (const dependente of dependentes) {
+        const anexos = await listarAnexosDependenteRepository(dependente.id, convite.empresaId, tx);
+        const tipos = new Set(anexos.map((anexo) => anexo.tipo));
+        if (tiposAnexoDependenteObrigatorios.some((tipo) => !tipos.has(tipo))) {
+          throw conflito(
+            `Envie os quatro documentos obrigatórios de ${dependente.nomeCompleto} antes de enviar a ficha.`,
+            "ANEXOS_DEPENDENTE_OBRIGATORIOS_AUSENTES"
+          );
+        }
+      }
     }
 
     const versao = await atualizarFichaRepository(
@@ -318,6 +349,19 @@ export async function enviarFicha(token: string | undefined, body: DadosExternos
       tx
     );
   });
+
+  // A gravacao da ficha permanece independente da integracao externa. Quando habilitada, a
+  // sincronizacao roda depois do commit e usa o controle idempotente da migration Google. Se a
+  // migration ainda nao estiver aplicada ou o Google estiver indisponivel, a ficha continua
+  // enviada e o erro e mantido como pendencia operacional, sem expor segredo ao candidato.
+  if (env.GOOGLE_ADMISSAO_SYNC_ENABLED) {
+    try {
+      await sincronizarAdmissaoGoogle(convite.processoId, convite.empresaId);
+    } catch {
+      console.warn("[admissao-google] sincronizacao pendente; a ficha foi preservada");
+    }
+  }
+  return resultado;
 }
 
 /**
@@ -383,13 +427,35 @@ export async function obterFichaParaRevisao(
     campos: camposDaLinha(ficha),
     // Copia campo a campo, como `camposDaLinha`: sem cast, um `cpf` que alguem acrescentasse a
     // selecao do repositorio nao passaria por aqui em silencio.
-    dependentes: dependentes.map((dependente) => ({
-      id: dependente.id,
-      nomeCompleto: dependente.nomeCompleto,
-      nascimento: dependente.nascimento,
-      parentesco: dependente.parentesco,
-      cpfInformado: dependente.cpfInformado,
-      finalidades: dependente.finalidades
+    dependentes: await Promise.all(
+      dependentes.map(async (dependente) => ({
+        id: dependente.id,
+        nomeCompleto: dependente.nomeCompleto,
+        nascimento: dependente.nascimento,
+        parentesco: dependente.parentesco,
+        cpfInformado: dependente.cpfInformado,
+        finalidades: dependente.finalidades,
+        sexo: dependente.sexo,
+        estadoCivil: dependente.estadoCivil,
+        grauInstrucao: dependente.grauInstrucao,
+        nacionalidade: dependente.nacionalidade,
+        anexos: (await listarAnexosDependenteRepository(dependente.id, empresaId)).map((anexo) => ({
+          id: anexo.id,
+          tipo: anexo.tipo as AnexoDependenteDto["tipo"],
+          nomeOriginal: anexo.nomeOriginal,
+          mimeType: anexo.mimeType,
+          tamanhoBytes: anexo.tamanhoBytes,
+          criadoEm: anexo.criadoEm.toISOString()
+        }))
+      }))
+    ),
+    anexos: (await listarAnexosFichaRepository(ficha.id, empresaId)).map((anexo) => ({
+      id: anexo.id,
+      tipo: anexo.tipo as FichaRevisaoDto["anexos"][number]["tipo"],
+      nomeOriginal: anexo.nomeOriginal,
+      mimeType: anexo.mimeType,
+      tamanhoBytes: anexo.tamanhoBytes,
+      criadoEm: anexo.criadoEm.toISOString()
     }))
   };
 }

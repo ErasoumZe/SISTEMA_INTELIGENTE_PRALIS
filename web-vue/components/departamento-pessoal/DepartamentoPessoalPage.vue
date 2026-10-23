@@ -2,12 +2,24 @@
 import type { AuthSession } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import IconeDestaque from "~/components/comum/IconeDestaque.vue";
+import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 
 type Fila = "testesAtivos" | "testesVencemHoje" | "testesVencidos" | "fichasEnviadas" | "processosPausados";
 type ResultadoPaginado = { total: number };
+type GoogleRecursoDiagnostico = {
+  status: "ok" | "inacessivel" | "indisponivel";
+  nome?: string;
+  motivo?: string;
+  alternativas?: string[];
+};
+type GoogleConexaoDiagnostico = {
+  status?: "conectado";
+  pasta: GoogleRecursoDiagnostico;
+  planilha: GoogleRecursoDiagnostico;
+};
 
-const { apiGetPaginado } = useApi();
+const { apiGet, apiGetPaginado } = useApi();
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeVerTestes = computed(() => temPermissao(permissoes.value, "admissoes_testes_visualizar"));
@@ -16,6 +28,7 @@ const podeVerColaboradores = computed(() => temPermissao(permissoes.value, "cada
 const podeVerFuncoes = computed(() => temPermissao(permissoes.value, "cadastro_funcoes_visualizar"));
 const podeVerAreas = computed(() => temPermissao(permissoes.value, "cadastro_areas_setores_visualizar"));
 const podeVerTurnos = computed(() => temPermissao(permissoes.value, "cadastro_turnos_visualizar"));
+const podeVerQuestor = computed(() => temPermissao(permissoes.value, "conplus_importacoes_visualizar"));
 
 const totais = reactive<Record<Fila, number | null>>({
   testesAtivos: null,
@@ -26,6 +39,10 @@ const totais = reactive<Record<Fila, number | null>>({
 });
 const carregando = ref(false);
 const erro = ref("");
+const googleDiagnostico = ref<GoogleConexaoDiagnostico | null>(null);
+const googleDiagnosticoCarregando = ref(false);
+const googleDiagnosticoErro = ref("");
+const podeTestarGoogle = computed(() => sessao.value?.perfil?.role === "usuario_admin");
 
 function consulta(pares: Record<string, string>) {
   return `?${new URLSearchParams({ page: "1", pageSize: "1", ...pares }).toString()}`;
@@ -61,6 +78,55 @@ function total(chave: Fila) {
   return totais[chave] === null ? "—" : String(totais[chave]);
 }
 
+function statusGoogle(status: GoogleRecursoDiagnostico["status"]) {
+  if (status === "ok") return "success";
+  if (status === "inacessivel") return "warning";
+  return "error";
+}
+
+function tituloStatusGoogle(status: GoogleRecursoDiagnostico["status"]) {
+  if (status === "ok") return "Conectado";
+  if (status === "inacessivel") return "Sem acesso ao recurso";
+  return "Indisponível";
+}
+
+function mensagemErroGoogle(error: unknown) {
+  if (error instanceof ErroApiCliente) {
+    if (error.codigo === "GOOGLE_NOT_CONFIGURED") {
+      return "A integração Google ainda não está configurada no ambiente da API.";
+    }
+    if (error.codigo === "GOOGLE_CONNECTION_FAILED") {
+      return "A conexão foi recusada por pelo menos um serviço Google. Os cartões abaixo mostram Drive e Sheets separadamente.";
+    }
+    if (error.status === 401 || error.status === 403) {
+      return "Sua sessão não tem autorização administrativa para realizar este diagnóstico.";
+    }
+  }
+  return "Não foi possível testar a conexão Google. Verifique se a API está em execução e tente novamente.";
+}
+
+function diagnosticoGoogleDoErro(error: unknown) {
+  if (!(error instanceof ErroApiCliente) || !error.details || typeof error.details !== "object") return null;
+  const detalhes = error.details as Partial<GoogleConexaoDiagnostico>;
+  if (!detalhes.pasta || !detalhes.planilha) return null;
+  return { pasta: detalhes.pasta, planilha: detalhes.planilha };
+}
+
+async function testarConexaoGoogle() {
+  if (!podeTestarGoogle.value || googleDiagnosticoCarregando.value) return;
+  googleDiagnosticoCarregando.value = true;
+  googleDiagnosticoErro.value = "";
+  googleDiagnostico.value = null;
+  try {
+    googleDiagnostico.value = await apiGet<GoogleConexaoDiagnostico>("/api/integracoes/google/conexao");
+  } catch (error) {
+    googleDiagnostico.value = diagnosticoGoogleDoErro(error);
+    googleDiagnosticoErro.value = mensagemErroGoogle(error);
+  } finally {
+    googleDiagnosticoCarregando.value = false;
+  }
+}
+
 onMounted(() => void carregarResumo());
 </script>
 
@@ -76,6 +142,53 @@ onMounted(() => void carregarResumo());
       </div>
       <v-btn variant="tonal" prepend-icon="mdi-refresh" :loading="carregando" @click="carregarResumo">Atualizar</v-btn>
     </header>
+
+    <section v-if="podeTestarGoogle" class="bloco" aria-labelledby="dp-google-diagnostico">
+      <div class="titulo-bloco">
+        <div>
+          <h2 id="dp-google-diagnostico">Integração da admissão</h2>
+          <p>Diagnóstico de leitura da pasta de documentos e da planilha de colaboradores.</p>
+        </div>
+        <v-btn
+          color="secondary"
+          variant="outlined"
+          prepend-icon="mdi-google-drive"
+          :loading="googleDiagnosticoCarregando"
+          @click="testarConexaoGoogle"
+        >
+          Testar conexão Google
+        </v-btn>
+      </div>
+
+      <v-alert v-if="googleDiagnosticoErro" type="error" variant="tonal" class="mb-4">
+        {{ googleDiagnosticoErro }}
+      </v-alert>
+
+      <v-row v-if="googleDiagnostico" dense>
+        <v-col cols="12" md="6">
+          <v-card variant="tonal" class="h-100">
+            <v-card-title>Google Drive</v-card-title>
+            <v-card-text>
+              <v-chip :color="statusGoogle(googleDiagnostico.pasta.status)" size="small">
+                {{ tituloStatusGoogle(googleDiagnostico.pasta.status) }}
+              </v-chip>
+              <div v-if="googleDiagnostico.pasta.nome" class="mt-2">{{ googleDiagnostico.pasta.nome }}</div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-card variant="tonal" class="h-100">
+            <v-card-title>Google Sheets</v-card-title>
+            <v-card-text>
+              <v-chip :color="statusGoogle(googleDiagnostico.planilha.status)" size="small">
+                {{ tituloStatusGoogle(googleDiagnostico.planilha.status) }}
+              </v-chip>
+              <div v-if="googleDiagnostico.planilha.nome" class="mt-2">{{ googleDiagnostico.planilha.nome }}</div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </section>
 
     <v-alert v-if="erro" type="warning" variant="tonal" density="comfortable" class="mb-5"
       >Não foi possível atualizar todas as filas agora. {{ erro
@@ -152,9 +265,13 @@ onMounted(() => void carregarResumo());
             <div>
               <h3>Folha de pagamento</h3>
               <p>Salários, eventos e fechamento mensal.</p>
-              <span class="acao-card__status">Em preparação</span>
+              <span class="acao-card__status">Importação Conplus disponível</span>
             </div></v-card-text
-          ></v-card
+          ><v-card-actions class="acao-card__acoes"
+            ><v-btn to="/conplus/folha-05" color="primary" variant="flat" prepend-icon="mdi-file-import-outline"
+              >Abrir importação</v-btn
+            >
+          </v-card-actions></v-card
         >
         <v-card class="acao-card acao-card--ponto acao-card--preparacao" variant="outlined"
           ><v-card-text class="acao-card__conteudo"
@@ -230,7 +347,11 @@ onMounted(() => void carregarResumo());
       </div>
     </section>
 
-    <section v-if="podeVerFuncoes || podeVerAreas || podeVerTurnos" class="bloco" aria-labelledby="dp-cadastros">
+    <section
+      v-if="podeVerFuncoes || podeVerAreas || podeVerTurnos || podeVerQuestor"
+      class="bloco"
+      aria-labelledby="dp-cadastros"
+    >
       <div class="titulo-bloco">
         <div>
           <h2 id="dp-cadastros">Cadastros base</h2>
@@ -243,6 +364,9 @@ onMounted(() => void carregarResumo());
         ><v-btn v-if="podeVerAreas" to="/areas_setores" prepend-icon="mdi-map-marker-outline" variant="outlined"
           >Áreas e setores</v-btn
         ><v-btn v-if="podeVerTurnos" to="/turnos" prepend-icon="mdi-clock-outline" variant="outlined">Turnos</v-btn>
+        <v-btn v-if="podeVerQuestor" to="/questor" prepend-icon="mdi-file-cog-outline" variant="outlined"
+          >Configuração Questor</v-btn
+        >
       </div>
     </section>
 

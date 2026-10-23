@@ -3,3 +3,6 @@
 *.ico binary
 *.xlsx binary
 *.pdf binary
+# Arquivos oficiais Conplus/Questor: CRLF e bytes originais fazem parte do contrato comparado nos testes.
+tests/fixtures/conplus-oficial/** -text
+tests/fixtures/conplus-gerados/** -text

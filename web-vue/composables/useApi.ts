@@ -73,12 +73,13 @@ function mensagemErroApi(body: unknown) {
 }
 
 async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body?: unknown) {
-  const executar = () => fetch(`${apiUrl}${rota}`, {
-    method,
-    credentials: "include",
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  const executar = () =>
+    fetch(`${apiUrl}${rota}`, {
+      method,
+      credentials: "include",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
   let resposta: Response;
   try {
     resposta = await executar();
@@ -180,6 +181,21 @@ export function useApi() {
     return request<T>(apiUrl, "DELETE", rota);
   }
 
+  async function apiUpload<T>(rota: string, dados: FormData) {
+    const resposta = await fetch(`${apiUrl}${rota}`, {
+      method: "POST",
+      credentials: "include",
+      body: dados
+    });
+    const payload = await lerJson(resposta);
+    if (!resposta.ok) {
+      const codigo = isProblemDetails(payload) ? payload.code : undefined;
+      const details = isProblemDetails(payload) ? payload.details : undefined;
+      throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo, details);
+    }
+    return isApiSuccess<T>(payload) ? payload.data : (payload as T);
+  }
+
   async function carregarSessao(): Promise<AuthSession | null> {
     const resposta = await fetch(`${apiUrl}/api/me`, { credentials: "include", cache: "no-store" });
     if (resposta.status === 401) return null;
@@ -235,5 +251,16 @@ export function useApi() {
     document.documentElement.style.setProperty("--padaria-card-saldo", temaResumoCaixa.corSucesso);
   }
 
-  return { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiPatch, apiDelete, carregarSessao, aplicarTema };
+  return {
+    apiUrl,
+    apiGet,
+    apiGetPaginado,
+    apiPost,
+    apiPut,
+    apiPatch,
+    apiDelete,
+    apiUpload,
+    carregarSessao,
+    aplicarTema
+  };
 }

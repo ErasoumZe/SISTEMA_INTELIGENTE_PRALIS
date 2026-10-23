@@ -15,8 +15,11 @@ export default tseslint.config(
       "**/.nuxt/**",
       "**/.output/**",
       "**/node_modules/**",
+      "db/proposals/**",
       "**/*.json",
       "**/*.jsonc",
+      "web-vue/**/*.test.ts",
+      "web-vue/**/*.spec.ts",
       // Arquivo estatico executado pelo navegador como Service Worker; nao participa do projeto TS.
       "web-vue/public/sw.js",
       "integracoes-scripts/**"
@@ -33,6 +36,7 @@ export default tseslint.config(
         projectService: {
           allowDefaultProject: [
             "*.mjs",
+            "vitest.config.ts",
             "scripts/*.mjs",
             "db/setup-dev.mjs",
             "db/seed.ts",
@@ -104,6 +108,15 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-unsafe-call": "off",
       "no-restricted-syntax": "off"
+    }
+  },
+  {
+    files: ["web-vue/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./web-vue/tsconfig.eslint.json"
+      }
     }
   }
 );

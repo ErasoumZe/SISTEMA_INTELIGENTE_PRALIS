@@ -56,8 +56,12 @@ describe("seguranca default-deny integration", () => {
     );
     const rotas = [...bloco.matchAll(/"([^"]+)"/gu)].map((achado) => achado[1]).sort();
     expect(rotas).toEqual([
+      "/api/admissao/anexos",
+      "/api/admissao/anexos/:id",
       "/api/admissao/dependentes",
       "/api/admissao/dependentes/:id",
+      "/api/admissao/dependentes/:id/anexos",
+      "/api/admissao/dependentes/:id/anexos/:anexoId",
       "/api/admissao/ficha",
       "/api/admissao/ficha/enviar",
       "/api/auth/*",

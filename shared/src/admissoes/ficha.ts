@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { dependenteRevisaoDtoSchema } from "./dependentes.js";
+import { anexoAdmissaoDtoSchema } from "./anexos.js";
+import { NACIONALIDADES_QUESTOR } from "../conplus/questor-de-para.js";
 
 /**
  * ADM-003 V3 — a ficha que o candidato preenche pelo link.
@@ -29,7 +31,6 @@ const camposDaFicha = {
   sexo: texto().nullish(),
   estadoCivil: texto().nullish(),
   racaCor: texto().nullish(),
-  grauInstrucao: texto().nullish(),
   nacionalidade: texto().nullish(),
   naturalidade: texto().nullish(),
   nomeMae: texto(LIMITE_LONGO).nullish(),
@@ -56,23 +57,30 @@ const camposDaFicha = {
     .regex(/^[0-9]{10,11}$/u, "Telefone precisa ter 10 ou 11 digitos")
     .nullish(),
   email: z.string().trim().email("E-mail invalido").max(LIMITE_LONGO).nullish(),
-  rgNumero: texto(30).nullish(),
-  rgOrgao: texto(30).nullish(),
-  rgUf: z
+  // E5 (Questor) — campos comuns. Opcionais no rascunho E no envio: a prévia de prontidão do DP
+  // mostra o que falta para o Questor. Listas = rótulos da documentação oficial.
+  // Texto livre de até 100 caracteres, como a coluna sempre aceitou (o cadastro de colaborador
+  // também): fichas e clientes existentes continuam válidos. A tela oferece a lista oficial
+  // (`GRAUS_INSTRUCAO_QUESTOR`); valor fora dela vira pendência "fora da lista" na prévia Questor.
+  grauInstrucao: texto(100).nullish(),
+  naturalidadeUf: z
     .string()
     .trim()
     .toUpperCase()
     .regex(/^[A-Z]{2}$/u, "UF precisa ter duas letras")
     .nullish(),
-  rgEmissao: dataIso.nullish(),
-  tituloEleitor: texto(30).nullish(),
-  tituloZona: texto(10).nullish(),
-  tituloSecao: texto(10).nullish(),
-  banco: texto().nullish(),
-  agencia: texto(20).nullish(),
-  conta: texto(20).nullish(),
-  contaDigito: texto(5).nullish(),
-  contaTipo: texto(30).nullish()
+  // Preenchido pela consulta de CEP (campo `ibge` do ViaCEP), nunca digitado.
+  municipioIbge: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{7}$/u, "Codigo IBGE invalido")
+    .nullish(),
+  nacionalidadeEspecifica: z
+    .string()
+    .refine((valor) => NACIONALIDADES_QUESTOR.includes(valor), "Nacionalidade fora da lista")
+    .nullish(),
+  primeiroEmprego: z.boolean().nullish(),
+  recebeSeguroDesemprego: z.boolean().nullish()
 };
 
 export const fichaRascunhoPayloadSchema = z.object({
@@ -103,7 +111,6 @@ const obrigatoriosParaEnviar = [
   "sexo",
   "estadoCivil",
   "racaCor",
-  "grauInstrucao",
   "nacionalidade",
   "naturalidade",
   "nomeMae",
@@ -113,11 +120,7 @@ const obrigatoriosParaEnviar = [
   "bairro",
   "municipio",
   "uf",
-  "telefone",
-  "rgNumero",
-  "rgOrgao",
-  "rgUf",
-  "rgEmissao"
+  "telefone"
 ] as const;
 
 export const camposObrigatoriosDaFicha: readonly string[] = obrigatoriosParaEnviar;
@@ -137,6 +140,14 @@ export const fichaEnviarPayloadSchema = fichaRascunhoPayloadSchema
     avisoPrivacidadeVersao: z.string().trim().min(1)
   })
   .superRefine((dados, ctx) => {
+    // "Estrangeira" não tem código no Questor: no envio, a nacionalidade específica é obrigatória.
+    if (dados.nacionalidade === "Estrangeira" && !dados.nacionalidadeEspecifica) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["nacionalidadeEspecifica"],
+        message: "Informe a nacionalidade"
+      });
+    }
     for (const campo of obrigatoriosParaEnviar) {
       // `dados` ja e o objeto tipado do proprio schema, e `campo` e uma chave dele — o indice e
       // seguro sem cast, e um campo removido do schema quebraria aqui em vez de virar `unknown`.
@@ -166,6 +177,7 @@ export const fichaPublicaDtoSchema = z.object({
   /** O texto do aviso vigente, para a pessoa ler ANTES de aceitar. */
   avisoTexto: z.string(),
   avisoVersaoVigente: z.string(),
+  anexos: z.array(anexoAdmissaoDtoSchema),
   /** Somente leitura: o que o DP preencheu e o candidato apenas confere. */
   cabecalho: z.object({
     empresaNome: z.string(),
@@ -198,7 +210,8 @@ export const fichaRevisaoDtoSchema = z.object({
   avisoPrivacidadeVersao: z.string().nullable(),
   avisoAceitoEm: z.string().nullable(),
   campos: z.object(camposDaFicha),
-  dependentes: z.array(dependenteRevisaoDtoSchema)
+  dependentes: z.array(dependenteRevisaoDtoSchema),
+  anexos: z.array(anexoAdmissaoDtoSchema)
 });
 
 export type FichaRevisaoDto = z.infer<typeof fichaRevisaoDtoSchema>;

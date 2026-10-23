@@ -26,7 +26,6 @@ const camposDaFicha = {
   sexo: admissoesProcessosFicha.sexo,
   estadoCivil: admissoesProcessosFicha.estadoCivil,
   racaCor: admissoesProcessosFicha.racaCor,
-  grauInstrucao: admissoesProcessosFicha.grauInstrucao,
   nacionalidade: admissoesProcessosFicha.nacionalidade,
   naturalidade: admissoesProcessosFicha.naturalidade,
   nomeMae: admissoesProcessosFicha.nomeMae,
@@ -40,18 +39,13 @@ const camposDaFicha = {
   uf: admissoesProcessosFicha.uf,
   telefone: admissoesProcessosFicha.telefone,
   email: admissoesProcessosFicha.email,
-  rgNumero: admissoesProcessosFicha.rgNumero,
-  rgOrgao: admissoesProcessosFicha.rgOrgao,
-  rgUf: admissoesProcessosFicha.rgUf,
-  rgEmissao: admissoesProcessosFicha.rgEmissao,
-  tituloEleitor: admissoesProcessosFicha.tituloEleitor,
-  tituloZona: admissoesProcessosFicha.tituloZona,
-  tituloSecao: admissoesProcessosFicha.tituloSecao,
-  banco: admissoesProcessosFicha.banco,
-  agencia: admissoesProcessosFicha.agencia,
-  conta: admissoesProcessosFicha.conta,
-  contaDigito: admissoesProcessosFicha.contaDigito,
-  contaTipo: admissoesProcessosFicha.contaTipo
+  // E5 (Questor) — campos comuns do candidato.
+  grauInstrucao: admissoesProcessosFicha.grauInstrucao,
+  naturalidadeUf: admissoesProcessosFicha.naturalidadeUf,
+  municipioIbge: admissoesProcessosFicha.municipioIbge,
+  nacionalidadeEspecifica: admissoesProcessosFicha.nacionalidadeEspecifica,
+  primeiroEmprego: admissoesProcessosFicha.primeiroEmprego,
+  recebeSeguroDesemprego: admissoesProcessosFicha.recebeSeguroDesemprego
 };
 
 function selecao() {
@@ -113,7 +107,8 @@ export async function garantirFichaRepository(input: { processoId: string; empre
     .onConflictDoNothing();
 }
 
-type CamposGravaveis = Partial<Record<keyof typeof camposDaFicha, string | null>>;
+/** Tipos das colunas: desde a E5 há booleanos (primeiro emprego, seguro-desemprego), não só texto. */
+type CamposGravaveis = Partial<Pick<typeof admissoesProcessosFicha.$inferInsert, keyof typeof camposDaFicha>>;
 
 /**
  * `versaoAtual` no WHERE: retorno nulo significa que alguem gravou no meio.

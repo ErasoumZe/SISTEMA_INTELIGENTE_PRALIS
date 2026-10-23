@@ -25,6 +25,12 @@ CADASTRO DE PRODUTOS/
 # Nao e fonte de verdade e nao deve ser lido por agentes.
 _ARQUIVO_MORTO/
 docs/
+!docs/
+!docs/integracoes/
+!docs/integracoes/conplus/
+!docs/integracoes/conplus/*.md
+!docs/infra/
+!docs/infra/*.md
 # PDFs de analise/reuniao gerados localmente
 *.pdf
 

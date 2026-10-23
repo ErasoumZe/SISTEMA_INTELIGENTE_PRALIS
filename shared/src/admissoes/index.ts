@@ -10,6 +10,8 @@ export * from "./convites.js";
 export * from "./ficha.js";
 // ADM-003 V4 — os dependentes que o candidato declara. Importa de `./cpf.js`, nunca daqui.
 export * from "./dependentes.js";
+export * from "./anexos.js";
+export * from "./dependentes-anexos.js";
 
 // =================================================================================================
 // ADM-001 â€” Controle de periodo de teste (piloto TNP).

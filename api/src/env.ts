@@ -3,11 +3,13 @@ import { resolve } from "node:path";
 import { config as carregarEnv } from "dotenv";
 import { z } from "zod";
 
-// Segredos locais vencem os defaults de `.env`, mas nunca entram no bundle do Nuxt. O segundo
-// caminho cobre `npm --workspace api`; o primeiro cobre o servidor iniciado pela raiz.
+// Segredos locais completam os defaults de `.env`, mas nunca entram no bundle do Nuxt. O segundo
+// caminho cobre `npm --workspace api`; o primeiro cobre o servidor iniciado pela raiz. Em Docker,
+// variaveis declaradas explicitamente no Compose precisam vencer o arquivo montado (por exemplo,
+// DATABASE_URL usa o host `db`, nao `localhost`).
 carregarEnv({
   path: [...new Set([resolve(process.cwd(), ".env.local"), resolve(process.cwd(), "..", ".env.local")])],
-  override: true,
+  override: false,
   quiet: true
 });
 
@@ -17,6 +19,10 @@ const segredoPlaceholderExample = "change-me-in-production-with-at-least-32-char
 const envOpcionalNaoVazio = z.preprocess(
   (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
   z.string().trim().min(1).optional()
+);
+const envOpcionalUrl = z.preprocess(
+  (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
+  z.string().trim().url().optional()
 );
 
 const envSchema = z.object({
@@ -34,6 +40,35 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
   SENTRY_DSN: z.string().url().optional(),
+  // OAuth2 do Google: configuracao opcional para desenvolvimento. O refresh token nunca deve
+  // aparecer em logs, respostas HTTP, bundle do Nuxt ou arquivos versionados.
+  GOOGLE_CLIENT_ID: envOpcionalNaoVazio,
+  GOOGLE_CLIENT_SECRET: envOpcionalNaoVazio,
+  GOOGLE_REFRESH_TOKEN: envOpcionalNaoVazio,
+  GOOGLE_DRIVE_FOLDER_ID: envOpcionalNaoVazio,
+  GOOGLE_SPREADSHEET_ID: envOpcionalNaoVazio,
+  // A sincronizacao da admissao so pode ser habilitada explicitamente depois de a migration de
+  // controle Google ser aplicada e o destino real ser validado. O default seguro e desligado.
+  GOOGLE_ADMISSAO_SYNC_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  // A sincronização Conplus permanece desativada até a migration, os cabeçalhos e o destino
+  // real serem validados. Nunca habilitar por ausência de configuração.
+  CONPLUS_GOOGLE_SYNC_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  // Exportações Questor são bloqueadas por padrão. Os dois gates precisam ser explicitamente
+  // habilitados apenas após confirmação do layout/códigos pela Conplus e revisão operacional.
+  CONPLUS_QUESTOR_EXPORT_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  CONPLUS_QUESTOR_EXPORT_HOMOLOGADA: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde
   // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
   GEMINI_API_KEY: envOpcionalNaoVazio,
@@ -57,7 +92,7 @@ const envSchema = z.object({
   // Webhook da contabilidade (Make.com) para importar NF-e por CNPJ/periodo. Sem URL/TOKEN, a
   // importacao de notas fiscais fica indisponivel (erro claro na rota); o resto do sistema funciona.
   // O CNPJ de cada empresa NAO vem daqui: e resolvido de empresas.cnpj no banco.
-  NOTAS_FISCAIS_URL: z.string().url().optional(),
+  NOTAS_FISCAIS_URL: envOpcionalUrl,
   NOTAS_FISCAIS_TOKEN: z.string().optional(),
   // Identificador FIXO da contabilidade no filtro (campo `company` de obternfeporfiltro). NAO e o
   // CNPJ da empresa consultada (esse vai em data.search.Client). Exposto como env para trocar de

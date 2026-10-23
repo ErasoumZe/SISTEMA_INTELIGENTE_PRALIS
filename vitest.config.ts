@@ -25,7 +25,12 @@ export default defineConfig({
           testTimeout: 60_000,
           hookTimeout: 180_000,
           fileParallelism: false,
-          pool: "forks"
+          // Threads evitam duplicar processos Node durante o setup do Testcontainers. Em Windows,
+          // o pool de forks excede a memória disponível e deixa a suíte sem iniciar os testes.
+          // Um Ãºnico processo filho evita a violaÃ§Ã£o de acesso observada no encerramento do pool
+          // de threads no Windows e limita o pico de memÃ³ria do Testcontainers.
+          pool: "forks",
+          maxWorkers: 1
         }
       }
     ]

@@ -1,4 +1,9 @@
-import { dependentePayloadSchema, type DadosExternos, type DependentesDto } from "@padaria/shared";
+import {
+  dependentePayloadSchema,
+  type AnexoDependenteDto,
+  type DadosExternos,
+  type DependentesDto
+} from "@padaria/shared";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { conflito, erroValidacao, falhaTecnica, naoEncontrado } from "../erros.js";
 import {
@@ -9,6 +14,23 @@ import {
 } from "./dependentes.repository.js";
 import { atualizarFichaRepository, obterFichaRepository } from "./ficha.repository.js";
 import { conviteDoToken, travarFichaEditavel, type Convite } from "./ficha.service.js";
+import { listarAnexosDependenteRepository } from "./dependentes-anexos.repository.js";
+
+async function itensComAnexos(itens: Awaited<ReturnType<typeof listarDependentesRepository>>, empresaId: string) {
+  return Promise.all(
+    itens.map(async (item) => ({
+      ...item,
+      anexos: (await listarAnexosDependenteRepository(item.id, empresaId)).map((anexo) => ({
+        id: anexo.id,
+        tipo: anexo.tipo as AnexoDependenteDto["tipo"],
+        nomeOriginal: anexo.nomeOriginal,
+        mimeType: anexo.mimeType,
+        tamanhoBytes: anexo.tamanhoBytes,
+        criadoEm: anexo.criadoEm.toISOString()
+      }))
+    }))
+  );
+}
 
 /**
  * ADM-003 V4 — os dependentes, pela porta do candidato.
@@ -102,7 +124,10 @@ export async function listarDependentes(token: string | undefined): Promise<Depe
   const convite = await conviteDoToken(token);
   const ficha = await obterFichaRepository(convite.processoId, convite.empresaId);
   if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
-  const itens = await listarDependentesRepository(convite.processoId, convite.empresaId);
+  const itens = await itensComAnexos(
+    await listarDependentesRepository(convite.processoId, convite.empresaId),
+    convite.empresaId
+  );
   return { versao: ficha.versao, semDependentes: ficha.semDependentes, itens };
 }
 
@@ -121,7 +146,11 @@ export async function criarDependente(token: string | undefined, body: DadosExte
           nascimento: dados.nascimento,
           parentesco: dados.parentesco,
           cpf: dados.cpf ?? null,
-          finalidades: dados.finalidades
+          finalidades: dados.finalidades,
+          sexo: dados.sexo,
+          estadoCivil: dados.estadoCivil,
+          grauInstrucao: dados.grauInstrucao,
+          nacionalidade: dados.nacionalidade
         },
         tx
       )
@@ -129,7 +158,10 @@ export async function criarDependente(token: string | undefined, body: DadosExte
     if (!criado) throw falhaTecnica("insert de dependente nao devolveu linha");
 
     const versao = await sincronizarDeclaracao(convite, ficha, false, tx);
-    const itens = await listarDependentesRepository(convite.processoId, convite.empresaId, tx);
+    const itens = await itensComAnexos(
+      await listarDependentesRepository(convite.processoId, convite.empresaId, tx),
+      convite.empresaId
+    );
     return { versao, semDependentes: false, itens };
   });
 }
@@ -154,7 +186,11 @@ export async function atualizarDependente(
           nascimento: dados.nascimento,
           parentesco: dados.parentesco,
           cpf: dados.cpf ?? null,
-          finalidades: dados.finalidades
+          finalidades: dados.finalidades,
+          sexo: dados.sexo,
+          estadoCivil: dados.estadoCivil,
+          grauInstrucao: dados.grauInstrucao,
+          nacionalidade: dados.nacionalidade
         },
         tx
       )
@@ -164,7 +200,10 @@ export async function atualizarDependente(
     if (!alterado) throw naoEncontrado("Dependente nao encontrado", "DEPENDENTE_NAO_ENCONTRADO");
 
     // Editar nao mexe na declaracao: quem tem um dependente continua tendo depois de corrigir o nome.
-    const itens = await listarDependentesRepository(convite.processoId, convite.empresaId, tx);
+    const itens = await itensComAnexos(
+      await listarDependentesRepository(convite.processoId, convite.empresaId, tx),
+      convite.empresaId
+    );
     return { versao: ficha.versao, semDependentes: ficha.semDependentes, itens };
   });
 }
@@ -180,7 +219,10 @@ export async function excluirDependente(token: string | undefined, id: string): 
     );
     if (!removido) throw naoEncontrado("Dependente nao encontrado", "DEPENDENTE_NAO_ENCONTRADO");
 
-    const itens = await listarDependentesRepository(convite.processoId, convite.empresaId, tx);
+    const itens = await itensComAnexos(
+      await listarDependentesRepository(convite.processoId, convite.empresaId, tx),
+      convite.empresaId
+    );
     const desejada = itens.length === 0 ? null : ficha.semDependentes;
     const versao = await sincronizarDeclaracao(convite, ficha, desejada, tx);
     return { versao, semDependentes: desejada, itens };

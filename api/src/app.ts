@@ -15,6 +15,11 @@ import { registrarRotasColaboradores } from "./colaboradores/colaboradores.contr
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasCompras } from "./compras/compras.controller.js";
 import { registrarRotasCotacoes } from "./cotacoes/cotacoes.controller.js";
+import { registrarRotasConplus } from "./conplus/conplus.controller.js";
+import { registrarRotasQuestorProntidao } from "./conplus/questor-prontidao.controller.js";
+import { registrarRotasQuestorConfiguracao } from "./conplus/questor-configuracao.controller.js";
+import { registrarRotasQuestorExportacao } from "./conplus/questor-exportacao.controller.js";
+import { registrarRotasQuestorEventos } from "./conplus/questor-eventos.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
@@ -58,6 +63,7 @@ import { registrarRotasFuncoesOperacionais } from "./funcoes/funcoes.controller.
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
+import { registrarRotasGoogle } from "./google/google-connection.controller.js";
 import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
 import { usuarioEstaTravado } from "./transferencias/transferencias.service.js";
 
@@ -78,11 +84,15 @@ const rotasComAutenticacaoPropria = new Set([
   // porque a comparacao e exata; e GET e PUT dividem a mesma entrada, porque o Set e por url.
   "/api/admissao/ficha",
   "/api/admissao/ficha/enviar",
+  "/api/admissao/anexos",
+  "/api/admissao/anexos/:id",
   // ADM-003 V4: dependentes, pela mesma porta. Duas entradas para quatro rotas — GET e POST
   // dividem a primeira, PUT e DELETE dividem a segunda, porque a comparacao e pela url
   // DECLARADA da rota, com o `:id` literal, e nao pelo caminho ja resolvido.
   "/api/admissao/dependentes",
   "/api/admissao/dependentes/:id",
+  "/api/admissao/dependentes/:id/anexos",
+  "/api/admissao/dependentes/:id/anexos/:anexoId",
   // R-216: a cotacao do fornecedor. Ele NAO tem conta — autentica pelo header `x-cotacao-token`,
   // cujo hash mora em `pedidos_cotacoes`. GET e PUT dividem a primeira entrada.
   "/api/cotacao",
@@ -188,7 +198,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       "X-Admissao-Convite",
       // R-216: o token da cotacao do fornecedor. Mesmo motivo do anterior.
       "X-Cotacao-Token"
-    ]
+    ],
+    // Downloads (TXT/CSV Questor): sem expor, o navegador cross-origin não lê o nome do arquivo nem a
+    // auditoria (SHA-256, id da exportação, reaproveitamento) que a tela mostra depois de gerar.
+    exposedHeaders: ["Content-Disposition", "X-Questor-Sha256", "X-Questor-Exportacao-Id", "X-Questor-Reutilizado"]
   });
   await app.register(helmet);
   await app.register(rateLimit, {
@@ -290,9 +303,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasPermissoes(app);
   await registrarRotasProdutosMaisVendidos(app);
   await registrarRotasIntegracoes(app);
+  await registrarRotasGoogle(app);
   await registrarRotasPedidos(app);
   await registrarRotasCompras(app);
   await registrarRotasCotacoes(app);
+  await registrarRotasConplus(app);
+  await registrarRotasQuestorConfiguracao(app, { permissaoConfigurar: "conplus_questor_configurar" });
+  await registrarRotasQuestorExportacao(app);
+  await registrarRotasQuestorEventos(app);
+  await registrarRotasQuestorProntidao(app);
 
   return app;
 }

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { cpfTesteSchema } from "./cpf.js";
+import { anexoDependenteDtoSchema } from "./dependentes-anexos.js";
+import { OPCOES_E5_QUESTOR } from "../conplus/questor-candidato.js";
 
 /**
  * ADM-003 V4 — os dependentes que o candidato declara.
@@ -54,12 +56,39 @@ const cpfOpcional = z
   .preprocess((valor) => (typeof valor === "string" && valor.trim() === "" ? null : valor), cpfTesteSchema.nullable())
   .optional();
 
+/**
+ * E5 (Questor) — campos comuns do dependente, opcionais. Listas = `OPCOES_E5_QUESTOR` (rótulos já
+ * usados na ficha + listas oficiais da documentação). Fumo e álcool são dado de saúde (Q11) e não
+ * são coletados.
+ */
+const opcaoOpcional = (opcoes: readonly string[], rotulo: string) =>
+  z
+    .string()
+    .refine((valor) => opcoes.includes(valor), `${rotulo} fora da lista`)
+    .nullish()
+    .transform((valor) => valor ?? null);
+
+const camposE5Dependente = {
+  sexo: opcaoOpcional(OPCOES_E5_QUESTOR.sexo, "Sexo"),
+  estadoCivil: opcaoOpcional(OPCOES_E5_QUESTOR.estadoCivil, "Estado civil"),
+  grauInstrucao: opcaoOpcional(OPCOES_E5_QUESTOR.grauInstrucao, "Grau de instrucao"),
+  nacionalidade: opcaoOpcional(OPCOES_E5_QUESTOR.nacionalidade, "Nacionalidade")
+};
+
+const camposE5DependenteDto = {
+  sexo: z.string().nullable(),
+  estadoCivil: z.string().nullable(),
+  grauInstrucao: z.string().nullable(),
+  nacionalidade: z.string().nullable()
+};
+
 export const dependentePayloadSchema = z.object({
   nomeCompleto: z.string().trim().min(1, "Informe o nome do dependente").max(LIMITE_NOME),
   nascimento: dataIso,
   parentesco: z.string().trim().min(1, "Informe o parentesco").max(LIMITE_PARENTESCO),
   cpf: cpfOpcional,
-  finalidades: z.array(z.string().trim().min(1).max(LIMITE_FINALIDADE)).max(MAX_FINALIDADES).default([])
+  finalidades: z.array(z.string().trim().min(1).max(LIMITE_FINALIDADE)).max(MAX_FINALIDADES).default([]),
+  ...camposE5Dependente
 });
 
 export type DependentePayload = z.infer<typeof dependentePayloadSchema>;
@@ -71,7 +100,9 @@ export const dependenteDtoSchema = z.object({
   parentesco: z.string(),
   /** Inteiro, e nao mascarado: quem le esta tela e o proprio declarante, conferindo o que digitou. */
   cpf: z.string().nullable(),
-  finalidades: z.array(z.string())
+  finalidades: z.array(z.string()),
+  ...camposE5DependenteDto,
+  anexos: z.array(anexoDependenteDtoSchema).optional()
 });
 
 export type DependenteDto = z.infer<typeof dependenteDtoSchema>;
@@ -90,7 +121,9 @@ export const dependenteRevisaoDtoSchema = z.object({
   nascimento: z.string(),
   parentesco: z.string(),
   cpfInformado: z.boolean(),
-  finalidades: z.array(z.string())
+  finalidades: z.array(z.string()),
+  ...camposE5DependenteDto,
+  anexos: z.array(anexoDependenteDtoSchema).optional()
 });
 
 export type DependenteRevisaoDto = z.infer<typeof dependenteRevisaoDtoSchema>;

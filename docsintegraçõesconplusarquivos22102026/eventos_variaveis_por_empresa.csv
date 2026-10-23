@@ -1,0 +1,39 @@
+﻿Empresa;Evento;Descrição;Sequência;Filial;Referência (Questor);Tipo (H/R/V);Natureza
+BURPIZ LTDA;35;Horas Extras 50% Diurnas;1;1;Hora;H;Provento
+BURPIZ LTDA;49;Horas Extras 100% Diurnas;1;1;Hora;H;Provento
+BURPIZ LTDA;63;Horas Atrasos Diurnas;1;1;Hora;H;Desconto
+BURPIZ LTDA;97;Feriado;1;1;Dia;R;Provento
+BURPIZ LTDA;109;Horas Trabalhadas Diurnas;1;1;Hora;H;Provento
+BURPIZ LTDA;317;Adicional Noturno;1;1;Hora;H;Provento
+BURPIZ LTDA;800;Desconto de Vales;2;1;Valor;V;Desconto
+BURPIZ LTDA;1073;Dias faltas;1;1;Dia;R;Desconto
+BURPIZ LTDA;1087;DSR Dias Faltas;1;1;Dia;R;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;35;Horas Extras 50% Diurnas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;36;Horas Extras 50% Noturnas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;49;Horas Extras 100% Diurnas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;50;Horas Extras 100% Noturnas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;63;Horas Atrasos Diurnas;1;1;Hora;H;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;97;Feriado;1;1;Dia;R;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;105;Vale Compras;1;1;Valor;V;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;109;Horas Trabalhadas Diurnas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;317;Adicional Noturno;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;712;Feriado horas;1;1;Hora;H;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;800;Desconto de Vales;1;1;Valor;V;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;842;Assiduidade;1;1;Valor;V;Provento
+COMERCIAL LISBOA ALIMENTOS LTDA;1073;Dias faltas;1;1;Dia;R;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;1087;DSR Dias Faltas;1;1;Dia;R;Desconto
+COMERCIAL LISBOA ALIMENTOS LTDA;1407;Desconto Consumo;1;1;Valor;V;Desconto
+COMERCIAL TUDONUPAO LTDA;35;Horas Extras 50% Diurnas;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;36;Horas Extras 50% Noturnas;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;49;Horas Extras 100% Diurnas;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;50;Horas Extras 100% Noturnas;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;63;Horas Atrasos Diurnas;1;1;Hora;H;Desconto
+COMERCIAL TUDONUPAO LTDA;97;Feriado;1;1;Dia;R;Provento
+COMERCIAL TUDONUPAO LTDA;109;Horas Trabalhadas Diurnas;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;317;Adicional Noturno;1;1;Hora;H;Provento
+COMERCIAL TUDONUPAO LTDA;708;Premio;1;1;Valor;V;Provento
+COMERCIAL TUDONUPAO LTDA;800;Desconto de Vales;1;1;Valor;V;Desconto
+COMERCIAL TUDONUPAO LTDA;842;Assiduidade;1;1;Valor;V;Provento
+COMERCIAL TUDONUPAO LTDA;1073;Dias faltas;1;1;Dia;R;Desconto
+COMERCIAL TUDONUPAO LTDA;1087;DSR Dias Faltas;1;1;Dia;R;Desconto
+COMERCIAL TUDONUPAO LTDA;1407;Desconto Consumo;1;1;Valor;V;Desconto

@@ -5,7 +5,10 @@ import { erro, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
+import { empresaDoAtor } from "./ator.js";
 import { TETO_PUBLICO, tokenDoCabecalho } from "./convite-http.js";
+import { lerAnexoInterno, lerAnexoPublico, enviarAnexoFicha, removerAnexoPublico } from "./anexos.service.js";
+import { lerAnexoDependenteInterno } from "./dependentes-anexos.service.js";
 import {
   aprovarFicha,
   devolverFicha,
@@ -54,6 +57,40 @@ export async function registrarRotasAdmissaoFicha(app: FastifyInstance): Promise
     return semConteudo(reply);
   });
 
+  app.post("/api/admissao/anexos", TETO_PUBLICO, async (request, reply) => {
+    try {
+      const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 1, parts: 2 } });
+      const campoTipo = arquivo?.fields["tipo"];
+      const tipo = campoTipo && !Array.isArray(campoTipo) && "value" in campoTipo ? String(campoTipo.value) : "";
+      return reply.status(201).send(ok(await enviarAnexoFicha(tokenDoCabecalho(request) ?? undefined, tipo, arquivo)));
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  app.delete("/api/admissao/anexos/:id", TETO_PUBLICO, async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      await removerAnexoPublico(tokenDoCabecalho(request) ?? undefined, id);
+      return semConteudo(reply);
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  app.get("/api/admissao/anexos/:id", TETO_PUBLICO, async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const anexo = await lerAnexoPublico(tokenDoCabecalho(request) ?? undefined, id);
+      return reply
+        .type(anexo.mimeType)
+        .header("Content-Disposition", `inline; filename="${anexo.nomeOriginal.replace(/[^a-zA-Z0-9._-]/g, "_")}"`)
+        .send(anexo.dados);
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
   // --- Do DP (sessao) ----------------------------------------------------------------------------
   app.get(
     "/api/admissoes/processos/:id/ficha",
@@ -62,6 +99,46 @@ export async function registrarRotasAdmissaoFicha(app: FastifyInstance): Promise
       try {
         const { id } = processoParamsSchema.parse(request.params);
         return ok(await obterFichaParaRevisao(id, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/admissoes/processos/:id/ficha/anexos/:anexoId",
+    { preHandler: exigirPermissao("admissoes_processos_ver_ficha") },
+    async (request, reply) => {
+      try {
+        const { id, anexoId } = request.params as { id: string; anexoId: string };
+        const ficha = await obterFichaParaRevisao(id, request.perfilUsuario);
+        if (!ficha) return erro(reply, 404, "Ficha nao encontrada");
+        const anexo = await lerAnexoInterno(id, empresaDoAtor(request.perfilUsuario), anexoId);
+        return reply
+          .type(anexo.mimeType)
+          .header("Content-Disposition", `inline; filename="${anexo.nomeOriginal.replace(/[^a-zA-Z0-9._-]/g, "_")}"`)
+          .send(anexo.dados);
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/admissoes/processos/:id/dependentes/:dependenteId/anexos/:anexoId",
+    { preHandler: exigirPermissao("admissoes_processos_ver_ficha") },
+    async (request, reply) => {
+      try {
+        const { id, dependenteId, anexoId } = request.params as {
+          id: string;
+          dependenteId: string;
+          anexoId: string;
+        };
+        const anexo = await lerAnexoDependenteInterno(empresaDoAtor(request.perfilUsuario), id, dependenteId, anexoId);
+        return reply
+          .type(anexo.mimeType)
+          .header("Content-Disposition", `inline; filename="${anexo.nomeOriginal.replace(/[^a-zA-Z0-9._-]/g, "_")}"`)
+          .send(anexo.dados);
       } catch (error) {
         return responderErro(reply, error);
       }

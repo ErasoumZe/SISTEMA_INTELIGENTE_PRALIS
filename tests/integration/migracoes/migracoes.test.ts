@@ -47,15 +47,27 @@ function tabelasDoArrayDa0002(): string[] {
 // real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
+  // 0061 (fila Google da admissao), 0063 (importacoes Conplus) e 0068 (exportacoes Questor) criaram
+  // `atualizado_em` sem o bloco de trigger; os servicos gravam a coluna explicitamente. Declaradas
+  // aqui pelo nome ate a decisao da migration que instala os triggers (pendencia registrada).
+  "admissoes_google_arquivos",
+  "admissoes_google_dependentes",
+  "admissoes_google_sincronizacoes",
   "campanhas",
   // Conferencia nasce apenas como agenda; nao ha escritor de atualizacao de status nesta entrega.
   // Quando a contagem fisica ganhar conclusao/cancelamento, ela precisa sair desta lista com o
   // trigger correspondente na mesma vertical.
   "conferencias_estoque",
+  "conplus_google_sincronizacoes",
+  "conplus_importacoes",
+  "conplus_registros",
   "fechamentos_caixa_relatorios_maquininha",
   "maquininhas",
   "notas_fiscais",
   "pedidos",
+  "questor_eventos_variaveis",
+  "questor_eventos_variaveis_lancamentos",
+  "questor_exportacoes",
   "regras_recebimento",
   "turnos"
 ];
@@ -114,6 +126,11 @@ const sqlConstraints = `
   order by 1, 2
 `;
 
+/**
+ * Caminho OFICIAL de banco novo: o mesmo `drizzle-kit migrate` que o deploy roda
+ * (`api:prod:migrate`). Ate 22/10/2026 ele quebrava na 0061 (FK apontando para a UNIQUE que so nascia
+ * na 0062); a 0061 passou a criar a UNIQUE de forma idempotente, e este teste e a prova.
+ */
 function executarMigrate(databaseUrl: string) {
   return new Promise<void>((resolve, reject) => {
     const processo = spawn("npm", ["run", "db:migrate", "--workspace", "@padaria/db"], {
@@ -313,9 +330,14 @@ describe("migracoes integration", () => {
       "colaboradores_onboarding",
       "colaboradores_vinculos",
       "configuracoes_menu_empresas",
+      // 0069: estado da busca automatica Conplus muda a cada execucao da rotina.
+      "conplus_sincronizacao_estado",
       "funcoes_operacionais",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
-      "pedidos_cotacoes"
+      "pedidos_cotacoes",
+      // 0064: configuracao e catalogo Questor sao editados pelo DP.
+      "questor_codigos",
+      "questor_configuracoes"
     ]);
 
     const esperadas = [...new Set([...tabelasDoArrayDa0002(), ...aMao.map((achado) => achado.tabela)])].sort();
