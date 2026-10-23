@@ -65,6 +65,7 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
       "estoque_produtos",
       "conferencias_estoque",
       "agendamento_pedidos",
+      "solicitacao_compra",
       "pedidos",
       "cadastro_compras",
       "fornecedores"

@@ -40,6 +40,7 @@ const permissaoAcessoPorTela = {
   conferencias_estoque: "conferencias_estoque_visualizar",
   agendamento_pedidos: "agendamento_pedidos_visualizar",
   cadastro_compras: "compras_catalogo_gerir",
+  solicitacao_compra: "pedidos_visualizar",
   relatorio_dre: "relatorio_dre_visualizar",
   clientes: "cadastro_clientes_visualizar",
   fornecedores: "cadastro_fornecedores_visualizar",
@@ -216,6 +217,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "conferencias_estoque",
       "agendamento_pedidos",
       "cadastro_compras",
+      "solicitacao_compra",
       "relatorio_dre",
       "clientes",
       "admissoes_testes"
@@ -278,6 +280,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "conferencias_estoque",
       "agendamento_pedidos",
       "cadastro_compras",
+      "solicitacao_compra",
       "mercadorias",
       "fornecedores",
       "produtos"

@@ -151,6 +151,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "agendamento_pedidos_visualizar",
     icone: "mdi-calendar-sync-outline"
   },
+  // Doc 58 §2: o responsavel confere e envia o pedido agendado.
+  solicitacao_compra: {
+    id: "solicitacao_compra",
+    titulo: "Solicitação de compra",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-clipboard-text-clock-outline"
+  },
   // Doc 57 §4: catalogo fornecedor-produto, historico de compras e preco-base sairam da tela de Pedidos.
   cadastro_compras: {
     id: "cadastro_compras",
@@ -577,6 +584,7 @@ export const secoesPermissoes = [
       "menu_conferencias_estoque",
       "menu_agendamento_pedidos",
       "menu_cadastro_compras",
+      "menu_solicitacao_compra",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",
