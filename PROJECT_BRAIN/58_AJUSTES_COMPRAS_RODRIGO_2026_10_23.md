@@ -78,6 +78,31 @@ hoje (recebido parcialmente, esperando o resto).
    `pedidos_devolucoes`. Aplicada só no banco de dev.
 3. A mensagem de WhatsApp "pode entregar" sai quando o produto fica **Comprado** (não mais depois do Retornado).
 
+### 9.1 Decisões técnicas da implementação (23/10, para o Marco revisar)
+
+Tomadas para fechar a entrega sem deixar caminho duplicado; nenhuma muda fórmula de dinheiro.
+
+1. **Todo produto sai com fornecedor.** Como o "A fazer" deixou de existir, abrir cotação (Solicitação de compra,
+   Pedido urgente ou abertura manual) com produto sem fornecedor é recusado (`PRODUCT_WITHOUT_SUPPLIER`). O convite
+   avulso pela tela de Pedidos (`/convidar`) foi removido.
+2. **Um lugar por ato.** Aceitar o preço, aceitar e reajustar e contrapropor ficam só na cotação do produto (aberta
+   pela matriz). O diálogo "Decisões da cotação" ficou só com o que é da cotação inteira: o que falta e por quê,
+   encerrar agora, Pedido urgente com os pendentes e encerrar a solicitação.
+3. **Aceitar vale para qualquer oferta enviada de produto ainda sem vencedor** — Com aumento e também Retornado
+   dentro da referência que não comprou sozinho (margem ou teto). Exige a permissão de exceção.
+4. **Devolução:** recebido + devolvido não passa do que falta chegar; item com devolução fica com pendente 0, mesmo
+   que tenha chegado menos que o pedido.
+5. **Pedidos finalizados** tem as abas A caminho (inclui recebido parcial e pedidos legados abertos), Recebidos e
+   Cancelados.
+6. A rota da tela continua `/pedidos` (id `pedidos`, por causa das permissões já gravadas); só o título virou
+   "Cotação por fornecedor".
+
+## Estado da entrega (23/10)
+
+Implementado e commitado só local na branch `feat/compras-fase2-solicitacao-rodada-20261021` (sem push, sem PR,
+nada em produção). §1–§8 entregues com tela + backend + testes; caminhos antigos removidos (matriz por fornecedor,
+"A fazer", confirmar na mão, separação antes da compra, "Pedido rápido"). A migration 0068 está só no banco de dev.
+
 ## 10. O que este documento substitui
 
 | Antes (doc 57)                                                    | Agora                                                                               |
