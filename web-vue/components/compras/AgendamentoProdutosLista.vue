@@ -79,66 +79,68 @@ const numero = (valor: string | null) =>
       <v-switch v-model="somenteMarcados" label="Só os marcados" color="primary" density="compact" hide-details />
     </template>
     <template #filtros>
-      <v-text-field
-        v-model="filtro.busca"
-        placeholder="Buscar produto"
-        prepend-inner-icon="mdi-magnify"
-        clearable
-        density="compact"
-        hide-details
-        aria-label="Buscar produto"
-        class="filtro filtro--busca"
-      />
-      <v-select
-        v-model="filtro.grupo"
-        :items="gruposPai"
-        item-title="nome"
-        item-value="id"
-        label="Grupo"
-        clearable
-        density="compact"
-        hide-details
-        class="filtro"
-      />
-      <v-select
-        v-model="filtro.subgrupo"
-        :items="subgrupos"
-        item-title="nome"
-        item-value="id"
-        label="Subgrupo"
-        clearable
-        density="compact"
-        hide-details
-        :disabled="!subgrupos.length"
-        class="filtro"
-      />
-      <v-select
-        v-model="filtro.area"
-        :items="areas"
-        label="Área / setor da loja"
-        clearable
-        density="compact"
-        hide-details
-        class="filtro"
-      />
-      <v-select
-        v-model="filtro.localEstoque"
-        :items="locaisEstoque"
-        label="Local de estoque"
-        clearable
-        density="compact"
-        hide-details
-        class="filtro"
-      />
-      <v-select
-        v-model="filtro.localVenda"
-        :items="locaisVenda"
-        label="Local de venda"
-        clearable
-        density="compact"
-        hide-details
-        class="filtro"
-      />
+      <div class="grade">
+        <v-text-field
+          v-model="filtro.busca"
+          placeholder="Buscar produto"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          density="compact"
+          hide-details
+          aria-label="Buscar produto"
+          class="filtro filtro--busca"
+        />
+        <v-select
+          v-model="filtro.grupo"
+          :items="gruposPai"
+          item-title="nome"
+          item-value="id"
+          label="Grupo"
+          clearable
+          density="compact"
+          hide-details
+          class="filtro"
+        />
+        <v-select
+          v-model="filtro.subgrupo"
+          :items="subgrupos"
+          item-title="nome"
+          item-value="id"
+          label="Subgrupo"
+          clearable
+          density="compact"
+          hide-details
+          :disabled="!subgrupos.length"
+          class="filtro"
+        />
+        <v-select
+          v-model="filtro.area"
+          :items="areas"
+          label="Área / setor da loja"
+          clearable
+          density="compact"
+          hide-details
+          class="filtro"
+        />
+        <v-select
+          v-model="filtro.localEstoque"
+          :items="locaisEstoque"
+          label="Local de estoque"
+          clearable
+          density="compact"
+          hide-details
+          class="filtro"
+        />
+        <v-select
+          v-model="filtro.localVenda"
+          :items="locaisVenda"
+          label="Local de venda"
+          clearable
+          density="compact"
+          hide-details
+          class="filtro"
+        />
+      </div>
     </template>
 
     <div class="barra" data-secao="legenda">
@@ -219,13 +221,22 @@ const numero = (valor: string | null) =>
   color: var(--cx-brand-text);
 }
 
-.filtro {
-  flex: 1 1 160px;
-  min-width: 150px;
+/* Grade com largura minima igual para todos: o select do Vuetify estreito demais abre o menu sem itens. */
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--cx-sp-3);
+  width: 100%;
 }
 
 .filtro--busca {
-  flex: 2 1 220px;
+  grid-column: span 2;
+}
+
+@media (max-width: 599px) {
+  .filtro--busca {
+    grid-column: 1 / -1;
+  }
 }
 
 .barra {
