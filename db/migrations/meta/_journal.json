@@ -477,6 +477,13 @@
       "when": 1792676483390,
       "tag": "0067_compras_fluxo_jose",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1792762616543,
+      "tag": "0068_compras_ajustes_rodrigo",
+      "breakpoints": true
     }
   ]
 }

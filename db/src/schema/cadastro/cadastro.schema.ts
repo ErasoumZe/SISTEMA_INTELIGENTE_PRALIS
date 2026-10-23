@@ -64,6 +64,7 @@ export {
   produtosPrecosBase,
   pedidosAgendas,
   comprasWhatsappEnvios,
+  pedidosDevolucoes,
   conferenciasAgendas,
   conferenciasEstoque,
   conferenciasEstoqueItens,
