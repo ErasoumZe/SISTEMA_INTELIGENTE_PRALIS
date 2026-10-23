@@ -2,6 +2,7 @@
 import type { AgendamentoDto, AgendamentoOcorrenciaDto, AgendamentoPayload, AuthSession } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import AgendamentoPedidoCard from "~/components/compras/AgendamentoPedidoCard.vue";
 import AgendamentoProdutosLista from "~/components/compras/AgendamentoProdutosLista.vue";
 import AgendamentosLista from "~/components/compras/AgendamentosLista.vue";
@@ -9,9 +10,9 @@ import { useAgendamentoPedidos } from "~/composables/useAgendamentoPedidos";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 
-// Agendamento de pedido (PROJECT_BRAIN/56 e 57), módulo próprio de Compras: o card do agendamento, a lista
-// de produtos (com filtros e bolinhas) e os agendamentos salvos. Na data, o responsavel envia pela
-// Solicitacao de compra.
+// Agendamento de pedido (PROJECT_BRAIN/56, 57 e 58), módulo próprio de Compras: primeiro os agendamentos salvos;
+// "Novo agendamento" (ou Editar) abre o formulário e a lista de produtos (com filtros e bolinhas). Na data, o
+// responsavel confere e envia pela Solicitacao de compra.
 const router = useRouter();
 const { apiGet, carregarSessao } = useApi();
 const sessao = ref<AuthSession | null>(null);
@@ -34,6 +35,7 @@ const agenda = useAgendamentoPedidos(empresaId);
 const { agendamentos, produtos, grupos, responsaveis, carregando } = agenda;
 const marcados = ref<string[]>([]);
 const editando = ref<AgendamentoDto | null>(null);
+const formAberto = ref(false);
 
 function notificar(text: string, color = "success") {
   Object.assign(snackbar, { text, color, show: true });
@@ -53,10 +55,16 @@ const card = ref<InstanceType<typeof AgendamentoPedidoCard> | null>(null);
 function cancelarEdicao() {
   editando.value = null;
   marcados.value = [];
+  formAberto.value = false;
   card.value?.limpar();
+}
+function novo() {
+  cancelarEdicao();
+  formAberto.value = true;
 }
 function editar(item: AgendamentoDto) {
   editando.value = item;
+  formAberto.value = true;
   marcados.value = item.produtos.map((produto) => produto.produtoId);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -124,26 +132,31 @@ onMounted(async () => {
     :carregando-empresa="carregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-4">
+    <ComprasTela>
       <AppCabecalhoTela
         titulo="Agendamento de pedidos"
         subtitulo="Escolha os produtos, a repetição e o responsável. Na data, ele confere na Solicitação de compra e envia."
-      />
+      >
+        <template v-if="podeGerir && !formAberto" #acoes>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="novo">Novo agendamento</v-btn>
+        </template>
+      </AppCabecalhoTela>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
 
-      <AgendamentoPedidoCard
-        v-if="podeGerir"
-        ref="card"
-        :empresa-id="empresaId"
-        :grupos="grupos"
-        :produtos-marcados="marcados"
-        :editando="editando"
-        :salvando="salvando"
-        :responsaveis="responsaveis"
-        @salvar="salvar"
-        @cancelar="cancelarEdicao"
-      />
-      <AgendamentoProdutosLista v-if="podeGerir" v-model="marcados" :produtos="produtos" :grupos="grupos" />
+      <template v-if="podeGerir && formAberto">
+        <AgendamentoPedidoCard
+          ref="card"
+          :empresa-id="empresaId"
+          :grupos="grupos"
+          :produtos-marcados="marcados"
+          :editando="editando"
+          :salvando="salvando"
+          :responsaveis="responsaveis"
+          @salvar="salvar"
+          @cancelar="cancelarEdicao"
+        />
+        <AgendamentoProdutosLista v-model="marcados" :produtos="produtos" :grupos="grupos" />
+      </template>
       <AgendamentosLista
         :agendamentos="agendamentos"
         :pode-gerir="podeGerir"
@@ -153,7 +166,7 @@ onMounted(async () => {
         @cancelar-data="cancelarData"
         @mover-data="moverData"
       />
-    </div>
+    </ComprasTela>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>

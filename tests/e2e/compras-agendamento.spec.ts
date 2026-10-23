@@ -51,6 +51,8 @@ test.describe("agendamento de pedido", () => {
 
     await entrar(page, USUARIOS.compras);
     await irParaTela(page, "/agendamento_pedidos", "Agendamento de pedidos");
+    // O formulario so abre pelo "Novo agendamento"; a tela comeca pelos agendamentos salvos.
+    await page.getByRole("button", { name: "Novo agendamento" }).click();
 
     // 1) Marca o produto na lista (filtrando pelo nome).
     await page.getByRole("textbox", { name: "Buscar produto" }).fill(sufixo);
@@ -121,7 +123,8 @@ test.describe("agendamento de pedido", () => {
     await expect(page.locator(".v-snackbar__content")).toContainText("Data excluída.");
     await expect(agenda.locator(".v-chip").first()).toHaveClass(/text-decoration-line-through/u);
 
-    // 5) Responsivo, com a tela e com o editor de repeticao aberto.
+    // 5) Responsivo, com a tela e com o editor de repeticao aberto (salvar fechou o formulario).
+    await page.getByRole("button", { name: "Novo agendamento" }).click();
     for (const { nome, largura, altura } of LARGURAS) {
       await page.setViewportSize({ width: largura, height: altura });
       await semRolagemHorizontal(page);

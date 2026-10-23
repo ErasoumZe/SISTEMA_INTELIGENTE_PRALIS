@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
 import type { GrupoAgendamentoDto, ProdutoAgendamentoDto } from "@padaria/shared";
@@ -69,113 +70,253 @@ const numero = (valor: string | null) =>
 </script>
 
 <template>
-  <v-card variant="outlined">
-    <v-card-title class="d-flex align-center ga-2 flex-wrap">
-      <v-icon icon="mdi-format-list-checks" color="primary" />
-      <span>Produtos</span>
-      <v-chip size="small" label color="primary" variant="tonal">{{ totalMarcados }} marcado(s)</v-chip>
-    </v-card-title>
-    <v-card-text class="d-grid ga-3">
-      <div class="filtros">
-        <v-select
-          v-model="filtro.grupo"
-          :items="gruposPai"
-          item-title="nome"
-          item-value="id"
-          label="Grupo"
-          clearable
-          hide-details
-        />
-        <v-select
-          v-model="filtro.subgrupo"
-          :items="subgrupos"
-          item-title="nome"
-          item-value="id"
-          label="Subgrupo"
-          clearable
-          hide-details
-          :disabled="!subgrupos.length"
-        />
-        <v-select v-model="filtro.area" :items="areas" label="Área / setor da loja" clearable hide-details />
-        <v-select
-          v-model="filtro.localEstoque"
-          :items="locaisEstoque"
-          label="Local de estoque"
-          clearable
-          hide-details
-        />
-        <v-select v-model="filtro.localVenda" :items="locaisVenda" label="Local de venda" clearable hide-details />
-        <v-text-field
-          v-model="filtro.busca"
-          label="Buscar produto"
-          prepend-inner-icon="mdi-magnify"
-          clearable
-          hide-details
-        />
-      </div>
+  <ComprasSecao rente data-secao="produtos-agendamento">
+    <template #titulo>
+      Produtos do agendamento
+      <span class="conta" :class="{ 'conta--ativa': totalMarcados }">{{ totalMarcados }} marcado(s)</span>
+    </template>
+    <template #acoes>
+      <v-switch v-model="somenteMarcados" label="Só os marcados" color="primary" density="compact" hide-details />
+    </template>
+    <template #filtros>
+      <v-text-field
+        v-model="filtro.busca"
+        placeholder="Buscar produto"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        density="compact"
+        hide-details
+        aria-label="Buscar produto"
+        class="filtro filtro--busca"
+      />
+      <v-select
+        v-model="filtro.grupo"
+        :items="gruposPai"
+        item-title="nome"
+        item-value="id"
+        label="Grupo"
+        clearable
+        density="compact"
+        hide-details
+        class="filtro"
+      />
+      <v-select
+        v-model="filtro.subgrupo"
+        :items="subgrupos"
+        item-title="nome"
+        item-value="id"
+        label="Subgrupo"
+        clearable
+        density="compact"
+        hide-details
+        :disabled="!subgrupos.length"
+        class="filtro"
+      />
+      <v-select
+        v-model="filtro.area"
+        :items="areas"
+        label="Área / setor da loja"
+        clearable
+        density="compact"
+        hide-details
+        class="filtro"
+      />
+      <v-select
+        v-model="filtro.localEstoque"
+        :items="locaisEstoque"
+        label="Local de estoque"
+        clearable
+        density="compact"
+        hide-details
+        class="filtro"
+      />
+      <v-select
+        v-model="filtro.localVenda"
+        :items="locaisVenda"
+        label="Local de venda"
+        clearable
+        density="compact"
+        hide-details
+        class="filtro"
+      />
+    </template>
 
-      <div class="d-flex align-center flex-wrap ga-4 text-body-2" data-secao="legenda">
-        <BolinhasLegenda />
-        <v-spacer />
-        <v-switch v-model="somenteMarcados" label="Só os marcados" color="primary" density="compact" hide-details />
-        <v-btn size="small" variant="text" :disabled="!exibidos.length" @click="marcarVisiveis"
-          >Marcar os listados</v-btn
-        >
-      </div>
-
-      <div class="responsive-table-shell">
-        <v-table density="compact">
-          <thead>
-            <tr>
-              <th class="coluna-marca"><span class="sr-only">Marcar</span></th>
-              <th>Produto</th>
-              <th>Legenda</th>
-              <th class="text-right">Saldo</th>
-              <th class="text-right">Mín · Máx</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="produto in exibidos" :key="produto.id" :data-produto="produto.id">
-              <td>
-                <v-checkbox-btn
-                  :model-value="marcado.has(produto.id)"
-                  :aria-label="`Marcar ${produto.descricao}`"
-                  @update:model-value="alternar(produto)"
-                />
-              </td>
-              <td>{{ produto.descricao }}</td>
-              <td>
+    <div class="barra" data-secao="legenda">
+      <BolinhasLegenda />
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-checkbox-multiple-marked-outline"
+        :disabled="!exibidos.length"
+        @click="marcarVisiveis"
+        >Marcar os listados</v-btn
+      >
+    </div>
+    <div class="tabela">
+      <table>
+        <thead>
+          <tr>
+            <th class="coluna-marca"><span class="sr-only">Marcar</span></th>
+            <th>Produto</th>
+            <th class="numero">Saldo</th>
+            <th class="numero">Mín · Máx</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="produto in exibidos"
+            :key="produto.id"
+            :data-produto="produto.id"
+            :class="{ 'linha--marcada': marcado.has(produto.id) }"
+            @click="alternar(produto)"
+          >
+            <td @click.stop>
+              <v-checkbox-btn
+                :model-value="marcado.has(produto.id)"
+                :aria-label="`Marcar ${produto.descricao}`"
+                color="primary"
+                @update:model-value="alternar(produto)"
+              />
+            </td>
+            <td>
+              <span class="produto">
+                {{ produto.descricao }}
                 <ProdutoBolinhas
                   :mais-vende="produto.maisVende"
                   :mais-compra="produto.maisCompra"
                   :mais-lucro="produto.maisLucro"
                 />
-              </td>
-              <td class="text-right">{{ numero(produto.quantidadeEstoque) }} {{ produto.unidade ?? "" }}</td>
-              <td class="text-right">{{ numero(produto.estoqueMin) }} · {{ numero(produto.estoqueMax) }}</td>
-            </tr>
-            <tr v-if="!exibidos.length">
-              <td colspan="5" class="text-center text-medium-emphasis py-6">Nenhum produto com estes filtros.</td>
-            </tr>
-          </tbody>
-        </v-table>
-      </div>
-      <p v-if="visiveis.length > LIMITE" class="text-caption text-medium-emphasis mb-0">
-        Mostrando {{ LIMITE }} de {{ visiveis.length }}. Use os filtros para achar os demais.
-      </p>
-    </v-card-text>
-  </v-card>
+              </span>
+            </td>
+            <td class="numero">{{ numero(produto.quantidadeEstoque) }} {{ produto.unidade ?? "" }}</td>
+            <td class="numero">{{ numero(produto.estoqueMin) }} · {{ numero(produto.estoqueMax) }}</td>
+          </tr>
+          <tr v-if="!exibidos.length">
+            <td colspan="4" class="vazio">Nenhum produto com estes filtros.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-if="visiveis.length > LIMITE" class="limite">
+      Mostrando {{ LIMITE }} de {{ visiveis.length }}. Use os filtros para achar os demais.
+    </p>
+  </ComprasSecao>
 </template>
 
 <style scoped>
-.filtros {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+.conta {
+  padding: 0 8px;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  line-height: 20px;
 }
+
+.conta--ativa {
+  background: var(--cx-brand-wash);
+  color: var(--cx-brand-text);
+}
+
+.filtro {
+  flex: 1 1 160px;
+  min-width: 150px;
+}
+
+.filtro--busca {
+  flex: 2 1 220px;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-2);
+  padding: 0 var(--cx-sp-5) var(--cx-sp-2);
+}
+
+.tabela {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.tabela table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela th,
+.tabela td {
+  padding: var(--cx-sp-1) var(--cx-sp-3);
+  border-top: 1px solid var(--cx-line-soft);
+  text-align: left;
+}
+
+.tabela th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: var(--cx-sp-2);
+  padding-bottom: var(--cx-sp-2);
+  border-top: 0;
+  background: var(--cx-surface);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+}
+
+.tabela th:first-child,
+.tabela td:first-child {
+  padding-left: var(--cx-sp-4);
+}
+
+.tabela tbody tr {
+  cursor: pointer;
+  transition: background-color var(--cx-dur-1) var(--cx-ease);
+}
+
+.tabela tbody tr:hover {
+  background: var(--cx-hover);
+}
+
+.linha--marcada {
+  background: color-mix(in srgb, var(--cx-brand) 5%, var(--cx-surface));
+}
+
+.produto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  color: var(--cx-ink);
+  font-weight: 600;
+}
+
+.numero {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-right: var(--cx-sp-5) !important;
+}
+
 .coluna-marca {
-  width: 48px;
+  width: 52px;
 }
+
+.vazio {
+  padding: var(--cx-sp-6) !important;
+  color: var(--cx-ink-soft);
+  text-align: center !important;
+}
+
+.limite {
+  margin: 0;
+  padding: var(--cx-sp-2) var(--cx-sp-5) var(--cx-sp-3);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
