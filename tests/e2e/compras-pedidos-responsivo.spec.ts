@@ -10,23 +10,27 @@ import { abrirContextoCompras, dialogoAberto, irParaTela, prepararRodada } from 
 test.describe("telas de compra em todas as larguras", () => {
   test.setTimeout(240_000);
 
-  test("Pedidos e o Pedido rapido nao rolam na horizontal", async ({ page }) => {
+  test("Cotacao, Pedido urgente e Pedidos finalizados nao rolam na horizontal", async ({ page }) => {
     const problemas = observarConsole(page);
     await entrar(page, USUARIOS.compras);
 
     for (const { nome, largura, altura } of LARGURAS) {
       await page.setViewportSize({ width: largura, height: altura });
-      await irParaTela(page, "/pedidos", "Pedidos");
-      await expect(page.getByRole("heading", { name: "Pedidos", exact: true }), nome).toBeVisible();
+      await irParaTela(page, "/pedidos", "Cotação por fornecedor");
+      await expect(page.getByRole("heading", { name: "Cotação por fornecedor", exact: true }), nome).toBeVisible();
       await semRolagemHorizontal(page);
 
       // O formulario e o que mais aperta: cabecalho fixo, itens rolando e rodape fixo.
-      await page.getByRole("button", { name: "Pedido rápido" }).click();
+      await page.getByRole("button", { name: "Pedido urgente" }).click();
       const formulario = dialogoAberto(page);
       await expect(formulario.getByText("Itens da solicitação", { exact: false })).toBeVisible();
       await semRolagemHorizontal(page);
       await formulario.getByRole("button", { name: "Cancelar" }).click();
       await expect(formulario).toBeHidden();
+
+      await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
+      await expect(page.getByRole("heading", { name: "Pedidos finalizados", exact: true }), nome).toBeVisible();
+      await semRolagemHorizontal(page);
     }
 
     expect(problemas, problemas.join("\n")).toEqual([]);

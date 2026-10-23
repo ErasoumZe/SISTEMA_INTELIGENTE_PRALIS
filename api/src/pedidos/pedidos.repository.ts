@@ -4,6 +4,7 @@ import {
   estoqueMovimentos,
   pedidos,
   pedidosEventos,
+  pedidosDevolucoes,
   pedidosItens,
   pedidosRecebimentos,
   perfisUsuarios
@@ -238,9 +239,26 @@ export async function listarItensDoPedidoRepository(
         )
         .groupBy(estoqueMovimentos.pedidoItemId)
     : [];
+  const devolvidos = itens.length
+    ? await db
+        .select({
+          pedidoItemId: pedidosDevolucoes.pedidoItemId,
+          quantidade: sql<string>`sum(${pedidosDevolucoes.quantidade})`
+        })
+        .from(pedidosDevolucoes)
+        .where(
+          inArray(
+            pedidosDevolucoes.pedidoItemId,
+            itens.map((item) => item.id)
+          )
+        )
+        .groupBy(pedidosDevolucoes.pedidoItemId)
+    : [];
   const recebidoPorItem = new Map(recebidos.map((item) => [item.pedidoItemId, Number(item.quantidadeRecebida)]));
+  const devolvidoPorItem = new Map(devolvidos.map((item) => [item.pedidoItemId, Number(item.quantidade)]));
   return itens.map((item) => {
     const recebida = recebidoPorItem.get(item.id) ?? 0;
+    const devolvida = devolvidoPorItem.get(item.id) ?? 0;
     const quantidade = Number(item.quantidade);
     return {
       id: item.id,
@@ -248,7 +266,9 @@ export async function listarItensDoPedidoRepository(
       descricaoProduto: item.descricaoProduto,
       quantidade: item.quantidade,
       quantidadeRecebida: String(recebida),
-      quantidadePendente: String(quantidade - recebida),
+      quantidadeDevolvida: String(devolvida),
+      // Doc 58 §7: devolveu, fechou — o resto nao fica esperando.
+      quantidadePendente: String(devolvida > 0 ? 0 : quantidade - recebida),
       estoqueAtual: item.estoqueAtual,
       estoqueMin: item.estoqueMin,
       estoqueMax: item.estoqueMax
@@ -288,6 +308,13 @@ export async function atualizarSituacaoPedidoRepository(
   await inserirEvento(input, db);
 }
 
+export type ItemDoRecebimentoGravado = {
+  pedidoItemId: string;
+  quantidadeConferida: number;
+  quantidadeDevolvida: number;
+  motivoDevolucao: string | null;
+};
+
 export async function buscarRecebimentoPorIdempotenciaRepository(
   empresaId: string,
   idempotenciaChave: string,
@@ -296,7 +323,7 @@ export async function buscarRecebimentoPorIdempotenciaRepository(
   id: string;
   pedidoId: string;
   observacao: string | null;
-  itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>;
+  itens: ItemDoRecebimentoGravado[];
 } | null> {
   const [recebimento] = await db
     .select({
@@ -317,13 +344,32 @@ export async function buscarRecebimentoPorIdempotenciaRepository(
     })
     .from(estoqueMovimentos)
     .where(eq(estoqueMovimentos.pedidoRecebimentoId, recebimento.id));
-  return {
-    ...recebimento,
-    itens: movimentos.map((item) => ({
-      pedidoItemId: item.pedidoItemId,
-      quantidadeConferida: Number(item.quantidade)
-    }))
+  const devolucoes = await db
+    .select({
+      pedidoItemId: pedidosDevolucoes.pedidoItemId,
+      quantidade: pedidosDevolucoes.quantidade,
+      motivo: pedidosDevolucoes.motivo
+    })
+    .from(pedidosDevolucoes)
+    .where(eq(pedidosDevolucoes.pedidoRecebimentoId, recebimento.id));
+  const porItem = new Map<string, ItemDoRecebimentoGravado>();
+  const doItem = (pedidoItemId: string) => {
+    const atual = porItem.get(pedidoItemId) ?? {
+      pedidoItemId,
+      quantidadeConferida: 0,
+      quantidadeDevolvida: 0,
+      motivoDevolucao: null
+    };
+    porItem.set(pedidoItemId, atual);
+    return atual;
   };
+  for (const movimento of movimentos) doItem(movimento.pedidoItemId).quantidadeConferida = Number(movimento.quantidade);
+  for (const devolucao of devolucoes) {
+    const item = doItem(devolucao.pedidoItemId);
+    item.quantidadeDevolvida = Number(devolucao.quantidade);
+    item.motivoDevolucao = devolucao.motivo;
+  }
+  return { ...recebimento, itens: [...porItem.values()] };
 }
 
 export async function criarRecebimentoRepository(
@@ -358,6 +404,22 @@ export async function travarProdutosRepository(
     .orderBy(asc(produtos.id))
     .for("update");
   return linhas.map((linha) => ({ id: linha.id, quantidadeEstoque: Number(linha.quantidadeEstoque) }));
+}
+
+/** Doc 58 §7: o que voltou com o entregador, com o motivo. Nao mexe no estoque. */
+export async function registrarDevolucaoRepository(
+  input: {
+    empresaId: string;
+    pedidoId: string;
+    pedidoItemId: string;
+    pedidoRecebimentoId: string;
+    quantidade: number;
+    motivo: string;
+    devolvidoPor: string;
+  },
+  db: ExecutorBanco
+): Promise<void> {
+  await db.insert(pedidosDevolucoes).values({ ...input, quantidade: String(input.quantidade) });
 }
 
 export async function registrarMovimentoRecebimentoRepository(

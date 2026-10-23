@@ -31,6 +31,29 @@ export const responderRodadaPayloadSchema = z.object({
   itens: z.array(respostaItemPublicaSchema).min(1)
 });
 
+/**
+ * Doc 58 §4 (Cotado): o fornecedor salva o que ja preencheu SEM enviar. O rascunho pode ter item sem valor; ao
+ * enviar, valem as regras da resposta.
+ */
+export const rascunhoRodadaPayloadSchema = z.object({
+  frete: z.coerce.number().nonnegative().optional().nullable(),
+  observacao: z.string().trim().max(1_000).optional().nullable(),
+  prazoEntrega: z.string().min(10).optional().nullable(),
+  condicaoPagamento: z.string().trim().max(200).optional().nullable(),
+  itens: z
+    .array(
+      z.object({
+        conviteItemId: uuid,
+        indisponivel: z.coerce.boolean().default(false),
+        motivoIndisponivel: z.enum(["sem_estoque", "nao_trabalha"]).optional().nullable(),
+        valorUnitario: z.coerce.number().nonnegative().optional().nullable(),
+        quantidadeDisponivel: z.coerce.number().positive().max(9_999_999).optional().nullable()
+      })
+    )
+    .min(1)
+});
+export type RascunhoRodadaPayload = z.infer<typeof rascunhoRodadaPayloadSchema>;
+
 /** Passo 2 (doc 57 §5): depois de separar, o fornecedor informa a quantidade real de cada item que ganhou. */
 export const separacaoPublicaPayloadSchema = z.object({
   itens: z
@@ -82,6 +105,9 @@ export type RodadaPublicaDto = {
   expiraEm: string;
   // Doc 57 §6.3: quanto a quantidade pode variar do pedido (null = cotação antiga, sem margem).
   margemVariacaoPercentual: number | null;
+  // Doc 58 §8: a loja recebe pedido nesta janela (HH:MM). null = não informada.
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
   // "aberta" quando o fornecedor ainda pode mandar; "encerrada" quando o prazo passou ou o comprador
   // fechou. Sem revelar nada do envelope do comprador.
   situacao: "aberta" | "encerrada";
@@ -95,6 +121,14 @@ export type RodadaPublicaDto = {
   // O ULTIMO que ELE mandou (nunca de concorrente). null se ainda nao respondeu.
   ultimaProposta: {
     versao: number;
+    frete: string | null;
+    observacao: string | null;
+    prazoEntrega: string | null;
+    condicaoPagamento: string | null;
+    itens: RodadaPublicaPropostaItemDto[];
+  } | null;
+  /** O que ele salvou sem enviar (Cotado). null se não há rascunho. */
+  rascunho: {
     frete: string | null;
     observacao: string | null;
     prazoEntrega: string | null;

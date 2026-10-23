@@ -8,7 +8,7 @@ import type {
 } from "@padaria/shared/compras";
 import { pendenciasDeTeto } from "@padaria/shared/compras";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { buscarProdutosEstoqueRepository, type ProdutoEstoqueLinha } from "../pedidos/pedidos.repository.js";
 import {
@@ -126,6 +126,27 @@ export async function criarSolicitacao(payload: SolicitacaoPayload, perfil: Perf
       tx
     )
   );
+}
+
+/**
+ * Troca os itens de uma solicitacao em rascunho dentro de uma transacao que ja existe (doc 58 §2: o responsavel
+ * poe as quantidades e envia, tudo ou nada). Mesmas regras da edicao: produto da empresa, sem repetir, teto.
+ */
+export async function substituirItensNaTransacao(
+  id: string,
+  empresaId: string,
+  itens: Array<{ produtoId: string; quantidade: number }>,
+  observacao: string | null,
+  tx: TransacaoBanco
+): Promise<void> {
+  const base = await buscarSolicitacaoParaEdicaoRepository(id, empresaId, tx);
+  if (!base) throw naoEncontrado("Solicitacao nao encontrada");
+  if (base.status !== "rascunho") {
+    throw erroValidacao("So e possivel editar solicitacao em rascunho", "SOLICITACAO_NAO_EDITAVEL");
+  }
+  const produtos = await buscarProdutosEstoqueRepository(empresaId, tx);
+  const entradas = resolverItens(itens, new Map(produtos.map((produto) => [produto.id, produto])));
+  await atualizarSolicitacaoRepository({ id, empresaId, observacao, itens: entradas }, tx);
 }
 
 export async function atualizarSolicitacao(

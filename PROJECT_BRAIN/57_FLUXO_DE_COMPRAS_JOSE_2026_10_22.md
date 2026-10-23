@@ -2,6 +2,10 @@
 
 > José, 22/10/2026: "vale o que eu vou falar agora". Este documento **substitui** os documentos 52, 53, 54 e 56
 > em tudo o que conflitar com ele (lista no §9). Onde ele não fala, os anteriores continuam valendo.
+>
+> **Atenção (23/10/2026):** o doc **58** (ajustes do Rodrigo) substitui este em §3 (envio na data), §4 (tela de
+> Pedidos), §5 (cotado → retornado → comprado), o "Pedido rápido" e o recebimento. A tabela do doc 58 §10 lista
+> o que mudou.
 
 ## 1. Princípio das telas
 

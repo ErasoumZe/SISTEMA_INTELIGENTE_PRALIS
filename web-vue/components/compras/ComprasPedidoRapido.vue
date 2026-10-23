@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Pedido rápido (R-221 decisão 2): o pedido de um fornecedor só. NÃO é um segundo caminho de compra:
+ * Pedido urgente (R-221 decisão 2): o pedido de um fornecedor só. NÃO é um segundo caminho de compra:
  * cria uma solicitação `rapida` e abre uma rodada com UM convite; o fornecedor responde pelo link e a
  * compra sai pelo mesmo portão de qualquer rodada (preço-base, teto, adjudicação). O sistema manda o link
  * pelo WhatsApp (doc 57 §3); a tela mostra se saiu.
@@ -85,14 +85,14 @@ defineExpose({ abrir });
 
 <template>
   <div class="pedido-rapido">
-    <v-btn color="primary" variant="flat" prepend-icon="mdi-lightning-bolt" @click="abrir()">Pedido rápido</v-btn>
+    <v-btn color="primary" variant="flat" prepend-icon="mdi-lightning-bolt" @click="abrir()">Pedido urgente</v-btn>
     <v-alert v-if="erro && !dialog" type="error" variant="tonal" density="compact" closable @click:close="erro = ''">{{
       erro
     }}</v-alert>
 
     <ComprasSolicitacaoFormDialog
       v-model="dialog"
-      titulo="Pedido rápido"
+      titulo="Pedido urgente"
       :empresa-id="empresaId"
       :form="form"
       :salvando="salvando"

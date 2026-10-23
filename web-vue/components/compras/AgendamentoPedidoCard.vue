@@ -6,20 +6,22 @@ import {
   type GrupoAgendamentoDto,
   type MargemVariacao,
   type RegraRecorrencia,
+  type ResponsavelPedidoDto,
   type TerminoRecorrencia
 } from "@padaria/shared";
 import MargemVariacaoCampo from "~/components/compras/MargemVariacaoCampo.vue";
 import RecorrenciaCampo from "~/components/compras/RecorrenciaCampo.vue";
 
-// O card "Agendamento de pedido" (doc 56 §2.2, doc 57 §2): grupo e subgrupo, quando começa, a repetição, o
-// tempo que o fornecedor tem para responder, a variação de quantidade aceita, e Salvar/Cancelar. Os produtos
-// vêm marcados da lista de baixo.
+// O card "Agendamento de pedido" (doc 56 §2.2, doc 58 §1/§8): grupo e subgrupo, o responsável por executar o
+// pedido, quando começa, a repetição, o tempo de resposta, a variação aceita e o horário de recebimento da loja.
+// Os produtos vêm marcados da lista de baixo.
 const props = defineProps<{
   empresaId: string;
   grupos: GrupoAgendamentoDto[];
   produtosMarcados: Record<string, string>;
   editando: AgendamentoDto | null;
   salvando: boolean;
+  responsaveis: ResponsavelPedidoDto[];
 }>();
 const emit = defineEmits<{ salvar: [payload: AgendamentoPayload, aPartirDe: string | undefined]; cancelar: [] }>();
 
@@ -36,6 +38,9 @@ const form = reactive({
   inicioHora: "08:00",
   prazo: 24 as number,
   margem: 10 as MargemVariacao,
+  responsavelId: null as string | null,
+  recebimentoInicio: "",
+  recebimentoFim: "",
   aPartirDe: ""
 });
 const regra = ref<RegraRecorrencia>({ tipo: "padrao", frequencia: "semanal", intervalo: 1 });
@@ -58,6 +63,9 @@ function limpar() {
     inicioHora: "08:00",
     prazo: 24,
     margem: 10,
+    responsavelId: null,
+    recebimentoInicio: "",
+    recebimentoFim: "",
     aPartirDe: ""
   });
   regra.value = { tipo: "padrao", frequencia: "semanal", intervalo: 1 };
@@ -77,6 +85,9 @@ watch(
       inicioHora: agenda.inicioHora,
       prazo: agenda.prazoRespostaHoras,
       margem: agenda.margemVariacaoPercentual as MargemVariacao,
+      responsavelId: agenda.responsavelId,
+      recebimentoInicio: agenda.recebimentoInicio ?? "",
+      recebimentoFim: agenda.recebimentoFim ?? "",
       aPartirDe: agenda.proximas[0] ? diaLocal(new Date(agenda.proximas[0].dataAtual)) : hoje()
     });
     regra.value = agenda.regra;
@@ -98,6 +109,11 @@ function salvar() {
   if (!grupoMercadoriaId) return void (erro.value = "Escolha o grupo do pedido.");
   if (!totalMarcados.value) return void (erro.value = "Marque ao menos um produto na lista abaixo.");
   if (!form.inicioData || !form.inicioHora) return void (erro.value = "Informe a data e a hora do primeiro pedido.");
+  if (!form.responsavelId) return void (erro.value = "Escolha o responsável por executar o pedido.");
+  if (Boolean(form.recebimentoInicio) !== Boolean(form.recebimentoFim))
+    return void (erro.value = "Informe o início e o fim do horário de recebimento.");
+  if (form.recebimentoInicio && form.recebimentoFim <= form.recebimentoInicio)
+    return void (erro.value = "O fim do recebimento vem depois do início.");
   const prazo = Number(form.prazo);
   if (!Number.isInteger(prazo) || prazo < 1 || prazo > 720)
     return void (erro.value = "O tempo de resposta vai de 1 a 720 horas.");
@@ -112,6 +128,9 @@ function salvar() {
       termino: termino.value,
       prazoRespostaHoras: prazo,
       margemVariacaoPercentual: form.margem,
+      responsavelId: form.responsavelId,
+      recebimentoInicio: form.recebimentoInicio || null,
+      recebimentoFim: form.recebimentoFim || null,
       produtos: Object.entries(props.produtosMarcados).map(([produtoId, quantidade]) => ({
         produtoId,
         quantidadePadrao: quantidade && Number(quantidade) > 0 ? Number(quantidade) : null
@@ -131,8 +150,8 @@ defineExpose({ limpar });
       {{ editando ? "Editar agendamento de pedido" : "Agendamento de pedido" }}
     </v-card-title>
     <v-card-subtitle class="text-wrap">
-      Na data, o sistema manda a cotação pelo WhatsApp a cada fornecedor do catálogo, só com os produtos dele. Produto
-      sem fornecedor fica “A fazer” em Pedidos.
+      Na data, o responsável recebe o aviso, confere as quantidades na Solicitação de compra e envia; cada fornecedor
+      recebe só os seus produtos pelo WhatsApp.
     </v-card-subtitle>
     <v-card-text class="d-grid ga-4">
       <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
@@ -163,6 +182,16 @@ defineExpose({ limpar });
           hide-details="auto"
         />
         <v-text-field v-model="form.inicioHora" type="time" label="Hora *" hide-details="auto" />
+        <v-select
+          v-model="form.responsavelId"
+          :items="responsaveis"
+          item-title="nome"
+          item-value="usuarioId"
+          label="Responsável por executar *"
+          hint="Recebe o aviso na data, confere e envia."
+          persistent-hint
+          data-campo="responsavel"
+        />
       </div>
       <div class="campos">
         <RecorrenciaCampo v-model:regra="regra" v-model:termino="termino" :inicio-data="form.inicioData" />
@@ -188,6 +217,14 @@ defineExpose({ limpar });
             >
           </div>
           <MargemVariacaoCampo v-model="form.margem" />
+          <div class="d-grid ga-1" data-campo="horario-recebimento">
+            <span class="text-body-2">Horário de recebimento da loja</span>
+            <div class="recebimento">
+              <v-text-field v-model="form.recebimentoInicio" type="time" label="Das" density="compact" hide-details />
+              <v-text-field v-model="form.recebimentoFim" type="time" label="Até" density="compact" hide-details />
+            </div>
+            <span class="text-caption text-medium-emphasis">O fornecedor vê na cotação.</span>
+          </div>
           <v-text-field
             v-if="editando"
             v-model="form.aPartirDe"
@@ -211,6 +248,12 @@ defineExpose({ limpar });
 </template>
 
 <style scoped>
+.recebimento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .campos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

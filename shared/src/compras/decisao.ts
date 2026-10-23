@@ -10,7 +10,12 @@ const uuid = z.string().uuid();
 export const decisoesQuerySchema = z.object({ empresaId: uuid });
 
 // O Comprador escolhe QUAL proposta aprova (varios fornecedores podem ter preco para o mesmo item).
-export const aprovarExcecaoPayloadSchema = z.object({ empresaId: uuid, propostaItemId: uuid });
+// Doc 58 §4: "Com aumento" — aceitar o preco so desta vez, ou aceitar e reajustar a referencia da proxima rodada.
+export const aprovarExcecaoPayloadSchema = z.object({
+  empresaId: uuid,
+  propostaItemId: uuid,
+  reajustarReferencia: z.boolean().default(false)
+});
 
 export const encerrarSolicitacaoPayloadSchema = z.object({ empresaId: uuid });
 

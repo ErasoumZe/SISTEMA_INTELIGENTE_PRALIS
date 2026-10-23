@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
+import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
 import type { GrupoAgendamentoDto, ProdutoAgendamentoDto } from "@padaria/shared";
 
 // A lista de produtos do agendamento (doc 56 §2.1): filtros por grupo/subgrupo, área, local de estoque e
@@ -117,10 +119,7 @@ const numero = (valor: string | null) =>
       </div>
 
       <div class="d-flex align-center flex-wrap ga-4 text-body-2" data-secao="legenda">
-        <span class="legenda"><span class="bolinha bolinha--vende" aria-hidden="true" />Mais vende</span>
-        <span class="legenda"><span class="bolinha bolinha--compra" aria-hidden="true" />Mais compramos</span>
-        <span class="legenda"><span class="bolinha bolinha--lucro" aria-hidden="true" />Mais lucro</span>
-        <span class="text-caption text-medium-emphasis">Top 20% dos últimos 3 meses</span>
+        <BolinhasLegenda />
         <v-spacer />
         <v-switch v-model="somenteMarcados" label="Só os marcados" color="primary" density="compact" hide-details />
         <v-btn size="small" variant="text" :disabled="!exibidos.length" @click="marcarVisiveis"
@@ -151,26 +150,11 @@ const numero = (valor: string | null) =>
               </td>
               <td>{{ produto.descricao }}</td>
               <td>
-                <span class="d-inline-flex ga-1">
-                  <span
-                    v-if="produto.maisVende"
-                    class="bolinha bolinha--vende"
-                    title="Mais vende"
-                    aria-label="Mais vende"
-                  />
-                  <span
-                    v-if="produto.maisCompra"
-                    class="bolinha bolinha--compra"
-                    title="Mais compramos"
-                    aria-label="Mais compramos"
-                  />
-                  <span
-                    v-if="produto.maisLucro"
-                    class="bolinha bolinha--lucro"
-                    title="Mais lucro"
-                    aria-label="Mais lucro"
-                  />
-                </span>
+                <ProdutoBolinhas
+                  :mais-vende="produto.maisVende"
+                  :mais-compra="produto.maisCompra"
+                  :mais-lucro="produto.maisLucro"
+                />
               </td>
               <td class="text-right">{{ numero(produto.quantidadeEstoque) }} {{ produto.unidade ?? "" }}</td>
               <td class="text-right">{{ numero(produto.estoqueMin) }} · {{ numero(produto.estoqueMax) }}</td>
@@ -207,29 +191,6 @@ const numero = (valor: string | null) =>
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
-}
-.legenda {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.bolinha {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex: none;
-}
-/* Verde, amarela e azul, como José pediu (doc 56), pelos tokens do tema; o title/aria-label acompanha
-   para a legenda nao depender so da cor. */
-.bolinha--vende {
-  background: var(--cx-positive);
-}
-.bolinha--compra {
-  background: var(--cx-attention);
-}
-.bolinha--lucro {
-  background: rgb(var(--v-theme-info));
 }
 .coluna-marca {
   width: 48px;

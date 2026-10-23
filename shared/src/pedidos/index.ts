@@ -42,17 +42,28 @@ export const pedidoSituacaoPayloadSchema = z.object({
   observacao: z.string().trim().max(1_000).optional().nullable()
 });
 
+// Doc 58 §7: por item, quanto recebeu e quanto devolveu (com motivo). Devolver fecha o item: o estoque entra so o
+// recebido e o que faltou nao fica esperando.
+export const pedidoRecebimentoItemSchema = z
+  .object({
+    pedidoItemId: uuidSchema,
+    quantidadeConferida: z.coerce.number().min(0),
+    quantidadeDevolvida: z.coerce.number().min(0).default(0),
+    motivoDevolucao: z.string().trim().max(500).optional().nullable()
+  })
+  .refine((item) => item.quantidadeConferida > 0 || item.quantidadeDevolvida > 0, {
+    message: "Informe quanto recebeu ou quanto devolveu",
+    path: ["quantidadeConferida"]
+  })
+  .refine((item) => item.quantidadeDevolvida === 0 || Boolean(item.motivoDevolucao), {
+    message: "Diga o motivo da devolucao",
+    path: ["motivoDevolucao"]
+  });
+
 export const pedidoRecebimentoPayloadSchema = z.object({
   idempotenciaChave: uuidSchema,
   observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z
-    .array(
-      z.object({
-        pedidoItemId: uuidSchema,
-        quantidadeConferida: z.coerce.number().positive()
-      })
-    )
-    .min(1)
+  itens: z.array(pedidoRecebimentoItemSchema).min(1)
 });
 
 export const pedidosQuerySchema = z.object({
@@ -62,6 +73,13 @@ export const pedidosQuerySchema = z.object({
 
 export type PedidoSituacaoPayload = z.infer<typeof pedidoSituacaoPayloadSchema>;
 export type PedidoRecebimentoPayload = z.infer<typeof pedidoRecebimentoPayloadSchema>;
+// O que a tela manda por item (o coerce do schema deixaria o tipo de entrada como unknown).
+export type PedidoRecebimentoItem = {
+  pedidoItemId: string;
+  quantidadeConferida: number;
+  quantidadeDevolvida: number;
+  motivoDevolucao: string | null;
+};
 export type PedidosQuery = z.infer<typeof pedidosQuerySchema>;
 
 export type PedidoItemDto = {
@@ -70,6 +88,8 @@ export type PedidoItemDto = {
   descricaoProduto: string;
   quantidade: string;
   quantidadeRecebida: string;
+  /** Doc 58 §7: o que voltou com o entregador. Item com devolucao esta fechado (pendente 0). */
+  quantidadeDevolvida: string;
   quantidadePendente: string;
   estoqueAtual: string | null;
   estoqueMin: string | null;

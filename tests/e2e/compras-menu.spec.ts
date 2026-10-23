@@ -5,7 +5,9 @@ const ROTAS_COMPRAS = [
   "/estoque_produtos",
   "/conferencias_estoque",
   "/agendamento_pedidos",
+  "/solicitacao_compra",
   "/pedidos",
+  "/pedidos_finalizados",
   "/cadastro_compras",
   "/fornecedores"
 ] as const;

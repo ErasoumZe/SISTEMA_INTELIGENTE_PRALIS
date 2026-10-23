@@ -15,6 +15,7 @@ import {
   contrapropostaVigente,
   itensDoAceite,
   produtosDoFornecedorPayloadSchema,
+  rascunhoRodadaPayloadSchema,
   responderRodadaPayloadSchema,
   situacaoDoItemParaFornecedor
 } from "@padaria/shared/compras";
@@ -23,12 +24,14 @@ import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, erroValidacao, foiEmbora, naoEncontrado } from "../erros.js";
 import {
   buscarConvitePorHashRepository,
+  apagarRascunhoRepository,
   conviteItemIdsRepository,
   criarPropostaFornecedorRepository,
   itensDoConviteRepository,
   marcarConviteRespondidoRepository,
   produtosParaFornecedorRepository,
   proximaVersaoRepository,
+  rascunhoDoConviteRepository,
   travarConvitePorHashRepository,
   ultimaPropostaDoConviteRepository,
   versoesDoConviteRepository,
@@ -79,12 +82,13 @@ export async function obterRodadaPublica(
   pedidoDoConvite: (conviteId: string) => Promise<PedidoPublicoDto | null>
 ): Promise<RodadaPublicaDto> {
   const convite = await autenticarConvitePorToken(token);
-  const [itens, ultima, versoes, comprados, pedido] = await Promise.all([
+  const [itens, ultima, versoes, comprados, pedido, rascunho] = await Promise.all([
     itensDoConviteRepository(convite.conviteId),
     ultimaPropostaDoConviteRepository(convite.conviteId),
     versoesDoConviteRepository(convite.conviteId),
     itensComprados(convite.conviteId),
-    pedidoDoConvite(convite.conviteId)
+    pedidoDoConvite(convite.conviteId),
+    rascunhoDoConviteRepository(convite.conviteId)
   ]);
   const viva = rodadaViva(convite);
   const precificados = new Set(
@@ -102,6 +106,8 @@ export async function obterRodadaPublica(
     empresaNome: convite.empresaNome,
     expiraEm: convite.expiraEm.toISOString(),
     margemVariacaoPercentual: convite.margemVariacaoPercentual,
+    recebimentoInicio: convite.recebimentoInicio?.slice(0, 5) ?? null,
+    recebimentoFim: convite.recebimentoFim?.slice(0, 5) ?? null,
     situacao: viva ? "aberta" : "encerrada",
     itens: itens.map((item) => ({
       conviteItemId: item.conviteItemId,
@@ -128,6 +134,15 @@ export async function obterRodadaPublica(
             valorUnitario: item.valorUnitario,
             quantidadeDisponivel: item.quantidadeDisponivel
           }))
+        }
+      : null,
+    rascunho: rascunho
+      ? {
+          frete: rascunho.frete,
+          observacao: rascunho.observacao,
+          prazoEntrega: rascunho.prazoEntrega,
+          condicaoPagamento: rascunho.condicaoPagamento,
+          itens: rascunho.itens
         }
       : null,
     pedido
@@ -162,6 +177,8 @@ export async function responderRodadaPublica(
       throw erroValidacao("Item repetido na mesma resposta", "ITEM_DUPLICADO");
     }
 
+    // Enviou: o rascunho (se havia) deixa de existir; a versao enviada e a que vale.
+    await apagarRascunhoRepository(travado.id, tx);
     const versao = await proximaVersaoRepository(travado.id, tx);
     const propostaId = await criarPropostaFornecedorRepository(
       {
@@ -184,6 +201,49 @@ export async function responderRodadaPublica(
     );
     await marcarConviteRespondidoRepository(travado.id, travado.empresaId, tx);
     return { versao, propostaId };
+  });
+}
+
+/**
+ * Doc 58 §4 (Cotado): o fornecedor salva sem enviar. O comprador ve o produto como "Cotado" na matriz, mas nada
+ * e comparado com a referencia nem comprado ate ele enviar. Mesmas travas da resposta.
+ */
+export async function salvarRascunhoPublico(token: string | undefined, body: DadosExternos): Promise<void> {
+  const payload = rascunhoRodadaPayloadSchema.parse(body ?? {});
+  const convite = await autenticarConvitePorToken(token);
+  if (!rodadaViva(convite)) throw foiEmbora("A rodada nao esta mais aberta para respostas", "RODADA_ENCERRADA");
+  await executarEmTransacao(async (tx) => {
+    await tx.execute(sqlTravarRodadaDeCompras(convite.solicitacaoId));
+    const travado = await travarConvitePorHashRepository(hashToken(exigirToken(token)), tx);
+    if (!travado) throw naoEncontrado("Convite nao encontrado", "RODADA_CONVITE_INVALIDO");
+    const atual = await autenticarConvitePorToken(token);
+    if (!rodadaViva(atual)) throw foiEmbora("A rodada nao esta mais aberta para respostas", "RODADA_ENCERRADA");
+    const itensValidos = await conviteItemIdsRepository(travado.id, tx);
+    if (payload.itens.some((item) => !itensValidos.has(item.conviteItemId)))
+      throw erroValidacao("Item nao pertence a este convite", "ITEM_FORA_DO_CONVITE");
+    if (new Set(payload.itens.map((item) => item.conviteItemId)).size !== payload.itens.length)
+      throw erroValidacao("Item repetido na mesma resposta", "ITEM_DUPLICADO");
+    await apagarRascunhoRepository(travado.id, tx);
+    await criarPropostaFornecedorRepository(
+      {
+        status: "rascunho",
+        empresaId: travado.empresaId,
+        conviteId: travado.id,
+        versao: await proximaVersaoRepository(travado.id, tx),
+        frete: payload.frete ?? null,
+        observacao: payload.observacao ?? null,
+        prazoEntrega: payload.prazoEntrega ?? null,
+        condicaoPagamento: payload.condicaoPagamento ?? null,
+        itens: payload.itens.map((item) => ({
+          conviteItemId: item.conviteItemId,
+          indisponivel: item.indisponivel,
+          motivoIndisponivel: item.indisponivel ? (item.motivoIndisponivel ?? "sem_estoque") : null,
+          valorUnitario: item.indisponivel ? null : (item.valorUnitario ?? null),
+          quantidadeDisponivel: item.indisponivel ? null : (item.quantidadeDisponivel ?? null)
+        }))
+      },
+      tx
+    );
   });
 }
 
@@ -214,6 +274,8 @@ export async function aceitarContrapropostaPublica(
       throw conflito("Nao ha contraproposta esperando resposta", "SEM_CONTRAPROPOSTA");
     }
 
+    // Enviou: o rascunho (se havia) deixa de existir; a versao enviada e a que vale.
+    await apagarRascunhoRepository(travado.id, tx);
     const versao = await proximaVersaoRepository(travado.id, tx);
     const propostaId = await criarPropostaFornecedorRepository(
       {

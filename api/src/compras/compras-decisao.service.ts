@@ -8,15 +8,15 @@ import type {
   EncerrarSolicitacaoPayload
 } from "@padaria/shared/compras";
 import { motivoDecisao, statusSolicitacaoAposFechamento } from "@padaria/shared/compras";
-import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
+import { sqlTravarPrecoBaseDaEmpresa, sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import {
-  criarPedidoCotadoRepository,
+  criarPedidoCompradoRepository,
   inserirAdjudicacaoRepository,
   inserirItemPedidoRepository,
-  pedidoCotadoDaRodadaRepository,
+  pedidoAbertoDaRodadaRepository,
   rodadaItensAdjudicadosRepository
 } from "./compras-adjudicacao.repository.js";
 import {
@@ -27,7 +27,12 @@ import {
   travarSolicitacaoRepository,
   ultimaVersaoEnviadaDoConviteRepository
 } from "./compras-decisao.repository.js";
-import { atualizarStatusSolicitacaoRepository, totalItensDaRodadaRepository } from "./compras-fechamento.repository.js";
+import {
+  atualizarStatusSolicitacaoRepository,
+  substituirPrecoBaseRepository,
+  totalItensDaRodadaRepository
+} from "./compras-fechamento.repository.js";
+import { enfileirarAvisoDeCompra } from "./compras-whatsapp.service.js";
 
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -111,15 +116,9 @@ export async function aprovarExcecao(
     await tx.execute(sqlTravarRodadaDeCompras(solicitacaoId));
     const alvo = await buscarPropostaItemParaAprovarRepository(payload.propostaItemId, payload.empresaId, tx);
     if (!alvo || alvo.rodadaId !== rodadaId) throw naoEncontrado("Proposta nao encontrada");
-    // R-221 decisao 6 + decisao de Jose de 21/10: a excecao so vale com a rodada FECHADA. Com ela
-    // aberta, aprovar travaria o item e uma oferta melhor que chegasse depois perderia; o caminho do
-    // periodo aberto e a contraproposta (E7). Compra urgente: "Encerrar rodada agora".
-    if (alvo.rodadaStatus !== "fechada") {
-      throw naoProcessavel(
-        "A excecao so vale depois do fechamento da rodada. Aguarde o prazo ou encerre a rodada agora.",
-        "RODADA_ABERTA"
-      );
-    }
+    // Doc 58 §9 (José, 23/10): o comprador aceita o preco "Com aumento" quando quiser, com a cotacao aberta ou
+    // fechada. Aceitar compra na hora; um preco menor que chegue depois nao ganha mais este produto.
+    if (alvo.rodadaStatus === "cancelada") throw naoProcessavel("Esta cotacao foi cancelada", "RODADA_CANCELADA");
     const solicitacao = await travarSolicitacaoRepository(solicitacaoId, payload.empresaId, tx);
     if (!solicitacao || solicitacao.status === "encerrada" || solicitacao.status === "cancelada") {
       throw naoProcessavel("A solicitacao ja foi encerrada", "SOLICITACAO_ENCERRADA");
@@ -138,8 +137,8 @@ export async function aprovarExcecao(
     if (adjudicados.has(alvo.rodadaItemId)) throw conflito("Este item ja tem vencedor", "ITEM_JA_ADJUDICADO");
 
     const pedidoId =
-      (await pedidoCotadoDaRodadaRepository(alvo.rodadaId, alvo.fornecedorId, tx)) ??
-      (await criarPedidoCotadoRepository(
+      (await pedidoAbertoDaRodadaRepository(alvo.rodadaId, alvo.fornecedorId, tx)) ??
+      (await criarPedidoCompradoRepository(
         {
           empresaId: payload.empresaId,
           solicitacaoId: alvo.solicitacaoId,
@@ -184,10 +183,30 @@ export async function aprovarExcecao(
     // desfaz o pedido e o item recem-criados.
     if (!venceu) throw conflito("Este item ja tem vencedor", "ITEM_JA_ADJUDICADO");
 
-    // Se este era o ultimo item sem vencedor, a solicitacao passa a comprada.
+    // Doc 58 §4: "aceitar e reajustar" — a referencia da proxima rodada passa a ser o custo aceito (pode subir,
+    // por decisao do comprador). "So desta vez" nao mexe na referencia.
+    if (payload.reajustarReferencia) {
+      await tx.execute(sqlTravarPrecoBaseDaEmpresa(payload.empresaId));
+      await substituirPrecoBaseRepository(
+        {
+          empresaId: payload.empresaId,
+          produtoId: alvo.produtoId,
+          valor: alvo.custoFinalUnitario,
+          rodadaId: alvo.rodadaId,
+          criadoPor: perfil.usuarioId,
+          agora: new Date()
+        },
+        tx
+      );
+    }
+    await enfileirarAvisoDeCompra(pedidoId, tx);
+
+    // Se este era o ultimo item sem vencedor, a solicitacao passa a comprada. Com a cotacao ainda aberta, so
+    // muda quando tudo foi comprado: o "parcialmente" e do fechamento.
     const total = await totalItensDaRodadaRepository(alvo.rodadaId, tx);
     const novoStatus = statusSolicitacaoAposFechamento(total, adjudicados.size + 1);
-    if (novoStatus !== solicitacao.status) {
+    const podeMudar = alvo.rodadaStatus === "fechada" || novoStatus === "comprada";
+    if (podeMudar && novoStatus !== solicitacao.status) {
       await atualizarStatusSolicitacaoRepository(
         { solicitacaoId, empresaId: payload.empresaId, status: novoStatus, agora: new Date() },
         tx

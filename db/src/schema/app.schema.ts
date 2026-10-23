@@ -1980,6 +1980,36 @@ export const pedidosRecebimentos = pgTable(
   ]
 );
 
+// Doc 58 §7: devolucao no recebimento. O que volta ao fornecedor fecha o item sem entrar no estoque.
+export const pedidosDevolucoes = pgTable(
+  "pedidos_devolucoes",
+  {
+    id: idUuid,
+    empresaId,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    pedidoItemId: uuid("pedido_item_id")
+      .notNull()
+      .references(() => pedidosItens.id, { onDelete: "restrict" }),
+    pedidoRecebimentoId: uuid("pedido_recebimento_id")
+      .notNull()
+      .references(() => pedidosRecebimentos.id, { onDelete: "restrict" }),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    motivo: text("motivo").notNull(),
+    devolvidoPor: text("devolvido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    unique("pedidos_devolucoes_recebimento_item_unico").on(table.pedidoRecebimentoId, table.pedidoItemId),
+    check("pedidos_devolucoes_quantidade_check", sql`${table.quantidade} > 0`),
+    check("pedidos_devolucoes_motivo_check", sql`btrim(${table.motivo}) <> ''`),
+    index("pedidos_devolucoes_empresa_pedido_idx").on(table.empresaId, table.pedidoId)
+  ]
+);
+
 // Agenda da conferencia fisica. Agendar nao altera saldo: a divergencia so tera efeito quando a
 // regra propria de inventario for definida e implementada.
 export const conferenciasEstoque = pgTable(
@@ -4748,6 +4778,9 @@ export const pedidosAgendas = pgTable(
     terminoQuantidade: integer("termino_quantidade"),
     prazoRespostaHoras: integer("prazo_resposta_horas").notNull(),
     margemVariacaoPercentual: smallint("margem_variacao_percentual").notNull().default(10),
+    // Doc 58 §8: a loja recebe pedido nesta janela (o fornecedor ve na cotacao).
+    recebimentoInicio: time("recebimento_inicio"),
+    recebimentoFim: time("recebimento_fim"),
     status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
     serieAnteriorId: uuid("serie_anterior_id").references((): AnyPgColumn => pedidosAgendas.id, {
       onDelete: "restrict"
@@ -4773,6 +4806,10 @@ export const pedidosAgendas = pgTable(
     ),
     check("pedidos_agendas_prazo_check", sql`${table.prazoRespostaHoras} between 1 and 720`),
     check("pedidos_agendas_margem_check", sql`${table.margemVariacaoPercentual} in (10, 20, 30, 40)`),
+    check(
+      "pedidos_agendas_recebimento_check",
+      sql`(${table.recebimentoInicio} is null) = (${table.recebimentoFim} is null) and (${table.recebimentoFim} is null or ${table.recebimentoFim} > ${table.recebimentoInicio})`
+    ),
     check("pedidos_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
     check(
       "pedidos_agendas_termino_check",
@@ -4878,6 +4915,9 @@ export const comprasRodadas = pgTable(
     // Doc 57: variacao de quantidade aceita (para menos e para mais, na resposta e na separacao). Null = rodada
     // de antes da regra (sem limite).
     margemVariacaoPercentual: smallint("margem_variacao_percentual"),
+    // Doc 58 §8: a janela de recebimento da loja, congelada na abertura.
+    recebimentoInicio: time("recebimento_inicio"),
+    recebimentoFim: time("recebimento_fim"),
     abertaPor: text("aberta_por")
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
@@ -4890,6 +4930,10 @@ export const comprasRodadas = pgTable(
     atualizadoEm
   },
   (table) => [
+    check(
+      "compras_rodadas_recebimento_check",
+      sql`(${table.recebimentoInicio} is null) = (${table.recebimentoFim} is null) and (${table.recebimentoFim} is null or ${table.recebimentoFim} > ${table.recebimentoInicio})`
+    ),
     check(
       "compras_rodadas_margem_check",
       sql`${table.margemVariacaoPercentual} is null or ${table.margemVariacaoPercentual} in (10, 20, 30, 40)`

@@ -10,7 +10,8 @@ import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 
 // Agendamento de pedido (PROJECT_BRAIN/56 e 57), módulo próprio de Compras: o card do agendamento, a lista
-// de produtos (com filtros e bolinhas) e os agendamentos salvos. Na data, o servidor envia sozinho.
+// de produtos (com filtros e bolinhas) e os agendamentos salvos. Na data, o responsavel envia pela
+// Solicitacao de compra.
 const router = useRouter();
 const { apiGet, carregarSessao } = useApi();
 const sessao = ref<AuthSession | null>(null);
@@ -30,7 +31,7 @@ const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesab
 const podeGerir = computed(() => temPermissao("agendamento_pedidos_gerir"));
 
 const agenda = useAgendamentoPedidos(empresaId);
-const { agendamentos, produtos, grupos, carregando } = agenda;
+const { agendamentos, produtos, grupos, responsaveis, carregando } = agenda;
 const marcados = ref<Record<string, string>>({});
 const editando = ref<AgendamentoDto | null>(null);
 
@@ -131,7 +132,7 @@ onMounted(async () => {
     <div class="d-grid ga-4">
       <AppCabecalhoTela
         titulo="Agendamento de pedidos"
-        subtitulo="Escolha os produtos, a repetição, o prazo e a variação. Na data, a cotação sai pelo WhatsApp."
+        subtitulo="Escolha os produtos, a repetição e o responsável. Na data, ele confere na Solicitação de compra e envia."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
 
@@ -143,6 +144,7 @@ onMounted(async () => {
         :produtos-marcados="marcados"
         :editando="editando"
         :salvando="salvando"
+        :responsaveis="responsaveis"
         @salvar="salvar"
         @cancelar="cancelarEdicao"
       />

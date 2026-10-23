@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import {
   comprasAdjudicacoes,
   comprasPropostas,
@@ -13,8 +13,8 @@ import {
 } from "@padaria/db/schema";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
-// MODULO DO COMPRADOR — passo 2 da cotacao (doc 57 §5): o fornecedor ajusta a quantidade real do que
-// ganhou e devolve; o comprador confirma. O modulo publico so chega aqui pelo controller (injecao).
+// MODULO DO COMPRADOR — ajuste do fornecedor depois da compra (doc 58 §6): ele acerta a quantidade ao estoque
+// dele, dentro da margem. O modulo publico so chega aqui pelo controller (injecao).
 
 /** O pedido do fornecedor nesta rodada (o mais recente que nao foi cancelado). */
 export async function pedidoDoConviteRepository(conviteId: string, db: ExecutorBanco = banco) {
@@ -94,18 +94,18 @@ export async function ajustarQuantidadesRepository(
   }
 }
 
-export async function mudarStatusPedidoRepository(
+/** Linha no historico do pedido (o ajuste do fornecedor nao muda a situacao: continua Comprado). */
+export async function registrarEventoDoPedidoRepository(
   input: {
     pedidoId: string;
     empresaId: string;
-    status: "retornado" | "confirmado";
+    status: "confirmado";
     observacao: string;
     usuarioId: string | null;
     propostaId: string | null;
   },
   tx: TransacaoBanco
 ) {
-  await tx.update(pedidos).set({ status: input.status }).where(eq(pedidos.id, input.pedidoId));
   await tx.insert(pedidosEventos).values({
     empresaId: input.empresaId,
     pedidoId: input.pedidoId,
@@ -125,9 +125,4 @@ export async function ultimaPropostaIdDoConviteRepository(conviteId: string, tx:
     .orderBy(desc(comprasPropostas.versao))
     .limit(1);
   return linha?.id ?? null;
-}
-
-export async function pedidosDaListaRepository(pedidoIds: string[], db: ExecutorBanco = banco) {
-  if (!pedidoIds.length) return [];
-  return db.select({ id: pedidos.id, status: pedidos.status }).from(pedidos).where(inArray(pedidos.id, pedidoIds));
 }

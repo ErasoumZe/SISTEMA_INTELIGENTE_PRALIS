@@ -15,6 +15,7 @@ const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 const quantidades = ref<Record<string, string>>({});
 const enviando = ref(false);
 const erro = ref("");
+const salvo = ref(false);
 
 watch(
   () => props.pedido,
@@ -26,7 +27,8 @@ watch(
   { immediate: true }
 );
 
-const separando = computed(() => props.pedido.status === "cotado");
+// Doc 58 §6: depois de comprado (e antes de receber), o fornecedor ajusta a quantidade ao estoque dele.
+const separando = computed(() => props.pedido.status === "confirmado");
 const foraDaFaixa = (item: PedidoPublicoDto["itens"][number]) => {
   const valor = Number(quantidades.value[item.pedidoItemId]);
   if (!(valor > 0)) return true;
@@ -41,9 +43,10 @@ const total = computed(() =>
   )
 );
 const MENSAGEM: Record<PedidoPublicoDto["status"], string> = {
-  cotado: "Você ganhou estes produtos. Separe e informe a quantidade real de cada um.",
-  retornado: "Quantidades enviadas. Agora é só aguardar a confirmação do comprador pelo WhatsApp.",
-  confirmado: "Compra confirmada. Pode entregar.",
+  cotado: "Você ganhou estes produtos.",
+  retornado: "Quantidades enviadas.",
+  confirmado:
+    "Compramos estes produtos de você. Pode entregar. Se a quantidade que você tem for diferente, ajuste aqui, dentro da faixa.",
   recebido_parcial: "Recebemos parte da entrega.",
   recebido: "Entrega recebida. Obrigado!"
 };
@@ -63,6 +66,7 @@ async function devolver() {
         }))
       })
     });
+    salvo.value = true;
     emit("devolvido");
   } catch (causa) {
     erro.value = causa instanceof Error ? causa.message : "Não foi possível enviar.";
@@ -79,6 +83,9 @@ async function devolver() {
       <p class="separacao__mensagem">{{ MENSAGEM[pedido.status] }}</p>
     </header>
     <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
+    <v-alert v-if="salvo" type="success" variant="tonal" density="compact" data-estado="ajuste-salvo"
+      >Ajuste salvo. O comprador vê a quantidade nova no pedido.</v-alert
+    >
     <div v-for="item in pedido.itens" :key="item.pedidoItemId" class="separacao__item">
       <div class="separacao__produto">
         <strong>{{ item.descricaoProduto }}</strong>
@@ -94,7 +101,7 @@ async function devolver() {
         inputmode="decimal"
         min="0"
         step="0.001"
-        label="Quantidade separada"
+        label="Quantidade que vou entregar"
         density="comfortable"
         :hint="
           item.minimo && item.maximo
@@ -112,7 +119,7 @@ async function devolver() {
         >Total: <strong>{{ MOEDA.format(total) }}</strong></span
       >
       <v-btn color="primary" variant="flat" :loading="enviando" :disabled="!podeEnviar" @click="devolver"
-        >Enviar quantidades</v-btn
+        >Salvar ajuste</v-btn
       >
     </footer>
   </section>

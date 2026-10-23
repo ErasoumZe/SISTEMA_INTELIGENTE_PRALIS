@@ -66,8 +66,10 @@ export function useRodadaFornecedor() {
     return corpo?.data as T;
   };
 
+  // Doc 58 §4: o que ele salvou sem enviar (Cotado) vem antes da ultima resposta enviada.
   function prefill(dto: RodadaPublicaDto) {
-    const anterior = new Map((dto.ultimaProposta?.itens ?? []).map((item) => [item.conviteItemId, item]));
+    const base = dto.rascunho ?? dto.ultimaProposta;
+    const anterior = new Map((base?.itens ?? []).map((item) => [item.conviteItemId, item]));
     respostas.value = dto.itens.map((item) => {
       const feito = anterior.get(item.conviteItemId);
       const disponibilidade: Disponibilidade = feito?.indisponivel
@@ -80,14 +82,15 @@ export function useRodadaFornecedor() {
         quantidade: feito?.quantidadeDisponivel ?? ""
       };
     });
-    frete.value = dto.ultimaProposta?.frete ?? "";
-    observacao.value = dto.ultimaProposta?.observacao ?? "";
-    prazoEntrega.value = dto.ultimaProposta?.prazoEntrega ?? "";
-    condicaoPagamento.value = dto.ultimaProposta?.condicaoPagamento ?? "";
+    frete.value = base?.frete ?? "";
+    observacao.value = base?.observacao ?? "";
+    prazoEntrega.value = base?.prazoEntrega ?? "";
+    condicaoPagamento.value = base?.condicaoPagamento ?? "";
   }
 
-  async function carregar() {
-    carregando.value = true;
+  /** `silencioso`: atualiza sem trocar a tela pelo carregando (o ajuste do fornecedor mantem o aviso de salvo). */
+  async function carregar({ silencioso = false }: { silencioso?: boolean } = {}) {
+    if (!silencioso) carregando.value = true;
     erro.value = "";
     try {
       const dto = await requisitar<RodadaPublicaDto>("/api/rodada");
@@ -129,6 +132,46 @@ export function useRodadaFornecedor() {
     }
   }
 
+  function corpoDaResposta() {
+    return {
+      frete: frete.value ? Number(frete.value) : null,
+      observacao: observacao.value || null,
+      prazoEntrega: prazoEntrega.value || null,
+      condicaoPagamento: condicaoPagamento.value || null,
+      itens: respostas.value.map((item) => {
+        const tem = item.disponibilidade === "tenho";
+        return {
+          conviteItemId: item.conviteItemId,
+          indisponivel: !tem,
+          motivoIndisponivel: tem ? null : item.disponibilidade,
+          valorUnitario: tem && item.valor !== "" ? Number(item.valor) : null,
+          quantidadeDisponivel: tem && Number(item.quantidade) > 0 ? Number(item.quantidade) : null
+        };
+      })
+    };
+  }
+
+  /** Doc 58 §4: salva sem enviar. O comprador ve "Cotado"; nada e comprado ate ele enviar. */
+  const salvando = ref(false);
+  const salvoEm = ref("");
+  async function salvarRascunho() {
+    if (!aberta.value || salvando.value || enviando.value) return;
+    salvando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/rascunho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoDaResposta())
+      });
+      salvoEm.value = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" }).format(new Date());
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível salvar.";
+    } finally {
+      salvando.value = false;
+    }
+  }
+
   async function enviar() {
     if (!aberta.value || enviando.value || aceitando.value) return;
     // Campo em branco não é R$ 0,00: item que ele tem precisa de preço.
@@ -142,22 +185,7 @@ export function useRodadaFornecedor() {
       await requisitar("/api/rodada/responder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          frete: frete.value ? Number(frete.value) : null,
-          observacao: observacao.value || null,
-          prazoEntrega: prazoEntrega.value || null,
-          condicaoPagamento: condicaoPagamento.value || null,
-          itens: respostas.value.map((item) => {
-            const tem = item.disponibilidade === "tenho";
-            return {
-              conviteItemId: item.conviteItemId,
-              indisponivel: !tem,
-              motivoIndisponivel: tem ? null : item.disponibilidade,
-              valorUnitario: tem ? Number(item.valor) : null,
-              quantidadeDisponivel: tem && Number(item.quantidade) > 0 ? Number(item.quantidade) : null
-            };
-          })
-        })
+        body: JSON.stringify(corpoDaResposta())
       });
       enviado.value = true;
       await carregar();
@@ -199,6 +227,9 @@ export function useRodadaFornecedor() {
     requisitar,
     carregar,
     aceitar,
+    salvando,
+    salvoEm,
+    salvarRascunho,
     enviar
   };
 }

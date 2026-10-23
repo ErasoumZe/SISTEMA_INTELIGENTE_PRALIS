@@ -4,17 +4,19 @@ import type {
   EditarAgendamentoPayload,
   GrupoAgendamentoDto,
   ProdutoAgendamentoDto,
-  ProdutosAgendamentoDto
+  ProdutosAgendamentoDto,
+  ResponsavelPedidoDto
 } from "@padaria/shared";
 
-// Agendamento de pedido (PROJECT_BRAIN/56 e 57): dados e acoes do modulo. A tela so organiza; as regras
-// moram no servidor (recorrencia, datas, quem recebe o que). Na data, o servidor envia sozinho.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 58): dados e acoes do modulo. A tela so organiza; as regras
+// moram no servidor (recorrencia, datas, quem recebe o que). Na data, o responsavel envia pela Solicitacao.
 export function useAgendamentoPedidos(empresaId: Ref<string>) {
   const { apiGet, apiPost, apiPut } = useApi();
 
   const agendamentos = ref<AgendamentoDto[]>([]);
   const produtos = ref<ProdutoAgendamentoDto[]>([]);
   const grupos = ref<GrupoAgendamentoDto[]>([]);
+  const responsaveis = ref<ResponsavelPedidoDto[]>([]);
   const carregando = ref(false);
 
   const base = "/api/compras/agendamentos";
@@ -36,13 +38,15 @@ export function useAgendamentoPedidos(empresaId: Ref<string>) {
     agendamentos.value = [];
     produtos.value = [];
     try {
-      const [catalogo] = await Promise.all([
+      const [catalogo, pessoas] = await Promise.all([
         apiGet<ProdutosAgendamentoDto>(`${base}/produtos${query()}`),
+        apiGet<ResponsavelPedidoDto[]>(`/api/compras/solicitacoes-compra/responsaveis${query()}`).catch(() => []),
         carregarAgenda()
       ]);
       if (token !== requisicao) return;
       produtos.value = catalogo.produtos;
       grupos.value = catalogo.grupos;
+      responsaveis.value = pessoas;
     } finally {
       if (token === requisicao) carregando.value = false;
     }
@@ -75,6 +79,7 @@ export function useAgendamentoPedidos(empresaId: Ref<string>) {
     agendamentos,
     produtos,
     grupos,
+    responsaveis,
     carregando,
     carregarTudo,
     carregarAgenda,

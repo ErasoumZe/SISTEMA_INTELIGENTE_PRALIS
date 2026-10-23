@@ -1,4 +1,7 @@
-import type { DecisaoItemDto, DecisaoPropostaDto, MotivoDecisao } from "@padaria/shared";
+import type { DecisaoItemDto, MotivoDecisao } from "@padaria/shared";
+
+/** O minimo de uma oferta para decidir (vale para a fila da cotacao e para a cotacao do produto). */
+type OfertaComCusto = { indisponivel: boolean; custoFinalUnitario: string | null };
 
 // Apresentacao da fila de decisao do Comprador (R-221, E6). Pura: nao conhece API nem componente.
 
@@ -31,12 +34,12 @@ export const AJUDA_MOTIVO: Record<MotivoDecisao, string> = {
 };
 
 /** Só dá para aprovar proposta com preço e custo final calculado. */
-export function podeAprovarProposta(proposta: DecisaoPropostaDto): boolean {
+export function podeAprovarProposta(proposta: OfertaComCusto): boolean {
   return !proposta.indisponivel && proposta.custoFinalUnitario !== null;
 }
 
 /** Total do item na proposta (custo final x quantidade), ou null se a proposta não tem custo. */
-export function totalDaProposta(proposta: DecisaoPropostaDto, quantidade: string): number | null {
+export function totalDaProposta(proposta: OfertaComCusto, quantidade: string): number | null {
   if (proposta.custoFinalUnitario === null) return null;
   return Number((Number(proposta.custoFinalUnitario) * Number(quantidade)).toFixed(2));
 }

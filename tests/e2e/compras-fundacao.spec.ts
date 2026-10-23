@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 import { entrar, LARGURAS, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import { abrirContextoCompras, irParaTela } from "./apoio-compras.js";
 
-// Doc 57 §1/§4: catalogo, historico e preco-base sairam da tela de Pedidos para o modulo "Cadastro de compras".
-// Pedidos ficou com o Pedido rapido e a matriz; nenhum caminho antigo de compra sobrou.
-test("Cadastro de compras tem catalogo, historico e preco-base; Pedidos ficou so com o Pedido rapido e a matriz", async ({
+// Doc 57 §1 e doc 58 §4/§5: catalogo, historico e preco-base moram no "Cadastro de compras". A Cotacao por
+// fornecedor tem o Pedido urgente e a matriz por produto; o comprado vai para Pedidos finalizados.
+test("Cadastro de compras tem catalogo, historico e preco-base; a Cotacao tem so o Pedido urgente e a matriz", async ({
   page
 }) => {
   const contexto = await abrirContextoCompras(USUARIOS.admin);
@@ -19,14 +19,20 @@ test("Cadastro de compras tem catalogo, historico e preco-base; Pedidos ficou so
     expect(precos.status(), await precos.text()).toBe(200);
 
     await entrar(page, USUARIOS.admin);
-    await irParaTela(page, "/pedidos", "Pedidos");
-    await expect(page.getByRole("button", { name: "Pedido rápido" })).toBeVisible();
-    await expect(page.locator('[data-secao="matriz-pedidos"]')).toBeVisible();
+    await irParaTela(page, "/pedidos", "Cotação por fornecedor");
+    await expect(page.getByRole("button", { name: "Pedido urgente" })).toBeVisible();
+    await expect(page.locator('[data-secao="matriz-cotacao"]')).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pedido rápido" })).toHaveCount(0);
     // Regra-mae: nada de catalogo, abas de solicitacao, fila antiga nem pedido manual nesta tela.
     await expect(page.getByRole("tab", { name: "Catálogo fornecedor–produto" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Solicitações" })).toHaveCount(0);
     await expect(page.getByText("Fila de pedidos", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Novo pedido manual" })).toHaveCount(0);
+
+    await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
+    await expect(page.locator('[data-secao="pedidos-finalizados"]')).toBeVisible();
+    await expect(page.getByRole("tab", { name: /A caminho/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Recebidos/ })).toBeVisible();
 
     await irParaTela(page, "/cadastro_compras", "Cadastro de compras");
     await expect(page.getByRole("tab", { name: "Catálogo fornecedor–produto" })).toBeVisible();

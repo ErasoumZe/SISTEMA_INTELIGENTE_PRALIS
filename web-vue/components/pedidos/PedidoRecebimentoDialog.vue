@@ -6,18 +6,23 @@
  * por item, quanto foi pedido, quanto ja chegou e quanto ainda falta. A quantidade comeca no
  * pendente, mas o conferente abaixa o numero quando chega menos — e o resumo no rodape mostra o
  * total que sera somado ao saldo antes de ele confirmar.
+ *
+ * Doc 58 §7: o que voltou com o entregador vai em "Devolvido", com o motivo. Devolver fecha o item: so o recebido
+ * entra no estoque e o resto nao fica esperando.
  */
-import type { PedidoDto } from "@padaria/shared";
+import type { PedidoDto, PedidoRecebimentoItem } from "@padaria/shared";
 import { formatarQuantidade, normalizarQuantidadeEditavel } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ required: true });
 const props = defineProps<{ pedido: PedidoDto | null; salvando: boolean }>();
 const emit = defineEmits<{
-  confirmar: [itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>, observacao: string];
+  confirmar: [itens: PedidoRecebimentoItem[], observacao: string];
 }>();
 
 const observacao = ref("");
 const quantidades = reactive<Record<string, string>>({});
+const devolvidas = reactive<Record<string, string>>({});
+const motivos = reactive<Record<string, string>>({});
 
 const itens = computed(() => props.pedido?.itens ?? []);
 const pendentes = computed(() => itens.value.filter((item) => Number(item.quantidadePendente) > 0));
@@ -26,8 +31,12 @@ watch(
   () => [aberto.value, props.pedido?.id],
   () => {
     observacao.value = "";
-    for (const chave of Object.keys(quantidades)) delete quantidades[chave];
-    for (const item of itens.value) quantidades[item.id] = normalizarQuantidadeEditavel(item.quantidadePendente);
+    for (const mapa of [quantidades, devolvidas, motivos]) for (const chave of Object.keys(mapa)) delete mapa[chave];
+    for (const item of itens.value) {
+      quantidades[item.id] = normalizarQuantidadeEditavel(item.quantidadePendente);
+      devolvidas[item.id] = "0";
+      motivos[item.id] = "";
+    }
   },
   { immediate: true }
 );
@@ -37,23 +46,34 @@ const numero = (valor: string | undefined) => {
   return Number.isFinite(convertido) ? convertido : 0;
 };
 
-const conferidos = computed(() =>
+const conferidos = computed<PedidoRecebimentoItem[]>(() =>
   pendentes.value
-    .map((item) => ({ pedidoItemId: item.id, quantidadeConferida: numero(quantidades[item.id]) }))
-    .filter((item) => item.quantidadeConferida > 0)
+    .map((item) => {
+      const devolvida = numero(devolvidas[item.id]);
+      return {
+        pedidoItemId: item.id,
+        quantidadeConferida: numero(quantidades[item.id]),
+        quantidadeDevolvida: devolvida,
+        motivoDevolucao: devolvida > 0 ? (motivos[item.id] ?? "").trim() : null
+      };
+    })
+    .filter((item) => item.quantidadeConferida > 0 || item.quantidadeDevolvida > 0)
 );
 const totalConferido = computed(() => conferidos.value.reduce((soma, item) => soma + item.quantidadeConferida, 0));
+const totalDevolvido = computed(() => conferidos.value.reduce((soma, item) => soma + item.quantidadeDevolvida, 0));
 
-/** Nenhum item pode receber mais do que o pendente — e a mesma trava do servidor. */
+/** Recebido + devolvido nunca passa do pendente — e a mesma trava do servidor. */
 function excedeu(itemId: string, pendente: string) {
-  return numero(quantidades[itemId]) > Number(pendente);
+  return numero(quantidades[itemId]) + numero(devolvidas[itemId]) > Number(pendente);
 }
+const semMotivo = (itemId: string) => numero(devolvidas[itemId]) > 0 && !(motivos[itemId] ?? "").trim();
 const algumExcedeu = computed(() => pendentes.value.some((item) => excedeu(item.id, item.quantidadePendente)));
 
 const impedimento = computed(() => {
   if (!pendentes.value.length) return "Este pedido não tem item pendente.";
-  if (algumExcedeu.value) return "Há item conferido acima do que falta chegar.";
-  if (!conferidos.value.length) return "Informe a quantidade conferida de ao menos um item.";
+  if (algumExcedeu.value) return "Há item com recebido + devolvido acima do que falta chegar.";
+  if (pendentes.value.some((item) => semMotivo(item.id))) return "Diga o motivo de cada devolução.";
+  if (!conferidos.value.length) return "Informe o que recebeu ou devolveu de ao menos um item.";
   return "";
 });
 
@@ -62,7 +82,10 @@ function receberTudo() {
 }
 
 function zerarTudo() {
-  for (const item of pendentes.value) quantidades[item.id] = "0";
+  for (const item of pendentes.value) {
+    quantidades[item.id] = "0";
+    devolvidas[item.id] = "0";
+  }
 }
 
 function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
@@ -80,14 +103,19 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
           <h2 class="text-h6">Conferir recebimento</h2>
           <p class="text-caption text-medium-emphasis mb-0">{{ pedido.fornecedorNome ?? "Pedido histórico" }}</p>
         </div>
-        <v-chip size="small" color="success" variant="tonal" label
-          >+{{ formatarQuantidade(totalConferido) }} no estoque</v-chip
-        >
+        <div class="d-flex flex-wrap ga-1">
+          <v-chip size="small" color="success" variant="tonal" label
+            >+{{ formatarQuantidade(totalConferido) }} no estoque</v-chip
+          >
+          <v-chip v-if="totalDevolvido > 0" size="small" color="warning" variant="tonal" label
+            >{{ formatarQuantidade(totalDevolvido) }} devolvido</v-chip
+          >
+        </div>
       </div>
 
       <v-card-text class="recebimento__corpo">
         <v-alert type="info" density="compact" variant="tonal">
-          Só a quantidade conferida aqui entra no estoque. O que não chegou continua pendente.
+          Só o recebido entra no estoque. O que não chegou continua pendente; o item com devolução fecha.
         </v-alert>
 
         <div class="recebimento__atalhos">
@@ -105,22 +133,46 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
               <strong>Falta {{ formatarQuantidade(item.quantidadePendente) }}</strong>
             </div>
           </div>
+          <div class="recebimento__campos">
+            <v-text-field
+              v-model="quantidades[item.id]"
+              type="number"
+              min="0"
+              :max="item.quantidadePendente"
+              step="0.001"
+              label="Recebido"
+              density="comfortable"
+              hide-details="auto"
+              data-campo="recebido"
+              :error="excedeu(item.id, item.quantidadePendente)"
+              :error-messages="
+                excedeu(item.id, item.quantidadePendente)
+                  ? `Falta apenas ${formatarQuantidade(item.quantidadePendente)}.`
+                  : undefined
+              "
+            />
+            <v-text-field
+              v-model="devolvidas[item.id]"
+              type="number"
+              min="0"
+              step="0.001"
+              label="Devolvido"
+              density="comfortable"
+              hide-details
+              data-campo="devolvido"
+            />
+          </div>
           <v-text-field
-            v-model="quantidades[item.id]"
-            type="number"
-            min="0"
-            :max="item.quantidadePendente"
-            step="0.001"
-            label="Quantidade conferida"
+            v-if="numero(devolvidas[item.id]) > 0"
+            v-model="motivos[item.id]"
+            label="Motivo da devolução"
+            placeholder="Ex.: estragado, fora do pedido"
             density="comfortable"
             hide-details="auto"
-            class="recebimento__campo"
-            :error="excedeu(item.id, item.quantidadePendente)"
-            :error-messages="
-              excedeu(item.id, item.quantidadePendente)
-                ? `Falta apenas ${formatarQuantidade(item.quantidadePendente)}.`
-                : undefined
-            "
+            maxlength="500"
+            class="recebimento__motivo"
+            data-campo="motivo-devolucao"
+            :error-messages="semMotivo(item.id) ? 'Diga o motivo.' : undefined"
           />
         </div>
 
@@ -140,7 +192,9 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
         <span v-if="impedimento" class="recebimento__impedimento">{{ impedimento }}</span>
         <span v-else class="recebimento__resumo"
           >{{ conferidos.length }} item(ns) conferido(s) · entra {{ formatarQuantidade(totalConferido) }} no
-          estoque</span
+          estoque<template v-if="totalDevolvido > 0">
+            · devolve {{ formatarQuantidade(totalDevolvido) }}</template
+          ></span
         >
         <v-spacer />
         <v-btn variant="text" @click="aberto = false">Cancelar</v-btn>
@@ -196,7 +250,7 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 
 .recebimento__item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--cx-sp-4);
   align-items: center;
   padding: var(--cx-sp-4);
@@ -208,6 +262,16 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 
 .recebimento__produto {
   min-width: 0;
+}
+
+.recebimento__campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--cx-sp-2);
+}
+
+.recebimento__motivo {
+  grid-column: 1 / -1;
 }
 
 .recebimento__numeros {

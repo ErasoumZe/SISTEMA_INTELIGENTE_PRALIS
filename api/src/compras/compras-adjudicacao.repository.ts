@@ -137,7 +137,7 @@ export async function somaAutomaticaDaRodadaRepository(rodadaId: string, tx: Tra
   return linhas.reduce((soma, linha) => soma + Number(linha.custoFinalUnitario) * Number(linha.quantidade), 0);
 }
 
-export async function pedidoCotadoDaRodadaRepository(
+export async function pedidoAbertoDaRodadaRepository(
   rodadaId: string,
   fornecedorId: string,
   tx: TransacaoBanco
@@ -146,9 +146,9 @@ export async function pedidoCotadoDaRodadaRepository(
     .select({ id: pedidos.id })
     .from(pedidos)
     .where(
-      // Doc 57 §5: o item ganho entra no pedido que o fornecedor ainda esta SEPARANDO (cotado). Depois que ele
-      // devolveu (retornado) ou o comprador confirmou, um item novo abre outro pedido.
-      and(eq(pedidos.rodadaId, rodadaId), eq(pedidos.fornecedorId, fornecedorId), eq(pedidos.status, "cotado"))
+      // Doc 58 §6: o item ganho entra no pedido comprado deste fornecedor que ainda nao comecou a ser recebido.
+      // Depois do primeiro recebimento, um item novo abre outro pedido.
+      and(eq(pedidos.rodadaId, rodadaId), eq(pedidos.fornecedorId, fornecedorId), eq(pedidos.status, "confirmado"))
     )
     .limit(1)
     // Trava o pedido antes de anexar item: se o recebimento mudar o status entre a leitura e a escrita,
@@ -157,7 +157,7 @@ export async function pedidoCotadoDaRodadaRepository(
   return pedido?.id ?? null;
 }
 
-export async function criarPedidoCotadoRepository(
+export async function criarPedidoCompradoRepository(
   input: {
     empresaId: string;
     solicitacaoId: string;
@@ -180,9 +180,9 @@ export async function criarPedidoCotadoRepository(
       empresaId: input.empresaId,
       fornecedorId: input.fornecedorId,
       tipo: "rodada",
-      // Doc 57 §5: nasce COTADO (o item e dele); vira confirmado so quando o comprador confirma depois do
-      // ajuste da separacao.
-      status: "cotado",
+      // Doc 58 §6: o preco aceito (automatico ou pelo comprador) compra na hora: nasce COMPRADO (confirmado).
+      // O fornecedor ainda pode ajustar a quantidade ao estoque dele, dentro da margem.
+      status: "confirmado",
       recorrencia: "nenhuma",
       solicitacaoId: input.solicitacaoId,
       rodadaId: input.rodadaId,
@@ -196,7 +196,7 @@ export async function criarPedidoCotadoRepository(
   await tx.insert(pedidosEventos).values({
     empresaId: input.empresaId,
     pedidoId: pedido.id,
-    status: "cotado",
+    status: "confirmado",
     observacao: aprovadoPor ? "Compra aprovada pelo comprador" : "Compra automatica",
     criadoPor: aprovadoPor,
     propostaId: input.propostaId

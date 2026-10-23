@@ -34,6 +34,8 @@ export type ConvitePublicoLinha = {
   fornecedorNome: string;
   empresaNome: string;
   margemVariacaoPercentual: number | null;
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
 };
 
 export async function buscarConvitePorHashRepository(
@@ -52,7 +54,9 @@ export async function buscarConvitePorHashRepository(
       fornecedorId: comprasRodadasConvites.fornecedorId,
       fornecedorNome: fornecedores.nome,
       empresaNome: empresas.nome,
-      margemVariacaoPercentual: comprasRodadas.margemVariacaoPercentual
+      margemVariacaoPercentual: comprasRodadas.margemVariacaoPercentual,
+      recebimentoInicio: comprasRodadas.recebimentoInicio,
+      recebimentoFim: comprasRodadas.recebimentoFim
     })
     .from(comprasRodadasConvites)
     .innerJoin(comprasRodadas, eq(comprasRodadas.id, comprasRodadasConvites.rodadaId))
@@ -170,6 +174,40 @@ export async function ultimaPropostaDoConviteRepository(
   };
 }
 
+/** O rascunho vivo do convite (um por convite). Os itens saem pelo mesmo formato da ultima proposta. */
+export async function rascunhoDoConviteRepository(conviteId: string, db: ExecutorBanco = banco) {
+  const [proposta] = await db
+    .select({
+      id: comprasPropostas.id,
+      frete: comprasPropostas.frete,
+      observacao: comprasPropostas.observacao,
+      prazoEntrega: comprasPropostas.prazoEntrega,
+      condicaoPagamento: comprasPropostas.condicaoPagamento
+    })
+    .from(comprasPropostas)
+    .where(and(eq(comprasPropostas.conviteId, conviteId), eq(comprasPropostas.status, "rascunho")))
+    .limit(1);
+  if (!proposta) return null;
+  const itens = await db
+    .select({
+      conviteItemId: comprasPropostasItens.conviteItemId,
+      indisponivel: comprasPropostasItens.indisponivel,
+      motivoIndisponivel: comprasPropostasItens.motivoIndisponivel,
+      valorUnitario: comprasPropostasItens.valorUnitario,
+      quantidadeDisponivel: comprasPropostasItens.quantidadeDisponivel
+    })
+    .from(comprasPropostasItens)
+    .where(eq(comprasPropostasItens.propostaId, proposta.id));
+  return { ...proposta, itens };
+}
+
+/** Apaga o rascunho (ao salvar outro ou ao enviar): o livro de versoes so guarda o que foi enviado. */
+export async function apagarRascunhoRepository(conviteId: string, tx: TransacaoBanco): Promise<void> {
+  await tx
+    .delete(comprasPropostas)
+    .where(and(eq(comprasPropostas.conviteId, conviteId), eq(comprasPropostas.status, "rascunho")));
+}
+
 export async function conviteItemIdsRepository(conviteId: string, tx: TransacaoBanco): Promise<Set<string>> {
   const linhas = await tx
     .select({ id: comprasConvitesItens.id })
@@ -190,6 +228,8 @@ export async function proximaVersaoRepository(conviteId: string, tx: TransacaoBa
 
 export async function criarPropostaFornecedorRepository(
   input: {
+    /** Doc 58 §4: "rascunho" = salvou sem enviar (Cotado). Padrao: "enviada". */
+    status?: "rascunho" | "enviada";
     empresaId: string;
     conviteId: string;
     versao: number;
@@ -215,12 +255,12 @@ export async function criarPropostaFornecedorRepository(
       versao: input.versao,
       autorTipo: "fornecedor",
       autorUsuarioId: null,
-      status: "enviada",
+      status: input.status ?? "enviada",
       frete: input.frete === null ? null : String(input.frete),
       observacao: input.observacao,
       prazoEntrega: input.prazoEntrega,
       condicaoPagamento: input.condicaoPagamento,
-      enviadaEm: new Date()
+      enviadaEm: input.status === "rascunho" ? null : new Date()
     })
     .returning({ id: comprasPropostas.id });
   if (!proposta) throw new Error("Proposta nao criada");

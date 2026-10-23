@@ -14,7 +14,7 @@ import {
   type TerminoRecorrencia
 } from "@padaria/shared/compras";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { buscarPerfilUsuario } from "../auth/perfil.service.js";
+import { usuariosComPermissao } from "./compras-responsaveis.service.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { gruposDaEmpresaRepository, validarGrupoAgendaRepository } from "./compras-agendamento.repository.js";
@@ -35,7 +35,6 @@ import {
   registrarContagemRepository,
   travarAgendaConferenciaRepository,
   travarConferenciaRepository,
-  usuariosDaEmpresaRepository,
   type AgendaConferenciaEntrada
 } from "./conferencias-estoque.repository.js";
 
@@ -68,9 +67,7 @@ export async function listarResponsaveisConferencia(
   perfil: PerfilUsuario
 ): Promise<ResponsavelConferenciaDto[]> {
   validarEmpresa(perfil, empresaId);
-  const usuarios = await usuariosDaEmpresaRepository(empresaId);
-  const perfis = await Promise.all(usuarios.map((usuario) => buscarPerfilUsuario(usuario.usuarioId)));
-  return usuarios.filter((_, indice) => perfis[indice]?.permissoes.includes(PERMISSAO_CONTAR));
+  return usuariosComPermissao(empresaId, PERMISSAO_CONTAR);
 }
 
 export async function opcoesConferencia(empresaId: string, perfil: PerfilUsuario): Promise<OpcoesConferenciaDto> {

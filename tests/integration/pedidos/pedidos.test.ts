@@ -52,6 +52,7 @@ describe("pedidos integration (Compras, pos-E8)", () => {
       `delete from estoque_movimentos where pedido_item_id in (select id from pedidos_itens where pedido_id in (${pedidosDaRodada}))`,
       [idsTeste.empresaA]
     );
+    await executarSql(`delete from pedidos_devolucoes where pedido_id in (${pedidosDaRodada})`, [idsTeste.empresaA]);
     await executarSql(`delete from pedidos_recebimentos where pedido_id in (${pedidosDaRodada})`, [idsTeste.empresaA]);
     await executarSql(`delete from pedidos_eventos where pedido_id in (${pedidosDaRodada})`, [idsTeste.empresaA]);
     await executarSql("delete from pedidos where empresa_id = $1 and tipo = 'rodada'", [idsTeste.empresaA]);
@@ -83,11 +84,11 @@ describe("pedidos integration (Compras, pos-E8)", () => {
       idsTeste.produto
     ]))!.quantidade_estoque;
 
-  /** O pedido NASCE da rodada: solicitacao -> rodada -> resposta dentro da base -> compra automatica. */
-  async function criarPedidoDaRodada(
-    quantidade: number,
-    { confirmar = true }: { confirmar?: boolean } = {}
-  ): Promise<{ pedidoId: string; itemId: string }> {
+  /**
+   * O pedido NASCE da rodada: solicitacao -> rodada -> resposta dentro da base -> compra automatica. Doc 58 §6: ja
+   * nasce Comprado (confirmado); nao existe mais confirmar na mao.
+   */
+  async function criarPedidoDaRodada(quantidade: number): Promise<{ pedidoId: string; itemId: string }> {
     const criar = await post("/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
       itens: [{ produtoId: idsTeste.produto, quantidade }]
@@ -118,15 +119,11 @@ describe("pedidos integration (Compras, pos-E8)", () => {
       solicitacaoId
     ]);
     const item = await consultarUm<{ id: string }>("select id from pedidos_itens where pedido_id = $1", [pedido!.id]);
-    if (confirmar) {
-      const confirmado = await post(`/api/pedidos/${pedido!.id}/confirmar`, { empresaId: idsTeste.empresaA });
-      expect(confirmado.statusCode, confirmado.body).toBe(204);
-    }
     return { pedidoId: pedido!.id, itemId: item!.id };
   }
 
   it("a compra NAO move estoque: so o recebimento, parcial e idempotente, soma so a conferencia", async () => {
-    const { pedidoId, itemId } = await criarPedidoDaRodada(5, { confirmar: false });
+    const { pedidoId, itemId } = await criarPedidoDaRodada(5);
 
     const detalhe = await get(`/api/pedidos/${pedidoId}`);
     assertOk(detalhe);
@@ -139,22 +136,16 @@ describe("pedidos integration (Compras, pos-E8)", () => {
         eventos: Array<{ status: string; criadoPorNome: string }>;
       };
     }>(detalhe).data;
-    expect(inicial).toMatchObject({ status: "cotado", tipo: "rodada", fornecedorId: FORN });
+    expect(inicial).toMatchObject({ status: "confirmado", tipo: "rodada", fornecedorId: FORN });
     expect(inicial.itens[0]?.quantidadeRecebida).toBe("0");
-    // R-213: comprar nao move estoque. O evento de cotado e do fornecedor, pelo link (nao "Sistema").
+    // R-213: comprar nao move estoque. O evento de compra e do fornecedor, pelo link (nao "Sistema").
     expect(await estoque()).toBe("0.000");
-    expect(inicial.eventos.find((evento) => evento.status === "cotado")?.criadoPorNome).toBe(
+    expect(inicial.eventos.find((evento) => evento.status === "confirmado")?.criadoPorNome).toBe(
       "Pedidos Forn (pelo link)"
     );
-    // Doc 57 §5: cotado ainda nao recebe; so depois que o comprador confirma (Comprado).
-    const cedo = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
-      idempotenciaChave: "11111111-1111-4111-8111-11111111f0ff",
-      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1 }]
-    });
-    expect(cedo.statusCode).toBeGreaterThanOrEqual(400);
-    expect(await estoque()).toBe("0.000");
+    // Doc 58 §6: confirmar na mao deixou de existir.
     const confirmar = await post(`/api/pedidos/${pedidoId}/confirmar`, { empresaId: idsTeste.empresaA });
-    expect(confirmar.statusCode, confirmar.body).toBe(204);
+    expect(confirmar.statusCode, confirmar.body).toBe(404);
 
     const primeiroRecebimento = {
       idempotenciaChave: "00000000-0000-4000-8000-000000000901",
@@ -226,6 +217,73 @@ describe("pedidos integration (Compras, pos-E8)", () => {
         )
       )?.total
     ).toBe("2");
+  });
+
+  it("devolucao no recebimento fecha o item: o estoque entra so o recebido e a devolucao fica registrada (doc 58 §7)", async () => {
+    const { pedidoId, itemId } = await criarPedidoDaRodada(4);
+    const saldoAntes = Number(await estoque());
+
+    const semMotivo = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: crypto.randomUUID(),
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1, quantidadeDevolvida: 1 }]
+    });
+    expect(semMotivo.statusCode).toBe(400);
+    const acima = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: crypto.randomUUID(),
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 3, quantidadeDevolvida: 2, motivoDevolucao: "estragado" }]
+    });
+    assertProblem(acima, 400, "RECEBIMENTO_ACIMA_PEDIDO");
+
+    // Pediu 4, chegaram 2 e 1 veio estragado: recebe 1, devolve 1. O item fecha mesmo faltando 2.
+    const recebimento = {
+      idempotenciaChave: "00000000-0000-4000-8000-000000000905",
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 1, quantidadeDevolvida: 1, motivoDevolucao: "estragado" }]
+    };
+    const receber = await post(`/api/pedidos/${pedidoId}/recebimentos`, recebimento);
+    assertOk(receber);
+    expect(json<{ data: { status: string } }>(receber).data.status).toBe("recebido");
+    expect(Number(await estoque())).toBe(saldoAntes + 1);
+
+    const retry = await post(`/api/pedidos/${pedidoId}/recebimentos`, recebimento);
+    assertOk(retry);
+    expect(json<{ data: { duplicado: boolean } }>(retry).data.duplicado).toBe(true);
+    const outraIntencao = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      ...recebimento,
+      itens: [{ ...recebimento.itens[0], motivoDevolucao: "vencido" }]
+    });
+    assertProblem(outraIntencao, 400, "IDEMPOTENCIA_CONFLITO");
+    expect(Number(await estoque())).toBe(saldoAntes + 1);
+
+    const item = json<{
+      data: { itens: Array<{ quantidadeRecebida: string; quantidadeDevolvida: string; quantidadePendente: string }> };
+    }>(await get(`/api/pedidos/${pedidoId}`)).data.itens[0];
+    expect(item).toMatchObject({ quantidadeRecebida: "1", quantidadeDevolvida: "1", quantidadePendente: "0" });
+    expect(
+      await consultarUm<{ quantidade: string; motivo: string }>(
+        "select quantidade::text, motivo from pedidos_devolucoes where pedido_item_id = $1",
+        [itemId]
+      )
+    ).toEqual({ quantidade: "1.000", motivo: "estragado" });
+  });
+
+  it("so devolucao (nada recebido) fecha o item sem mexer no estoque", async () => {
+    const { pedidoId, itemId } = await criarPedidoDaRodada(2);
+    const saldoAntes = Number(await estoque());
+    const receber = await post(`/api/pedidos/${pedidoId}/recebimentos`, {
+      idempotenciaChave: crypto.randomUUID(),
+      itens: [{ pedidoItemId: itemId, quantidadeConferida: 0, quantidadeDevolvida: 2, motivoDevolucao: "veio errado" }]
+    });
+    assertOk(receber);
+    expect(json<{ data: { status: string } }>(receber).data.status).toBe("recebido");
+    expect(Number(await estoque())).toBe(saldoAntes);
+    expect(
+      (
+        await consultarUm<{ total: string }>(
+          "select count(*)::text as total from estoque_movimentos where pedido_item_id = $1",
+          [itemId]
+        )
+      )?.total
+    ).toBe("0");
   });
 
   it("pedido legado (a fazer, enviado, retornado) so pode ser cancelado: nao recebe e nao confirma na mao", async () => {

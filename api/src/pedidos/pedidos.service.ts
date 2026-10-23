@@ -16,9 +16,11 @@ import {
   listarItensDoPedidoRepository,
   listarPedidosRepository,
   obterPedidoDetalheRepository,
+  registrarDevolucaoRepository,
   registrarMovimentoRecebimentoRepository,
   travarPedidoRepository,
-  travarProdutosRepository
+  travarProdutosRepository,
+  type ItemDoRecebimentoGravado
 } from "./pedidos.repository.js";
 
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
@@ -111,9 +113,10 @@ export async function receberPedido(
       const itemPedido = itensPorId.get(itemRecebido.pedidoItemId);
       if (!itemPedido || !itemPedido.produtoId)
         throw erroValidacao("Item do pedido nao encontrado", "ITEM_PEDIDO_INVALIDO");
-      if (itemRecebido.quantidadeConferida > Number(itemPedido.quantidadePendente)) {
+      // Recebido + devolvido nunca passa do que falta chegar (doc 58 §7: chegaram 2, 1 estragado = 1 + 1).
+      if (itemRecebido.quantidadeConferida + itemRecebido.quantidadeDevolvida > Number(itemPedido.quantidadePendente)) {
         throw erroValidacao(
-          `Quantidade conferida ultrapassa o pendente de ${itemPedido.descricaoProduto}`,
+          `Recebido e devolvido ultrapassam o pendente de ${itemPedido.descricaoProduto}`,
           "RECEBIMENTO_ACIMA_PEDIDO"
         );
       }
@@ -145,17 +148,39 @@ export async function receberPedido(
       return { recebimentoId: vencedor.id, duplicado: true, status: "recebido_parcial" };
     }
 
+    // So o recebido entra no estoque: trava apenas os produtos que vao receber quantidade.
+    const entrando = payload.itens.filter((item) => item.quantidadeConferida > 0);
     const produtosTravados = await travarProdutosRepository(
       pedido.empresaId,
-      payload.itens.map((item) => itensPorId.get(item.pedidoItemId)?.produtoId ?? ""),
+      entrando.map((item) => itensPorId.get(item.pedidoItemId)?.produtoId ?? ""),
       tx
     );
     const saldos = new Map(produtosTravados.map((produto) => [produto.id, produto.quantidadeEstoque]));
-    if (saldos.size !== new Set(payload.itens.map((item) => itensPorId.get(item.pedidoItemId)?.produtoId)).size) {
+    if (saldos.size !== new Set(entrando.map((item) => itensPorId.get(item.pedidoItemId)?.produtoId)).size) {
       throw erroValidacao("Produto do pedido nao pertence a empresa", "INVALID_PRODUCT");
     }
 
     for (const itemRecebido of payload.itens) {
+      if (itemRecebido.quantidadeDevolvida <= 0) continue;
+      const itemPedido = itensPorId.get(itemRecebido.pedidoItemId)!;
+      await registrarDevolucaoRepository(
+        {
+          empresaId: pedido.empresaId,
+          pedidoId,
+          pedidoItemId: itemPedido.id,
+          pedidoRecebimentoId: recebimentoId,
+          quantidade: itemRecebido.quantidadeDevolvida,
+          motivo: itemRecebido.motivoDevolucao!,
+          devolvidoPor: perfil.usuarioId
+        },
+        tx
+      );
+      itemPedido.quantidadeDevolvida = String(
+        Number(itemPedido.quantidadeDevolvida) + itemRecebido.quantidadeDevolvida
+      );
+    }
+
+    for (const itemRecebido of entrando) {
       const itemPedido = itensPorId.get(itemRecebido.pedidoItemId)!;
       const produtoId = itemPedido.produtoId!;
       const saldoAnterior = saldos.get(produtoId)!;
@@ -174,8 +199,14 @@ export async function receberPedido(
       );
       saldos.set(produtoId, saldoPosterior);
       itemPedido.quantidadeRecebida = String(Number(itemPedido.quantidadeRecebida) + itemRecebido.quantidadeConferida);
-      itemPedido.quantidadePendente = String(Number(itemPedido.quantidade) - Number(itemPedido.quantidadeRecebida));
     }
+    // Devolveu, fechou o item (doc 58 §7); sem devolucao, o que falta continua pendente.
+    for (const itemPedido of itensPedido)
+      itemPedido.quantidadePendente = String(
+        Number(itemPedido.quantidadeDevolvida) > 0
+          ? 0
+          : Number(itemPedido.quantidade) - Number(itemPedido.quantidadeRecebida)
+      );
 
     const status: "recebido_parcial" | "recebido" = itensPedido.every((item) => Number(item.quantidadePendente) === 0)
       ? "recebido"
@@ -194,17 +225,19 @@ export async function receberPedido(
   });
 }
 
+type IntencaoItem = Omit<ItemDoRecebimentoGravado, "motivoDevolucao"> & { motivoDevolucao?: string | null | undefined };
+
 function mesmaIntencaoRecebimento(
-  gravado: {
-    observacao: string | null;
-    itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>;
-  },
+  gravado: { observacao: string | null; itens: IntencaoItem[] },
   recebido: PedidoRecebimentoPayload
 ): boolean {
-  const assinatura = (itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>) =>
+  const assinatura = (itens: IntencaoItem[]) =>
     [...itens]
       .sort((a, b) => a.pedidoItemId.localeCompare(b.pedidoItemId))
-      .map((item) => `${item.pedidoItemId}:${item.quantidadeConferida}`)
+      .map((item) => {
+        const motivo = item.quantidadeDevolvida > 0 ? (item.motivoDevolucao ?? "") : "";
+        return `${item.pedidoItemId}:${item.quantidadeConferida}:${item.quantidadeDevolvida}:${motivo}`;
+      })
       .join("|");
   return (
     (gravado.observacao ?? "") === (recebido.observacao ?? "") &&

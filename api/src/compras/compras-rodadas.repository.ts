@@ -136,6 +136,8 @@ export async function criarRodadaRepository(
     fusoHorario: string;
     tetoValor: number | null;
     margemVariacaoPercentual: number;
+    recebimentoInicio: string | null;
+    recebimentoFim: string | null;
     abertaPor: string;
     itens: ItemEnvelope[];
     convites: ConviteParaCriar[];
@@ -154,6 +156,8 @@ export async function criarRodadaRepository(
       fusoHorario: input.fusoHorario,
       tetoValor: input.tetoValor === null ? null : String(input.tetoValor),
       margemVariacaoPercentual: input.margemVariacaoPercentual,
+      recebimentoInicio: input.recebimentoInicio,
+      recebimentoFim: input.recebimentoFim,
       abertaPor: input.abertaPor
     })
     .returning({ id: comprasRodadas.id });
