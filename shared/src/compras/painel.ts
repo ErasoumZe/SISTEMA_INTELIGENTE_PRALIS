@@ -73,6 +73,8 @@ export type OfertaDoProdutoDto = {
   rodadaNumero: number;
   solicitacaoId: string;
   rodadaAberta: boolean;
+  /** Quando a cotacao saiu: e o que distingue duas cotacoes do mesmo produto na tela. */
+  abertaEm: string;
   expiraEm: string;
   fornecedorId: string;
   fornecedorNome: string;

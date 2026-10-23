@@ -1,173 +1,176 @@
 <script setup lang="ts">
 /**
- * Cotação por fornecedor (doc 58 §4): uma linha por produto em cotação, com as bolinhas; cada coluna conta
- * quantos fornecedores estão naquela situação ("Enviado" = para quantos foi). Tocar no produto ou num número
- * abre a cotação do produto.
+ * Cotação por fornecedor (doc 58 §4): uma linha por produto em cotação, com as bolinhas; cada coluna conta quantos
+ * fornecedores estão naquela situação ("Enviado" = para quantos foi). "Com aumento" é o que pede decisão, por isso
+ * é a única coluna que se destaca, e o filtro "Para decidir" mostra só esses produtos. A linha inteira abre a
+ * cotação do produto.
  */
-import { COLUNAS_COTACAO, ROTULO_COLUNA_COTACAO, celulasZeradas, type ProdutoEmCotacaoDto } from "@padaria/shared";
+import { COLUNAS_COTACAO, ROTULO_COLUNA_COTACAO, type ProdutoEmCotacaoDto } from "@padaria/shared";
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
+import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
-import { COR_SITUACAO } from "~/utils/cotacao-produto";
 
 const props = defineProps<{ produtos: ProdutoEmCotacaoDto[]; carregando: boolean }>();
 const emit = defineEmits<{ abrir: [produto: ProdutoEmCotacaoDto] }>();
 
 const busca = ref("");
+const soDecidir = ref(false);
+const paraDecidir = computed(() => props.produtos.filter((produto) => produto.celulas.com_aumento > 0).length);
 const linhas = computed(() => {
-  const termo = busca.value.trim().toLocaleLowerCase("pt-BR");
-  return termo
-    ? props.produtos.filter((produto) => produto.descricao.toLocaleLowerCase("pt-BR").includes(termo))
-    : props.produtos;
-});
-const totais = computed(() => {
-  const soma = celulasZeradas();
-  for (const linha of linhas.value) for (const coluna of COLUNAS_COTACAO) soma[coluna] += linha.celulas[coluna];
-  return soma;
+  const termo = (busca.value ?? "").trim().toLocaleLowerCase("pt-BR");
+  return props.produtos.filter(
+    (produto) =>
+      (!soDecidir.value || produto.celulas.com_aumento > 0) &&
+      (!termo || produto.descricao.toLocaleLowerCase("pt-BR").includes(termo))
+  );
 });
 </script>
 
 <template>
-  <v-card class="matriz" data-secao="matriz-cotacao">
-    <v-card-title class="matriz__topo">
-      <div>
-        <h2 class="matriz__titulo">Produtos em cotação</h2>
-        <p class="matriz__subtitulo">Cada número é a quantidade de fornecedores naquela situação.</p>
-        <BolinhasLegenda class="mt-1" />
-      </div>
+  <ComprasSecao titulo="Produtos em cotação" rente data-secao="matriz-cotacao">
+    <template #acoes><BolinhasLegenda /></template>
+    <template #filtros>
       <v-text-field
         v-model="busca"
-        label="Produto"
-        placeholder="Buscar"
+        placeholder="Buscar produto"
         prepend-inner-icon="mdi-magnify"
         clearable
         density="compact"
         hide-details
-        class="matriz__filtro"
+        aria-label="Buscar produto"
+        class="matriz__busca"
         data-campo="filtro-produto"
       />
-    </v-card-title>
-    <v-progress-linear v-if="carregando" indeterminate />
-    <div v-if="!linhas.length && !carregando" class="matriz__vazio">
-      <v-icon icon="mdi-inbox-outline" size="32" />
-      <p>Nenhum produto em cotação. A Solicitação de compra e o Pedido urgente abrem as cotações.</p>
-    </div>
+      <v-chip-group v-model="soDecidir" :mandatory="false" selected-class="matriz__filtro--ativo">
+        <v-chip :value="true" variant="outlined" filter data-filtro="para-decidir">
+          Para decidir <span class="matriz__filtro-conta">{{ paraDecidir }}</span>
+        </v-chip>
+      </v-chip-group>
+    </template>
+
+    <v-progress-linear v-if="carregando" indeterminate height="2" />
+    <ComprasVazio
+      v-if="!linhas.length && !carregando"
+      icone="mdi-clipboard-text-search-outline"
+      :titulo="produtos.length ? 'Nenhum produto com este filtro.' : 'Nenhum produto em cotação.'"
+      :texto="produtos.length ? undefined : 'A Solicitação de compra e o Pedido urgente abrem as cotações.'"
+    />
     <div v-else class="matriz__rolagem">
-      <table class="matriz__tabela">
+      <table class="matriz">
         <thead>
           <tr>
             <th scope="col" class="matriz__produto">Produto</th>
             <th v-for="coluna in COLUNAS_COTACAO" :key="coluna" scope="col">{{ ROTULO_COLUNA_COTACAO[coluna] }}</th>
+            <th scope="col" class="matriz__seta"><span class="sr-only">Abrir</span></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="linha in linhas" :key="linha.produtoId" :data-produto="linha.descricao">
+          <tr
+            v-for="linha in linhas"
+            :key="linha.produtoId"
+            :data-produto="linha.descricao"
+            class="matriz__linha"
+            :class="{ 'matriz__linha--decidir': linha.celulas.com_aumento > 0 }"
+            @click="emit('abrir', linha)"
+          >
             <th scope="row" class="matriz__produto">
-              <button type="button" class="matriz__nome" @click="emit('abrir', linha)">
+              <button type="button" class="matriz__nome" @click.stop="emit('abrir', linha)">
+                <span>{{ linha.descricao }}</span>
                 <ProdutoBolinhas
                   :mais-vende="linha.maisVende"
                   :mais-compra="linha.maisCompra"
                   :mais-lucro="linha.maisLucro"
                 />
-                <span>{{ linha.descricao }}</span>
               </button>
             </th>
             <td v-for="coluna in COLUNAS_COTACAO" :key="coluna">
-              <v-btn
+              <span
                 v-if="linha.celulas[coluna]"
-                size="small"
-                variant="tonal"
-                :color="COR_SITUACAO[coluna]"
                 class="matriz__numero"
+                :class="`matriz__numero--${coluna}`"
                 :aria-label="`${linha.descricao}: ${linha.celulas[coluna]} fornecedor(es) em ${ROTULO_COLUNA_COTACAO[coluna]}`"
                 :data-celula="coluna"
-                @click="emit('abrir', linha)"
-                >{{ linha.celulas[coluna] }}</v-btn
+                >{{ linha.celulas[coluna] }}</span
               >
-              <span v-else class="matriz__zero" aria-hidden="true">·</span>
+              <span v-else class="matriz__zero" aria-hidden="true">–</span>
             </td>
+            <td class="matriz__seta"><v-icon icon="mdi-chevron-right" size="18" /></td>
           </tr>
         </tbody>
-        <tfoot>
-          <tr>
-            <th scope="row" class="matriz__produto">Total</th>
-            <td v-for="coluna in COLUNAS_COTACAO" :key="coluna" class="matriz__total">{{ totais[coluna] }}</td>
-          </tr>
-        </tfoot>
       </table>
     </div>
-  </v-card>
+  </ComprasSecao>
 </template>
 
 <style scoped>
-.matriz {
-  overflow: hidden;
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-xl);
-  background: var(--cx-surface-raised);
+.matriz__busca {
+  flex: 1 1 260px;
+  max-width: 360px;
 }
 
-.matriz__topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--cx-sp-3);
-  padding: var(--cx-sp-5) var(--cx-sp-6);
-  white-space: normal;
+.matriz__filtro-conta {
+  margin-left: 6px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.matriz__titulo {
-  color: var(--cx-ink);
-  font-size: var(--cx-fs-title);
-  font-weight: 650;
+.matriz__filtro--ativo {
+  border-color: var(--cx-attention) !important;
+  color: var(--cx-attention) !important;
 }
 
-.matriz__subtitulo {
-  margin: var(--cx-sp-1) 0 0;
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-caption);
-}
-
-.matriz__filtro {
-  flex: 0 1 280px;
-  min-width: 200px;
-}
-
-/* A tabela rola dentro do cartão no celular; a página nunca rola na horizontal. */
+/* A tabela rola dentro do bloco no celular; a página nunca rola na horizontal. */
 .matriz__rolagem {
   overflow-x: auto;
-  border-top: 1px solid var(--cx-line-soft);
 }
 
-.matriz__tabela {
+.matriz {
   width: 100%;
   min-width: 680px;
   border-collapse: collapse;
 }
 
-.matriz__tabela th,
-.matriz__tabela td {
-  padding: var(--cx-sp-2) var(--cx-sp-3);
-  border-bottom: 1px solid var(--cx-line-soft);
+.matriz th,
+.matriz td {
+  padding: var(--cx-sp-3) var(--cx-sp-3);
+  border-top: 1px solid var(--cx-line-soft);
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
-.matriz__tabela thead th {
+.matriz thead th {
+  padding-top: var(--cx-sp-2);
+  padding-bottom: var(--cx-sp-2);
+  border-top: 0;
   color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-wide);
-  text-transform: uppercase;
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .matriz__produto {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 200px;
-  background: var(--cx-surface-raised);
+  min-width: 240px;
+  padding-left: var(--cx-sp-5) !important;
+  background: var(--cx-surface);
   text-align: left !important;
-  font-weight: 600;
+}
+
+.matriz__linha {
+  cursor: pointer;
+  transition: background-color var(--cx-dur-1) var(--cx-ease);
+}
+
+.matriz__linha:hover,
+.matriz__linha:hover .matriz__produto {
+  background: var(--cx-hover);
+}
+
+.matriz__linha:hover .matriz__produto {
+  background: color-mix(in srgb, var(--cx-ink) 3%, var(--cx-surface));
 }
 
 .matriz__nome {
@@ -177,20 +180,36 @@ const totais = computed(() => {
   padding: 0;
   border: 0;
   background: none;
-  color: inherit;
+  color: var(--cx-ink);
   font: inherit;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
 
-.matriz__nome:hover span,
-.matriz__nome:focus-visible span {
-  text-decoration: underline;
+.matriz__nome:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .matriz__numero {
-  min-width: 44px;
-  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  min-width: 28px;
+  color: var(--cx-ink);
+  font-weight: 600;
+}
+
+.matriz__numero--com_aumento {
+  padding: 1px 8px;
+  border-radius: var(--cx-r-pill);
+  background: color-mix(in srgb, var(--cx-attention) 14%, var(--cx-surface));
+  color: var(--cx-attention);
+  font-weight: 700;
+}
+
+.matriz__numero--comprado {
+  color: var(--cx-positive);
   font-weight: 700;
 }
 
@@ -198,17 +217,24 @@ const totais = computed(() => {
   color: var(--cx-line);
 }
 
-.matriz__total {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
+.matriz__seta {
+  width: 40px;
+  padding-right: var(--cx-sp-4) !important;
+  color: var(--cx-ink-soft);
 }
 
-.matriz__vazio {
-  display: grid;
-  justify-items: center;
-  gap: var(--cx-sp-2);
-  padding: var(--cx-sp-8) var(--cx-sp-6);
-  color: var(--cx-ink-soft);
-  text-align: center;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (max-width: 599px) {
+  .matriz__produto {
+    min-width: 170px;
+    padding-left: var(--cx-sp-4) !important;
+  }
 }
 </style>

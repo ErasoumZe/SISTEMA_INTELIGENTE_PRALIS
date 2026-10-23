@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ProdutoEmCotacaoDto } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import ComprasPedidoRapido from "~/components/compras/ComprasPedidoRapido.vue";
 import CotacaoAcoesDialog from "~/components/cotacao/CotacaoAcoesDialog.vue";
 import CotacaoMatriz from "~/components/cotacao/CotacaoMatriz.vue";
@@ -84,46 +85,48 @@ function novoPedidoUrgente(itens: Array<{ produtoId: string; quantidade: string 
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-5">
+    <ComprasTela>
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos?.titulo ?? ''"
         subtitulo="Cada produto em cotação e quantos fornecedores estão em cada situação."
-      />
+      >
+        <template v-if="podePedidoUrgente" #acoes>
+          <ComprasPedidoRapido
+            ref="pedidoUrgente"
+            :empresa-id="empresaId"
+            :empresa-nome="empresaNome"
+            :produtos="produtos"
+            :fornecedores="fornecedores"
+            @criado="carregarDados"
+          />
+        </template>
+      </AppCabecalhoTela>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-      <ComprasPedidoRapido
-        v-if="podePedidoUrgente"
-        ref="pedidoUrgente"
-        :empresa-id="empresaId"
-        :empresa-nome="empresaNome"
-        :produtos="produtos"
-        :fornecedores="fornecedores"
-        @criado="carregarDados"
-      />
       <CotacaoMatriz :produtos="painel.produtos" :carregando="empresaCarregando" @abrir="abrirProduto" />
-    </div>
 
-    <CotacaoProdutoDialog
-      :model-value="produtoAberto !== null"
-      :empresa-id="empresaId"
-      :produto-id="produtoAberto"
-      :bolinhas="bolinhas"
-      :pode-editar="podeEditar"
-      :pode-excecao="podeExcecao"
-      @update:model-value="(valor: boolean) => !valor && (produtoAberto = null)"
-      @mudou="recarregarPainel"
-      @acoes="verAcoes"
-    />
-    <CotacaoAcoesDialog
-      :model-value="rodadaAberta !== null"
-      :empresa-id="empresaId"
-      :rodada-id="rodadaAberta"
-      :pode-editar="podeEditar"
-      :pode-criar="podePedidoUrgente"
-      @update:model-value="(valor: boolean) => !valor && (rodadaAberta = null)"
-      @mudou="recarregarPainel"
-      @produto="verOfertas"
-      @nova-solicitacao="novoPedidoUrgente"
-    />
+      <CotacaoProdutoDialog
+        :model-value="produtoAberto !== null"
+        :empresa-id="empresaId"
+        :produto-id="produtoAberto"
+        :bolinhas="bolinhas"
+        :pode-editar="podeEditar"
+        :pode-excecao="podeExcecao"
+        @update:model-value="(valor: boolean) => !valor && (produtoAberto = null)"
+        @mudou="recarregarPainel"
+        @acoes="verAcoes"
+      />
+      <CotacaoAcoesDialog
+        :model-value="rodadaAberta !== null"
+        :empresa-id="empresaId"
+        :rodada-id="rodadaAberta"
+        :pode-editar="podeEditar"
+        :pode-criar="podePedidoUrgente"
+        @update:model-value="(valor: boolean) => !valor && (rodadaAberta = null)"
+        @mudou="recarregarPainel"
+        @produto="verOfertas"
+        @nova-solicitacao="novoPedidoUrgente"
+      />
+    </ComprasTela>
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>

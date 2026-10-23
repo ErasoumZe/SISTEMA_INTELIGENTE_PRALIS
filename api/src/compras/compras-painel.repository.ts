@@ -26,6 +26,7 @@ export async function itensEmCotacaoRepository(empresaId: string, produtoId?: st
       rodadaId: comprasRodadas.id,
       rodadaNumero: comprasRodadas.numero,
       rodadaStatus: comprasRodadas.status,
+      abertaEm: comprasRodadas.abertaEm,
       expiraEm: comprasRodadas.expiraEm,
       solicitacaoId: comprasRodadas.solicitacaoId,
       produtoId: comprasSolicitacoesItens.produtoId,

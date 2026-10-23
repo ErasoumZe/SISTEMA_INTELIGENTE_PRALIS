@@ -112,13 +112,14 @@ test.describe("ciclo de compra pela cotacao", () => {
       return page.locator('[data-dialogo="cotacao-produto"]');
     };
     let cotacao = await abrirCotacao();
-    await expect(cotacao).toContainText("Referência não cadastrada");
-    const oferta = cotacao.locator(`[data-grupo="com_aumento"] [data-fornecedor="${fornecedorNome}"]`);
-    await expect(oferta).toContainText(/custo\s+R\$\s*12,50/u);
-    await oferta.getByLabel(/Contraproposta/u).fill("11");
+    await expect(cotacao.locator('[data-campo="referencia"]')).toContainText("Sem referência");
+    const oferta = cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="com_aumento"]`);
+    await expect(oferta).toContainText(/R\$\s*12,50/u);
     await oferta.getByRole("button", { name: "Contrapropor" }).click();
+    await oferta.getByLabel(/Seu valor/u).fill("11");
+    await oferta.getByRole("button", { name: "Enviar contraproposta" }).click();
     await expect(cotacao.locator('[data-estado="aceite-feito"]')).toContainText("Contraproposta enviada");
-    await expect(oferta).toContainText(/contraproposta\s+R\$\s*11,00/u);
+    await expect(oferta).toContainText(/contrapropôs\s+R\$\s*11,00/u);
 
     // 5) O fornecedor ve a contraproposta no MESMO link e aceita.
     const reaberta = await navegadorFornecedor.newPage();
@@ -130,13 +131,14 @@ test.describe("ciclo de compra pela cotacao", () => {
 
     // 6) Com a cotacao ABERTA, o comprador aceita e reajusta a referencia: vira Comprado na hora.
     cotacao = await abrirCotacao();
-    const aceitar = cotacao.locator(`[data-grupo="com_aumento"] [data-fornecedor="${fornecedorNome}"]`);
-    await expect(aceitar).toContainText(/custo\s+R\$\s*11,00/u);
-    await aceitar.getByRole("button", { name: "Aceitar e reajustar a referência" }).click();
-    await aceitar.getByRole("button", { name: "Confirmar", exact: true }).click();
+    const aceitar = cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="com_aumento"]`);
+    await expect(aceitar).toContainText(/R\$\s*11,00/u);
+    await aceitar.getByRole("button", { name: "Aceitar" }).click();
+    await aceitar.getByRole("radio", { name: /Reajustar a referência/u }).check();
+    await aceitar.getByRole("button", { name: "Confirmar compra" }).click();
     await expect(cotacao.locator('[data-estado="aceite-feito"]')).toContainText("A referência foi reajustada");
     await expect(cotacao).toContainText(/Referência\s+R\$\s*11,00/u);
-    await expect(cotacao.locator(`[data-grupo="comprado"] [data-fornecedor="${fornecedorNome}"]`)).toBeVisible();
+    await expect(cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="comprado"]`)).toBeVisible();
     expect(await saldoDoProduto(contexto, produtoId), "comprar nao move estoque (R-213)").toBe(0);
     await page.keyboard.press("Escape");
 
