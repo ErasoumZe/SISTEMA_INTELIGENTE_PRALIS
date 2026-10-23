@@ -158,7 +158,7 @@ test.describe("ciclo de compra pela cotacao", () => {
     await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
     await page.locator(`[data-pedido="${fornecedorNome}"]`).click();
     const detalhe = page.locator(".pedido-detalhe");
-    await expect(detalhe.locator(".v-card-title .v-chip")).toContainText("Comprado");
+    await expect(detalhe.locator('[data-campo="situacao-pedido"]')).toContainText("Comprado");
     await expect(detalhe.locator(".pedido-detalhe__tabela tbody tr").filter({ hasText: nomeProduto })).toContainText(
       "10,5"
     );
@@ -182,7 +182,7 @@ test.describe("ciclo de compra pela cotacao", () => {
     await conferencia.getByRole("button", { name: "Confirmar recebimento" }).click();
     await expect(page.locator(".v-snackbar__content")).toContainText(/concluido/iu);
     expect(await saldoDoProduto(contexto, produtoId), "devolvido nao entra no estoque").toBe(9.5);
-    await expect(detalhe.locator(".v-card-title .v-chip")).toContainText("Recebido");
+    await expect(detalhe.locator('[data-campo="situacao-pedido"]')).toContainText("Recebido");
     await semRolagemHorizontal(page);
 
     expect(problemas, problemas.join("\n")).toEqual([]);

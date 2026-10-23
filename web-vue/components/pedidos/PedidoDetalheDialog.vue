@@ -1,255 +1,340 @@
 <script setup lang="ts">
+/**
+ * O pedido de um fornecedor (doc 58 §5 e §6): o pedido da cotação nasce Comprado; o fornecedor pode ajustar a
+ * quantidade ao estoque dele (aparece no histórico). Daqui se confere o recebimento ou se cancela. A trilha no topo
+ * mostra onde o pedido está; a coluna "Devolvido" só aparece quando houve devolução.
+ */
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
+import ComprasSituacao from "~/components/compras/base/ComprasSituacao.vue";
 import { formatarQuantidade } from "~/utils/formatacao";
-import {
-  corStatusPedido as corStatus,
-  pedidoEhLegado,
-  rotuloDoTipoDePedido,
-  rotuloStatusPedido
-} from "~/utils/pedido-origem";
+import { pedidoEhLegado, rotuloDoTipoDePedido, rotuloStatusPedido, tomStatusPedido } from "~/utils/pedido-origem";
 
 const aberto = defineModel<boolean>({ default: false });
-defineProps<{
+const props = defineProps<{
   pedido: PedidoDto | null;
   podeEditar: boolean;
   podeReceber: boolean;
   transicionando: boolean;
 }>();
-// Doc 58 §6: o pedido da cotacao nasce Comprado; o fornecedor pode ajustar a quantidade ao estoque dele (aparece no
-// historico). Daqui se recebe ou se cancela.
 const emit = defineEmits<{
   situacao: [status: "cancelado"];
   receber: [];
 }>();
 
+const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const etapasLegado: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
 const etapasRodada: PedidoStatus[] = ["confirmado", "recebido_parcial", "recebido"];
-const etapasDe = (pedido: PedidoDto) => (pedidoEhLegado(pedido.tipo) ? etapasLegado : etapasRodada);
-function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
-  if (pedido.status === "cancelado" || pedido.status === "rascunho" || pedido.status === "aprovado")
-    return pedido.status === etapa;
-  const etapas = etapasDe(pedido);
-  return etapas.indexOf(etapa) <= etapas.indexOf(pedido.status);
+const etapas = computed(() => (props.pedido && pedidoEhLegado(props.pedido.tipo) ? etapasLegado : etapasRodada));
+const historico = computed(() => props.pedido?.status === "rascunho" || props.pedido?.status === "aprovado");
+const legadoAberto = computed(
+  () =>
+    Boolean(props.pedido) &&
+    pedidoEhLegado(props.pedido!.tipo) &&
+    ["a_fazer", "enviado", "retornado"].includes(props.pedido!.status)
+);
+const itens = computed(() => props.pedido?.itens ?? []);
+const temDevolucao = computed(() => itens.value.some((item) => Number(item.quantidadeDevolvida) > 0));
+const podeConferir = computed(
+  () => props.podeReceber && ["confirmado", "recebido_parcial"].includes(props.pedido?.status ?? "")
+);
+const podeCancelar = computed(
+  () =>
+    props.podeEditar && !["recebido", "cancelado", "rascunho", "aprovado"].includes(props.pedido?.status ?? "cancelado")
+);
+
+function etapaFeita(etapa: PedidoStatus) {
+  if (!props.pedido || props.pedido.status === "cancelado") return false;
+  return etapas.value.indexOf(etapa) <= etapas.value.indexOf(props.pedido.status);
 }
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="900" scrollable>
+  <v-dialog v-model="aberto" max-width="860" scrollable :fullscreen="$vuetify.display.xs">
     <v-card v-if="pedido" class="pedido-detalhe">
-      <v-card-title class="pedido-detalhe__topo">
-        <div>
+      <header class="pedido-detalhe__topo">
+        <div class="pedido-detalhe__titulos">
           <h2 class="pedido-detalhe__titulo">{{ pedido.fornecedorNome ?? "Pedido histórico" }}</h2>
           <p class="pedido-detalhe__subtitulo">
-            {{ pedido.totalItens }} item(ns) ·
-            {{ rotuloDoTipoDePedido(pedido.tipo) }}
+            {{ pedido.totalItens }} item(ns) · {{ rotuloDoTipoDePedido(pedido.tipo) }} · comprado em
+            {{ DATA_HORA.format(new Date(pedido.aprovadoEm ?? pedido.criadoEm)) }}
           </p>
         </div>
-        <v-chip :color="corStatus(pedido.status)" size="small">{{ rotuloStatusPedido(pedido.status) }}</v-chip>
-      </v-card-title>
+        <ComprasSituacao
+          :rotulo="rotuloStatusPedido(pedido.status)"
+          :tom="tomStatusPedido(pedido.status)"
+          data-campo="situacao-pedido"
+        />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="aberto = false" />
+      </header>
+
       <v-card-text class="pedido-detalhe__corpo">
-        <v-alert v-if="pedido.status === 'rascunho' || pedido.status === 'aprovado'" type="warning" variant="tonal">
+        <v-alert v-if="historico" type="warning" variant="tonal" density="compact">
           Pedido histórico: leitura preservada; não entra no novo fluxo sem migração de dados aprovada.
         </v-alert>
-        <v-alert
-          v-else-if="pedidoEhLegado(pedido.tipo) && ['a_fazer', 'enviado', 'retornado'].includes(pedido.status)"
-          type="info"
-          variant="tonal"
-          density="compact"
-          data-legado="pedido"
-        >
+        <v-alert v-else-if="legadoAberto" type="info" variant="tonal" density="compact" data-legado="pedido">
           Pedido do fluxo antigo: não é mais editado, enviado nem confirmado. Só pode ser cancelado. Para comprar de
           novo, use o Pedido urgente.
         </v-alert>
-        <div v-if="pedido.status !== 'rascunho' && pedido.status !== 'aprovado'" class="pedido-detalhe__etapas">
-          <v-chip
-            v-for="etapa in etapasDe(pedido)"
+
+        <ol v-if="!historico && pedido.status !== 'cancelado'" class="trilha" aria-label="Etapas do pedido">
+          <li
+            v-for="etapa in etapas"
             :key="etapa"
-            :color="etapaAtual(pedido, etapa) ? corStatus(etapa) : undefined"
-            :variant="etapaAtual(pedido, etapa) ? 'tonal' : 'outlined'"
-            size="small"
-            >{{ rotuloStatusPedido(etapa) }}</v-chip
+            class="trilha__etapa"
+            :class="{ 'trilha__etapa--feita': etapaFeita(etapa), 'trilha__etapa--atual': pedido.status === etapa }"
           >
-        </div>
-        <div class="pedido-detalhe__tabela d-none d-sm-block">
-          <v-table density="compact">
+            <span class="trilha__ponto" aria-hidden="true" />{{ rotuloStatusPedido(etapa) }}
+          </li>
+        </ol>
+
+        <div class="pedido-detalhe__tabela">
+          <table>
             <thead>
               <tr>
                 <th>Produto</th>
-                <th class="text-right">Pedido</th>
-                <th class="text-right">Recebido</th>
-                <th class="text-right">Devolvido</th>
-                <th class="text-right">Pendente</th>
+                <th class="numero">Pedido</th>
+                <th class="numero">Recebido</th>
+                <th v-if="temDevolucao" class="numero">Devolvido</th>
+                <th class="numero">Falta</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in pedido.itens ?? []" :key="item.id">
-                <td>{{ item.descricaoProduto }}</td>
-                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidade) }}</td>
-                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeRecebida) }}</td>
-                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeDevolvida) }}</td>
-                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadePendente) }}</td>
+              <tr v-for="item in itens" :key="item.id">
+                <td class="produto">{{ item.descricaoProduto }}</td>
+                <td class="numero">{{ formatarQuantidade(item.quantidade) }}</td>
+                <td class="numero">{{ formatarQuantidade(item.quantidadeRecebida) }}</td>
+                <td v-if="temDevolucao" class="numero">{{ formatarQuantidade(item.quantidadeDevolvida) }}</td>
+                <td class="numero" :class="{ 'numero--falta': Number(item.quantidadePendente) > 0 }">
+                  {{ formatarQuantidade(item.quantidadePendente) }}
+                </td>
               </tr>
             </tbody>
-          </v-table>
+          </table>
         </div>
-        <div class="d-sm-none d-grid ga-2">
-          <v-card v-for="item in pedido.itens ?? []" :key="item.id" class="pedido-detalhe__item-mobile">
-            <v-card-text class="py-3"
-              ><div class="font-weight-medium">{{ item.descricaoProduto }}</div>
-              <div class="d-flex justify-space-between text-body-2 mt-2">
-                <span>Pedido {{ formatarQuantidade(item.quantidade) }}</span
-                ><span>Recebido {{ formatarQuantidade(item.quantidadeRecebida) }}</span>
-              </div>
-              <div class="text-caption text-medium-emphasis mt-1">
-                Pendente: {{ formatarQuantidade(item.quantidadePendente) }}
-                <template v-if="Number(item.quantidadeDevolvida) > 0">
-                  · Devolvido: {{ formatarQuantidade(item.quantidadeDevolvida) }}</template
-                >
-              </div></v-card-text
-            >
-          </v-card>
-        </div>
-        <v-list
-          v-if="pedido.eventos?.length"
-          class="pedido-detalhe__historico"
-          density="compact"
-          data-secao="historico-pedido"
-        >
-          <v-list-subheader>Histórico</v-list-subheader>
-          <v-list-item
-            v-for="evento in pedido.eventos"
-            :key="evento.id"
-            data-evento="pedido"
-            :title="`${rotuloStatusPedido(evento.status)} · ${evento.criadoPorNome}`"
-            :subtitle="`${new Date(evento.criadoEm).toLocaleString('pt-BR')} · ${evento.observacao ?? 'Sem observação'}`"
-          />
-        </v-list>
+
+        <section v-if="pedido.eventos?.length" class="historico" data-secao="historico-pedido">
+          <h3 class="historico__titulo">Histórico</h3>
+          <ul class="historico__lista">
+            <li v-for="evento in pedido.eventos" :key="evento.id" class="historico__item" data-evento="pedido">
+              <span class="historico__quando">{{ DATA_HORA.format(new Date(evento.criadoEm)) }}</span>
+              <span class="historico__o-que">
+                <strong>{{ rotuloStatusPedido(evento.status) }}</strong> · {{ evento.criadoPorNome }}
+                <span v-if="evento.observacao" class="historico__obs">{{ evento.observacao }}</span>
+              </span>
+            </li>
+          </ul>
+        </section>
       </v-card-text>
-      <v-card-actions class="pedido-detalhe__acoes flex-wrap">
+
+      <footer class="pedido-detalhe__acoes">
         <v-btn
-          v-if="podeReceber && ['confirmado', 'recebido_parcial'].includes(pedido.status)"
-          color="success"
-          @click="emit('receber')"
-          >Conferir recebimento</v-btn
-        >
-        <v-btn
-          v-if="podeEditar && !['recebido', 'cancelado', 'rascunho', 'aprovado'].includes(pedido.status)"
+          v-if="podeCancelar"
           color="error"
           variant="text"
           :loading="transicionando"
           @click="emit('situacao', 'cancelado')"
-          >Cancelar</v-btn
+          >Cancelar pedido</v-btn
         >
         <v-spacer />
         <v-btn variant="text" @click="aberto = false">Fechar</v-btn>
-      </v-card-actions>
+        <v-btn
+          v-if="podeConferir"
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-truck-check-outline"
+          @click="emit('receber')"
+          >Conferir recebimento</v-btn
+        >
+      </footer>
     </v-card>
   </v-dialog>
 </template>
 
 <style scoped>
 .pedido-detalhe {
-  overflow: hidden;
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-xl);
-  background: var(--cx-surface-raised);
-  box-shadow: var(--cx-e-3);
+  border-radius: var(--cx-r-lg) !important;
 }
 
 .pedido-detalhe__topo {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--cx-sp-4);
-  padding: var(--cx-sp-6);
+  align-items: center;
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-5) var(--cx-sp-4) var(--cx-sp-4) var(--cx-sp-5);
   border-bottom: 1px solid var(--cx-line-soft);
 }
 
+.pedido-detalhe__titulos {
+  flex: 1;
+  min-width: 0;
+}
+
 .pedido-detalhe__titulo {
+  margin: 0;
   color: var(--cx-ink);
   font-size: var(--cx-fs-title);
   font-weight: 650;
   letter-spacing: var(--cx-tracking-tight);
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .pedido-detalhe__subtitulo {
   margin: var(--cx-sp-1) 0 0;
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
-  font-weight: 400;
 }
 
 .pedido-detalhe__corpo {
   display: grid;
-  /* Linhas do tamanho do conteudo. Sem isto, num dialogo com altura limitada, os blocos com
-     overflow: hidden (tabela e historico) tem tamanho minimo zero e sao ESPREMIDOS em vez de o
-     corpo rolar: a tabela mostrava 1 de 3 itens e o historico so o primeiro evento. */
+  /* Linhas do tamanho do conteudo: num dialogo de altura limitada, a tabela e o historico nao podem ser
+     espremidos (o corpo e que rola). */
   grid-auto-rows: max-content;
   align-content: start;
-  gap: var(--cx-sp-4);
-  padding: var(--cx-sp-5) var(--cx-sp-6);
+  gap: var(--cx-sp-5);
+  padding: var(--cx-sp-5) !important;
 }
 
-.pedido-detalhe__etapas {
+.trilha {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--cx-sp-2) var(--cx-sp-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trilha__etapa {
+  display: flex;
+  align-items: center;
   gap: var(--cx-sp-2);
-  padding: var(--cx-sp-3);
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
+.trilha__ponto {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--cx-line);
+  border-radius: 50%;
+}
+
+.trilha__etapa--feita {
+  color: var(--cx-ink);
+}
+
+.trilha__etapa--feita .trilha__ponto {
+  border-color: var(--cx-brand);
+  background: var(--cx-brand);
+}
+
+.trilha__etapa--atual {
+  font-weight: 650;
 }
 
 .pedido-detalhe__tabela {
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
+  border-radius: var(--cx-r-md);
 }
 
-.pedido-detalhe__tabela :deep(th) {
+.pedido-detalhe__tabela table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pedido-detalhe__tabela th,
+.pedido-detalhe__tabela td {
+  padding: var(--cx-sp-2) var(--cx-sp-4);
+  border-top: 1px solid var(--cx-line-soft);
+  text-align: left;
+}
+
+.pedido-detalhe__tabela th {
+  border-top: 0;
   color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-wide);
-  text-transform: uppercase;
-}
-
-.pedido-detalhe__numero {
-  font-variant-numeric: tabular-nums;
+  font-size: var(--cx-fs-caption);
   font-weight: 600;
 }
 
-.pedido-detalhe__item-mobile {
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-md);
-  background: var(--cx-surface-sunken);
-  box-shadow: none;
+.pedido-detalhe__tabela .produto {
+  min-width: 160px;
+  font-weight: 600;
 }
 
-.pedido-detalhe__historico {
-  overflow: hidden;
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface);
+.pedido-detalhe__tabela .numero {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.numero--falta {
+  color: var(--cx-attention);
+  font-weight: 650;
+}
+
+.historico__titulo {
+  margin: 0 0 var(--cx-sp-2);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 650;
+}
+
+.historico__lista {
+  display: grid;
+  gap: var(--cx-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.historico__item {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--cx-sp-3);
+  font-size: var(--cx-fs-caption);
+}
+
+.historico__quando {
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.historico__o-que {
+  color: var(--cx-ink);
+}
+
+.historico__obs {
+  display: block;
+  color: var(--cx-ink-soft);
 }
 
 .pedido-detalhe__acoes {
-  gap: var(--cx-sp-1);
-  padding: var(--cx-sp-3) var(--cx-sp-6) var(--cx-sp-5);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-3) var(--cx-sp-5);
   border-top: 1px solid var(--cx-line-soft);
 }
 
 @media (max-width: 599px) {
   .pedido-detalhe__topo,
-  .pedido-detalhe__corpo,
   .pedido-detalhe__acoes {
     padding-left: var(--cx-sp-4);
     padding-right: var(--cx-sp-4);
   }
 
   .pedido-detalhe__topo {
-    flex-direction: column;
+    flex-wrap: wrap;
+  }
+
+  .pedido-detalhe__corpo {
+    padding: var(--cx-sp-4) !important;
+  }
+
+  .historico__item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
   }
 }
 </style>
