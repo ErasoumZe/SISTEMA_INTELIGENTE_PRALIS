@@ -34,6 +34,8 @@ export type ConvitePublicoLinha = {
   fornecedorNome: string;
   empresaNome: string;
   margemVariacaoPercentual: number | null;
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
 };
 
 export async function buscarConvitePorHashRepository(
@@ -52,7 +54,9 @@ export async function buscarConvitePorHashRepository(
       fornecedorId: comprasRodadasConvites.fornecedorId,
       fornecedorNome: fornecedores.nome,
       empresaNome: empresas.nome,
-      margemVariacaoPercentual: comprasRodadas.margemVariacaoPercentual
+      margemVariacaoPercentual: comprasRodadas.margemVariacaoPercentual,
+      recebimentoInicio: comprasRodadas.recebimentoInicio,
+      recebimentoFim: comprasRodadas.recebimentoFim
     })
     .from(comprasRodadasConvites)
     .innerJoin(comprasRodadas, eq(comprasRodadas.id, comprasRodadasConvites.rodadaId))

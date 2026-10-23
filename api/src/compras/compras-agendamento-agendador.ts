@@ -1,14 +1,11 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { podeConvidar } from "@padaria/shared";
 import { localDoInstante, quantidadeSugerida } from "@padaria/shared/compras";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { buscarProdutosEstoqueRepository } from "../pedidos/pedidos.repository.js";
 import {
   agendasAtivasRepository,
-  cancelarSolicitacaoDoAgendamentoRepository,
   criarSolicitacaoDoAgendamentoRepository,
-  fornecedoresDoCatalogoRepository,
   ocorrenciaPorPrevistoRepository,
   ocorrenciasDasAgendasRepository,
   produtosDasAgendasRepository,
@@ -16,13 +13,12 @@ import {
   travarAgendaRepository
 } from "./compras-agendamento.repository.js";
 import { instantesDaSerie, terminoDaLinha } from "./compras-agendamento.service.js";
-import { abrirRodadaNaTransacao } from "./compras-rodadas.service.js";
 import type { ItemEntrada } from "./compras-solicitacoes.repository.js";
 
-// Agendador do agendamento de pedido (doc 56 §4, doc 57 §2). Roda no tick de Compras (60 s, server.ts): cada
-// data que chegou vira a rodada de cotacao, e a fila do WhatsApp manda o link para cada fornecedor. Nunca
-// confirma pedido nem mexe em estoque. Idempotente: a agenda e travada e o UNIQUE(agenda, previsto_para)
-// impede a mesma data duas vezes.
+// Agendador do agendamento de pedido (doc 56 §4, doc 58 §2). Roda no tick de Compras (60 s, server.ts): cada
+// data que chegou vira a solicitacao do dia (com as quantidades sugeridas) e o responsavel e avisado no sino;
+// ele confere e envia pela tela Solicitacao de compra. Nunca envia cotacao nem mexe em estoque. Idempotente: a
+// agenda e travada e o UNIQUE(agenda, previsto_para) impede a mesma data duas vezes.
 
 type Agenda = Awaited<ReturnType<typeof agendasAtivasRepository>>[number];
 
@@ -53,28 +49,6 @@ async function datasDevidas(agenda: Agenda, agora: Date): Promise<Array<{ previs
   return devidas;
 }
 
-/** Para cada fornecedor que pode receber cotacao, os itens da solicitacao que ele vende (catalogo aprovado). */
-export function convitesDoCatalogo(
-  itens: Array<{ id: string; produtoId: string }>,
-  catalogo: Array<{ produtoId: string; fornecedorId: string; situacao: string; whatsapp: string | null }>
-) {
-  const itemPorProduto = new Map(itens.map((item) => [item.produtoId, item.id]));
-  const porFornecedor = new Map<string, string[]>();
-  for (const vinculo of catalogo) {
-    const solicitacaoItemId = itemPorProduto.get(vinculo.produtoId);
-    if (!solicitacaoItemId) continue;
-    if (podeConvidar({ situacao: vinculo.situacao as "ativo" | "inativo", whatsapp: vinculo.whatsapp })) continue;
-    const lista = porFornecedor.get(vinculo.fornecedorId) ?? [];
-    if (!lista.includes(solicitacaoItemId)) lista.push(solicitacaoItemId);
-    porFornecedor.set(vinculo.fornecedorId, lista);
-  }
-  const comFornecedor = new Set([...porFornecedor.values()].flat());
-  return {
-    convites: [...porFornecedor].map(([fornecedorId, solicitacaoItemIds]) => ({ fornecedorId, solicitacaoItemIds })),
-    aFazer: itens.filter((item) => !comFornecedor.has(item.id)).length
-  };
-}
-
 async function materializar(agenda: Agenda, devida: { previstoPara: Date; dataAtual: Date }) {
   await executarEmTransacao(async (tx) => {
     const travada = await travarAgendaRepository(agenda.id, agenda.empresaId, tx);
@@ -87,8 +61,8 @@ async function materializar(agenda: Agenda, devida: { previstoPara: Date; dataAt
       buscarProdutosEstoqueRepository(agenda.empresaId, tx)
     ]);
     const estoquePorId = new Map(estoque.map((produto) => [produto.id, produto]));
-    // Quantidade padrao do agendamento; sem ela, a sugestao do estoque (maximo - saldo). Sem nenhuma das
-    // duas (ou com o estoque cheio) o produto nao entra neste pedido.
+    // A sugestao que o responsavel ve: a quantidade padrao do agendamento ou maximo - saldo. Sem nenhuma das
+    // duas, o produto aparece na solicitacao sem quantidade e ele decide.
     const itens: ItemEntrada[] = produtosDaAgenda.flatMap((produto) => {
       const posicao = estoquePorId.get(produto.produtoId);
       const quantidade =
@@ -116,60 +90,29 @@ async function materializar(agenda: Agenda, devida: { previstoPara: Date; dataAt
       },
       tx
     );
-    const dataDoDia = {
-      empresaId: agenda.empresaId,
-      agendaId: agenda.id,
-      previstoPara: devida.previstoPara,
-      dataAtual: devida.dataAtual,
-      solicitacaoId: solicitacao.id
-    };
-    if (!solicitacao.itens.length) {
-      // Nada a repor: a data passa como cancelada, sem rodada vazia na rua.
-      await cancelarSolicitacaoDoAgendamentoRepository(solicitacao.id, tx);
-      await registrarOcorrenciaRepository(
-        { ...dataDoDia, situacao: "cancelada", canceladaPor: agenda.responsavelId },
-        tx
-      );
-      return;
-    }
-    // A ocorrencia nasce ligada a solicitacao e vira "enviada" dentro de abrirRodadaNaTransacao.
     const ocorrencia = await registrarOcorrenciaRepository(
-      { ...dataDoDia, situacao: "aguardando_conferencia", canceladaPor: null },
-      tx
-    );
-
-    // Doc 57 §2: cada fornecedor do catalogo (com WhatsApp) recebe SO os seus produtos, sem ninguem
-    // conferir. Produto sem fornecedor que possa receber fica "A fazer" na tela de Pedidos.
-    const catalogo = await fornecedoresDoCatalogoRepository(
-      agenda.empresaId,
-      solicitacao.itens.map((item) => item.produtoId),
-      tx
-    );
-    const { convites, aFazer } = convitesDoCatalogo(solicitacao.itens, catalogo);
-    await abrirRodadaNaTransacao(
       {
         empresaId: agenda.empresaId,
+        agendaId: agenda.id,
+        previstoPara: devida.previstoPara,
+        dataAtual: devida.dataAtual,
+        situacao: "aguardando_conferencia",
         solicitacaoId: solicitacao.id,
-        prazoRespostaHoras: agenda.prazoRespostaHoras,
-        tetoValor: null,
-        margemVariacaoPercentual: agenda.margemVariacaoPercentual as 10 | 20 | 30 | 40,
-        convites
+        canceladaPor: null
       },
-      agenda.responsavelId,
-      tx,
-      { permitirSemConvites: true }
+      tx
     );
-    if (aFazer)
-      await criarNotificacoesRepository(
-        {
-          empresaId: agenda.empresaId,
-          tipo: "compras_agendamento_conferir",
-          destinatariosUsuarioIds: [agenda.responsavelId],
-          referenciaId: ocorrencia.id,
-          titulo: `Pedido agendado (${agenda.grupoNome}): ${aFazer} produto(s) sem fornecedor ficaram A fazer`
-        },
-        tx
-      );
+    // Doc 58 §2: o responsavel e avisado e envia pela tela Solicitacao de compra.
+    await criarNotificacoesRepository(
+      {
+        empresaId: agenda.empresaId,
+        tipo: "compras_agendamento_conferir",
+        destinatariosUsuarioIds: [agenda.responsavelId],
+        referenciaId: ocorrencia.id,
+        titulo: `Solicitação de compra para enviar: ${agenda.grupoNome}`
+      },
+      tx
+    );
   });
 }
 

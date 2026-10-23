@@ -32,6 +32,8 @@ export type AgendaEntrada = {
   terminoQuantidade: number | null;
   prazoRespostaHoras: number;
   margemVariacaoPercentual: number;
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
   produtos: Array<{ produtoId: string; quantidadePadrao: number | null }>;
 };
 
@@ -53,6 +55,8 @@ const colunasAgenda = {
   terminoQuantidade: pedidosAgendas.terminoQuantidade,
   prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras,
   margemVariacaoPercentual: pedidosAgendas.margemVariacaoPercentual,
+  recebimentoInicio: pedidosAgendas.recebimentoInicio,
+  recebimentoFim: pedidosAgendas.recebimentoFim,
   status: pedidosAgendas.status,
   criadoEm: pedidosAgendas.criadoEm
 };
@@ -164,6 +168,8 @@ export async function criarAgendaRepository(
       terminoQuantidade: input.terminoQuantidade,
       prazoRespostaHoras: input.prazoRespostaHoras,
       margemVariacaoPercentual: input.margemVariacaoPercentual,
+      recebimentoInicio: input.recebimentoInicio,
+      recebimentoFim: input.recebimentoFim,
       serieAnteriorId: input.serieAnteriorId,
       criadoPor: input.criadoPor
     })
@@ -204,7 +210,9 @@ export async function atualizarAgendaRepository(id: string, input: AgendaEntrada
       terminoEm: input.terminoEm,
       terminoQuantidade: input.terminoQuantidade,
       prazoRespostaHoras: input.prazoRespostaHoras,
-      margemVariacaoPercentual: input.margemVariacaoPercentual
+      margemVariacaoPercentual: input.margemVariacaoPercentual,
+      recebimentoInicio: input.recebimentoInicio,
+      recebimentoFim: input.recebimentoFim
     })
     .where(eq(pedidosAgendas.id, id));
   await substituirProdutosDaAgenda(input.empresaId, id, input.produtos, tx);
@@ -349,7 +357,9 @@ export async function agendasAtivasRepository(db: ExecutorBanco = banco) {
       terminoEm: pedidosAgendas.terminoEm,
       terminoQuantidade: pedidosAgendas.terminoQuantidade,
       prazoRespostaHoras: pedidosAgendas.prazoRespostaHoras,
-      margemVariacaoPercentual: pedidosAgendas.margemVariacaoPercentual
+      margemVariacaoPercentual: pedidosAgendas.margemVariacaoPercentual,
+      recebimentoInicio: pedidosAgendas.recebimentoInicio,
+      recebimentoFim: pedidosAgendas.recebimentoFim
     })
     .from(pedidosAgendas)
     .innerJoin(gruposMercadorias, eq(gruposMercadorias.id, pedidosAgendas.grupoMercadoriaId))

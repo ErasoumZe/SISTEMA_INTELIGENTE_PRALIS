@@ -4,6 +4,7 @@ import {
   PROXIMAS_DATAS_AGENDAMENTO,
   datasDoAgendamento,
   instanteLocal,
+  janelaDeRecebimentoValida,
   localDoInstante,
   resumoRecorrencia,
   topoDoRanking,
@@ -19,6 +20,7 @@ import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { conflito, erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { buscarEmpresaComprasRepository } from "./compras-rodadas.repository.js";
+import { usuariosComPermissao } from "./compras-responsaveis.service.js";
 import { listarEstoqueProdutosRepository } from "./compras.repository.js";
 import {
   atualizarAgendaRepository,
@@ -37,7 +39,6 @@ import {
   produtosDasAgendasRepository,
   quantidadeVendidaRepository,
   registrarOcorrenciaRepository,
-  responsavelDaEmpresaRepository,
   travarAgendaRepository,
   validarGrupoAgendaRepository,
   type AgendaEntrada
@@ -49,6 +50,9 @@ import {
 const FUSO_PADRAO = "America/Sao_Paulo";
 // Ate quando a lista calcula "proximas datas" (o suficiente para 6 datas de qualquer regra mensal).
 const HORIZONTE_DIAS = 3 * 366;
+
+/** O banco devolve "HH:MM:SS"; a tela e o fornecedor veem "HH:MM". */
+export const horaCurta = (valor: string | null) => (valor ? valor.slice(0, 5) : null);
 
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string) {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -96,8 +100,15 @@ async function validarPayload(payload: AgendamentoPayload, perfil: PerfilUsuario
   if ((await produtosDaEmpresaRepository(payload.empresaId, ids)).length !== ids.length)
     throw erroValidacao("Produto nao pertence a empresa", "INVALID_PRODUCT");
   const responsavelId = payload.responsavelId ?? perfil.usuarioId;
-  if (responsavelId !== perfil.usuarioId && !(await responsavelDaEmpresaRepository(payload.empresaId, responsavelId)))
-    throw erroValidacao("Responsavel nao pertence a empresa", "INVALID_RESPONSIBLE");
+  // Doc 58 §1: o responsavel executa o pedido (confere e envia a cotacao): precisa de `pedidos_editar`.
+  const podeExecutar = await usuariosComPermissao(payload.empresaId, "pedidos_editar");
+  if (!podeExecutar.some((usuario) => usuario.usuarioId === responsavelId))
+    throw erroValidacao("Este colaborador nao pode enviar pedidos", "INVALID_RESPONSIBLE");
+  if (!janelaDeRecebimentoValida(payload.recebimentoInicio, payload.recebimentoFim))
+    throw erroValidacao(
+      "Informe o inicio e o fim do recebimento, com o fim depois do inicio",
+      "INVALID_RECEIVING_WINDOW"
+    );
   if (payload.termino.tipo === "data" && payload.termino.data < payload.inicioData)
     throw erroValidacao("O termino nao pode ser antes do inicio", "INVALID_END");
   if (payload.regra.tipo === "datas" && payload.regra.datas.some((data) => data <= payload.inicioData))
@@ -115,6 +126,8 @@ async function validarPayload(payload: AgendamentoPayload, perfil: PerfilUsuario
     ...colunasDoTermino(payload.termino),
     prazoRespostaHoras: payload.prazoRespostaHoras,
     margemVariacaoPercentual: payload.margemVariacaoPercentual,
+    recebimentoInicio: payload.recebimentoInicio || null,
+    recebimentoFim: payload.recebimentoFim || null,
     produtos: payload.produtos.map((produto) => ({
       produtoId: produto.produtoId,
       quantidadePadrao: produto.quantidadePadrao ?? null
@@ -286,6 +299,8 @@ export async function listarAgendamentos(empresaId: string, perfil: PerfilUsuari
       resumo: resumoRecorrencia(agenda.regra, inicio.data, termino),
       prazoRespostaHoras: agenda.prazoRespostaHoras,
       margemVariacaoPercentual: agenda.margemVariacaoPercentual,
+      recebimentoInicio: horaCurta(agenda.recebimentoInicio),
+      recebimentoFim: horaCurta(agenda.recebimentoFim),
       status: agenda.status,
       produtos: produtos
         .filter((produto) => produto.agendaId === agenda.id)

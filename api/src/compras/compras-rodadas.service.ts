@@ -138,6 +138,8 @@ export async function abrirRodadaNaTransacao(
       fusoHorario,
       tetoValor: payload.tetoValor ?? null,
       margemVariacaoPercentual: payload.margemVariacaoPercentual ?? 10,
+      recebimentoInicio: payload.recebimentoInicio ?? null,
+      recebimentoFim: payload.recebimentoFim ?? null,
       abertaPor: usuarioId,
       itens: itensEnvelope,
       convites: convitesParaCriar

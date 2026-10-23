@@ -82,6 +82,9 @@ export type RodadaPublicaDto = {
   expiraEm: string;
   // Doc 57 §6.3: quanto a quantidade pode variar do pedido (null = cotação antiga, sem margem).
   margemVariacaoPercentual: number | null;
+  // Doc 58 §8: a loja recebe pedido nesta janela (HH:MM). null = não informada.
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
   // "aberta" quando o fornecedor ainda pode mandar; "encerrada" quando o prazo passou ou o comprador
   // fechou. Sem revelar nada do envelope do comprador.
   situacao: "aberta" | "encerrada";

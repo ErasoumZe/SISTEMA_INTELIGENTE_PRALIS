@@ -36,6 +36,17 @@ export const abrirRodadaPayloadSchema = z.object({
     .union([z.literal(10), z.literal(20), z.literal(30), z.literal(40)])
     .optional()
     .nullable(),
+  // Doc 58 §8: janela de recebimento da loja (HH:MM), congelada na cotacao.
+  recebimentoInicio: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/u)
+    .optional()
+    .nullable(),
+  recebimentoFim: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/u)
+    .optional()
+    .nullable(),
   convites: z.array(abrirRodadaConviteSchema).min(1)
 });
 

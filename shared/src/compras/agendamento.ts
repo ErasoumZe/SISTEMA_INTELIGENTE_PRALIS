@@ -7,9 +7,9 @@ import {
   type TerminoRecorrencia
 } from "./recorrencia.js";
 
-// Agendamento de pedido (PROJECT_BRAIN/56 e 57): o comprador marca os produtos, define a recorrencia, o prazo
-// de resposta e a margem de quantidade. Na data, o sistema abre a cotacao e manda o WhatsApp para cada
-// fornecedor do catalogo; produto sem fornecedor fica "A fazer" em Pedidos.
+// Agendamento de pedido (PROJECT_BRAIN/56, 57 e 58): o comprador marca os produtos, define a recorrencia, o
+// prazo de resposta, a margem de quantidade, o responsavel e o horario de recebimento da loja. Na data, o
+// responsavel e avisado e envia pela tela Solicitacao de compra (doc 58 §2).
 
 const uuid = z.string().uuid();
 const empresa = z.object({ empresaId: uuid });
@@ -41,11 +41,20 @@ export const agendamentoPayloadSchema = empresa.extend({
   prazoRespostaHoras: z.number().int().min(1).max(720),
   // Doc 57 §6.3: quanto a quantidade entregue pode variar, para menos e para mais (10, 20, 30 ou 40%).
   margemVariacaoPercentual: z.union([z.literal(10), z.literal(20), z.literal(30), z.literal(40)]).default(10),
+  // Doc 58 §8: a loja recebe pedido nesta janela (o fornecedor ve na cotacao). Os dois ou nenhum.
+  recebimentoInicio: hora.optional().nullable(),
+  recebimentoFim: hora.optional().nullable(),
   produtos: z.array(agendamentoProdutoSchema).min(1).max(500).refine(unicosPorProduto, "Produto repetido")
 });
 
 /** "Esta e as futuras" a partir de uma data (como no iPhone). Sem `aPartirDe`, vale a serie inteira. */
 export const editarAgendamentoSchema = agendamentoPayloadSchema.extend({ aPartirDe: dataIso.optional() });
+
+/** Janela de recebimento: os dois horarios ou nenhum, e o fim depois do inicio. */
+export function janelaDeRecebimentoValida(inicio: string | null | undefined, fim: string | null | undefined): boolean {
+  if (!inicio && !fim) return true;
+  return Boolean(inicio && fim && fim > inicio);
+}
 
 export const ocorrenciaAgendamentoSchema = empresa.extend({ previstoPara: z.string().datetime({ offset: true }) });
 export const moverOcorrenciaSchema = ocorrenciaAgendamentoSchema.extend({ novaData: dataIso, novaHora: hora });
@@ -80,6 +89,8 @@ export type AgendamentoDto = {
   resumo: string;
   prazoRespostaHoras: number;
   margemVariacaoPercentual: number;
+  recebimentoInicio: string | null;
+  recebimentoFim: string | null;
   status: "ativa" | "encerrada";
   produtos: Array<{ produtoId: string; descricao: string; quantidadePadrao: string | null }>;
   proximas: AgendamentoOcorrenciaDto[];
