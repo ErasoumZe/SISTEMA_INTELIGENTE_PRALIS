@@ -1,23 +1,20 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { localDoInstante, quantidadeSugerida } from "@padaria/shared/compras";
+import { localDoInstante } from "@padaria/shared/compras";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
-import { buscarProdutosEstoqueRepository } from "../pedidos/pedidos.repository.js";
 import {
   agendasAtivasRepository,
   criarSolicitacaoDoAgendamentoRepository,
   ocorrenciaPorPrevistoRepository,
   ocorrenciasDasAgendasRepository,
-  produtosDasAgendasRepository,
   registrarOcorrenciaRepository,
   travarAgendaRepository
 } from "./compras-agendamento.repository.js";
 import { instantesDaSerie, terminoDaLinha } from "./compras-agendamento.service.js";
-import type { ItemEntrada } from "./compras-solicitacoes.repository.js";
 
 // Agendador do agendamento de pedido (doc 56 §4, doc 58 §2). Roda no tick de Compras (60 s, server.ts): cada
-// data que chegou vira a solicitacao do dia (com as quantidades sugeridas) e o responsavel e avisado no sino;
-// ele confere e envia pela tela Solicitacao de compra. Nunca envia cotacao nem mexe em estoque. Idempotente: a
+// data que chegou vira a solicitacao do dia (sem quantidade) e o responsavel e avisado no sino; ele confere os
+// produtos, poe as quantidades e envia pela tela Solicitacao de compra. Nunca envia cotacao nem mexe em estoque. Idempotente: a
 // agenda e travada e o UNIQUE(agenda, previsto_para) impede a mesma data duas vezes.
 
 type Agenda = Awaited<ReturnType<typeof agendasAtivasRepository>>[number];
@@ -56,37 +53,11 @@ async function materializar(agenda: Agenda, devida: { previstoPara: Date; dataAt
     const atual = await ocorrenciaPorPrevistoRepository(agenda.id, devida.previstoPara, tx);
     if (atual && atual.situacao !== "agendada") return;
 
-    const [produtosDaAgenda, estoque] = await Promise.all([
-      produtosDasAgendasRepository([agenda.id], tx),
-      buscarProdutosEstoqueRepository(agenda.empresaId, tx)
-    ]);
-    const estoquePorId = new Map(estoque.map((produto) => [produto.id, produto]));
-    // A sugestao que o responsavel ve: a quantidade padrao do agendamento ou maximo - saldo. Sem nenhuma das
-    // duas, o produto aparece na solicitacao sem quantidade e ele decide.
-    const itens: ItemEntrada[] = produtosDaAgenda.flatMap((produto) => {
-      const posicao = estoquePorId.get(produto.produtoId);
-      const quantidade =
-        produto.quantidadePadrao !== null
-          ? Number(produto.quantidadePadrao)
-          : quantidadeSugerida(posicao?.quantidadeEstoque ?? null, posicao?.estoqueMax ?? null);
-      if (!quantidade) return [];
-      return [
-        {
-          produtoId: produto.produtoId,
-          descricaoProduto: posicao?.descricao ?? produto.descricao ?? "Produto",
-          quantidade,
-          estoqueAtual: posicao?.quantidadeEstoque ?? null,
-          estoqueMin: posicao?.estoqueMin ?? null,
-          estoqueMax: posicao?.estoqueMax ?? null
-        }
-      ];
-    });
     const solicitacao = await criarSolicitacaoDoAgendamentoRepository(
       {
         empresaId: agenda.empresaId,
         criadoPor: agenda.responsavelId,
-        observacao: `Agendamento de pedido: ${agenda.grupoNome}`,
-        itens
+        observacao: `Agendamento de pedido: ${agenda.grupoNome}`
       },
       tx
     );

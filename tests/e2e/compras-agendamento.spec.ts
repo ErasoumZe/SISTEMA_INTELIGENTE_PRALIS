@@ -51,10 +51,11 @@ test.describe("agendamento de pedido", () => {
     await entrar(page, USUARIOS.compras);
     await irParaTela(page, "/agendamento_pedidos", "Agendamento de pedidos");
 
-    // 1) Marca o produto na lista (filtrando pelo nome) e define a quantidade padrao.
+    // 1) Marca o produto na lista (filtrando pelo nome).
     await page.getByRole("textbox", { name: "Buscar produto" }).fill(sufixo);
     await page.getByRole("checkbox", { name: `Marcar ${produto}` }).check();
-    await page.getByRole("spinbutton", { name: `Quantidade padrão de ${produto}` }).fill("6");
+    // Doc 58 §2: aqui nao se poe quantidade; ela e decidida na Solicitacao de compra.
+    await expect(page.getByRole("spinbutton", { name: /Quantidade/u })).toHaveCount(0);
     const card = page.locator('[data-secao="card-agendamento"]');
     await expect(card.locator('[data-campo="produtos-marcados"]')).toContainText("1 produto(s)");
 

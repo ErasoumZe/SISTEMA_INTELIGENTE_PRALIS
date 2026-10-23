@@ -32,7 +32,7 @@ const podeGerir = computed(() => temPermissao("agendamento_pedidos_gerir"));
 
 const agenda = useAgendamentoPedidos(empresaId);
 const { agendamentos, produtos, grupos, responsaveis, carregando } = agenda;
-const marcados = ref<Record<string, string>>({});
+const marcados = ref<string[]>([]);
 const editando = ref<AgendamentoDto | null>(null);
 
 function notificar(text: string, color = "success") {
@@ -52,17 +52,12 @@ async function executar(acao: () => Promise<void>, mensagem: string) {
 const card = ref<InstanceType<typeof AgendamentoPedidoCard> | null>(null);
 function cancelarEdicao() {
   editando.value = null;
-  marcados.value = {};
+  marcados.value = [];
   card.value?.limpar();
 }
 function editar(item: AgendamentoDto) {
   editando.value = item;
-  marcados.value = Object.fromEntries(
-    item.produtos.map((produto) => [
-      produto.produtoId,
-      produto.quantidadePadrao ? String(Number(produto.quantidadePadrao)) : ""
-    ])
-  );
+  marcados.value = item.produtos.map((produto) => produto.produtoId);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function salvar(payload: AgendamentoPayload, aPartirDe: string | undefined) {

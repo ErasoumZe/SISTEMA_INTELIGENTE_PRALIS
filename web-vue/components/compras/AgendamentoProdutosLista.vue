@@ -7,8 +7,9 @@ import type { GrupoAgendamentoDto, ProdutoAgendamentoDto } from "@padaria/shared
 // local de venda; marca o que entra no pedido; bolinhas verde (mais vende), amarela (mais compramos) e
 // azul (mais lucro) — top 20% dos últimos 3 meses.
 const props = defineProps<{ produtos: ProdutoAgendamentoDto[]; grupos: GrupoAgendamentoDto[] }>();
-/** produtoId -> quantidade padrão ("" = sugestão do estoque na data). */
-const selecionados = defineModel<Record<string, string>>({ required: true });
+// Doc 58 §2: aqui só se escolhe o produto; a quantidade é posta na Solicitação de compra, na data.
+const selecionados = defineModel<string[]>({ required: true });
+const marcado = computed(() => new Set(selecionados.value));
 
 const filtro = reactive({ grupo: "", subgrupo: "", area: "", localEstoque: "", localVenda: "", busca: "" });
 const somenteMarcados = ref(false);
@@ -41,7 +42,7 @@ const visiveis = computed(() => {
   const termo = filtro.busca.trim().toLocaleLowerCase("pt-BR");
   return props.produtos.filter(
     (produto) =>
-      (!somenteMarcados.value || produto.id in selecionados.value) &&
+      (!somenteMarcados.value || marcado.value.has(produto.id)) &&
       (!gruposDoFiltro.value || (produto.grupoMercadoriaId && gruposDoFiltro.value.has(produto.grupoMercadoriaId))) &&
       (!filtro.area || produto.areaEstoque === filtro.area) &&
       (!filtro.localEstoque || produto.localEstoque === filtro.localEstoque) &&
@@ -52,21 +53,16 @@ const visiveis = computed(() => {
 // A tela mostra até 300 linhas: com 1.300 produtos e filtros vazios, a tabela inteira travaria o celular.
 const LIMITE = 300;
 const exibidos = computed(() => visiveis.value.slice(0, LIMITE));
-const totalMarcados = computed(() => Object.keys(selecionados.value).length);
+const totalMarcados = computed(() => selecionados.value.length);
 
 function alternar(produto: ProdutoAgendamentoDto) {
-  const copia = { ...selecionados.value };
-  if (produto.id in copia) delete copia[produto.id];
-  else copia[produto.id] = "";
-  selecionados.value = copia;
+  selecionados.value = marcado.value.has(produto.id)
+    ? selecionados.value.filter((id) => id !== produto.id)
+    : [...selecionados.value, produto.id];
 }
 function marcarVisiveis() {
-  const copia = { ...selecionados.value };
-  for (const produto of exibidos.value) if (!(produto.id in copia)) copia[produto.id] = "";
-  selecionados.value = copia;
-}
-function definirQuantidade(produtoId: string, valor: string) {
-  selecionados.value = { ...selecionados.value, [produtoId]: valor };
+  const novos = exibidos.value.map((produto) => produto.id).filter((id) => !marcado.value.has(id));
+  selecionados.value = [...selecionados.value, ...novos];
 }
 const numero = (valor: string | null) =>
   valor === null ? "—" : Number(valor).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
@@ -136,14 +132,13 @@ const numero = (valor: string | null) =>
               <th>Legenda</th>
               <th class="text-right">Saldo</th>
               <th class="text-right">Mín · Máx</th>
-              <th>Quantidade padrão</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="produto in exibidos" :key="produto.id" :data-produto="produto.id">
               <td>
                 <v-checkbox-btn
-                  :model-value="produto.id in selecionados"
+                  :model-value="marcado.has(produto.id)"
                   :aria-label="`Marcar ${produto.descricao}`"
                   @update:model-value="alternar(produto)"
                 />
@@ -158,23 +153,9 @@ const numero = (valor: string | null) =>
               </td>
               <td class="text-right">{{ numero(produto.quantidadeEstoque) }} {{ produto.unidade ?? "" }}</td>
               <td class="text-right">{{ numero(produto.estoqueMin) }} · {{ numero(produto.estoqueMax) }}</td>
-              <td>
-                <v-text-field
-                  v-if="produto.id in selecionados"
-                  :model-value="selecionados[produto.id]"
-                  type="number"
-                  min="0"
-                  density="compact"
-                  hide-details
-                  placeholder="Sugestão do estoque"
-                  :aria-label="`Quantidade padrão de ${produto.descricao}`"
-                  class="campo-quantidade"
-                  @update:model-value="(valor: string) => definirQuantidade(produto.id, valor)"
-                />
-              </td>
             </tr>
             <tr v-if="!exibidos.length">
-              <td colspan="6" class="text-center text-medium-emphasis py-6">Nenhum produto com estes filtros.</td>
+              <td colspan="5" class="text-center text-medium-emphasis py-6">Nenhum produto com estes filtros.</td>
             </tr>
           </tbody>
         </v-table>
@@ -194,10 +175,6 @@ const numero = (valor: string | null) =>
 }
 .coluna-marca {
   width: 48px;
-}
-.campo-quantidade {
-  max-width: 160px;
-  min-width: 110px;
 }
 .sr-only {
   position: absolute;

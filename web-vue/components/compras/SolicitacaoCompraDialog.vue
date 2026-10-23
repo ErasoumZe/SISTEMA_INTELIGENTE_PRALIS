@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * A conferência do pedido do dia (doc 58 §2): a lista de produtos do agendamento com o estoque e a sugestão; o
- * responsável põe as quantidades e envia. Cada fornecedor do catálogo recebe só os seus produtos. Produto sem
+ * A conferência do pedido do dia (doc 58 §2): a lista de produtos do agendamento com o estoque; o responsável
+ * confere e põe as quantidades (o agendamento não traz quantidade) e envia. Cada fornecedor do catálogo recebe só os seus produtos. Produto sem
  * fornecedor: escolhe-se aqui, e o vínculo vai para o catálogo. Quantidade vazia = o produto não vai neste pedido.
  */
 import { podeConvidar, type EnviarSolicitacaoCompraPayload, type SolicitacaoCompraDetalheDto } from "@padaria/shared";
@@ -24,12 +24,7 @@ const escolhido = ref<Record<string, string | null>>({});
 watch(
   () => props.detalhe,
   (detalhe) => {
-    quantidades.value = Object.fromEntries(
-      (detalhe?.itens ?? []).map((item) => [
-        item.produtoId,
-        item.quantidadeSugerida ? String(Number(item.quantidadeSugerida)) : ""
-      ])
-    );
+    quantidades.value = Object.fromEntries((detalhe?.itens ?? []).map((item) => [item.produtoId, ""]));
     escolhido.value = {};
   },
   { immediate: true }

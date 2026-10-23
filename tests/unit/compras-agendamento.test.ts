@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { agendamentoPayloadSchema, quantidadeSugerida, topoDoRanking } from "@padaria/shared/compras";
+import { agendamentoPayloadSchema, topoDoRanking } from "@padaria/shared/compras";
 
-// Agendamento de pedido (PROJECT_BRAIN/56): as bolinhas e a sugestao de quantidade.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 58): as bolinhas e o contrato (so produtos, sem quantidade).
 describe("bolinhas: top 20% de cada ranking", () => {
   it("pega o primeiro quinto (arredondado para cima) dos que tem medida positiva", () => {
     const medidas = new Map(Object.entries({ a: 50, b: 40, c: 30, d: 20, e: 10, f: 5, g: 0, h: -3 }));
@@ -18,15 +18,6 @@ describe("bolinhas: top 20% de cada ranking", () => {
 
   it("sem venda, compra ou lucro positivo, ninguem ganha bolinha", () => {
     expect(topoDoRanking(new Map(Object.entries({ a: 0, b: -1 })))).toEqual(new Set());
-  });
-});
-
-describe("quantidade sugerida na data", () => {
-  it("e o maximo menos o saldo, so quando falta", () => {
-    expect(quantidadeSugerida(4, 10)).toBe(6);
-    expect(quantidadeSugerida(null, 3.5)).toBe(3.5);
-    expect(quantidadeSugerida(10, 10)).toBeNull();
-    expect(quantidadeSugerida(5, null)).toBeNull();
   });
 });
 
@@ -50,5 +41,12 @@ describe("contrato do agendamento", () => {
     expect(
       agendamentoPayloadSchema.safeParse({ ...base, produtos: [base.produtos[0], base.produtos[0]] }).success
     ).toBe(false);
+  });
+  it("o agendamento nao guarda quantidade: ela e posta na Solicitacao de compra (doc 58 §2)", () => {
+    const lido = agendamentoPayloadSchema.parse({
+      ...base,
+      produtos: [{ produtoId: base.produtos[0]!.produtoId, quantidadePadrao: 6 }]
+    });
+    expect(lido.produtos).toEqual([{ produtoId: base.produtos[0]!.produtoId }]);
   });
 });

@@ -18,7 +18,7 @@ import RecorrenciaCampo from "~/components/compras/RecorrenciaCampo.vue";
 const props = defineProps<{
   empresaId: string;
   grupos: GrupoAgendamentoDto[];
-  produtosMarcados: Record<string, string>;
+  produtosMarcados: string[];
   editando: AgendamentoDto | null;
   salvando: boolean;
   responsaveis: ResponsavelPedidoDto[];
@@ -49,7 +49,7 @@ const erro = ref("");
 
 const gruposPai = computed(() => props.grupos.filter((grupo) => !grupo.grupoPaiId));
 const subgrupos = computed(() => props.grupos.filter((grupo) => grupo.grupoPaiId && grupo.grupoPaiId === form.grupo));
-const totalMarcados = computed(() => Object.keys(props.produtosMarcados).length);
+const totalMarcados = computed(() => props.produtosMarcados.length);
 const PRAZOS = PRAZO_RESPOSTA_ATALHOS.map((horas) => ({
   value: horas,
   title: horas < 24 ? `${horas} horas` : `${horas / 24} dia(s)`
@@ -131,10 +131,7 @@ function salvar() {
       responsavelId: form.responsavelId,
       recebimentoInicio: form.recebimentoInicio || null,
       recebimentoFim: form.recebimentoFim || null,
-      produtos: Object.entries(props.produtosMarcados).map(([produtoId, quantidade]) => ({
-        produtoId,
-        quantidadePadrao: quantidade && Number(quantidade) > 0 ? Number(quantidade) : null
-      }))
+      produtos: props.produtosMarcados.map((produtoId) => ({ produtoId }))
     },
     props.editando ? form.aPartirDe || undefined : undefined
   );

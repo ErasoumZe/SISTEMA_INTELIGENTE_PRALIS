@@ -26,10 +26,8 @@ export const PROXIMAS_DATAS_AGENDAMENTO = 6;
 export const FATIA_TOPO_BOLINHAS = 0.2;
 export const MESES_BOLINHAS = 3;
 
-export const agendamentoProdutoSchema = z.object({
-  produtoId: uuid,
-  quantidadePadrao: z.number().positive().max(9_999_999).nullable().optional()
-});
+// Doc 58 §2 (Rodrigo 23/10): o agendamento so escolhe os produtos; a quantidade e posta na Solicitacao de compra.
+export const agendamentoProdutoSchema = z.object({ produtoId: uuid });
 
 export const agendamentoPayloadSchema = empresa.extend({
   grupoMercadoriaId: uuid,
@@ -92,7 +90,7 @@ export type AgendamentoDto = {
   recebimentoInicio: string | null;
   recebimentoFim: string | null;
   status: "ativa" | "encerrada";
-  produtos: Array<{ produtoId: string; descricao: string; quantidadePadrao: string | null }>;
+  produtos: Array<{ produtoId: string; descricao: string }>;
   proximas: AgendamentoOcorrenciaDto[];
 };
 
@@ -113,11 +111,4 @@ export function topoDoRanking(medidas: Map<string, number>, fatia = FATIA_TOPO_B
   const corte = Math.max(1, Math.ceil(positivas.length * fatia));
   const limiar = positivas[corte - 1]![1];
   return new Set(positivas.filter(([, valor]) => valor >= limiar).map(([id]) => id));
-}
-
-/** Sugestao de quantidade na data: maximo - saldo (so quando positiva). */
-export function quantidadeSugerida(estoqueAtual: number | null, estoqueMax: number | null): number | null {
-  if (estoqueMax === null) return null;
-  const falta = estoqueMax - (estoqueAtual ?? 0);
-  return falta > 0 ? Math.round(falta * 1000) / 1000 : null;
 }

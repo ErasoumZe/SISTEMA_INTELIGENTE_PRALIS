@@ -14,9 +14,13 @@ envia aos fornecedores. Só aparece quem pode enviar cotação (`pedidos_editar`
 - Cada agendamento vira um **card** na tela **Solicitação de compra**, visível para o **responsável** daquele pedido
   (quem gere agendamentos vê todos).
 - Chegou a data: o responsável recebe a **notificação no sino**; o card fica pronto para executar.
-- Ele abre o card, vê a lista de produtos do agendamento (com a quantidade sugerida: a padrão ou máximo − saldo),
-  **põe as quantidades** e **envia**. O envio vai sozinho pelo WhatsApp para cada fornecedor, cada um só com os seus
-  produtos.
+- Ele abre o card, confere a lista de produtos do agendamento (com estoque e máximo como referência), **põe as
+  quantidades** e **envia**. O envio vai sozinho pelo WhatsApp para cada fornecedor, cada um só com os seus produtos.
+  Produto deixado sem quantidade não vai neste pedido.
+- **O agendamento não tem quantidade (José, 23/10):** lá se escolhem grupo, responsável, recorrência, prazo, margem,
+  horário de recebimento e os **produtos**. A quantidade só existe na Solicitação de compra, e o campo chega em
+  branco (sem sugestão). A coluna `quantidade_padrao` de `pedidos_agendas_produtos` fica no banco sem uso (removê-la
+  exige migration).
 - Produto **sem fornecedor** no catálogo: o responsável **escolhe o fornecedor ali mesmo**; ao enviar, o vínculo vai
   para o catálogo **(José, 23/10)**.
 - _Substitui o doc 57 §3 (envio automático na data sem conferência)._
