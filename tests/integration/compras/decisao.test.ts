@@ -149,17 +149,23 @@ describe("fila de decisao e excecao integration (E6)", () => {
     return json<{ data: Decisoes }>(resposta).data;
   }
 
-  function aprovar(rodadaId: string, propostaItemId: string, cookie = cookieAdmin) {
+  function aprovar(rodadaId: string, propostaItemId: string, cookie = cookieAdmin, reajustarReferencia = false) {
     return enviar("POST", `/api/compras/rodadas/${rodadaId}/decisoes/aprovar`, cookie, {
       empresaId: idsTeste.empresaA,
-      propostaItemId
+      propostaItemId,
+      reajustarReferencia
     });
   }
+  const referenciaVigente = () =>
+    consultarUm<{ valor: string; origem: string }>(
+      "select valor, origem from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, idsTeste.produto]
+    );
 
   const doProduto = (decisoes: Decisoes, produtoId: string) =>
     decisoes.itens.find((item) => item.produtoId === produtoId)!;
 
-  /** A excecao so vale com a rodada fechada: vence o prazo de 1h da rodada. */
+  /** Vence o prazo de 1h da rodada (fechamento por prazo). */
   const fechar = (rodada: RodadaAberta, solicitacaoId: string) =>
     fecharRodadaPorPrazo(
       { id: rodada.id, empresaId: idsTeste.empresaA, solicitacaoId },
@@ -185,16 +191,44 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect(resposta.statusCode).toBe(403);
   });
 
-  it("com a rodada ABERTA a excecao e recusada (422): aprovar travaria o item contra uma oferta melhor", async () => {
+  it("com a cotacao ABERTA aceitar ja compra (doc 58 §9): o produto sai da cotacao e a referencia fica", async () => {
     const { rodada } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
     const resposta = await aprovar(rodada.id, item.propostas[0]!.propostaItemId);
-    expect(resposta.statusCode).toBe(422);
-    expect(json<{ code?: string }>(resposta).code).toBe("RODADA_ABERTA");
-    await expect(
-      consultarUm("select id from compras_adjudicacoes where rodada_item_id = $1", [item.rodadaItemId])
-    ).resolves.toBeNull();
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const { pedidoId } = json<{ data: { pedidoId: string } }>(resposta).data;
+    expect(
+      (await consultarUm<{ status: string }>("select status from pedidos where id = $1", [pedidoId]))?.status
+    ).toBe("confirmado");
+    // A cotacao continua aberta para o resto; este produto nao vende mais.
+    expect(
+      (await consultarUm<{ status: string }>("select status from compras_rodadas where id = $1", [rodada.id]))?.status
+    ).toBe("aberta");
+    expect(doProduto(await fila(rodada.id), idsTeste.produto)).toBeUndefined();
+    // "Aceitar este preco" e so desta vez: a referencia (10) nao sobe.
+    expect(await referenciaVigente()).toMatchObject({ origem: "importacao" });
+    expect(Number((await referenciaVigente())?.valor)).toBe(10);
+  });
+
+  it("aceitar e reajustar: a referencia passa a ser o custo aceito, mesmo maior (doc 58 §4)", async () => {
+    const { rodada } = await abrir([FORN_A]);
+    await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
+    const item = doProduto(await fila(rodada.id), idsTeste.produto);
+    const resposta = await aprovar(rodada.id, item.propostas[0]!.propostaItemId, cookieAdmin, true);
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const vigente = await referenciaVigente();
+    expect(vigente?.origem).toBe("rodada");
+    expect(Number(vigente?.valor)).toBe(12);
+    // A importada foi encerrada, nao apagada: o historico da referencia fica.
+    expect(
+      (
+        await consultarUm<{ total: string }>(
+          "select count(*)::text as total from produtos_precos_base where id = $1 and valido_ate is not null",
+          [PRECO_BASE]
+        )
+      )?.total
+    ).toBe("1");
   });
 
   it("encerrar a rodada agora: fecha com motivo comprador e libera a excecao", async () => {
@@ -238,7 +272,7 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect((await aprovar(rodada.id, item.propostas[0]!.propostaItemId)).statusCode).toBe(200);
   });
 
-  it("aprova a excecao: pedido cotado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
+  it("aprova a excecao: pedido Comprado, adjudicacao do comprador, base intacta; o mesmo item nao vende duas vezes", async () => {
     const { rodada, solicitacaoId } = await abrir([FORN_A]);
     await responderPrecos(rodada.convites[0]!.token, { primeiro: 12, segundo: 5 });
     const item = doProduto(await fila(rodada.id), idsTeste.produto);
@@ -253,8 +287,8 @@ describe("fila de decisao e excecao integration (E6)", () => {
       "select status, tipo from pedidos where id = $1",
       [pedidoId]
     );
-    // Doc 57 §5: a excecao tambem nasce cotada; o fornecedor separa e o comprador confirma depois.
-    expect(pedido).toMatchObject({ status: "cotado", tipo: "rodada" });
+    // Doc 58 §6: aceitar e comprar — o pedido nasce Comprado (confirmado).
+    expect(pedido).toMatchObject({ status: "confirmado", tipo: "rodada" });
     const adjudicacao = await consultarUm<{ modo: string; aprovado_por: string | null; custo: string }>(
       "select modo, aprovado_por, custo_final_unitario as custo from compras_adjudicacoes where rodada_item_id = $1",
       [item.rodadaItemId]
@@ -262,9 +296,9 @@ describe("fila de decisao e excecao integration (E6)", () => {
     expect(adjudicacao?.modo).toBe("comprador");
     expect(adjudicacao?.aprovado_por).toBeTruthy();
     expect(Number(adjudicacao?.custo)).toBe(12);
-    // O evento do pedido cotado tem o aprovador como autor.
+    // O evento da compra tem o aprovador como autor.
     const evento = await consultarUm<{ criado_por: string | null }>(
-      "select criado_por from pedidos_eventos where pedido_id = $1 and status = 'cotado'",
+      "select criado_por from pedidos_eventos where pedido_id = $1 and status = 'confirmado'",
       [pedidoId]
     );
     expect(evento?.criado_por).toBeTruthy();

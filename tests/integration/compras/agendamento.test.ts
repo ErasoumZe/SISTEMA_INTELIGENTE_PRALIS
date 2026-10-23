@@ -5,9 +5,10 @@ import { idsTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 import { materializarAgendamentos } from "../../../api/src/compras/compras-agendamento-agendador.js";
 
-// Agendamento de pedido (PROJECT_BRAIN/56 e 57): agenda -> na data, a cotacao abre sozinha e cada fornecedor
-// do catalogo (com WhatsApp) recebe SO os seus produtos pela fila; produto sem fornecedor fica "A fazer" e o
-// responsavel e avisado. O agendador nunca cria a mesma data duas vezes.
+// Agendamento de pedido (PROJECT_BRAIN/56 e 58): agenda -> na data, vira a Solicitacao de compra do responsavel
+// (aviso no sino); ele confere as quantidades e envia, e cada fornecedor do catalogo (com WhatsApp) recebe SO os
+// seus produtos pela fila. Produto sem fornecedor recebe o que o responsavel escolher ali. O agendador nunca cria a
+// mesma data duas vezes.
 
 const FORNECEDOR = "11111111-1111-4111-8111-11111111a601";
 const SEGUNDO = "11111111-1111-4111-8111-11111111a602";
@@ -53,6 +54,7 @@ describe("agendamento de pedido integration", () => {
 
   const limpar = async () => {
     await executarSql("delete from notificacoes where tipo = 'compras_agendamento_conferir'", []);
+    await executarSql("delete from compras_whatsapp_envios where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from compras_rodadas_convites where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from compras_rodadas_itens where empresa_id = $1", [idsTeste.empresaA]);
@@ -113,90 +115,177 @@ describe("agendamento de pedido integration", () => {
       throw erro;
     });
 
-  it("na data, abre a cotacao sozinha: cada fornecedor do catalogo entra na fila do WhatsApp, uma vez so", async () => {
+  type Detalhe = {
+    recebimentoInicio: string | null;
+    recebimentoFim: string | null;
+    margemVariacaoPercentual: number;
+    itens: Array<{
+      produtoId: string;
+      quantidadeSugerida: string | null;
+      fornecedores: Array<{ fornecedorId: string }>;
+    }>;
+  };
+  const ocorrenciaDa = async (agendaId: string) =>
+    (await consultarUm<{ id: string; situacao: string; solicitacao_id: string; enviada_por: string | null }>(
+      "select id, situacao, solicitacao_id, enviada_por from pedidos_agenda_ocorrencias where agenda_id = $1",
+      [agendaId]
+    ))!;
+  const detalhar = async (ocorrenciaId: string) =>
+    json<{ data: Detalhe }>(
+      await pedir("GET", `/api/compras/solicitacoes-compra/${ocorrenciaId}?empresaId=${idsTeste.empresaA}`)
+    ).data;
+  const enviarSolicitacao = (ocorrenciaId: string, itens: object[]) =>
+    pedir("POST", `/api/compras/solicitacoes-compra/${ocorrenciaId}/enviar`, { empresaId: idsTeste.empresaA, itens });
+  const enviosDaSolicitacao = (solicitacaoId: string) =>
+    consultarTodos<{ fornecedor_id: string; tipo: string; status: string; telefone: string }>(
+      "select c.fornecedor_id, e.tipo, e.status, e.telefone from compras_whatsapp_envios e join compras_rodadas_convites c on c.id = e.convite_id join compras_rodadas r on r.id = c.rodada_id where r.solicitacao_id = $1 order by e.telefone",
+      [solicitacaoId]
+    );
+
+  it("na data, vira Solicitacao de compra do responsavel: aguardando, aviso no sino e nenhuma cotacao (uma vez so)", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
-    const id = await criar({ margemVariacaoPercentual: 20 });
+    await executarSql("delete from notificacoes where tipo = 'compras_agendamento_conferir'", []);
+    const id = await criar({ margemVariacaoPercentual: 20, recebimentoInicio: "07:00", recebimentoFim: "11:00" });
 
     await materializar(depoisDoInicio());
     await materializar(depoisDoInicio());
 
-    const ocorrencias = await consultarTodos<{ situacao: string; solicitacao_id: string; enviada_por: string | null }>(
-      "select situacao, solicitacao_id, enviada_por from pedidos_agenda_ocorrencias where agenda_id = $1",
+    const ocorrencias = await consultarTodos<{ situacao: string }>(
+      "select situacao from pedidos_agenda_ocorrencias where agenda_id = $1",
       [id]
     );
-    expect(ocorrencias).toHaveLength(1);
-    expect(ocorrencias[0]).toMatchObject({ situacao: "enviada" });
-    expect(ocorrencias[0]?.enviada_por).toBeTruthy();
+    expect(ocorrencias).toEqual([{ situacao: "aguardando_conferencia" }]);
+    const ocorrencia = await ocorrenciaDa(id);
     const solicitacao = await consultarUm<{ origem: string; status: string }>(
       "select origem, status from compras_solicitacoes where id = $1",
-      [ocorrencias[0]!.solicitacao_id]
+      [ocorrencia.solicitacao_id]
     );
-    expect(solicitacao).toEqual({ origem: "agendamento", status: "em_cotacao" });
-    // O prazo e a margem que o fornecedor ve sao os do agendamento.
-    const rodada = await consultarUm<{ id: string; prazo_resposta_horas: number; margem_variacao_percentual: number }>(
-      "select id, prazo_resposta_horas, margem_variacao_percentual from compras_rodadas where solicitacao_id = $1",
-      [ocorrencias[0]!.solicitacao_id]
+    expect(solicitacao).toEqual({ origem: "agendamento", status: "rascunho" });
+    // Doc 58 §2: ninguem recebe nada ate o responsavel conferir e enviar.
+    const rodadas = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_rodadas where solicitacao_id = $1",
+      [ocorrencia.solicitacao_id]
     );
-    expect(rodada).toMatchObject({ prazo_resposta_horas: 12, margem_variacao_percentual: 20 });
-    // Os dois fornecedores aprovados no catalogo recebem o produto, cada um com o seu convite na fila.
-    const envios = await consultarTodos<{ fornecedor_id: string; tipo: string; status: string; telefone: string }>(
-      "select c.fornecedor_id, e.tipo, e.status, e.telefone from compras_whatsapp_envios e join compras_rodadas_convites c on c.id = e.convite_id where c.rodada_id = $1 order by e.telefone",
-      [rodada!.id]
+    expect(rodadas?.total).toBe("0");
+    const sino = await consultarTodos<{ titulo: string }>(
+      "select titulo from notificacoes where tipo = 'compras_agendamento_conferir'",
+      []
     );
-    expect(envios.map((envio) => envio.fornecedor_id).sort()).toEqual([FORNECEDOR, SEGUNDO].sort());
-    expect(envios.every((envio) => envio.tipo === "convite" && envio.status === "pendente")).toBe(true);
-    expect(envios[0]?.telefone).toBe("5511999995501");
-    // Todo produto tinha fornecedor: nada ficou "A fazer", ninguem precisou ser avisado.
-    const sino = await consultarTodos("select id from notificacoes where tipo = 'compras_agendamento_conferir'", []);
-    expect(sino).toHaveLength(0);
+    expect(sino).toHaveLength(1);
+    expect(sino[0]?.titulo).toContain("Solicitação de compra para enviar");
+
+    // O card do responsavel e o que ele ve ao abrir: a sugestao, os fornecedores e o horario de recebimento.
+    const cards = json<{ data: Array<{ agendaId: string; pendentes: Array<{ ocorrenciaId: string }> }> }>(
+      await pedir("GET", `/api/compras/solicitacoes-compra?empresaId=${idsTeste.empresaA}`)
+    ).data;
+    expect(cards.find((card) => card.agendaId === id)?.pendentes).toEqual([
+      expect.objectContaining({ ocorrenciaId: ocorrencia.id })
+    ]);
+    const detalhe = await detalhar(ocorrencia.id);
+    expect(detalhe).toMatchObject({
+      recebimentoInicio: "07:00",
+      recebimentoFim: "11:00",
+      margemVariacaoPercentual: 20
+    });
+    const item = detalhe.itens.find((linha) => linha.produtoId === idsTeste.produto);
+    expect(Number(item?.quantidadeSugerida)).toBe(3);
+    expect(item?.fornecedores.map((fornecedor) => fornecedor.fornecedorId).sort()).toEqual(
+      [FORNECEDOR, SEGUNDO].sort()
+    );
   });
 
-  it("produto sem fornecedor no catalogo fica A fazer em Pedidos e o responsavel e avisado no sino", async () => {
+  it("o responsavel confere e envia: cada fornecedor do catalogo entra na fila com o prazo, a margem e o horario", async () => {
+    await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
+    const id = await criar({ margemVariacaoPercentual: 20, recebimentoInicio: "07:00", recebimentoFim: "11:00" });
+    await materializar(depoisDoInicio());
+    const ocorrencia = await ocorrenciaDa(id);
+
+    const envio = await enviarSolicitacao(ocorrencia.id, [{ produtoId: idsTeste.produto, quantidade: 4 }]);
+    expect(envio.statusCode, envio.body).toBe(201);
+    const depois = await ocorrenciaDa(id);
+    expect(depois.situacao).toBe("enviada");
+    expect(depois.enviada_por).toBeTruthy();
+    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
+      ocorrencia.solicitacao_id
+    ]);
+    expect(solicitacao?.status).toBe("em_cotacao");
+    const rodada = await consultarUm<{
+      id: string;
+      prazo_resposta_horas: number;
+      margem_variacao_percentual: number;
+      recebimento_inicio: string;
+      recebimento_fim: string;
+    }>(
+      "select id, prazo_resposta_horas, margem_variacao_percentual, recebimento_inicio::text, recebimento_fim::text from compras_rodadas where solicitacao_id = $1",
+      [ocorrencia.solicitacao_id]
+    );
+    expect(rodada).toMatchObject({
+      prazo_resposta_horas: 12,
+      margem_variacao_percentual: 20,
+      recebimento_inicio: "07:00:00",
+      recebimento_fim: "11:00:00"
+    });
+    // A quantidade que vale e a que o responsavel conferiu (4), nao a sugestao (3).
+    const item = await consultarUm<{ quantidade: string }>(
+      "select quantidade::text from compras_rodadas_itens where rodada_id = $1",
+      [rodada!.id]
+    );
+    expect(Number(item?.quantidade)).toBe(4);
+    const envios = await enviosDaSolicitacao(ocorrencia.solicitacao_id);
+    expect(envios.map((linha) => linha.fornecedor_id).sort()).toEqual([FORNECEDOR, SEGUNDO].sort());
+    expect(envios.every((linha) => linha.tipo === "convite" && linha.status === "pendente")).toBe(true);
+    expect(envios[0]?.telefone).toBe("5511999995501");
+
+    const deNovo = await enviarSolicitacao(ocorrencia.id, [{ produtoId: idsTeste.produto, quantidade: 4 }]);
+    expect(deNovo.statusCode).toBe(409);
+    expect(json<{ code?: string }>(deNovo).code).toBe("OCCURRENCE_NOT_PENDING");
+  });
+
+  it("produto sem fornecedor: enviar sem escolher e recusado; escolhendo ali, o convite sai e o catalogo aprende", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("update fornecedores_produtos set status = 'pendente' where empresa_id = $1", [
       idsTeste.empresaA
     ]);
     try {
-      await criar();
+      const id = await criar();
       await materializar(depoisDoInicio());
-      const painel = json<{ data: { semFornecedor: Array<{ produtoId: string; quantidade: string }> } }>(
-        await pedir("GET", `/api/compras/painel?empresaId=${idsTeste.empresaA}`)
-      ).data;
-      expect(painel.semFornecedor).toEqual([expect.objectContaining({ produtoId: idsTeste.produto })]);
-      expect(Number(painel.semFornecedor[0]?.quantidade)).toBe(3);
-      const sino = await consultarTodos<{ titulo: string }>(
-        "select titulo from notificacoes where tipo = 'compras_agendamento_conferir'",
-        []
+      const ocorrencia = await ocorrenciaDa(id);
+      expect((await detalhar(ocorrencia.id)).itens[0]?.fornecedores).toEqual([]);
+
+      const semEscolha = await enviarSolicitacao(ocorrencia.id, [{ produtoId: idsTeste.produto, quantidade: 3 }]);
+      expect(semEscolha.statusCode).toBe(422);
+      expect(json<{ code?: string }>(semEscolha).code).toBe("PRODUCT_WITHOUT_SUPPLIER");
+      expect((await ocorrenciaDa(id)).situacao).toBe("aguardando_conferencia");
+
+      const escolhido = await enviarSolicitacao(ocorrencia.id, [
+        { produtoId: idsTeste.produto, quantidade: 3, fornecedorId: FORNECEDOR }
+      ]);
+      expect(escolhido.statusCode, escolhido.body).toBe(201);
+      expect((await enviosDaSolicitacao(ocorrencia.solicitacao_id)).map((linha) => linha.fornecedor_id)).toEqual([
+        FORNECEDOR
+      ]);
+      // Doc 58 §2: o vinculo vai para o catalogo — a proxima data ja manda sozinha para ele.
+      const vinculo = await consultarUm<{ status: string }>(
+        "select status from fornecedores_produtos where empresa_id = $1 and fornecedor_id = $2 and produto_id = $3",
+        [idsTeste.empresaA, FORNECEDOR, idsTeste.produto]
       );
-      expect(sino).toHaveLength(1);
-      expect(sino[0]?.titulo).toContain("A fazer");
+      expect(vinculo?.status).toBe("aprovado");
     } finally {
       await executarSql("update fornecedores_produtos set status = 'aprovado' where empresa_id = $1", [
         idsTeste.empresaA
       ]);
-      await executarSql("delete from notificacoes where tipo = 'compras_agendamento_conferir'", []);
     }
   });
 
-  it("produto sem quantidade nao entra; sem nada a pedir, a data passa sem abrir cotacao", async () => {
+  it("produto sem quantidade sugerida aparece sem quantidade; o responsavel decide", async () => {
     await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("update produtos set estoque_max = null where id = $1", [idsTeste.produto]);
     const id = await criar({ produtos: [{ produtoId: idsTeste.produto, quantidadePadrao: null }] });
     await materializar(depoisDoInicio());
-    const ocorrencia = await consultarUm<{ situacao: string; solicitacao_id: string }>(
-      "select situacao, solicitacao_id from pedidos_agenda_ocorrencias where agenda_id = $1",
-      [id]
-    );
-    expect(ocorrencia?.situacao).toBe("cancelada");
-    const solicitacao = await consultarUm<{ status: string }>("select status from compras_solicitacoes where id = $1", [
-      ocorrencia!.solicitacao_id
-    ]);
-    expect(solicitacao?.status).toBe("cancelada");
-    const rodadas = await consultarUm<{ total: string }>(
-      "select count(*)::text as total from compras_rodadas where solicitacao_id = $1",
-      [ocorrencia!.solicitacao_id]
-    );
-    expect(rodadas?.total).toBe("0");
+    const ocorrencia = await ocorrenciaDa(id);
+    expect(ocorrencia.situacao).toBe("aguardando_conferencia");
+    const item = (await detalhar(ocorrencia.id)).itens.find((linha) => linha.produtoId === idsTeste.produto);
+    expect(item?.quantidadeSugerida).toBeNull();
   });
 
   it("cancela e move uma data (so esta), e o agendador respeita as duas", async () => {

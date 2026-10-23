@@ -120,7 +120,7 @@ describe("pedido rapido integration (E8 — fornecedor unico vira rodada)", () =
       "select status, tipo from pedidos where rodada_id = $1",
       [rodada.id]
     );
-    expect(pedido).toMatchObject({ status: "cotado", tipo: "rodada" });
+    expect(pedido).toMatchObject({ status: "confirmado", tipo: "rodada" });
   });
 
   it("fornecedor sem WhatsApp ou inativo e recusado ANTES de criar a solicitacao (nada fica para tras)", async () => {

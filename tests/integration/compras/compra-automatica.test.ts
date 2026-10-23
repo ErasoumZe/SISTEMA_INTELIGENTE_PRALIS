@@ -107,19 +107,19 @@ describe("compra automatica integration (E5)", () => {
     return dto.itens[0]!.conviteItemId;
   }
 
-  it("item com custo final <= base nasce comprado e cotado, com adjudicacao e custo gravado", async () => {
+  it("item com custo final <= base nasce Comprado (confirmado), com adjudicacao e custo gravado", async () => {
     const rodada = await abrir({ fornecedores: [FORN_A] });
     const token = rodada.convites[0]!.token;
     const item = await conviteItemId(token);
     const resp = await responder(token, { itens: [{ conviteItemId: item, indisponivel: false, valorUnitario: 8 }] });
     expect(resp.statusCode, resp.body).toBe(200);
 
-    // Doc 57 §5: o pedido do vencedor nasce cotado (ele separa e devolve; o comprador confirma).
+    // Doc 58 §6: o pedido do vencedor nasce Comprado (confirmado); o fornecedor so ajusta a quantidade, na margem.
     const pedido = await consultarUm<{ id: string; status: string }>(
       "select id, status from pedidos where rodada_id = $1 and fornecedor_id = $2",
       [rodada.id, FORN_A]
     );
-    expect(pedido?.status).toBe("cotado");
+    expect(pedido?.status).toBe("confirmado");
     // Adjudicacao automatica do item.
     const adj = await consultarUm<{ modo: string; custo_final_unitario: string }>(
       "select a.modo, a.custo_final_unitario from compras_adjudicacoes a join compras_rodadas_itens ri on ri.id = a.rodada_item_id where ri.rodada_id = $1",

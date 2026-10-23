@@ -2,16 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   agendamentoPayloadSchema,
   conferenciaAgendaPayloadSchema,
+  celulasZeradas,
+  contarSituacoes,
   limitesDaMargem,
-  montarMatrizCompras,
   quantidadeDentroDaMargem,
-  totaisDaMatriz,
-  type PainelComprasDto
+  situacaoDaOferta
 } from "@padaria/shared/compras";
-import type { PedidoStatus } from "@padaria/shared";
 
-// Fluxo de Compras de 22/10/2026 (PROJECT_BRAIN/57): margem de quantidade, matriz de Pedidos e os contratos
-// novos de agendamento e conferencia.
+// Fluxo de Compras (PROJECT_BRAIN/57 e 58): margem de quantidade, a Cotacao por fornecedor e os contratos de
+// agendamento e conferencia.
 
 describe("margem de variacao da quantidade (doc 57 §6.3)", () => {
   it("vale para menos e para mais, com 3 casas", () => {
@@ -40,75 +39,41 @@ describe("margem de variacao da quantidade (doc 57 §6.3)", () => {
   });
 });
 
-describe("matriz de Pedidos (doc 57 §4)", () => {
-  const vazio: PainelComprasDto = { semFornecedor: [], decisoes: [], convites: [] };
-  const pedido = (status: PedidoStatus, fornecedorId: string | null, fornecedorNome: string | null) => ({
-    status,
-    fornecedorId,
-    fornecedorNome
+describe("Cotacao por fornecedor (doc 58 §4)", () => {
+  const base = { compradoDeste: false, compradoDeOutro: false, enviada: null, rascunho: false, referencia: 10 };
+
+  it("sem resposta e Enviado; salvou sem enviar e Cotado", () => {
+    expect(situacaoDaOferta(base)).toBe("enviado");
+    expect(situacaoDaOferta({ ...base, rascunho: true })).toBe("cotado");
   });
 
-  it("conta cada pedido na coluna da sua situacao e deixa cancelado e historico de fora", () => {
-    const linhas = montarMatrizCompras(vazio, [
-      pedido("cotado", "f1", "Bahamas"),
-      pedido("cotado", "f1", "Bahamas"),
-      pedido("retornado", "f1", "Bahamas"),
-      pedido("confirmado", "f2", "Mercearia do Lu"),
-      pedido("recebido", "f2", "Mercearia do Lu"),
-      pedido("cancelado", "f2", "Mercearia do Lu"),
-      pedido("rascunho", "f3", "Antigo")
-    ]);
-    expect(linhas.map((linha) => linha.fornecedorNome)).toEqual(["Bahamas", "Mercearia do Lu"]);
-    expect(linhas[0]!.celulas).toMatchObject({ cotado: 2, retornado: 1, confirmado: 0 });
-    expect(linhas[1]!.celulas).toMatchObject({ confirmado: 1, recebido: 1 });
+  it("enviou dentro da referencia e Retornado; acima (ou sem referencia) e Com aumento", () => {
+    expect(situacaoDaOferta({ ...base, enviada: { indisponivel: false, custo: 10 } })).toBe("retornado");
+    expect(situacaoDaOferta({ ...base, enviada: { indisponivel: false, custo: 10.01 } })).toBe("com_aumento");
+    expect(situacaoDaOferta({ ...base, referencia: null, enviada: { indisponivel: false, custo: 3 } })).toBe(
+      "com_aumento"
+    );
   });
 
-  it("convite em aberto conta em Enviado; item sem fornecedor e decisao pendente em A fazer, linha primeiro", () => {
-    const painel: PainelComprasDto = {
-      semFornecedor: [
-        {
-          rodadaId: "r1",
-          rodadaNumero: 1,
-          rodadaItemId: "i1",
-          produtoId: "p1",
-          descricaoProduto: "Abacaxi",
-          quantidade: "10",
-          expiraEm: "2026-10-23T12:00:00.000Z"
-        }
-      ],
-      decisoes: [
-        {
-          solicitacaoId: "s1",
-          rodadaId: "r0",
-          rodadaNumero: 1,
-          observacao: null,
-          fechadaEm: "2026-10-21T12:00:00.000Z"
-        }
-      ],
-      convites: [
-        {
-          conviteId: "c1",
-          rodadaId: "r1",
-          solicitacaoId: "s1",
-          rodadaNumero: 1,
-          fornecedorId: "f1",
-          fornecedorNome: "Bahamas",
-          totalItens: 2,
-          respondeu: false,
-          expiraEm: "2026-10-23T12:00:00.000Z",
-          whatsapp: "enviado"
-        }
-      ]
-    };
-    const linhas = montarMatrizCompras(painel, [pedido("enviado", "f1", "Bahamas")]);
-    expect(linhas[0]).toMatchObject({ fornecedorId: null, fornecedorNome: "Sem fornecedor" });
-    expect(linhas[0]!.celulas.a_fazer).toBe(2);
-    expect(linhas[1]!.celulas.enviado).toBe(2);
-    expect(totaisDaMatriz(linhas)).toMatchObject({ a_fazer: 2, enviado: 2, cotado: 0 });
+  it("indisponivel ou produto ja comprado de outro volta como Retornado; o vencedor e Comprado", () => {
+    expect(situacaoDaOferta({ ...base, enviada: { indisponivel: true, custo: null } })).toBe("retornado");
+    expect(situacaoDaOferta({ ...base, compradoDeOutro: true, enviada: { indisponivel: false, custo: 99 } })).toBe(
+      "retornado"
+    );
+    expect(situacaoDaOferta({ ...base, compradoDeste: true, enviada: { indisponivel: false, custo: 99 } })).toBe(
+      "comprado"
+    );
   });
 
-  it("sem nada em andamento, a matriz fica vazia", () => {
-    expect(montarMatrizCompras(vazio, [pedido("cancelado", "f1", "Bahamas")])).toEqual([]);
+  it("Enviado conta todos os fornecedores; as outras colunas, onde cada um esta", () => {
+    expect(contarSituacoes(["enviado", "cotado", "com_aumento", "com_aumento", "comprado"])).toEqual({
+      enviado: 5,
+      cotado: 1,
+      retornado: 0,
+      com_aumento: 2,
+      comprado: 1
+    });
+    expect(contarSituacoes([])).toEqual(celulasZeradas());
   });
 });
 

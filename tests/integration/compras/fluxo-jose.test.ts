@@ -6,11 +6,10 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { cookieSessao } from "../../setup/auth.js";
 import { restaurarBaseImportada } from "../../setup/compras.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-// Fluxo de Compras de 22/10/2026 (PROJECT_BRAIN/57): os dois passos da cotacao (cotado -> retornado ->
-// comprado), a fila do WhatsApp, o "A fazer" sem fornecedor, o painel da matriz e o fornecedor marcando o que
-// vende.
+// Fluxo de Compras (PROJECT_BRAIN/57 e 58): comprado no aceite e o ajuste do fornecedor dentro da margem, a fila do
+// WhatsApp, a Cotacao por fornecedor (produto x situacao) e o fornecedor marcando o que vende.
 
 const FORN_A = "11111111-1111-4111-8111-11111111f701";
 const FORN_B = "11111111-1111-4111-8111-11111111f702";
@@ -22,7 +21,7 @@ const PRECO_BASE = "11111111-1111-4111-8111-11111111f706";
 type Convite = { id: string; fornecedorId: string; token: string };
 type RodadaAberta = { id: string; itens: Array<{ id: string; produtoId: string }>; convites: Convite[] };
 
-describe("fluxo de compras do doc 57 integration", () => {
+describe("fluxo de compras dos docs 57 e 58 integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
 
@@ -61,6 +60,14 @@ describe("fluxo de compras do doc 57 integration", () => {
       [idsTeste.empresaA]
     );
     await executarSql("delete from compras_whatsapp_envios where empresa_id = $1", [idsTeste.empresaA]);
+    await executarSql(
+      "delete from estoque_movimentos where pedido_item_id in (select i.id from pedidos_itens i join pedidos p on p.id = i.pedido_id where p.empresa_id = $1 and p.tipo = 'rodada')",
+      [idsTeste.empresaA]
+    );
+    await executarSql(
+      "delete from pedidos_recebimentos where pedido_id in (select id from pedidos where empresa_id = $1 and tipo = 'rodada')",
+      [idsTeste.empresaA]
+    );
     await executarSql("delete from pedidos where empresa_id = $1 and tipo = 'rodada'", [idsTeste.empresaA]);
     await executarSql("delete from notificacoes where tipo = 'compras_decisao_pendente'", []);
     await executarSql("delete from compras_propostas where empresa_id = $1", [idsTeste.empresaA]);
@@ -85,14 +92,15 @@ describe("fluxo de compras do doc 57 integration", () => {
   const publico = (method: "GET" | "POST", url: string, token: string, payload?: object) =>
     contexto.app.inject({ method, url, headers: { "x-rodada-token": token }, ...(payload ? { payload } : {}) });
 
-  /** Cotacao com os dois produtos; `convites` diz quais produtos cada fornecedor recebe. */
+  /**
+   * Cotacao com os produtos que os convites cobrem (doc 58 §2: todo produto sai com fornecedor); `convites` diz quais
+   * produtos cada fornecedor recebe. Quantidades: produto 5, abacaxi 3.
+   */
   async function abrir(convites: Array<{ fornecedorId: string; produtos: string[] }>): Promise<RodadaAberta> {
+    const produtos = [...new Set(convites.flatMap((convite) => convite.produtos))];
     const criar = await pedir("POST", "/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
-      itens: [
-        { produtoId: idsTeste.produto, quantidade: 5 },
-        { produtoId: PRODUTO_2, quantidade: 3 }
-      ]
+      itens: produtos.map((produtoId) => ({ produtoId, quantidade: produtoId === PRODUTO_2 ? 3 : 5 }))
     });
     const solicitacaoId = json<{ data: { id: string } }>(criar).data.id;
     const solicitacao = json<{ data: { itens: Array<{ id: string; produtoId: string }> } }>(
@@ -126,7 +134,7 @@ describe("fluxo de compras do doc 57 integration", () => {
     expect(resposta.statusCode, resposta.body).toBe(200);
   }
 
-  it("dois passos: vence cotado, separa dentro da margem (retornado), o comprador confirma e o ok vai para a fila", async () => {
+  it("comprado no aceite: o aviso vai para a fila e o fornecedor ajusta a quantidade na margem, sem nova aprovacao", async () => {
     const rodada = await abrir([{ fornecedorId: FORN_A, produtos: [idsTeste.produto] }]);
     const token = rodada.convites[0]!.token;
     const antes = json<{ data: { itens: Array<{ referencia: string | null }>; margemVariacaoPercentual: number } }>(
@@ -141,12 +149,18 @@ describe("fluxo de compras do doc 57 integration", () => {
       "select id, status from pedidos where rodada_id = $1",
       [rodada.id]
     );
-    expect(pedido?.status).toBe("cotado");
+    // Doc 58 §6: dentro da referencia, compra no aceite e o "pode entregar" vai para a fila do WhatsApp.
+    expect(pedido?.status).toBe("confirmado");
+    const aviso = await consultarUm<{ telefone: string; status: string }>(
+      "select telefone, status from compras_whatsapp_envios where pedido_id = $1 and tipo = 'pedido_confirmado'",
+      [pedido!.id]
+    );
+    expect(aviso).toEqual({ telefone: "5511999997701", status: "pendente" });
 
     const visto = json<{
       data: { pedido: { status: string; itens: Array<{ pedidoItemId: string; minimo: string; maximo: string }> } };
     }>(await publico("GET", "/api/rodada", token)).data;
-    expect(visto.pedido.status).toBe("cotado");
+    expect(visto.pedido.status).toBe("confirmado");
     expect(Number(visto.pedido.itens[0]?.minimo)).toBe(4.5);
     expect(Number(visto.pedido.itens[0]?.maximo)).toBe(5.5);
     const pedidoItemId = visto.pedido.itens[0]!.pedidoItemId;
@@ -155,38 +169,44 @@ describe("fluxo de compras do doc 57 integration", () => {
     expect(fora.statusCode).toBe(422);
     expect(json<{ code?: string }>(fora).code).toBe("QUANTIDADE_FORA_DA_MARGEM");
 
-    const separado = await publico("POST", "/api/rodada/separacao", token, {
+    const ajustado = await publico("POST", "/api/rodada/separacao", token, {
       itens: [{ pedidoItemId, quantidade: 5.2 }]
     });
-    expect(separado.statusCode, separado.body).toBe(200);
+    expect(ajustado.statusCode, ajustado.body).toBe(200);
     const depois = await consultarUm<{ status: string; quantidade: string; adjudicada: string }>(
       "select p.status, i.quantidade, a.quantidade as adjudicada from pedidos p join pedidos_itens i on i.pedido_id = p.id join compras_adjudicacoes a on a.pedido_item_id = i.id where p.id = $1",
       [pedido!.id]
     );
-    expect(depois?.status).toBe("retornado");
+    // Continua Comprado: o ajuste nao pede nova aprovacao, mas fica no historico e o comprador e avisado.
+    expect(depois).toMatchObject({ status: "confirmado" });
     expect(Number(depois?.quantidade)).toBe(5.2);
     expect(Number(depois?.adjudicada)).toBe(5.2);
-    // O comprador e avisado; devolver de novo nao vale.
+    await expect(
+      consultarUm("select id from pedidos_eventos where pedido_id = $1 and observacao like 'Fornecedor ajustou%'", [
+        pedido!.id
+      ])
+    ).resolves.toBeTruthy();
     await expect(
       consultarUm("select id from notificacoes where tipo = 'compras_decisao_pendente' and referencia_id = $1", [
         rodada.id
       ])
     ).resolves.toBeTruthy();
+    // Ate receber, pode ajustar de novo (dentro da faixa); confirmar na mao deixou de existir.
     const deNovo = await publico("POST", "/api/rodada/separacao", token, { itens: [{ pedidoItemId, quantidade: 5 }] });
-    expect(deNovo.statusCode).toBe(409);
-
-    const confirmar = await pedir("POST", `/api/pedidos/${pedido!.id}/confirmar`, { empresaId: idsTeste.empresaA });
-    expect(confirmar.statusCode, confirmar.body).toBe(204);
-    const confirmado = await consultarUm<{ status: string }>("select status from pedidos where id = $1", [pedido!.id]);
-    expect(confirmado?.status).toBe("confirmado");
-    const aviso = await consultarUm<{ telefone: string; status: string }>(
-      "select telefone, status from compras_whatsapp_envios where pedido_id = $1 and tipo = 'pedido_confirmado'",
-      [pedido!.id]
-    );
-    expect(aviso).toEqual({ telefone: "5511999997701", status: "pendente" });
+    expect(deNovo.statusCode, deNovo.body).toBe(200);
     expect(
       (await pedir("POST", `/api/pedidos/${pedido!.id}/confirmar`, { empresaId: idsTeste.empresaA })).statusCode
-    ).toBe(409);
+    ).toBe(404);
+
+    // Depois que comecou a ser recebido, o fornecedor nao ajusta mais.
+    const recebido = await pedir("POST", `/api/pedidos/${pedido!.id}/recebimentos`, {
+      idempotenciaChave: crypto.randomUUID(),
+      itens: [{ pedidoItemId, quantidadeConferida: 2 }]
+    });
+    expect(recebido.statusCode, recebido.body).toBe(200);
+    const tarde = await publico("POST", "/api/rodada/separacao", token, { itens: [{ pedidoItemId, quantidade: 5 }] });
+    expect(tarde.statusCode).toBe(409);
+    expect(json<{ code?: string }>(tarde).code).toBe("PEDIDO_NAO_AJUSTAVEL");
   });
 
   it("quantidade disponivel fora da margem nao compra sozinha", async () => {
@@ -233,57 +253,124 @@ describe("fluxo de compras do doc 57 integration", () => {
     }
   });
 
-  it("item sem fornecedor: aparece no painel, o comprador convida, o catalogo aprende e o convite vai para a fila", async () => {
-    const rodada = await abrir([{ fornecedorId: FORN_A, produtos: [idsTeste.produto] }]);
-    const painel = async () =>
-      json<{
-        data: {
-          semFornecedor: Array<{ rodadaId: string; rodadaItemId: string; produtoId: string }>;
-          convites: Array<{ conviteId: string; rodadaId: string; fornecedorId: string; totalItens: number }>;
-        };
-      }>(await pedir("GET", `/api/compras/painel?empresaId=${idsTeste.empresaA}`)).data;
-
-    const antes = await painel();
-    const aFazer = antes.semFornecedor.find((item) => item.rodadaId === rodada.id);
-    expect(aFazer?.produtoId).toBe(PRODUTO_2);
-    expect(antes.convites.some((convite) => convite.rodadaId === rodada.id && convite.fornecedorId === FORN_A)).toBe(
-      true
+  it("Cotacao por fornecedor: cada produto conta os fornecedores por situacao e o detalhe mostra as ofertas", async () => {
+    // A matriz soma todas as cotacoes em andamento da empresa: as dos outros casos saem de cena.
+    await executarSql(
+      "update compras_rodadas set status = 'cancelada', fechada_em = now(), motivo_fechamento = 'cancelada' where empresa_id = $1 and status = 'aberta'",
+      [idsTeste.empresaA]
     );
+    await executarSql(
+      "update compras_solicitacoes set status = 'encerrada' where empresa_id = $1 and status = 'parcialmente_comprada'",
+      [idsTeste.empresaA]
+    );
+    const rodada = await abrir([
+      { fornecedorId: FORN_A, produtos: [idsTeste.produto, PRODUTO_2] },
+      { fornecedorId: FORN_B, produtos: [idsTeste.produto] }
+    ]);
+    const tokenA = rodada.convites.find((convite) => convite.fornecedorId === FORN_A)!.token;
+    const tokenB = rodada.convites.find((convite) => convite.fornecedorId === FORN_B)!.token;
+    type Linha = { produtoId: string; referencia: string | null; celulas: Record<string, number> };
+    const linha = async (produtoId: string) =>
+      json<{ data: { produtos: Linha[] } }>(
+        await pedir("GET", `/api/compras/painel?empresaId=${idsTeste.empresaA}`)
+      ).data.produtos.find((produto) => produto.produtoId === produtoId)!;
 
+    expect((await linha(idsTeste.produto)).celulas).toEqual({
+      enviado: 2,
+      cotado: 0,
+      retornado: 0,
+      com_aumento: 0,
+      comprado: 0
+    });
+
+    // A salva sem enviar: Cotado. Nada e comprado com rascunho.
+    const dtoA = json<{ data: { itens: Array<{ conviteItemId: string; descricaoProduto: string }> } }>(
+      await publico("GET", "/api/rodada", tokenA)
+    ).data;
+    const rascunho = await publico("POST", "/api/rodada/rascunho", tokenA, {
+      itens: dtoA.itens.map((item) => ({ conviteItemId: item.conviteItemId, indisponivel: false, valorUnitario: 7 }))
+    });
+    expect(rascunho.statusCode, rascunho.body).toBe(200);
+    expect((await linha(idsTeste.produto)).celulas).toMatchObject({ enviado: 2, cotado: 1 });
+    await expect(consultarUm("select id from pedidos where rodada_id = $1", [rodada.id])).resolves.toBeNull();
+
+    // B envia acima da referencia (10): Com aumento.
+    await responder(tokenB, { "Produto Integracao": 12 });
+    expect((await linha(idsTeste.produto)).celulas).toMatchObject({ cotado: 1, com_aumento: 1 });
+
+    // A envia dentro da referencia: compra sozinha. A vira Comprado; B (que perdeu) volta como Retornado.
+    await responder(tokenA, { "Produto Integracao": 8, "Abacaxi do fluxo": 4 });
+    expect((await linha(idsTeste.produto)).celulas).toEqual({
+      enviado: 2,
+      cotado: 0,
+      retornado: 1,
+      com_aumento: 0,
+      comprado: 1
+    });
+    // O abacaxi nao tem referencia: toda oferta pede decisao do comprador.
+    const abacaxi = await linha(PRODUTO_2);
+    expect(abacaxi.referencia).toBeNull();
+    expect(abacaxi.celulas).toMatchObject({ enviado: 1, com_aumento: 1 });
+
+    const detalhe = json<{
+      data: { ofertas: Array<{ fornecedorId: string; situacao: string; custoFinalUnitario: string | null }> };
+    }>(await pedir("GET", `/api/compras/painel/produtos/${idsTeste.produto}?empresaId=${idsTeste.empresaA}`)).data;
+    expect(
+      detalhe.ofertas.map((oferta) => [oferta.fornecedorId, oferta.situacao]).sort((a, b) => a[0]!.localeCompare(b[0]!))
+    ).toEqual(
+      [
+        [FORN_A, "comprado"],
+        [FORN_B, "retornado"]
+      ].sort((a, b) => a[0]!.localeCompare(b[0]!))
+    );
+    expect(Number(detalhe.ofertas.find((oferta) => oferta.fornecedorId === FORN_B)?.custoFinalUnitario)).toBe(12);
+
+    // Produto fora de cotacao nao tem detalhe; outra empresa nao ve nada.
+    const fora = await pedir(
+      "GET",
+      `/api/compras/painel/produtos/11111111-1111-4111-8111-11111111dead?empresaId=${idsTeste.empresaA}`
+    );
+    expect(fora.statusCode).toBe(404);
+    const outra = await pedir("GET", `/api/compras/painel/produtos/${idsTeste.produto}?empresaId=${idsTeste.empresaB}`);
+    expect(outra.statusCode).toBe(403);
+    // O convite avulso do "A fazer" saiu: quem escolhe fornecedor e o responsavel, na Solicitacao de compra.
     const convidar = await pedir("POST", `/api/compras/rodadas/${rodada.id}/convidar`, {
       empresaId: idsTeste.empresaA,
       fornecedorId: FORN_B,
-      rodadaItemIds: [aFazer!.rodadaItemId]
+      rodadaItemIds: [rodada.itens[0]!.id]
     });
-    expect(convidar.statusCode, convidar.body).toBe(201);
-    const { conviteId } = json<{ data: { conviteId: string } }>(convidar).data;
-    expect((await painel()).semFornecedor.some((item) => item.rodadaId === rodada.id)).toBe(false);
-    const vinculo = await consultarUm<{ status: string; origem: string }>(
-      "select status, origem from fornecedores_produtos where fornecedor_id = $1 and produto_id = $2",
-      [FORN_B, PRODUTO_2]
-    );
-    expect(vinculo).toEqual({ status: "aprovado", origem: "compras" });
-    await expect(
-      consultarUm("select id from compras_whatsapp_envios where convite_id = $1 and status = 'pendente'", [conviteId])
-    ).resolves.toBeTruthy();
+    expect(convidar.statusCode).toBe(404);
+  });
 
-    // Convidar quem ja tem convite aberto acrescenta o item no mesmo convite.
-    const conviteA = rodada.convites[0]!.id;
-    const acrescentar = await pedir("POST", `/api/compras/rodadas/${rodada.id}/convidar`, {
+  it("abrir cotacao com produto sem fornecedor e recusado (doc 58 §2)", async () => {
+    const criar = await pedir("POST", "/api/compras/solicitacoes", {
       empresaId: idsTeste.empresaA,
-      fornecedorId: FORN_A,
-      rodadaItemIds: [aFazer!.rodadaItemId]
+      itens: [
+        { produtoId: idsTeste.produto, quantidade: 5 },
+        { produtoId: PRODUTO_2, quantidade: 3 }
+      ]
     });
-    expect(json<{ data: { conviteId: string } }>(acrescentar).data.conviteId).toBe(conviteA);
-    const itensA = await consultarTodos("select id from compras_convites_itens where convite_id = $1", [conviteA]);
-    expect(itensA).toHaveLength(2);
-
-    const intruso = await pedir("POST", `/api/compras/rodadas/${rodada.id}/convidar`, {
-      empresaId: idsTeste.empresaB,
-      fornecedorId: FORN_B,
-      rodadaItemIds: [aFazer!.rodadaItemId]
+    const solicitacaoId = json<{ data: { id: string } }>(criar).data.id;
+    const solicitacao = json<{ data: { itens: Array<{ id: string; produtoId: string }> } }>(
+      await pedir("GET", `/api/compras/solicitacoes/${solicitacaoId}`)
+    ).data;
+    const resposta = await pedir("POST", "/api/compras/rodadas", {
+      empresaId: idsTeste.empresaA,
+      solicitacaoId,
+      convites: [
+        {
+          fornecedorId: FORN_A,
+          solicitacaoItemIds: solicitacao.itens
+            .filter((item) => item.produtoId === idsTeste.produto)
+            .map((item) => item.id)
+        }
+      ]
     });
-    expect(intruso.statusCode).toBe(403);
+    expect(resposta.statusCode).toBe(422);
+    expect(json<{ code?: string; details?: string[] }>(resposta)).toMatchObject({
+      code: "PRODUCT_WITHOUT_SUPPLIER",
+      details: [PRODUTO_2]
+    });
   });
 
   it("o fornecedor marca o que tambem vende e passa a ser fornecedor aprovado daquele produto", async () => {

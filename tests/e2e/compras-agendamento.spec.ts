@@ -88,6 +88,13 @@ test.describe("agendamento de pedido", () => {
     const margem = card.getByRole("radiogroup", { name: "Variação aceita na quantidade" });
     await margem.getByRole("radio", { name: "20%" }).click();
     await expect(margem.getByRole("radio", { name: "20%" })).toHaveAttribute("aria-checked", "true");
+    // Doc 58 §1 e §8: quem executa o pedido na data e o horario em que a loja recebe.
+    await card.getByRole("button", { name: "Salvar" }).click();
+    await expect(card).toContainText("Escolha o responsável por executar o pedido.");
+    await escolherNoSelect(page, card, "Responsável por executar *");
+    const horario = card.locator('[data-campo="horario-recebimento"]');
+    await horario.getByLabel("Das").fill("07:00");
+    await horario.getByLabel("Até").fill("11:00");
 
     // 3) Salva: aparece na lista com o resumo e as proximas 6 datas. O agendamento novo e o id que nao
     // existia antes (o banco de desenvolvimento guarda os de execucoes anteriores).

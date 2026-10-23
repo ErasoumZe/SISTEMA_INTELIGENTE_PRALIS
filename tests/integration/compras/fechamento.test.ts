@@ -193,11 +193,11 @@ describe("fechamento da rodada por prazo integration (E6)", () => {
     expect(solicitacao?.status).toBe("parcialmente_comprada");
     expect(solicitacao?.encerrada_em).toBeNull();
 
-    // O comprado permanece comprado: o pedido segue cotado (doc 57 §5: o fornecedor separa e devolve).
+    // O comprado permanece comprado: o pedido segue Comprado (doc 58 §6).
     const pedido = await consultarUm<{ status: string }>("select status from pedidos where rodada_id = $1", [
       rodada.id
     ]);
-    expect(pedido?.status).toBe("cotado");
+    expect(pedido?.status).toBe("confirmado");
 
     // Doc 57 §5: a base vigente agora e a menor oferta (8), e a anterior (10) ficou no historico.
     const vigente = await consultarUm<{ valor: string; origem: string; rodada_id: string | null }>(

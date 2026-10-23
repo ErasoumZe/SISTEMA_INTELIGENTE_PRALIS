@@ -99,6 +99,7 @@ describe("aprovarExcecaoPayloadSchema", () => {
       false
     );
     const lido = aprovarExcecaoPayloadSchema.parse({ empresaId: uuid, propostaItemId: uuid, aprovadoPor: "outra" });
-    expect(lido).toEqual({ empresaId: uuid, propostaItemId: uuid });
+    // Doc 58 §4: reajustar a referencia e escolha explicita; sem ela, aceitar nao mexe na referencia.
+    expect(lido).toEqual({ empresaId: uuid, propostaItemId: uuid, reajustarReferencia: false });
   });
 });
