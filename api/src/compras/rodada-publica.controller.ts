@@ -7,7 +7,8 @@ import {
   marcarProdutosQueVende,
   obterRodadaPublica,
   produtosParaFornecedor,
-  responderRodadaPublica
+  responderRodadaPublica,
+  salvarRascunhoPublico
 } from "./rodada-publica.service.js";
 import { itensCompradosDoConvite, processarCompraAutomatica } from "./compras-adjudicacao.service.js";
 import { pedidoPublicoDoConvite, registrarSeparacao } from "./compras-separacao.service.js";
@@ -57,6 +58,13 @@ export async function registrarRotasRodadaPublica(app: FastifyInstance): Promise
     const convite = await autenticarConvitePorToken(tokenDaRodada(request));
     await registrarSeparacao(convite.conviteId, request.body ?? {});
     return ok({ status: "retornado" });
+  });
+
+  // Doc 58 §4 — o fornecedor salva sem enviar (o produto fica "Cotado" para o comprador).
+  app.post("/api/rodada/rascunho", TETO_RODADA, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    await salvarRascunhoPublico(tokenDaRodada(request), request.body ?? {});
+    return ok({ salvo: true });
   });
 
   // Doc 57 §5.1 — a lista do que a padaria compra; o fornecedor marca o que tambem vende.

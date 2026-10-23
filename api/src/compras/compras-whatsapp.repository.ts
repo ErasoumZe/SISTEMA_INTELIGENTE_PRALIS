@@ -131,6 +131,17 @@ export async function dadosDoPedidoParaEnvioRepository(pedidoId: string, tx: Tra
   return { ...linha, itens };
 }
 
+/** O WhatsApp do fornecedor do pedido (para avisar que a compra foi feita). */
+export async function whatsappDoFornecedorDoPedidoRepository(pedidoId: string, tx: TransacaoBanco) {
+  const [linha] = await tx
+    .select({ empresaId: pedidos.empresaId, whatsapp: fornecedores.whatsapp })
+    .from(pedidos)
+    .innerJoin(fornecedores, eq(fornecedores.id, pedidos.fornecedorId))
+    .where(eq(pedidos.id, pedidoId))
+    .limit(1);
+  return linha ?? null;
+}
+
 /** Situacao do ultimo envio de cada convite (para a tela mostrar "enviado", "pendente" ou "falhou"). */
 export async function ultimoEnvioDosConvitesRepository(conviteIds: string[], db: ExecutorBanco = banco) {
   if (!conviteIds.length) return new Map<string, { status: string; ultimoErro: string | null }>();

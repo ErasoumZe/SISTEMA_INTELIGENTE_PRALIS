@@ -31,6 +31,9 @@ const {
   requisitar,
   carregar,
   aceitar,
+  salvando,
+  salvoEm,
+  salvarRascunho,
   enviar
 } = useRodadaFornecedor();
 const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !enviado.value);
@@ -47,6 +50,10 @@ const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !env
         </p>
         <p v-if="aberta" class="rodada__prazo">
           <v-icon icon="mdi-clock-outline" size="16" /> Responda até <strong>{{ prazo }}</strong>
+        </p>
+        <p v-if="rodada?.recebimentoInicio" class="rodada__para" data-campo="horario-recebimento">
+          <v-icon icon="mdi-truck-delivery-outline" size="16" /> Recebemos pedidos das
+          <strong>{{ rodada.recebimentoInicio }}</strong> às <strong>{{ rodada.recebimentoFim }}</strong>
         </p>
       </header>
 
@@ -114,7 +121,7 @@ const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !env
               <v-text-field
                 v-model="prazoEntrega"
                 type="date"
-                label="Prazo de entrega"
+                label="Data de entrega"
                 density="comfortable"
                 hide-details="auto"
               />
@@ -158,7 +165,11 @@ const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !env
           <strong>{{ totalFormatado }}</strong>
           <small v-if="pendencias">{{ pendencias }} produto(s) sem valor</small>
         </div>
-        <v-btn color="primary" variant="flat" size="large" :loading="enviando" @click="enviar">Enviar resposta</v-btn>
+        <div class="rodada__barra-acoes">
+          <span v-if="salvoEm" class="text-caption text-medium-emphasis">Salvo às {{ salvoEm }}</span>
+          <v-btn variant="tonal" size="large" :loading="salvando" @click="salvarRascunho">Salvar sem enviar</v-btn>
+          <v-btn color="primary" variant="flat" size="large" :loading="enviando" @click="enviar">Enviar resposta</v-btn>
+        </div>
       </div>
     </footer>
   </v-main>
@@ -275,6 +286,13 @@ const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !env
   max-width: 760px;
   margin: 0 auto;
   padding: var(--cx-sp-3, 12px) var(--cx-sp-4, 16px);
+}
+.rodada__barra-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cx-sp-2, 8px);
 }
 .rodada__barra-total {
   display: grid;

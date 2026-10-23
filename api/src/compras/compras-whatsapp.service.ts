@@ -2,15 +2,22 @@ import { randomBytes } from "node:crypto";
 import type { DadosExternos } from "@padaria/shared/api";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { env } from "../env.js";
-import { enviarWhatsapp, provedorConfigurado, type MensagemWhatsapp } from "../whatsapp/whatsapp-provedor.js";
+import {
+  enviarWhatsapp,
+  provedorConfigurado,
+  telefoneParaWhatsapp,
+  type MensagemWhatsapp
+} from "../whatsapp/whatsapp-provedor.js";
 import { resumoDosItens } from "../whatsapp/texto-whatsapp.js";
 import { hashTokenRodada } from "./compras-rodadas.service.js";
 import {
   dadosDoConviteParaEnvioRepository,
   dadosDoPedidoParaEnvioRepository,
+  enfileirarEnviosRepository,
   proximosEnviosRepository,
   registrarResultadoEnvioRepository,
-  trocarTokenDoConviteRepository
+  trocarTokenDoConviteRepository,
+  whatsappDoFornecedorDoPedidoRepository
 } from "./compras-whatsapp.repository.js";
 
 // Doc 57 §3: o sistema manda pelo WhatsApp a cotacao (link do convite) e o "pode entregar" (pedido
@@ -66,12 +73,32 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
       parametros: [dados.fornecedorNome, dados.empresaNome, resumo],
       texto: [
         `Olá, ${dados.fornecedorNome}!`,
-        `A ${dados.empresaNome} confirmou o seu pedido. Pode entregar.`,
+        `A ${dados.empresaNome} comprou estes produtos de você. Pode separar e entregar.`,
         resumo
       ].join("\n\n")
     };
   }
   return null;
+}
+
+/**
+ * Doc 58 §6: a compra foi feita (automatica ou aceita pelo comprador). O fornecedor recebe pelo WhatsApp o que
+ * ganhou e pode separar e entregar. Sem WhatsApp no cadastro, nada entra na fila.
+ */
+export async function enfileirarAvisoDeCompra(pedidoId: string, tx: Transacao): Promise<void> {
+  const dados = await whatsappDoFornecedorDoPedidoRepository(pedidoId, tx);
+  if (!dados?.whatsapp) return;
+  await enfileirarEnviosRepository(
+    [
+      {
+        empresaId: dados.empresaId,
+        tipo: "pedido_confirmado",
+        pedidoId,
+        telefone: telefoneParaWhatsapp(dados.whatsapp)
+      }
+    ],
+    tx
+  );
 }
 
 /** Uma transacao por mensagem: uma falha nao segura as outras. Devolve quantas sairam. */

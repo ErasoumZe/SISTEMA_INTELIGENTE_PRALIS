@@ -15,19 +15,15 @@ defineProps<{
   podeReceber: boolean;
   transicionando: boolean;
 }>();
-// Doc 57 §5: o pedido da rodada nasce cotado; o comprador confirma (Comprado) depois que o fornecedor
-// devolve a quantidade real (retornado), ou ja no cotado. Cancelar continua manual.
+// Doc 58 §6: o pedido da cotacao nasce Comprado; o fornecedor pode ajustar a quantidade ao estoque dele (aparece no
+// historico). Daqui se recebe ou se cancela.
 const emit = defineEmits<{
   situacao: [status: "cancelado"];
-  confirmar: [];
   receber: [];
 }>();
-const podeConfirmar = (pedido: PedidoDto) =>
-  !pedidoEhLegado(pedido.tipo) && (pedido.status === "cotado" || pedido.status === "retornado");
 
 const etapasLegado: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
-const etapasRodada: PedidoStatus[] = ["cotado", "retornado", "confirmado", "recebido_parcial", "recebido"];
-// O pedido da rodada nasce cotado (doc 57 §4): o fornecedor separa, devolve e o comprador confirma.
+const etapasRodada: PedidoStatus[] = ["confirmado", "recebido_parcial", "recebido"];
 const etapasDe = (pedido: PedidoDto) => (pedidoEhLegado(pedido.tipo) ? etapasLegado : etapasRodada);
 function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
   if (pedido.status === "cancelado" || pedido.status === "rascunho" || pedido.status === "aprovado")
@@ -63,23 +59,6 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
         >
           Pedido do fluxo antigo: não é mais editado, enviado nem confirmado. Só pode ser cancelado. Para comprar de
           novo, use o Pedido rápido.
-        </v-alert>
-        <v-alert
-          v-else-if="!pedidoEhLegado(pedido.tipo) && pedido.status === 'cotado'"
-          type="info"
-          variant="tonal"
-          density="compact"
-        >
-          O fornecedor ganhou e está separando. Quando ele devolver a quantidade real, o pedido fica “Retornado” para
-          você confirmar.
-        </v-alert>
-        <v-alert
-          v-else-if="!pedidoEhLegado(pedido.tipo) && pedido.status === 'retornado'"
-          type="warning"
-          variant="tonal"
-          density="compact"
-        >
-          O fornecedor devolveu as quantidades reais. Confira e confirme: ele recebe o “pode entregar” pelo WhatsApp.
         </v-alert>
         <div v-if="pedido.status !== 'rascunho' && pedido.status !== 'aprovado'" class="pedido-detalhe__etapas">
           <v-chip
@@ -142,16 +121,6 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
         </v-list>
       </v-card-text>
       <v-card-actions class="pedido-detalhe__acoes flex-wrap">
-        <v-btn
-          v-if="podeEditar && podeConfirmar(pedido)"
-          color="primary"
-          variant="flat"
-          prepend-icon="mdi-check-decagram"
-          :loading="transicionando"
-          data-acao="confirmar-pedido"
-          @click="emit('confirmar')"
-          >Confirmar compra</v-btn
-        >
         <v-btn
           v-if="podeReceber && ['confirmado', 'recebido_parcial'].includes(pedido.status)"
           color="success"

@@ -46,7 +46,6 @@ const {
   carregarDados,
   notificar,
   verPedido,
-  confirmarPedido,
   abrirRecebimento,
   mudarSituacao,
   confirmarRecebimento
@@ -171,7 +170,6 @@ function novoPedidoRapido(itens: Array<{ produtoId: string; quantidade: string }
       :pode-receber="podeReceber"
       :transicionando="transicionando"
       @situacao="mudarSituacao"
-      @confirmar="confirmarPedido"
       @receber="abrirRecebimento"
     />
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>

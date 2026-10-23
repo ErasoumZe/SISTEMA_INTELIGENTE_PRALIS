@@ -114,21 +114,6 @@ export function usePedidos() {
       transicionando.value = false;
     }
   }
-  /** Doc 57 §5: Comprado. O fornecedor recebe o "pode entregar" pelo WhatsApp. */
-  async function confirmarPedido() {
-    if (!detalhe.value) return;
-    transicionando.value = true;
-    try {
-      await apiPost(`/api/pedidos/${detalhe.value.id}/confirmar`, { empresaId: empresaId.value });
-      notificar("Compra confirmada. O fornecedor recebe o aviso pelo WhatsApp.");
-      await carregarDados();
-      await verPedido(detalhe.value.id);
-    } catch (causa) {
-      notificar(mensagemErro(causa), "error");
-    } finally {
-      transicionando.value = false;
-    }
-  }
   function chaveIdempotencia() {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/gu, (caractere) => {
@@ -214,7 +199,6 @@ export function usePedidos() {
     carregarDados,
     notificar,
     verPedido,
-    confirmarPedido,
     abrirRecebimento,
     mudarSituacao,
     confirmarRecebimento

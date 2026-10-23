@@ -1,4 +1,3 @@
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import {
   limitesDaMargem,
   quantidadeDentroDaMargem,
@@ -6,28 +5,26 @@ import {
   type PedidoPublicoDto
 } from "@padaria/shared/compras";
 import type { DadosExternos } from "@padaria/shared/api";
-import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { conflito, erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
+import { conflito, erroValidacao, naoEncontrado, naoProcessavel } from "../erros.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
-import { telefoneParaWhatsapp } from "../whatsapp/whatsapp-provedor.js";
-import { enfileirarEnviosRepository } from "./compras-whatsapp.repository.js";
+import { formatarQuantidade } from "./texto-quantidade.js";
 import {
   ajustarQuantidadesRepository,
   itensDoPedidoDaRodadaRepository,
-  mudarStatusPedidoRepository,
   pedidoDoConviteRepository,
+  registrarEventoDoPedidoRepository,
   travarPedidoRepository,
   ultimaPropostaIdDoConviteRepository
 } from "./compras-separacao.repository.js";
 
-// Doc 57 §5 — passo 2. Cotado (o item e dele) -> o fornecedor separa e ajusta a quantidade real dentro da
-// margem -> Retornado -> o comprador confirma -> Comprado (confirmado), e o fornecedor recebe o ok pelo
-// WhatsApp. O recebimento confere exatamente o que foi confirmado.
+// Doc 58 §6 (Rodrigo, 23/10): o preco aceito compra na hora (Comprado). Depois disso o FORNECEDOR ajusta a
+// quantidade ao que tem em estoque (pediu 5 kg, separou 5,2 kg), pelo mesmo link, dentro da margem, sem nova
+// aprovacao; o comprador ve o ajuste no pedido. Vale enquanto nada foi recebido.
 
 const STATUS_PUBLICOS = new Set(["cotado", "retornado", "confirmado", "recebido_parcial", "recebido"]);
 
-/** O que o fornecedor ganhou nesta rodada, para a pagina publica. Injetado pelo controller publico. */
+/** O que o fornecedor ganhou nesta cotacao, para a pagina publica. Injetado pelo controller publico. */
 export async function pedidoPublicoDoConvite(conviteId: string): Promise<PedidoPublicoDto | null> {
   const pedido = await pedidoDoConviteRepository(conviteId);
   if (!pedido || !STATUS_PUBLICOS.has(pedido.status)) return null;
@@ -53,19 +50,20 @@ export async function pedidoPublicoDoConvite(conviteId: string): Promise<PedidoP
   };
 }
 
-/** O fornecedor devolve a separacao com a quantidade real de cada item (dentro da margem). */
+/** O fornecedor ajusta a quantidade de cada item comprado ao que tem em estoque (dentro da margem). */
 export async function registrarSeparacao(conviteId: string, body: DadosExternos): Promise<void> {
   const payload = separacaoPublicaPayloadSchema.parse(body ?? {});
   const pedido = await pedidoDoConviteRepository(conviteId);
   if (!pedido) throw naoEncontrado("Nenhum pedido seu nesta cotacao", "PEDIDO_NAO_ENCONTRADO");
   await executarEmTransacao(async (tx) => {
     const travado = await travarPedidoRepository(pedido.pedidoId, tx);
-    if (!travado || travado.status !== "cotado")
-      throw conflito("Este pedido ja foi devolvido ou confirmado", "PEDIDO_NAO_COTADO");
+    if (!travado || travado.status !== "confirmado")
+      throw conflito("Este pedido ja comecou a ser recebido ou foi cancelado", "PEDIDO_NAO_AJUSTAVEL");
     const itens = await itensDoPedidoDaRodadaRepository(pedido.pedidoId, tx);
     const porId = new Map(itens.map((item) => [item.pedidoItemId, item]));
     if (new Set(payload.itens.map((item) => item.pedidoItemId)).size !== payload.itens.length)
       throw erroValidacao("Item repetido", "ITEM_DUPLICADO");
+    const mudancas: string[] = [];
     const ajustes = payload.itens.map((informado) => {
       const item = porId.get(informado.pedidoItemId);
       if (!item) throw erroValidacao("Item nao e deste pedido", "ITEM_FORA_DO_PEDIDO");
@@ -78,15 +76,20 @@ export async function registrarSeparacao(conviteId: string, body: DadosExternos)
           "QUANTIDADE_FORA_DA_MARGEM"
         );
       }
+      if (Number(item.quantidade) !== informado.quantidade)
+        mudancas.push(
+          `${item.descricaoProduto}: ${formatarQuantidade(item.quantidade)} → ${formatarQuantidade(informado.quantidade)}`
+        );
       return { pedidoItemId: item.pedidoItemId, adjudicacaoId: item.adjudicacaoId, quantidade: informado.quantidade };
     });
+    if (!mudancas.length) return;
     await ajustarQuantidadesRepository(ajustes, tx);
-    await mudarStatusPedidoRepository(
+    await registrarEventoDoPedidoRepository(
       {
         pedidoId: pedido.pedidoId,
         empresaId: pedido.empresaId,
-        status: "retornado",
-        observacao: "Fornecedor separou e devolveu as quantidades reais",
+        status: "confirmado",
+        observacao: `Fornecedor ajustou ao estoque dele: ${mudancas.join("; ")}`,
         usuarioId: null,
         propostaId: await ultimaPropostaIdDoConviteRepository(conviteId, tx)
       },
@@ -98,44 +101,10 @@ export async function registrarSeparacao(conviteId: string, body: DadosExternos)
         tipo: "compras_decisao_pendente",
         destinatariosUsuarioIds: [pedido.abertaPor],
         referenciaId: pedido.rodadaId,
-        titulo: "Fornecedor devolveu o pedido separado: confira e confirme",
+        titulo: "Fornecedor ajustou a quantidade de um pedido comprado",
         reabrir: true
       },
       tx
     );
-  });
-}
-
-/** O comprador confirma (Comprado). O fornecedor recebe o "pode entregar" pelo WhatsApp. */
-export async function confirmarPedido(pedidoId: string, empresaId: string, perfil: PerfilUsuario): Promise<void> {
-  if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
-  await executarEmTransacao(async (tx) => {
-    const pedido = await travarPedidoRepository(pedidoId, tx);
-    if (!pedido || pedido.empresaId !== empresaId) throw naoEncontrado("Pedido nao encontrado");
-    if (pedido.tipo !== "rodada" || (pedido.status !== "cotado" && pedido.status !== "retornado"))
-      throw conflito("So se confirma pedido cotado ou retornado", "PEDIDO_NAO_CONFIRMAVEL");
-    await mudarStatusPedidoRepository(
-      {
-        pedidoId,
-        empresaId,
-        status: "confirmado",
-        observacao: "Pedido confirmado pelo comprador",
-        usuarioId: perfil.usuarioId,
-        propostaId: null
-      },
-      tx
-    );
-    if (pedido.fornecedorWhatsapp)
-      await enfileirarEnviosRepository(
-        [
-          {
-            empresaId,
-            tipo: "pedido_confirmado",
-            pedidoId,
-            telefone: telefoneParaWhatsapp(pedido.fornecedorWhatsapp)
-          }
-        ],
-        tx
-      );
   });
 }

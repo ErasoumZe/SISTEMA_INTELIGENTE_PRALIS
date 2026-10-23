@@ -127,6 +127,3 @@ export type RodadaDto = {
   // Falso: o WhatsApp da empresa ainda nao esta conectado; o link tem de ser mandado a mao.
   whatsappConectado: boolean;
 };
-
-/** Doc 57 §5: o comprador confirma o pedido cotado ou retornado (Comprado). */
-export const confirmarPedidoPayloadSchema = z.object({ empresaId: uuid });

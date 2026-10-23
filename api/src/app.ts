@@ -102,7 +102,9 @@ const rotasComAutenticacaoPropria = new Set([
   // Doc 57: o passo 2 (separacao com a quantidade real) e a lista do que a padaria compra, onde o
   // fornecedor marca o que tambem vende. GET e POST de /produtos dividem a entrada.
   "/api/rodada/separacao",
-  "/api/rodada/produtos"
+  "/api/rodada/produtos",
+  // Doc 58 §4: o fornecedor salva sem enviar (Cotado).
+  "/api/rodada/rascunho"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {

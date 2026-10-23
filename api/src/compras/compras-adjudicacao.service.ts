@@ -12,14 +12,15 @@ import {
   carregarPropostaParaAdjudicacaoRepository,
   conviteItensCompradosRepository,
   marcarConviteAguardandoCompradorRepository,
-  criarPedidoCotadoRepository,
+  criarPedidoCompradoRepository,
   gravarCustoPropostaItemRepository,
   inserirAdjudicacaoRepository,
   inserirItemPedidoRepository,
-  pedidoCotadoDaRodadaRepository,
+  pedidoAbertoDaRodadaRepository,
   rodadaItensAdjudicadosRepository,
   somaAutomaticaDaRodadaRepository
 } from "./compras-adjudicacao.repository.js";
+import { enfileirarAvisoDeCompra } from "./compras-whatsapp.service.js";
 
 export type ResultadoCompraAutomatica = { comprados: number; pendentes: number };
 
@@ -105,8 +106,8 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
       }
       if (!pedidoId) {
         pedidoId =
-          (await pedidoCotadoDaRodadaRepository(proposta.rodadaId, proposta.fornecedorId, tx)) ??
-          (await criarPedidoCotadoRepository(
+          (await pedidoAbertoDaRodadaRepository(proposta.rodadaId, proposta.fornecedorId, tx)) ??
+          (await criarPedidoCompradoRepository(
             {
               empresaId: proposta.empresaId,
               solicitacaoId: proposta.solicitacaoId,
@@ -155,6 +156,8 @@ export async function processarCompraAutomatica(propostaId: string): Promise<Res
       comprados += 1;
     }
 
+    // Doc 58 §6: comprou, o fornecedor fica sabendo pelo WhatsApp (pode separar e entregar).
+    if (pedidoId) await enfileirarAvisoDeCompra(pedidoId, tx);
     // O comprador ve na lista de convites quem esta esperando por ele.
     if (pendentes > 0) await marcarConviteAguardandoCompradorRepository(proposta.conviteId, tx);
 
