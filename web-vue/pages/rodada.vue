@@ -69,7 +69,12 @@ const respondendo = computed(() => Boolean(rodada.value) && aberta.value && !env
         <p>Este link não abre nenhuma cotação. Confira se ele chegou inteiro ou peça um novo ao comprador.</p>
       </div>
       <template v-else>
-        <RodadaSeparacao v-if="rodada.pedido" :pedido="rodada.pedido" :requisitar="requisitar" @devolvido="carregar" />
+        <RodadaSeparacao
+          v-if="rodada.pedido"
+          :pedido="rodada.pedido"
+          :requisitar="requisitar"
+          @devolvido="carregar({ silencioso: true })"
+        />
 
         <template v-if="respondendo">
           <v-alert

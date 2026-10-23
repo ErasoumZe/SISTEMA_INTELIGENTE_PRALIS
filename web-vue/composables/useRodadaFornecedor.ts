@@ -88,8 +88,9 @@ export function useRodadaFornecedor() {
     condicaoPagamento.value = base?.condicaoPagamento ?? "";
   }
 
-  async function carregar() {
-    carregando.value = true;
+  /** `silencioso`: atualiza sem trocar a tela pelo carregando (o ajuste do fornecedor mantem o aviso de salvo). */
+  async function carregar({ silencioso = false }: { silencioso?: boolean } = {}) {
+    if (!silencioso) carregando.value = true;
     erro.value = "";
     try {
       const dto = await requisitar<RodadaPublicaDto>("/api/rodada");
