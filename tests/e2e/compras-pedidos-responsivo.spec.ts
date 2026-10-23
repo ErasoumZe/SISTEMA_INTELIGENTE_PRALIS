@@ -1,6 +1,6 @@
 import { expect, test, type Browser } from "@playwright/test";
 import { entrar, LARGURAS, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
-import { abrirContextoCompras, dialogoAberto, irParaTela, prepararRodada } from "./apoio-compras.js";
+import { abrirContextoCompras, codigoDeTeste, dialogoAberto, irParaTela, prepararRodada } from "./apoio-compras.js";
 
 /**
  * Item 3 do Definition of Done para as telas de compra: 1440 / 1024 / 768 / 390 sem rolagem
@@ -53,7 +53,7 @@ test.describe("rodada do fornecedor", () => {
   test("nao rola na horizontal e mantem a barra de envio visivel em todas as larguras", async ({ browser }) => {
     const contexto = await abrirContextoCompras();
     try {
-      const { token } = await prepararRodada(contexto, `${Date.now()}-${Math.floor(Math.random() * 1000)}`);
+      const { token } = await prepararRodada(contexto, codigoDeTeste());
       const navegador = await navegadorDoFornecedor(browser);
       // Uma aba por largura, como o link chega pelo WhatsApp: reabrir na mesma aba mudaria so o
       // fragmento, e o Vue Router de desenvolvimento imprimiria o seletor com o token.

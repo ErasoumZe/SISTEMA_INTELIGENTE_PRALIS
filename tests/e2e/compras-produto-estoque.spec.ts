@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { entrar, escolherNoSelect, escolherPrimeiraOpcao, observarConsole, USUARIOS } from "./apoio.js";
-import { escolherNoFiltro, irParaTela } from "./apoio-compras.js";
+import { codigoDeTeste, escolherNoFiltro, irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(180_000);
 
 test("produto de Compras persiste parametros e aparece nos cinco filtros de estoque", async ({ page }) => {
   const problemas = observarConsole(page);
-  const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const nome = `E2E Estoque ${sufixo}`;
+  const sufixo = codigoDeTeste();
+  const nome = `Leite integral 1 L (teste ${sufixo})`;
   const area = `Area E2E ${sufixo}`;
   const localVenda1 = `Balcao E2E ${sufixo}`;
   const localVenda2 = `Vitrine E2E ${sufixo}`;

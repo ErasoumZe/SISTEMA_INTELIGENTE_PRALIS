@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { entrar, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  codigoDeTeste,
   criarFornecedor,
   criarProdutoDeEstoque,
   dialogoAberto,
@@ -43,9 +44,9 @@ test.describe("ciclo de compra pela cotacao", () => {
     browser
   }) => {
     const problemas = observarConsole(page);
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const nomeProduto = `E2E Rodada ${sufixo}`;
-    const fornecedorNome = `E2E Fornecedor ${sufixo}`;
+    const sufixo = codigoDeTeste();
+    const nomeProduto = `Abacaxi pérola (teste ${sufixo})`;
+    const fornecedorNome = `Hortifruti Bahamas (teste ${sufixo})`;
 
     const produtoId = await criarProdutoDeEstoque(contexto, {
       descricao: nomeProduto,

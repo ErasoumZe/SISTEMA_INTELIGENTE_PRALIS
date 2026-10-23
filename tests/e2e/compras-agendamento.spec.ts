@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { entrar, LARGURAS, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  codigoDeTeste,
   criarProdutoDeEstoque,
   dialogoAberto,
   esperarOverlayFechar,
@@ -39,8 +40,8 @@ test.describe("agendamento de pedido", () => {
 
   test("agenda bebidas duas vezes por semana e mexe so numa data", async ({ page }) => {
     const problemas = observarConsole(page);
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const produto = `E2E Agenda ${sufixo}`;
+    const sufixo = codigoDeTeste();
+    const produto = `Coca-Cola lata 350 ml (teste ${sufixo})`;
     await criarProdutoDeEstoque(contexto, {
       descricao: produto,
       estoqueMin: 2,

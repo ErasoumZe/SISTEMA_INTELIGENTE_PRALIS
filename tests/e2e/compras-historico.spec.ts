@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { entrar, LARGURAS, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  codigoDeTeste,
   criarFornecedor,
   criarProdutoDeEstoque,
   dialogoAberto,
@@ -36,9 +37,9 @@ test.describe("historico de compras por fornecedor e produto", () => {
 
   test("importa, confere o catalogo antes, aplica e consulta o ultimo custo em todas as larguras", async ({ page }) => {
     const problemas = observarConsole(page);
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const produto = `E2E Historico ${sufixo}`;
-    const fornecedor = `E2E Forn Historico ${sufixo}`;
+    const sufixo = codigoDeTeste();
+    const produto = `Farinha de trigo especial (teste ${sufixo})`;
+    const fornecedor = `Moinho Dias Branco (teste ${sufixo})`;
     await criarProdutoDeEstoque(contexto, {
       descricao: produto,
       estoqueMin: 1,
