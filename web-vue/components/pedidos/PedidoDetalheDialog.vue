@@ -77,6 +77,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
                 <th>Produto</th>
                 <th class="text-right">Pedido</th>
                 <th class="text-right">Recebido</th>
+                <th class="text-right">Devolvido</th>
                 <th class="text-right">Pendente</th>
               </tr>
             </thead>
@@ -85,6 +86,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
                 <td>{{ item.descricaoProduto }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidade) }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeRecebida) }}</td>
+                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeDevolvida) }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadePendente) }}</td>
               </tr>
             </tbody>
@@ -100,6 +102,9 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
               </div>
               <div class="text-caption text-medium-emphasis mt-1">
                 Pendente: {{ formatarQuantidade(item.quantidadePendente) }}
+                <template v-if="Number(item.quantidadeDevolvida) > 0">
+                  · Devolvido: {{ formatarQuantidade(item.quantidadeDevolvida) }}</template
+                >
               </div></v-card-text
             >
           </v-card>

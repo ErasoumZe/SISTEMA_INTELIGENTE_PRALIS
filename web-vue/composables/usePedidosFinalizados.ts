@@ -1,5 +1,5 @@
 import { rotuloStatusPedido } from "~/utils/pedido-origem";
-import type { PedidoDto } from "@padaria/shared";
+import type { PedidoDto, PedidoRecebimentoItem } from "@padaria/shared";
 import { useTelaCompras } from "~/composables/useTelaCompras";
 import { mensagemErro } from "~/utils/domain";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
@@ -70,11 +70,8 @@ export function usePedidosFinalizados() {
       return (caractere === "x" ? numero : (numero & 3) | 8).toString(16);
     });
   }
-  async function confirmarRecebimento(
-    itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>,
-    observacao: string
-  ) {
-    if (!detalhe.value || !itens.length) return notificar("Informe ao menos uma quantidade conferida.", "error");
+  async function confirmarRecebimento(itens: PedidoRecebimentoItem[], observacao: string) {
+    if (!detalhe.value || !itens.length) return notificar("Informe o que recebeu ou devolveu.", "error");
     tentativaRecebimento.value = obterTentativaRecebimento(
       tentativaRecebimento.value,
       detalhe.value.id,

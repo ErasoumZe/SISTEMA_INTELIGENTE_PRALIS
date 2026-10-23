@@ -1,4 +1,6 @@
-export type ItemRecebimento = { pedidoItemId: string; quantidadeConferida: number };
+import type { PedidoRecebimentoItem } from "@padaria/shared";
+
+export type ItemRecebimento = PedidoRecebimentoItem;
 
 export type TentativaRecebimento = {
   pedidoId: string;
