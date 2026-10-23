@@ -817,7 +817,11 @@ async function trocarEmpresa(idEmpresa = empresaId.value) {
 }
 
 async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva.value) {
-  const params = new URLSearchParams({ t: String(Date.now()) });
+  // `pageSize`: as rotas de cadastro paginam em 10 por padrao e aceitam ate 100. Sem pedir, a tela
+  // de Fornecedores (e as demais listagens de cadastro) mostrava so os 10 primeiros, sem controle de
+  // pagina — do 11o registro em diante o cadastro existia e nao aparecia. Acima de 100 e preciso
+  // paginar, como `carregarFornecedores` faz em Pedidos.
+  const params = new URLSearchParams({ t: String(Date.now()), pageSize: "100" });
   if (idEmpresa) params.set("empresaId", idEmpresa);
   const query = `?${params.toString()}`;
   const dados = opcoesVazias();
@@ -1024,11 +1028,13 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "areas_setores") {
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {
-    [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos] = await Promise.all([
+    [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos, dados.pdvs, dados.turnos] = await Promise.all([
       carregarOpcoesCompletas("/api/usuarios", idEmpresa),
       carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
       carregarOpcoesCompletas("/api/setores", idEmpresa),
-      carregarOpcoesCompletas("/api/cargos", idEmpresa)
+      carregarOpcoesCompletas("/api/cargos", idEmpresa),
+      carregarPdvsCompletos(idEmpresa),
+      carregarOpcoesCompletas("/api/turnos", idEmpresa)
     ]);
   } else if (tela === "permissoes") {
     Object.assign(
@@ -1103,6 +1109,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   const aviso = avisoOpcoesIndisponiveis(faltas);
   if (aviso) notificar(aviso, "warning");
   opcoes.value = dados;
+}
+
+async function recarregarDadosCadastro() {
+  await carregarDadosPagina(empresaId.value, telaAtiva.value);
 }
 
 async function carregarTudo() {
@@ -1324,7 +1334,11 @@ async function atualizarCaixaAutomaticamente() {
 }
 
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
-  const params = new URLSearchParams({ t: String(Date.now()) });
+  // `pageSize`: as rotas de cadastro paginam em 10 por padrao e aceitam ate 100. Sem pedir, a tela
+  // de Fornecedores (e as demais listagens de cadastro) mostrava so os 10 primeiros, sem controle de
+  // pagina — do 11o registro em diante o cadastro existia e nao aparecia. Acima de 100 e preciso
+  // paginar, como `carregarFornecedores` faz em Pedidos.
+  const params = new URLSearchParams({ t: String(Date.now()), pageSize: "100" });
   if (idEmpresa) params.set("empresaId", idEmpresa);
   const query = `?${params.toString()}`;
   const alvo = opcoes.value;
@@ -1902,10 +1916,14 @@ function atualizarColaboradorUsuario(valor: string) {
     formCadastro.value.colaboradorId = "";
     if (!formCadastro.value.novoColaboradorNome) formCadastro.value.novoColaboradorNome = formCadastro.value.nome;
     formCadastro.value.novoColaboradorSetorId = formCadastro.value.setorId || "";
+    formCadastro.value.novoColaboradorPdvPadraoId = "";
+    formCadastro.value.novoColaboradorTurnoPadraoId = "";
     return;
   }
   formCadastro.value.novoColaborador = false;
   formCadastro.value.colaboradorId = valor;
+  formCadastro.value.novoColaboradorPdvPadraoId = "";
+  formCadastro.value.novoColaboradorTurnoPadraoId = "";
 }
 
 // Acoes assincronas de tema: orquestracao extraida para utils/tema-acoes.ts (factory testavel).
@@ -2277,6 +2295,7 @@ const pageContext = computed(() => ({
   treeItens: telaAtiva.value === "areas_setores" ? treeAreasSetores() : treeGrupos(),
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
+  recarregarDadosCadastro,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,
@@ -2373,7 +2392,6 @@ function atualizarAoRetomarPagina() {
   void atualizarNotificacoesAutomaticamente();
   void atualizarCaixaAutomaticamente();
 }
-
 
 // A logo só entra depois que a casca autenticada existe. Assim o desfoque revela o painel em vez
 // de revelar o formulário de login, e a marca não reaparece ao trocar de página internamente.
@@ -2542,5 +2560,4 @@ onBeforeUnmount(() => {
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
-
 </template>

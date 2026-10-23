@@ -9,7 +9,14 @@ export const tipoNotificacaoSchema = z.enum([
   "transferencia_prazo_confirmacao",
   "mensagem_admin",
   "campanha",
-  "lancamento_vencimento"
+  "lancamento_vencimento",
+  // Fase 2 do Compras (decisao 14): item que a compra automatica NAO resolveu (acima da base, sem
+  // base, ou barrado pelo teto) cai no sino do Comprador na hora. Referencia a rodada.
+  "compras_decisao_pendente",
+  // Agendamento de pedido (doc 58 §2): chegou a data; o responsavel envia pela Solicitacao de compra.
+  "compras_agendamento_conferir",
+  // Conferencia de estoque agendada (doc 57 §1): chegou a data de contar.
+  "conferencia_estoque_fazer"
 ]);
 
 // O sino continua recebendo apenas o que ainda pede acao. A central de Pendencias, por outro

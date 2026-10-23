@@ -4,7 +4,7 @@ import { ErroDominio } from "../../api/src/erros.js";
 import { comMigrationQuestor, ehMigrationQuestorPendente } from "../../api/src/conplus/questor-comum.service.js";
 
 /**
- * Banco sem as migrations 0064–0066 (ex.: um ambiente ainda não migrado): a rota responde 503 com
+ * Banco sem as migrations 0073–0075 (ex.: um ambiente ainda não migrado): a rota responde 503 com
  * código próprio em vez de 500 genérico. O erro do driver chega embrulhado pelo Drizzle (`cause`).
  */
 const erroPg = (code: string) => Object.assign(new Error("falha de consulta"), { cause: { code } });

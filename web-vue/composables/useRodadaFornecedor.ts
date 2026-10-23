@@ -1,0 +1,235 @@
+import type { RodadaPublicaDto, SituacaoItemPublica } from "@padaria/shared";
+import { CABECALHO_DA_RODADA } from "~/utils/rodada-link";
+import { tokenDoFragmento } from "~/utils/convite-token";
+
+/**
+ * Página pública do fornecedor na cotação (doc 57 §5). O token vem do FRAGMENTO (`#t=`), sai da barra logo
+ * após ler e vai no cabeçalho `x-rodada-token`. Sem sessão, sem cookies (`credentials: "omit"`).
+ */
+export type Disponibilidade = "tenho" | "sem_estoque" | "nao_trabalha";
+export type RespostaItemLocal = {
+  conviteItemId: string;
+  disponibilidade: Disponibilidade;
+  valor: string;
+  /** Quanto ele tem; vazio = a quantidade pedida. */
+  quantidade: string;
+};
+export type RequisitarRodada = <T>(rota: string, init?: RequestInit) => Promise<T>;
+
+export function useRodadaFornecedor() {
+  const { apiUrl } = useApi();
+  const token = ref("");
+  const rodada = ref<RodadaPublicaDto | null>(null);
+  const respostas = ref<RespostaItemLocal[]>([]);
+  const frete = ref("");
+  const observacao = ref("");
+  const prazoEntrega = ref("");
+  const condicaoPagamento = ref("");
+  const carregando = ref(true);
+  const enviando = ref(false);
+  const aceitando = ref(false);
+  const enviado = ref(false);
+  const erro = ref("");
+
+  const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  // O que o fornecedor vê de cada item: nunca quem comprou nem por quanto.
+  const ROTULO_SITUACAO: Record<SituacaoItemPublica, string> = {
+    comprado: "Já comprado",
+    em_analise: "Em análise",
+    nao_cotado: "Sem valor seu"
+  };
+  const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const prazo = computed(() => (rodada.value ? DATA_HORA.format(new Date(rodada.value.expiraEm)) : ""));
+  const aberta = computed(() => rodada.value?.situacao === "aberta");
+
+  const totalEstimado = computed(() =>
+    respostas.value.reduce((soma, resposta, indice) => {
+      if (resposta.disponibilidade !== "tenho") return soma;
+      const pedida = Number(rodada.value?.itens[indice]?.quantidade ?? 0);
+      const quantidade = Number(resposta.quantidade) > 0 ? Number(resposta.quantidade) : pedida;
+      return soma + (Number(resposta.valor) || 0) * quantidade;
+    }, 0)
+  );
+  const totalFormatado = computed(() => MOEDA.format(totalEstimado.value));
+  const pendencias = computed(
+    () => respostas.value.filter((item) => item.disponibilidade === "tenho" && !(Number(item.valor) > 0)).length
+  );
+
+  const requisitar: RequisitarRodada = async <T>(rota: string, init?: RequestInit) => {
+    const resposta = await fetch(`${apiUrl}${rota}`, {
+      ...init,
+      credentials: "omit",
+      headers: { ...(init?.headers ?? {}), [CABECALHO_DA_RODADA]: token.value }
+    });
+    const corpo = (await resposta.json().catch(() => null)) as { data?: T; title?: string } | null;
+    if (!resposta.ok) throw new Error(corpo?.title || `Falha (HTTP ${resposta.status}).`);
+    return corpo?.data as T;
+  };
+
+  // Doc 58 §4: o que ele salvou sem enviar (Cotado) vem antes da ultima resposta enviada.
+  function prefill(dto: RodadaPublicaDto) {
+    const base = dto.rascunho ?? dto.ultimaProposta;
+    const anterior = new Map((base?.itens ?? []).map((item) => [item.conviteItemId, item]));
+    respostas.value = dto.itens.map((item) => {
+      const feito = anterior.get(item.conviteItemId);
+      const disponibilidade: Disponibilidade = feito?.indisponivel
+        ? (feito.motivoIndisponivel ?? "sem_estoque")
+        : "tenho";
+      return {
+        conviteItemId: item.conviteItemId,
+        disponibilidade,
+        valor: feito?.valorUnitario ?? "",
+        quantidade: feito?.quantidadeDisponivel ?? ""
+      };
+    });
+    frete.value = base?.frete ?? "";
+    observacao.value = base?.observacao ?? "";
+    prazoEntrega.value = base?.prazoEntrega ?? "";
+    condicaoPagamento.value = base?.condicaoPagamento ?? "";
+  }
+
+  /** `silencioso`: atualiza sem trocar a tela pelo carregando (o ajuste do fornecedor mantem o aviso de salvo). */
+  async function carregar({ silencioso = false }: { silencioso?: boolean } = {}) {
+    if (!silencioso) carregando.value = true;
+    erro.value = "";
+    try {
+      const dto = await requisitar<RodadaPublicaDto>("/api/rodada");
+      rodada.value = dto;
+      prefill(dto);
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível abrir a cotação.";
+      rodada.value = null;
+    } finally {
+      carregando.value = false;
+    }
+  }
+
+  // Contraproposta do comprador PARA ELE (E7): itens com descrição e o valor proposto, já formatados.
+  const itensContrapostos = computed(() => {
+    const contraproposta = rodada.value?.contraproposta;
+    if (!contraproposta || !rodada.value) return [];
+    const descricao = new Map(rodada.value.itens.map((item) => [item.conviteItemId, item.descricaoProduto]));
+    return contraproposta.itens.map((item) => ({
+      conviteItemId: item.conviteItemId,
+      descricaoProduto: descricao.get(item.conviteItemId) ?? "Item",
+      valor: MOEDA.format(Number(item.valorUnitario))
+    }));
+  });
+
+  // Aceitar vira a versão N+1 DELE; o comprador não precisa fazer mais nada para a compra sair.
+  async function aceitar() {
+    if (!aberta.value || !itensContrapostos.value.length || aceitando.value || enviando.value) return;
+    aceitando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/aceitar", { method: "POST" });
+      enviado.value = true;
+      await carregar();
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível aceitar.";
+    } finally {
+      aceitando.value = false;
+    }
+  }
+
+  function corpoDaResposta() {
+    return {
+      frete: frete.value ? Number(frete.value) : null,
+      observacao: observacao.value || null,
+      prazoEntrega: prazoEntrega.value || null,
+      condicaoPagamento: condicaoPagamento.value || null,
+      itens: respostas.value.map((item) => {
+        const tem = item.disponibilidade === "tenho";
+        return {
+          conviteItemId: item.conviteItemId,
+          indisponivel: !tem,
+          motivoIndisponivel: tem ? null : item.disponibilidade,
+          valorUnitario: tem && item.valor !== "" ? Number(item.valor) : null,
+          quantidadeDisponivel: tem && Number(item.quantidade) > 0 ? Number(item.quantidade) : null
+        };
+      })
+    };
+  }
+
+  /** Doc 58 §4: salva sem enviar. O comprador ve "Cotado"; nada e comprado ate ele enviar. */
+  const salvando = ref(false);
+  const salvoEm = ref("");
+  async function salvarRascunho() {
+    if (!aberta.value || salvando.value || enviando.value) return;
+    salvando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/rascunho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoDaResposta())
+      });
+      salvoEm.value = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" }).format(new Date());
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível salvar.";
+    } finally {
+      salvando.value = false;
+    }
+  }
+
+  async function enviar() {
+    if (!aberta.value || enviando.value || aceitando.value) return;
+    // Campo em branco não é R$ 0,00: item que ele tem precisa de preço.
+    if (pendencias.value) {
+      erro.value = "Informe o valor de cada produto que você tem, ou marque que não tem.";
+      return;
+    }
+    enviando.value = true;
+    erro.value = "";
+    try {
+      await requisitar("/api/rodada/responder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoDaResposta())
+      });
+      enviado.value = true;
+      await carregar();
+    } catch (causa) {
+      erro.value = causa instanceof Error ? causa.message : "Não foi possível enviar.";
+    } finally {
+      enviando.value = false;
+    }
+  }
+
+  onMounted(() => {
+    token.value = tokenDoFragmento(window.location.hash);
+    if (window.location.hash) history.replaceState(null, "", window.location.pathname);
+    if (!token.value) {
+      carregando.value = false;
+      return;
+    }
+    void carregar();
+  });
+
+  return {
+    rodada,
+    respostas,
+    frete,
+    observacao,
+    prazoEntrega,
+    condicaoPagamento,
+    carregando,
+    enviando,
+    aceitando,
+    enviado,
+    erro,
+    prazo,
+    aberta,
+    totalFormatado,
+    pendencias,
+    itensContrapostos,
+    ROTULO_SITUACAO,
+    requisitar,
+    carregar,
+    aceitar,
+    salvando,
+    salvoEm,
+    salvarRascunho,
+    enviar
+  };
+}

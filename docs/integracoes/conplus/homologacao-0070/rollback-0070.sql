@@ -1,13 +1,13 @@
--- ROLLBACK da migration 0070_eventos_layout_oficial — desfaz exatamente o que a 0070 criou.
+-- ROLLBACK da migration 0079_eventos_layout_oficial (antes 0070) — desfaz exatamente o que ela criou.
 --
 -- NÃO é migration e não é executado por nenhum procedimento automático. Só com autorização específica.
--- Perde, sem volta, o que foi gravado nas estruturas da 0070 depois da aplicação: código e razão social
+-- Perde, sem volta, o que foi gravado nas estruturas da 0079 depois da aplicação: código e razão social
 -- da empresa no Questor, dados do catálogo oficial, período/contrato/sequência das linhas exportadas,
 -- cancelamentos de lançamento e a trilha de auditoria (questor_auditoria). Antes de rodar, faça o backup
 -- do procedimento de homologação. Para voltar ao estado EXATO de antes, prefira restaurar o backup.
 --
 -- Pré-condição verificada abaixo: sem lançamentos cancelados que colidam com ativos na chave antiga
--- (a 0070 permite relançar um evento cancelado; a 0068 não). Se houver, o script para sem alterar nada.
+-- (a 0079 permite relançar um evento cancelado; a 0077 não). Se houver, o script para sem alterar nada.
 
 BEGIN;
 
@@ -19,7 +19,7 @@ BEGIN
     GROUP BY empresa_id, competencia, vinculo_id, evento_id
     HAVING count(*) > 1
   ) THEN
-    RAISE EXCEPTION 'Rollback interrompido: há lançamentos cancelados e relançados na mesma chave; a unicidade da 0068 não pode ser restaurada';
+    RAISE EXCEPTION 'Rollback interrompido: há lançamentos cancelados e relançados na mesma chave; a unicidade da 0077 não pode ser restaurada';
   END IF;
 END $$;
 
@@ -59,7 +59,7 @@ ALTER TABLE questor_configuracoes
   DROP COLUMN codigo_empresa_questor,
   DROP COLUMN razao_social_questor;
 
--- Registro da 0070 no controle do Drizzle (created_at = "when" do journal).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1792760751638;
+-- Registro da 0079 no controle do Drizzle (created_at = "when" do journal).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1792777123905;
 
 COMMIT;

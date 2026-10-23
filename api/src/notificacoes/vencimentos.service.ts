@@ -18,7 +18,8 @@ function tituloDoAviso(dominio: "despesa" | "mercadoria", dataVencimento: string
 }
 
 // Sincronizado junto ao sino: não exige cron externo e não cria duplicidade. Para cada consulta do
-// destinatário, alerta D-3/D-2/D-1, no vencimento e diariamente após vencer, até a quitação.
+// destinatário, alerta D-3/D-2/D-1 e no vencimento. Depois de reconhecido, o aviso permanece
+// lido: somente um novo fato operacional deve reabrir uma pendência.
 export async function sincronizarAvisosDeVencimento(empresaId: string): Promise<void> {
   const hoje = diaNegocio(new Date());
   const lancamentos = await listarLancamentosParaAvisoDeVencimento(empresaId, somarDias(hoje, 3));
@@ -36,10 +37,7 @@ export async function sincronizarAvisosDeVencimento(empresaId: string): Promise<
       destinatariosUsuarioIds: destinatarios,
       referenciaId: lancamento.id,
       titulo: tituloDoAviso(lancamento.dominio, lancamento.dataVencimento, hoje),
-      valorCentavos: paraCentavos(Number(lancamento.valor)),
-      reabrir: true,
-      reabrirUmaVezPorDia: true,
-      diaNegocio: hoje
+      valorCentavos: paraCentavos(Number(lancamento.valor))
     });
   }
 }

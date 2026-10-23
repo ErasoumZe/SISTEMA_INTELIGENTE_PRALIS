@@ -1,7 +1,7 @@
 // Agrupamento apenas VISUAL do menu lateral (nao filtra nem altera permissoes) — extraido do
 // AppShell.vue para ser testavel sem runtime Nuxt/Vuetify. Quem decide o que o usuario ve e o
 // usePermissoes (telasPermitidas); aqui so se decide em que secao cada tela cai.
-import type { CorMenuGrupo, CorRgbMenu } from "@padaria/shared";
+import { idsFilhosLancamentos, type CorMenuGrupo, type CorRgbMenu } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 
 // Categoria de menu: uma entrada UNICA que guarda telas dentro dela (PROJECT_BRAIN/17, D6). A
@@ -15,7 +15,7 @@ export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   id: "lancamentos",
   titulo: "Lançamentos",
   icone: "mdi-format-list-checks",
-  ids: ["despesas", "mercadorias", "retiradas"]
+  ids: idsFilhosLancamentos
 };
 
 export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
@@ -61,7 +61,16 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
   {
     // R-215: compras fisicas ficam aqui; Mercadorias/NF-e permanece no fluxo financeiro de Lancamentos.
     titulo: "Compras",
-    ids: ["estoque_produtos", "conferencias_estoque", "pedidos", "fornecedores"]
+    ids: [
+      "estoque_produtos",
+      "conferencias_estoque",
+      "agendamento_pedidos",
+      "solicitacao_compra",
+      "pedidos",
+      "pedidos_finalizados",
+      "cadastro_compras",
+      "fornecedores"
+    ]
   },
   {
     // Resultados – Relatorios + Diferenca de fechamento.
@@ -159,6 +168,10 @@ export function agruparTelasMenu<T extends ItemMenu>(
     for (const id of secao.ids) {
       const categoria = categoriaPorId.get(id);
       if (categoria) {
+        if (ocultos.has(categoria.id)) {
+          for (const filhoId of categoria.ids) restantes.delete(filhoId);
+          continue;
+        }
         const filhos: T[] = [];
         for (const filhoId of categoria.ids) {
           const tela = restantes.get(filhoId);

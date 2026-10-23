@@ -1,7 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import { entrar, USUARIOS } from "./apoio.js";
 
-const ROTAS_COMPRAS = ["/estoque_produtos", "/conferencias_estoque", "/pedidos", "/fornecedores"] as const;
+const ROTAS_COMPRAS = [
+  "/estoque_produtos",
+  "/conferencias_estoque",
+  "/agendamento_pedidos",
+  "/solicitacao_compra",
+  "/pedidos",
+  "/pedidos_finalizados",
+  "/cadastro_compras",
+  "/fornecedores"
+] as const;
 
 async function provarMenuCompras(page: Page) {
   const grupo = page.locator(".sidebar-group", {

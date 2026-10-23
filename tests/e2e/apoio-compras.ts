@@ -17,7 +17,9 @@ export type ContextoCompras = {
 };
 
 /** Abre um contexto de API autenticado e descobre a empresa ativa do perfil. */
-export async function abrirContextoCompras(usuario = USUARIOS.compras): Promise<ContextoCompras> {
+export async function abrirContextoCompras(
+  usuario: { email: string; senha: string } = USUARIOS.compras
+): Promise<ContextoCompras> {
   const api = await request.newContext({ baseURL: API_URL });
   const login = await api.post("/api/auth/sign-in/email", {
     data: { email: usuario.email, password: usuario.senha }
@@ -198,28 +200,62 @@ export function dialogoAberto(page: Page): Locator {
 }
 
 /**
- * R-216: prepara uma cotacao pronta para o fornecedor abrir — produto, fornecedor, pedido e link.
+ * R-221: prepara uma rodada pronta para o fornecedor abrir — produto, fornecedor, solicitacao e link.
  * Devolve o token cru, que so existe neste momento: o banco guarda apenas o hash.
  */
-export async function prepararCotacao(
+export async function prepararRodada(
   contexto: ContextoCompras,
   sufixo: string,
   quantidade = 4.5
-): Promise<{ pedidoId: string; token: string; produto: string }> {
-  const produto = `E2E Cotacao com nome longo para quebrar linha ${sufixo}`;
+): Promise<{ solicitacaoId: string; rodadaId: string; token: string; produto: string; produtoId: string }> {
+  const produto = `E2E Rodada com nome longo para quebrar linha ${sufixo}`;
   const produtoId = await criarProdutoDeEstoque(contexto, {
     descricao: produto,
     estoqueMin: 1,
     estoqueMax: 50,
     setorEstoque: `Deposito ${sufixo}`
   });
-  const fornecedorId = await criarFornecedor(contexto, `E2E Cotacao ${sufixo}`, "11977776666");
-  const pedido = await contexto.api.post("/api/pedidos", {
-    data: { empresaId: contexto.empresaId, fornecedorId, recorrencia: "nenhuma", itens: [{ produtoId, quantidade }] }
+  const fornecedorId = await criarFornecedor(contexto, `E2E Rodada ${sufixo}`, "11977776666");
+  const solicitacao = await contexto.api.post("/api/compras/solicitacoes", {
+    data: { empresaId: contexto.empresaId, itens: [{ produtoId, quantidade }] }
   });
-  expect(pedido.status(), await pedido.text()).toBe(201);
-  const pedidoId = ((await pedido.json()) as { data: { id: string } }).data.id;
-  const gerada = await contexto.api.post(`/api/pedidos/${pedidoId}/cotacoes`, { data: {} });
-  expect(gerada.status(), await gerada.text()).toBe(201);
-  return { pedidoId, token: ((await gerada.json()) as { data: { token: string } }).data.token, produto };
+  expect(solicitacao.status(), await solicitacao.text()).toBe(201);
+  const solicitacaoId = ((await solicitacao.json()) as { data: { id: string } }).data.id;
+  const detalhe = await contexto.api.get(`/api/compras/solicitacoes/${solicitacaoId}`);
+  const itens = ((await detalhe.json()) as { data: { itens: Array<{ id: string }> } }).data.itens;
+  const rodada = await contexto.api.post("/api/compras/rodadas", {
+    data: {
+      empresaId: contexto.empresaId,
+      solicitacaoId,
+      convites: [{ fornecedorId, solicitacaoItemIds: itens.map((item) => item.id) }]
+    }
+  });
+  expect(rodada.status(), await rodada.text()).toBe(201);
+  const corpo = ((await rodada.json()) as { data: { id: string; convites: Array<{ token: string }> } }).data;
+  return { solicitacaoId, rodadaId: corpo.id, token: corpo.convites[0]!.token, produto, produtoId };
+}
+
+/**
+ * Acha uma linha da tabela de cadastro, virando a pagina quando preciso.
+ *
+ * A listagem pagina em 10 e ordena por nome. Um cadastro novo raramente cai na primeira pagina
+ * depois de algumas rodadas de E2E, e esperar mais tempo nao resolve: a linha nao esta ali. Virar a
+ * pagina e exatamente o que a pessoa faria.
+ */
+export async function acharLinhaPaginando(page: Page, texto: string, maximoDePaginas = 30): Promise<Locator> {
+  const linha = page.locator("tbody tr").filter({ hasText: texto });
+  const proxima = page.getByRole("button", { name: "Próxima" });
+  // Teto alto na primeira espera: depois de um reload a rota remonta e a listagem so chega depois
+  // da sessao; com o servidor de desenvolvimento frio isso passa dos 15s padrao do expect.
+  await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 60_000 });
+  for (let pagina = 1; pagina <= maximoDePaginas; pagina += 1) {
+    if (await linha.count()) return linha;
+    if (await proxima.isDisabled()) break;
+    await proxima.click();
+    await expect(proxima)
+      .toBeEnabled({ timeout: 15_000 })
+      .catch(() => undefined);
+  }
+  await expect(linha, `"${texto}" nao foi encontrado em nenhuma pagina`).toBeVisible();
+  return linha;
 }

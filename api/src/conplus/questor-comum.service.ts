@@ -2,7 +2,7 @@ import { ERROS_QUESTOR, verificarCodigosNoCatalogoQuestor, type TabelaCodigoQues
 import { codigoPostgresDoErro, conflito, ErroDominio, naoProcessavel, type ErroEncadeado } from "../erros.js";
 import { buscarCodigosQuestorRepository } from "./questor-configuracao.repository.js";
 
-/** 42P01 tabela inexistente · 42703 coluna inexistente: as migrations Questor (0064+) não estão no banco. */
+/** 42P01 tabela inexistente · 42703 coluna inexistente: as migrations Questor (0073+) não estão no banco. */
 const SINAIS_MIGRATION_PENDENTE = new Set(["42P01", "42703"]);
 
 export function ehMigrationQuestorPendente(erro: ErroEncadeado): boolean {
@@ -20,7 +20,7 @@ export async function comMigrationQuestor<T>(operacao: () => Promise<T>): Promis
     if (erro instanceof ErroDominio) throw erro;
     if (ehMigrationQuestorPendente(erro as ErroEncadeado)) {
       throw new ErroDominio(
-        "Integração Questor indisponível: as migrations Questor (0064 em diante) ainda não foram aplicadas neste banco",
+        "Integração Questor indisponível: as migrations Questor (0073 em diante) ainda não foram aplicadas neste banco",
         503,
         ERROS_QUESTOR.migrationPendente
       );

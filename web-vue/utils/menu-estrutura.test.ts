@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Permissao } from "@padaria/shared";
-import { permissoesAcessoTotal } from "@padaria/shared";
+import { idsMenuConfiguraveis, permissoesAcessoTotal } from "@padaria/shared";
 import { agruparTelasMenu } from "./menu";
-import { estruturaEfetiva, estruturaPadrao, normalizarEstrutura, type EstruturaMenu } from "./menu-estrutura";
-import { rotaTela } from "./domain";
+import {
+  estruturaEfetiva,
+  estruturaPadrao,
+  idsMenuSemSecao,
+  normalizarEstrutura,
+  type EstruturaMenu
+} from "./menu-estrutura";
+import { itemPorTela, rotaTela } from "~/utils/domain";
 import { usePermissoes } from "~/composables/usePermissoes";
 
 const telasDe = (permissoes: Permissao[], caixaAberto = true) =>
@@ -114,5 +120,50 @@ describe("estrutura configurável do menu", () => {
     expect(telasDe(["menu_caixa_mostrar", "caixa_operar", "menu_entradas_mostrar"]).map((tela) => tela.id)).toContain(
       "caixa"
     );
+  });
+
+  it("trata os filhos de Lançamentos como organizados pela categoria", () => {
+    const estrutura: EstruturaMenu = {
+      versao: 1,
+      idsOcultos: [],
+      secoes: [{ id: "saidas", titulo: "Saídas", ids: ["lancamentos"] }]
+    };
+    expect(idsMenuSemSecao(estrutura)).not.toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
+    expect(idsMenuSemSecao({ ...estrutura, secoes: [] })).toEqual(
+      expect.arrayContaining(["despesas", "mercadorias", "retiradas"])
+    );
+  });
+
+  it("mantém catálogo, telas navegáveis e estrutura padrão alinhados", () => {
+    expect(idsMenuConfiguraveis.filter((id) => id !== "lancamentos").sort()).toEqual(Object.keys(itemPorTela).sort());
+    expect(estruturaPadrao().secoes.flatMap((secao) => secao.ids)).toContain("conferencias_estoque");
+  });
+
+  it("oculta a categoria Lançamentos junto com seus filhos", () => {
+    const grupos = agruparTelasMenu(todas, [{ titulo: "Saídas", ids: ["lancamentos"] }], ["lancamentos"]);
+    const ids = grupos.flatMap((grupo) =>
+      grupo.itens.flatMap((item) => (item.tipo === "categoria" ? item.itens.map((filho) => filho.id) : [item.id]))
+    );
+    expect(ids).not.toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
+  });
+
+  it("preserva Compras, Conplus e Questor na estrutura padrão, sem item ou rota duplicada", () => {
+    const compras = ["conferencias_estoque", "agendamento_pedidos", "solicitacao_compra", "cadastro_compras"];
+    const conplus = ["conplus_folha_05", "conplus_adiantamento_20", "conplus_rescisoes", "conplus_ferias"];
+    const questor = ["conplus_exportar"];
+    const ids = estruturaPadrao().secoes.flatMap((secao) => secao.ids);
+
+    for (const id of [...compras, ...conplus, ...questor]) {
+      expect(
+        ids.filter((item) => item === id),
+        id
+      ).toHaveLength(1);
+      expect(itemPorTela[id], id).toBeDefined();
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(idsMenuConfiguraveis).size).toBe(idsMenuConfiguraveis.length);
+    const rotas = [...compras, ...conplus, ...questor].map((id) => rotaTela(id));
+    expect(new Set(rotas).size).toBe(rotas.length);
+    expect(rotaTela("conplus_exportar")).toBe("/conplus/exportar");
   });
 });

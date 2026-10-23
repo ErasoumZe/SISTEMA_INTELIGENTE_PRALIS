@@ -183,6 +183,8 @@ export interface ProdutoParaGravar {
   areaEstoque: string | null;
   setorEstoque: string | null;
   curvaAbc: "A" | "B" | "C" | null;
+  quantidadeVariavel: boolean;
+  toleranciaQuantidadePercentual: number | null;
   localVenda1: string | null;
   localVenda2: string | null;
   fotoUrl: string | null;
@@ -259,6 +261,9 @@ export async function salvarProdutoRepository(
     areaEstoque: input.areaEstoque,
     setorEstoque: input.setorEstoque,
     curvaAbc: input.curvaAbc,
+    quantidadeVariavel: input.quantidadeVariavel,
+    toleranciaQuantidadePercentual:
+      input.toleranciaQuantidadePercentual != null ? String(input.toleranciaQuantidadePercentual) : null,
     localVenda1: input.localVenda1,
     localVenda2: input.localVenda2,
     fotoUrl: input.fotoUrl

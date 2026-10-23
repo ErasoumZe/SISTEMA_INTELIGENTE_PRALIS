@@ -7,7 +7,7 @@
  */
 import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
 
-defineProps<{
+const props = defineProps<{
   form: ProdutoForm;
   unidades: Array<{ id: string; sigla: string; nome: string }>;
   setores: string[];
@@ -19,6 +19,16 @@ defineProps<{
 }>();
 
 const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// Desligar "vendido por peso" limpa a tolerancia. O campo fica desabilitado, mas continuava exibindo
+// o numero digitado enquanto o payload mandava null — a tela afirmava uma tolerancia que nao seria
+// gravada. Agora o que esta na tela e o que vai para o banco.
+watch(
+  () => props.form.quantidadeVariavel,
+  (variavel) => {
+    if (!variavel) props.form.toleranciaQuantidadePercentual = "";
+  }
+);
 </script>
 
 <template>
@@ -111,6 +121,28 @@ const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "curr
         :error-messages="erros['estoqueMax']"
         :hint="dica('estoqueMax')"
         :disabled="somenteLeitura"
+      />
+      <div class="secao__interruptor">
+        <v-switch
+          v-model="form.quantidadeVariavel"
+          color="primary"
+          inset
+          hide-details
+          label="Produto vendido por peso"
+          :disabled="somenteLeitura"
+        />
+      </div>
+      <v-text-field
+        v-model="form.toleranciaQuantidadePercentual"
+        type="number"
+        min="0"
+        max="30"
+        step="0.01"
+        label="Tolerância na separação"
+        suffix="%"
+        :disabled="somenteLeitura || !form.quantidadeVariavel"
+        hint="Fora desta faixa, a quantidade efetiva exigirá aprovação."
+        persistent-hint
       />
       <v-text-field
         v-model="form.localVenda1"

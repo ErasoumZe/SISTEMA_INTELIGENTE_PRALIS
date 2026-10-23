@@ -20,7 +20,10 @@ const aba = ref("pessoas");
         <PermissoesUsuarioPage :empresa-id="ctx.empresaId" :usuario-inicial="usuarioInicial" />
       </v-window-item>
       <v-window-item value="menu">
-        <PermissoesMenuEmpresa :empresa-id="ctx.empresaId" :pode-editar="ctx.temPermissao('cadastro_permissoes_editar')" />
+        <PermissoesMenuEmpresa
+          :empresa-id="ctx.empresaId"
+          :pode-editar="ctx.temPermissao('cadastro_permissoes_editar')"
+        />
       </v-window-item>
     </v-window>
   </AppWorkspace>

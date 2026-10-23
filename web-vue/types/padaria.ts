@@ -29,6 +29,11 @@ export type Opcao = {
   estado?: string;
   cnpj?: string | null;
   matriculaPrefixo?: string;
+  // Configuracao operacional da empresa (migration 0060). Precisam viajar na opcao porque a grade de
+  // cadastro alimenta o formulario de edicao: campo que nao chega na linha reabre vazio e o salvar
+  // seguinte grava null em cima do valor correto.
+  fusoHorario?: string;
+  comprasPrazoRespostaHoras?: number | string | null;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
   // Conta com fundo (D8), vindo de /api/contas/saldos. saldoAtual e DERIVADO dos movimentos —
@@ -103,6 +108,8 @@ export type Opcao = {
   remuneracaoMinuto?: string;
   dataInicio?: string;
   ativo?: boolean;
+  /** Situacao do fornecedor (R-219): fornecedor inativo nao aparece no seletor da rodada. */
+  situacao?: "ativo" | "inativo";
   horaInicio?: string | null;
   horaFim?: string | null;
   /** ADM-003 V1B — turno. Nulos significam TURNO INCOMPLETO: valido no cadastro, mas nao admissivel. */
@@ -338,6 +345,7 @@ export type PlanejamentoRetorno = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+  vinculoOperador?: { pdvId: string; turnoId: string } | null;
   lacreFechamentoReservado: string | null;
   indisponibilidadeAberta?: {
     id: string;

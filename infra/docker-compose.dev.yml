@@ -27,6 +27,17 @@ services:
       GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
       GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID:-}
       GOOGLE_ADMISSAO_SYNC_ENABLED: ${GOOGLE_ADMISSAO_SYNC_ENABLED:-false}
+      # WhatsApp de Compras (doc 57 §7): o sistema manda a cotacao e o "pode entregar". Sem provedor, a fila
+      # espera e a tela avisa. O TOKEN e segredo: so no painel do Coolify ou no .env.local ignorado, nunca no Git.
+      WHATSAPP_PROVEDOR: ${WHATSAPP_PROVEDOR:-desligado}
+      WHATSAPP_META_TOKEN: ${WHATSAPP_META_TOKEN:-}
+      WHATSAPP_META_TELEFONE_ID: ${WHATSAPP_META_TELEFONE_ID:-}
+      WHATSAPP_META_VERSAO_API: ${WHATSAPP_META_VERSAO_API:-v21.0}
+      WHATSAPP_META_MODELO_COTACAO: ${WHATSAPP_META_MODELO_COTACAO:-cotacao_compra}
+      WHATSAPP_META_MODELO_CONFIRMACAO: ${WHATSAPP_META_MODELO_CONFIRMACAO:-pedido_confirmado}
+      WHATSAPP_META_IDIOMA: ${WHATSAPP_META_IDIOMA:-pt_BR}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      WHATSAPP_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_TOKEN:-}
     ports:
       - "127.0.0.1:${API_PORT:-4100}:${API_PORT:-4100}"
     volumes:
@@ -36,6 +47,7 @@ services:
       - padaria_dev_db_node_modules:/app/db/node_modules
       - padaria_dev_shared_node_modules:/app/shared/node_modules
       - padaria_dev_web_vue_node_modules:/app/web-vue/node_modules
+      - padaria_dev_web_vue_nuxt:/app/web-vue/.nuxt
       - padaria_dev_tests_node_modules:/app/tests/node_modules
       - padaria_dev_integracoes_scripts_node_modules:/app/integracoes-scripts/node_modules
     command: ["node", "--conditions=development", "--import", "tsx", "--watch", "api/src/server.ts"]
@@ -53,6 +65,8 @@ volumes:
     name: padaria_dev_shared_node_modules
   padaria_dev_web_vue_node_modules:
     name: padaria_dev_web_vue_node_modules
+  padaria_dev_web_vue_nuxt:
+    name: padaria_dev_web_vue_nuxt
   padaria_dev_tests_node_modules:
     name: padaria_dev_tests_node_modules
   padaria_dev_integracoes_scripts_node_modules:

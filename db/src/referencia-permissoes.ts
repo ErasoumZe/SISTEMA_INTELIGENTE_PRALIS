@@ -38,6 +38,10 @@ const permissaoAcessoPorTela = {
   perdas_sobras: "perdas_sobras_visualizar",
   estoque_produtos: "estoque_produtos_visualizar",
   conferencias_estoque: "conferencias_estoque_visualizar",
+  agendamento_pedidos: "agendamento_pedidos_visualizar",
+  cadastro_compras: "compras_catalogo_gerir",
+  solicitacao_compra: "pedidos_visualizar",
+  pedidos_finalizados: "pedidos_visualizar",
   relatorio_dre: "relatorio_dre_visualizar",
   clientes: "cadastro_clientes_visualizar",
   fornecedores: "cadastro_fornecedores_visualizar",
@@ -176,7 +180,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
     // A Tesouraria recebe quebra/divergência pelo sino e precisa abrir a central para tratar a
     // pendência; o código antigo ainda se chama fechamento_com_diferenca_visualizar.
-    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento"],
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "contas"],
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
@@ -213,6 +217,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "perdas_sobras",
       "estoque_produtos",
       "conferencias_estoque",
+      "agendamento_pedidos",
+      "cadastro_compras",
+      "solicitacao_compra",
+      "pedidos_finalizados",
       "relatorio_dre",
       "clientes",
       "admissoes_testes"
@@ -230,6 +238,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // Gerencia aprova as compras vindas de NF-e (fila de aprovacao) e os pedidos.
       "mercadorias_aprovar",
       "pedidos_aprovar",
+      "compras_catalogo_gerir",
+      "compras_preco_base_importar",
+      "compras_excecao_aprovar",
+      "agendamento_pedidos_gerir",
       "retiradas_criar",
       "retiradas_editar",
       "notas_fiscais_importar",
@@ -265,12 +277,27 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     ]
   }),
   Compras: permissoesDoCargo({
-    ativas: ["pedidos", "estoque_produtos", "conferencias_estoque", "mercadorias", "fornecedores", "produtos"],
+    ativas: [
+      "pedidos",
+      "estoque_produtos",
+      "conferencias_estoque",
+      "agendamento_pedidos",
+      "cadastro_compras",
+      "solicitacao_compra",
+      "pedidos_finalizados",
+      "mercadorias",
+      "fornecedores",
+      "produtos"
+    ],
     extras: [
       "pedidos_criar",
       "pedidos_editar",
       "pedidos_aprovar",
+      "compras_catalogo_gerir",
+      "compras_preco_base_importar",
+      "compras_excecao_aprovar",
       "conferencias_estoque_agendar",
+      "agendamento_pedidos_gerir",
       "mercadorias_criar",
       "mercadorias_discriminar",
       "cadastro_fornecedores_criar",

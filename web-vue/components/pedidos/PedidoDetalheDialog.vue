@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
-import PedidoCotacaoPainel from "~/components/pedidos/PedidoCotacaoPainel.vue";
 import { formatarQuantidade } from "~/utils/formatacao";
+import {
+  corStatusPedido as corStatus,
+  pedidoEhLegado,
+  rotuloDoTipoDePedido,
+  rotuloStatusPedido
+} from "~/utils/pedido-origem";
 
 const aberto = defineModel<boolean>({ default: false });
 defineProps<{
@@ -9,39 +14,21 @@ defineProps<{
   podeEditar: boolean;
   podeReceber: boolean;
   transicionando: boolean;
-  /** Link de cotacao gerado nesta sessao para este pedido, para copiar. */
-  linkCotacao: string | null;
 }>();
+// Doc 58 §6: o pedido da cotacao nasce Comprado; o fornecedor pode ajustar a quantidade ao estoque dele (aparece no
+// historico). Daqui se recebe ou se cancela.
 const emit = defineEmits<{
-  editar: [pedido: PedidoDto];
-  enviarCotacao: [];
-  copiarLink: [link: string];
-  situacao: [status: "confirmado" | "cancelado"];
+  situacao: [status: "cancelado"];
   receber: [];
 }>();
 
-const rotulosStatus: Record<PedidoStatus, string> = {
-  rascunho: "Legado: rascunho",
-  aprovado: "Legado: aprovado",
-  a_fazer: "A fazer",
-  enviado: "Enviado",
-  retornado: "Retornado",
-  confirmado: "Confirmado",
-  recebido_parcial: "Recebido parcialmente",
-  recebido: "Recebido",
-  cancelado: "Cancelado"
-};
-const etapas: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
-function corStatus(status: PedidoStatus) {
-  if (status === "recebido") return "success";
-  if (status === "recebido_parcial" || status === "confirmado") return "info";
-  if (status === "cancelado") return "error";
-  if (status === "retornado") return "warning";
-  return "secondary";
-}
+const etapasLegado: PedidoStatus[] = ["a_fazer", "enviado", "retornado", "confirmado", "recebido_parcial", "recebido"];
+const etapasRodada: PedidoStatus[] = ["confirmado", "recebido_parcial", "recebido"];
+const etapasDe = (pedido: PedidoDto) => (pedidoEhLegado(pedido.tipo) ? etapasLegado : etapasRodada);
 function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
   if (pedido.status === "cancelado" || pedido.status === "rascunho" || pedido.status === "aprovado")
     return pedido.status === etapa;
+  const etapas = etapasDe(pedido);
   return etapas.indexOf(etapa) <= etapas.indexOf(pedido.status);
 }
 </script>
@@ -54,23 +41,33 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
           <h2 class="pedido-detalhe__titulo">{{ pedido.fornecedorNome ?? "Pedido histórico" }}</h2>
           <p class="pedido-detalhe__subtitulo">
             {{ pedido.totalItens }} item(ns) ·
-            {{ pedido.tipo === "automatico" ? "Sugestão de reposição" : "Pedido manual" }}
+            {{ rotuloDoTipoDePedido(pedido.tipo) }}
           </p>
         </div>
-        <v-chip :color="corStatus(pedido.status)" size="small">{{ rotulosStatus[pedido.status] }}</v-chip>
+        <v-chip :color="corStatus(pedido.status)" size="small">{{ rotuloStatusPedido(pedido.status) }}</v-chip>
       </v-card-title>
       <v-card-text class="pedido-detalhe__corpo">
         <v-alert v-if="pedido.status === 'rascunho' || pedido.status === 'aprovado'" type="warning" variant="tonal">
           Pedido histórico: leitura preservada; não entra no novo fluxo sem migração de dados aprovada.
         </v-alert>
-        <div v-else class="pedido-detalhe__etapas">
+        <v-alert
+          v-else-if="pedidoEhLegado(pedido.tipo) && ['a_fazer', 'enviado', 'retornado'].includes(pedido.status)"
+          type="info"
+          variant="tonal"
+          density="compact"
+          data-legado="pedido"
+        >
+          Pedido do fluxo antigo: não é mais editado, enviado nem confirmado. Só pode ser cancelado. Para comprar de
+          novo, use o Pedido urgente.
+        </v-alert>
+        <div v-if="pedido.status !== 'rascunho' && pedido.status !== 'aprovado'" class="pedido-detalhe__etapas">
           <v-chip
-            v-for="etapa in etapas"
+            v-for="etapa in etapasDe(pedido)"
             :key="etapa"
             :color="etapaAtual(pedido, etapa) ? corStatus(etapa) : undefined"
             :variant="etapaAtual(pedido, etapa) ? 'tonal' : 'outlined'"
             size="small"
-            >{{ rotulosStatus[etapa] }}</v-chip
+            >{{ rotuloStatusPedido(etapa) }}</v-chip
           >
         </div>
         <div class="pedido-detalhe__tabela d-none d-sm-block">
@@ -80,6 +77,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
                 <th>Produto</th>
                 <th class="text-right">Pedido</th>
                 <th class="text-right">Recebido</th>
+                <th class="text-right">Devolvido</th>
                 <th class="text-right">Pendente</th>
               </tr>
             </thead>
@@ -88,6 +86,7 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
                 <td>{{ item.descricaoProduto }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidade) }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeRecebida) }}</td>
+                <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadeDevolvida) }}</td>
                 <td class="text-right pedido-detalhe__numero">{{ formatarQuantidade(item.quantidadePendente) }}</td>
               </tr>
             </tbody>
@@ -103,23 +102,13 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
               </div>
               <div class="text-caption text-medium-emphasis mt-1">
                 Pendente: {{ formatarQuantidade(item.quantidadePendente) }}
+                <template v-if="Number(item.quantidadeDevolvida) > 0">
+                  · Devolvido: {{ formatarQuantidade(item.quantidadeDevolvida) }}</template
+                >
               </div></v-card-text
             >
           </v-card>
         </div>
-        <PedidoCotacaoPainel
-          v-if="
-            pedido.cotacao &&
-            ['enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado'].includes(pedido.status)
-          "
-          :cotacao="pedido.cotacao"
-          :status="pedido.status"
-          :link="linkCotacao"
-          :pode-editar="podeEditar"
-          :transicionando="transicionando"
-          @novo-link="emit('enviarCotacao')"
-          @copiar="(link) => emit('copiarLink', link)"
-        />
         <v-list
           v-if="pedido.eventos?.length"
           class="pedido-detalhe__historico"
@@ -131,28 +120,12 @@ function etapaAtual(pedido: PedidoDto, etapa: PedidoStatus) {
             v-for="evento in pedido.eventos"
             :key="evento.id"
             data-evento="pedido"
-            :title="`${rotulosStatus[evento.status]} · ${evento.criadoPorNome}`"
+            :title="`${rotuloStatusPedido(evento.status)} · ${evento.criadoPorNome}`"
             :subtitle="`${new Date(evento.criadoEm).toLocaleString('pt-BR')} · ${evento.observacao ?? 'Sem observação'}`"
           />
         </v-list>
       </v-card-text>
       <v-card-actions class="pedido-detalhe__acoes flex-wrap">
-        <v-btn v-if="podeEditar && pedido.status === 'a_fazer'" @click="emit('editar', pedido)">Editar</v-btn>
-        <v-btn
-          v-if="podeEditar && pedido.status === 'a_fazer'"
-          color="primary"
-          :loading="transicionando"
-          prepend-icon="mdi-whatsapp"
-          @click="emit('enviarCotacao')"
-          >Enviar cotação</v-btn
-        >
-        <v-btn
-          v-if="podeEditar && pedido.status === 'retornado'"
-          color="primary"
-          :loading="transicionando"
-          @click="emit('situacao', 'confirmado')"
-          >Confirmar negociação</v-btn
-        >
         <v-btn
           v-if="podeReceber && ['confirmado', 'recebido_parcial'].includes(pedido.status)"
           color="success"

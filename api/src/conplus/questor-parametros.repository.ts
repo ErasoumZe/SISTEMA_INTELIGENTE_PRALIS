@@ -10,7 +10,7 @@ import { obterFuncaoQuestorRepository, obterTurnoQuestorRepository } from "./que
  * E2/E3/E4 de UM processo, no formato que a montagem do TXT e a prévia de prontidão consomem:
  * configuração da empresa, função e turno do processo e o contrato do DP. Tudo da mesma empresa.
  *
- * Lança 42P01/42703 enquanto as migrations 0064–0066 não existirem no banco — quem chama decide.
+ * Lança 42P01/42703 enquanto as migrations 0073–0075 não existirem no banco — quem chama decide.
  */
 export async function lerParametrosQuestorRepository(
   processoId: string,

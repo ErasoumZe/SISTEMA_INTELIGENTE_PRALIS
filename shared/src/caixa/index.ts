@@ -534,6 +534,15 @@ export const indisponibilidadeAbertaCaixaSchema = z.object({
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable(),
+  // Presente na consulta do status antes da abertura. A tela usa estes ids para exibir o posto
+  // configurado, mas a API continua validando-os no POST de abertura.
+  vinculoOperador: z
+    .object({
+      pdvId: uuidSchema,
+      turnoId: uuidSchema
+    })
+    .nullable()
+    .optional(),
   lacreFechamentoReservado: z.string().nullable(),
   indisponibilidadeAberta: indisponibilidadeAbertaCaixaSchema.nullable(),
   // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado

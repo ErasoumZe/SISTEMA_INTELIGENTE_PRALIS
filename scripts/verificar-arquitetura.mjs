@@ -50,6 +50,19 @@ for (const arquivo of arquivosApi) {
   if (arquivo.endsWith(".repository.ts") && /\.service\.js|\.controller\.js/u.test(conteudo)) {
     falhar(arquivo, "repository nao pode importar service/controller");
   }
+  // Isolamento comercial da Fase 2 (PROJECT_BRAIN 54): o modulo PUBLICO do fornecedor
+  // (rodada-publica) e disjunto do modulo do comprador. Ele nao pode importar o repository/service
+  // do comprador nem tocar preco-base ou adjudicacao — se tocar, o build quebra aqui, nao numa
+  // revisao que alguem pode esquecer de fazer.
+  if (arquivo.endsWith("rodada-publica.repository.ts") || arquivo.endsWith("rodada-publica.service.ts")) {
+    if (
+      /compras-(rodadas|decisao|fechamento|adjudicacao|solicitacoes|contraproposta)\.(repository|service)\.js|compras-fundacao|produtosPrecosBase|comprasAdjudicacoes|produtos_precos_base|compras_adjudicacoes/u.test(
+        conteudo
+      )
+    ) {
+      falhar(arquivo, "modulo publico da rodada nao pode tocar o modulo do comprador, preco-base ou adjudicacao");
+    }
+  }
 }
 
 // web-vue so importa `@padaria/shared` pela RAIZ quando o import gera codigo. O `nuxt.config`

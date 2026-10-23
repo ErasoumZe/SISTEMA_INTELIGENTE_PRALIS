@@ -198,10 +198,18 @@ export const permissoes = [
   "pedidos_criar",
   "pedidos_editar",
   "pedidos_aprovar",
+  "compras_catalogo_gerir",
+  "compras_preco_base_importar",
+  // R-221 decisao 10: aprovar compra acima da base (ou sem base, ou barrada pelo teto da rodada).
+  // Separada de `pedidos_aprovar` (receber): quem confere a porta nao autoriza gasto fora do envelope.
+  "compras_excecao_aprovar",
   "perdas_sobras_visualizar",
   "estoque_produtos_visualizar",
   "conferencias_estoque_visualizar",
   "conferencias_estoque_agendar",
+  // Agendamento de pedido (doc 56): ver a agenda e o pedido do dia; gerir = criar, editar, cancelar e conferir.
+  "agendamento_pedidos_visualizar",
+  "agendamento_pedidos_gerir",
   "relatorio_dre_visualizar",
   "avaliacao_qualidade_visualizar",
   "avaliacao_colaboradores_visualizar",
@@ -261,6 +269,14 @@ export const permissoes = [
   "menu_estoque_produtos_desabilitado",
   "menu_conferencias_estoque_mostrar",
   "menu_conferencias_estoque_desabilitado",
+  "menu_agendamento_pedidos_mostrar",
+  "menu_agendamento_pedidos_desabilitado",
+  "menu_cadastro_compras_mostrar",
+  "menu_cadastro_compras_desabilitado",
+  "menu_solicitacao_compra_mostrar",
+  "menu_solicitacao_compra_desabilitado",
+  "menu_pedidos_finalizados_mostrar",
+  "menu_pedidos_finalizados_desabilitado",
   "menu_relatorio_dre_mostrar",
   "menu_relatorio_dre_desabilitado",
   "menu_clientes_mostrar",
@@ -370,6 +386,8 @@ const nomesRecursosPermissao: Record<string, string> = {
   relatorio_faltas: "o relatório de faltas e atestados",
   relatorio_advertencias: "o relatório de advertências e suspensões",
   pedidos: "os pedidos",
+  compras_catalogo: "o catálogo de produtos dos fornecedores",
+  compras_preco_base: "a importação e o histórico de preço-base",
   perdas_sobras: "os registros de perdas e sobras",
   estoque_produtos: "o estoque de produtos",
   relatorio_dre: "o relatório de DRE",
@@ -639,6 +657,11 @@ export function ehAdministradorTotal(perfil: Pick<PerfilUsuario, "role">): boole
 /** Regra de cargo usada pelos fluxos operacionais próprios da Tesouraria. */
 export function ehTesouraria(perfil: Pick<PerfilUsuario, "cargos">): boolean {
   return perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("tesouraria"));
+}
+
+/** Ajustar saldo e um ato financeiro excepcional: somente Administrador total ou Tesouraria. */
+export function podeAjustarSaldoContas(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
+  return ehAdministradorTotal(perfil) || ehTesouraria(perfil);
 }
 
 /** A folha de fechamento é conferida pela Tesouraria e supervisionada pela Direção Geral. */

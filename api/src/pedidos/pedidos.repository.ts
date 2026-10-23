@@ -4,6 +4,7 @@ import {
   estoqueMovimentos,
   pedidos,
   pedidosEventos,
+  pedidosDevolucoes,
   pedidosItens,
   pedidosRecebimentos,
   perfisUsuarios
@@ -17,21 +18,12 @@ import type {
   PedidoStatusNovo,
   PedidoTipo
 } from "@padaria/shared/pedidos";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 export type ProdutoEstoqueLinha = {
   id: string;
   descricao: string;
   quantidadeEstoque: number;
-  estoqueMin: number | null;
-  estoqueMax: number | null;
-};
-
-export type ItemPedidoParaCriar = {
-  produtoId: string;
-  descricaoProduto: string;
-  quantidade: number;
-  estoqueAtual: number | null;
   estoqueMin: number | null;
   estoqueMax: number | null;
 };
@@ -95,124 +87,22 @@ export async function buscarProdutosEstoqueRepository(
   }));
 }
 
-export async function fornecedorPertenceAEmpresaRepository(
-  fornecedorId: string,
-  empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<boolean> {
-  const [fornecedor] = await db
-    .select({ id: fornecedores.id })
-    .from(fornecedores)
-    .where(and(eq(fornecedores.id, fornecedorId), eq(fornecedores.empresaId, empresaId)))
-    .limit(1);
-  return Boolean(fornecedor);
-}
-
-async function inserirItens(pedidoId: string, itens: ItemPedidoParaCriar[], tx: ExecutorBanco): Promise<void> {
-  await tx.insert(pedidosItens).values(
-    itens.map((item) => ({
-      pedidoId,
-      produtoId: item.produtoId,
-      fornecedorId: null,
-      descricaoProduto: item.descricaoProduto,
-      quantidade: String(item.quantidade),
-      estoqueAtual: item.estoqueAtual === null ? null : String(item.estoqueAtual),
-      estoqueMin: item.estoqueMin === null ? null : String(item.estoqueMin),
-      estoqueMax: item.estoqueMax === null ? null : String(item.estoqueMax)
-    }))
-  );
-}
-
 /**
- * Autor do evento: um usuario OU uma cotacao (R-216). O banco exige um dos dois por CHECK; o tipo
- * aqui repete a regra para o erro aparecer na compilacao, nao na primeira resposta de fornecedor.
+ * Autor do evento de situacao: sempre um USUARIO (cancelar, receber). Os eventos de compra automatica
+ * (autor = a resposta do fornecedor) nascem na adjudicacao da rodada, nao aqui. O banco aceita usuario,
+ * cotacao legada OU proposta como autor (CHECK pedidos_eventos_autor_check); este caminho so grava usuario.
  */
-export type AutorEventoPedido =
-  | { criadoPor: string; cotacaoId?: string | null }
-  | { criadoPor: null; cotacaoId: string };
-
 async function inserirEvento(
   input: {
     empresaId: string;
     pedidoId: string;
     status: PedidoStatusNovo;
     observacao: string | null;
-  } & AutorEventoPedido,
+    criadoPor: string;
+  },
   tx: ExecutorBanco
 ): Promise<void> {
-  await tx.insert(pedidosEventos).values({ ...input, cotacaoId: input.cotacaoId ?? null });
-}
-
-export async function criarPedidoRepository(
-  input: {
-    empresaId: string;
-    fornecedorId: string;
-    tipo: PedidoTipo;
-    dataAgendada: string | null;
-    recorrencia: PedidoRecorrencia;
-    observacao: string | null;
-    criadoPor: string;
-    itens: ItemPedidoParaCriar[];
-  },
-  db?: ExecutorBanco
-): Promise<{ id: string }> {
-  return executarComTransacaoOpcional(db, async (tx) => {
-    const [pedido] = await tx
-      .insert(pedidos)
-      .values({
-        empresaId: input.empresaId,
-        fornecedorId: input.fornecedorId,
-        tipo: input.tipo,
-        status: "a_fazer",
-        dataAgendada: input.dataAgendada ? new Date(input.dataAgendada) : null,
-        recorrencia: input.recorrencia,
-        observacao: input.observacao,
-        criadoPor: input.criadoPor
-      })
-      .returning({ id: pedidos.id });
-    if (!pedido) throw new Error("Pedido nao criado");
-    await inserirItens(pedido.id, input.itens, tx);
-    await inserirEvento(
-      {
-        empresaId: input.empresaId,
-        pedidoId: pedido.id,
-        status: "a_fazer",
-        observacao: input.observacao,
-        criadoPor: input.criadoPor
-      },
-      tx
-    );
-    return { id: pedido.id };
-  });
-}
-
-export async function atualizarPedidoRepository(
-  pedidoId: string,
-  input: {
-    fornecedorId: string | undefined;
-    dataAgendada: string | null | undefined;
-    recorrencia: PedidoRecorrencia | undefined;
-    observacao: string | null | undefined;
-    itens: ItemPedidoParaCriar[];
-  },
-  db?: ExecutorBanco
-): Promise<void> {
-  return executarComTransacaoOpcional(db, async (tx) => {
-    await tx
-      .update(pedidos)
-      .set({
-        ...(input.fornecedorId !== undefined ? { fornecedorId: input.fornecedorId } : {}),
-        ...(input.dataAgendada !== undefined
-          ? { dataAgendada: input.dataAgendada ? new Date(input.dataAgendada) : null }
-          : {}),
-        ...(input.recorrencia !== undefined ? { recorrencia: input.recorrencia } : {}),
-        ...(input.observacao !== undefined ? { observacao: input.observacao } : {}),
-        atualizadoEm: new Date()
-      })
-      .where(eq(pedidos.id, pedidoId));
-    await tx.delete(pedidosItens).where(eq(pedidosItens.pedidoId, pedidoId));
-    await inserirItens(pedidoId, input.itens, tx);
-  });
+  await tx.insert(pedidosEventos).values(input);
 }
 
 export type PedidoLinhaBase = {
@@ -288,19 +178,22 @@ export async function obterPedidoDetalheRepository(
       criadoPor: pedidosEventos.criadoPor,
       criadoPorNome: perfisUsuarios.nome,
       cotacaoId: pedidosEventos.cotacaoId,
+      propostaId: pedidosEventos.propostaId,
       criadoEm: pedidosEventos.criadoEm
     })
     .from(pedidosEventos)
-    // leftJoin: o Retornado de uma cotacao nao tem usuario — quem respondeu foi o fornecedor.
+    // leftJoin: a compra automatica (e o Retornado da cotacao legada) nao tem usuario — quem agiu foi o
+    // fornecedor, pelo link.
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, pedidosEventos.criadoPor))
     .where(eq(pedidosEventos.pedidoId, pedidoId))
     .orderBy(asc(pedidosEventos.criadoEm))
     .then((linhas) =>
-      linhas.map(({ cotacaoId, ...linha }) => ({
+      linhas.map(({ cotacaoId, propostaId, ...linha }) => ({
         ...linha,
         status: linha.status as PedidoStatusNovo,
         criadoPorNome:
-          linha.criadoPorNome ?? (cotacaoId ? `${cabecalho.fornecedorNome ?? "Fornecedor"} (pelo link)` : "Sistema"),
+          linha.criadoPorNome ??
+          (cotacaoId || propostaId ? `${cabecalho.fornecedorNome ?? "Fornecedor"} (pelo link)` : "Sistema"),
         criadoEm: linha.criadoEm.toISOString()
       }))
     );
@@ -346,9 +239,26 @@ export async function listarItensDoPedidoRepository(
         )
         .groupBy(estoqueMovimentos.pedidoItemId)
     : [];
+  const devolvidos = itens.length
+    ? await db
+        .select({
+          pedidoItemId: pedidosDevolucoes.pedidoItemId,
+          quantidade: sql<string>`sum(${pedidosDevolucoes.quantidade})`
+        })
+        .from(pedidosDevolucoes)
+        .where(
+          inArray(
+            pedidosDevolucoes.pedidoItemId,
+            itens.map((item) => item.id)
+          )
+        )
+        .groupBy(pedidosDevolucoes.pedidoItemId)
+    : [];
   const recebidoPorItem = new Map(recebidos.map((item) => [item.pedidoItemId, Number(item.quantidadeRecebida)]));
+  const devolvidoPorItem = new Map(devolvidos.map((item) => [item.pedidoItemId, Number(item.quantidade)]));
   return itens.map((item) => {
     const recebida = recebidoPorItem.get(item.id) ?? 0;
+    const devolvida = devolvidoPorItem.get(item.id) ?? 0;
     const quantidade = Number(item.quantidade);
     return {
       id: item.id,
@@ -356,7 +266,9 @@ export async function listarItensDoPedidoRepository(
       descricaoProduto: item.descricaoProduto,
       quantidade: item.quantidade,
       quantidadeRecebida: String(recebida),
-      quantidadePendente: String(quantidade - recebida),
+      quantidadeDevolvida: String(devolvida),
+      // Doc 58 §7: devolveu, fechou — o resto nao fica esperando.
+      quantidadePendente: String(devolvida > 0 ? 0 : quantidade - recebida),
       estoqueAtual: item.estoqueAtual,
       estoqueMin: item.estoqueMin,
       estoqueMax: item.estoqueMax
@@ -385,7 +297,8 @@ export async function atualizarSituacaoPedidoRepository(
     empresaId: string;
     status: PedidoStatusNovo;
     observacao: string | null;
-  } & AutorEventoPedido,
+    criadoPor: string;
+  },
   db: ExecutorBanco
 ): Promise<void> {
   await db
@@ -395,6 +308,13 @@ export async function atualizarSituacaoPedidoRepository(
   await inserirEvento(input, db);
 }
 
+export type ItemDoRecebimentoGravado = {
+  pedidoItemId: string;
+  quantidadeConferida: number;
+  quantidadeDevolvida: number;
+  motivoDevolucao: string | null;
+};
+
 export async function buscarRecebimentoPorIdempotenciaRepository(
   empresaId: string,
   idempotenciaChave: string,
@@ -403,7 +323,7 @@ export async function buscarRecebimentoPorIdempotenciaRepository(
   id: string;
   pedidoId: string;
   observacao: string | null;
-  itens: Array<{ pedidoItemId: string; quantidadeConferida: number }>;
+  itens: ItemDoRecebimentoGravado[];
 } | null> {
   const [recebimento] = await db
     .select({
@@ -424,13 +344,32 @@ export async function buscarRecebimentoPorIdempotenciaRepository(
     })
     .from(estoqueMovimentos)
     .where(eq(estoqueMovimentos.pedidoRecebimentoId, recebimento.id));
-  return {
-    ...recebimento,
-    itens: movimentos.map((item) => ({
-      pedidoItemId: item.pedidoItemId,
-      quantidadeConferida: Number(item.quantidade)
-    }))
+  const devolucoes = await db
+    .select({
+      pedidoItemId: pedidosDevolucoes.pedidoItemId,
+      quantidade: pedidosDevolucoes.quantidade,
+      motivo: pedidosDevolucoes.motivo
+    })
+    .from(pedidosDevolucoes)
+    .where(eq(pedidosDevolucoes.pedidoRecebimentoId, recebimento.id));
+  const porItem = new Map<string, ItemDoRecebimentoGravado>();
+  const doItem = (pedidoItemId: string) => {
+    const atual = porItem.get(pedidoItemId) ?? {
+      pedidoItemId,
+      quantidadeConferida: 0,
+      quantidadeDevolvida: 0,
+      motivoDevolucao: null
+    };
+    porItem.set(pedidoItemId, atual);
+    return atual;
   };
+  for (const movimento of movimentos) doItem(movimento.pedidoItemId).quantidadeConferida = Number(movimento.quantidade);
+  for (const devolucao of devolucoes) {
+    const item = doItem(devolucao.pedidoItemId);
+    item.quantidadeDevolvida = Number(devolucao.quantidade);
+    item.motivoDevolucao = devolucao.motivo;
+  }
+  return { ...recebimento, itens: [...porItem.values()] };
 }
 
 export async function criarRecebimentoRepository(
@@ -465,6 +404,22 @@ export async function travarProdutosRepository(
     .orderBy(asc(produtos.id))
     .for("update");
   return linhas.map((linha) => ({ id: linha.id, quantidadeEstoque: Number(linha.quantidadeEstoque) }));
+}
+
+/** Doc 58 §7: o que voltou com o entregador, com o motivo. Nao mexe no estoque. */
+export async function registrarDevolucaoRepository(
+  input: {
+    empresaId: string;
+    pedidoId: string;
+    pedidoItemId: string;
+    pedidoRecebimentoId: string;
+    quantidade: number;
+    motivo: string;
+    devolvidoPor: string;
+  },
+  db: ExecutorBanco
+): Promise<void> {
+  await db.insert(pedidosDevolucoes).values({ ...input, quantidade: String(input.quantidade) });
 }
 
 export async function registrarMovimentoRecebimentoRepository(

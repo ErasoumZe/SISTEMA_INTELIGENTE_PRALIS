@@ -19,6 +19,14 @@ test.describe("Relatório de fechamento da Tesouraria", () => {
     await conferir.click();
     await expect(page.getByText("Conferência final do caixa")).toBeVisible();
 
+    await page.getByRole("button", { name: "Exportar para planilha" }).click();
+    await expect(page.getByText("Nenhum arquivo foi gerado e nenhum dado foi alterado.")).toBeVisible();
+    await page.getByRole("button", { name: "Entendi" }).click();
+
+    await page.getByRole("button", { name: "Alteração de status" }).click();
+    await expect(page.getByText("Quebra de caixa", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Entendi" }).click();
+
     for (const largura of LARGURAS) {
       await page.setViewportSize({ width: largura.largura, height: largura.altura });
       await expect(page.getByText("Conferência final do caixa")).toBeVisible();

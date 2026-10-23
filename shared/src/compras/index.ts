@@ -12,18 +12,6 @@ export const estoqueProdutosQuerySchema = z.object({
   curvaAbc: curvaAbcSchema.optional()
 });
 
-export const conferenciaEstoquePayloadSchema = z.object({
-  empresaId: uuidSchema,
-  grupoMercadoriaId: uuidSchema.optional().nullable(),
-  areaEstoque: z.string().trim().max(120).optional().nullable(),
-  localVenda: z.string().trim().max(120).optional().nullable(),
-  localEstoque: z.string().trim().max(120).optional().nullable(),
-  curvaAbc: curvaAbcSchema.optional().nullable(),
-  agendadaPara: z.string().min(10),
-  observacao: z.string().trim().max(1_000).optional().nullable()
-});
-
-export const conferenciasEstoqueQuerySchema = z.object({ empresaId: uuidSchema });
 export const estoqueMovimentosQuerySchema = z.object({
   empresaId: uuidSchema,
   produtoId: uuidSchema.optional(),
@@ -33,8 +21,6 @@ export const estoqueMovimentosQuerySchema = z.object({
 });
 
 export type EstoqueProdutosQuery = z.infer<typeof estoqueProdutosQuerySchema>;
-export type ConferenciaEstoquePayload = z.infer<typeof conferenciaEstoquePayloadSchema>;
-export type ConferenciasEstoqueQuery = z.infer<typeof conferenciasEstoqueQuerySchema>;
 export type EstoqueMovimentosQuery = z.infer<typeof estoqueMovimentosQuerySchema>;
 
 export type ProdutoEstoqueDto = {
@@ -52,21 +38,6 @@ export type ProdutoEstoqueDto = {
   // Sigla da unidade individual. "12" sozinho nao diz se sao 12 quilos ou 12 caixas, e quem monta
   // pedido decide pela unidade. Esta rota ja exige `estoque_produtos_visualizar`.
   unidade: string | null;
-};
-
-export type ConferenciaEstoqueDto = {
-  id: string;
-  empresaId: string;
-  grupoMercadoriaId: string | null;
-  grupo: string | null;
-  areaEstoque: string | null;
-  localVenda: string | null;
-  localEstoque: string | null;
-  curvaAbc: "A" | "B" | "C" | null;
-  agendadaPara: string;
-  observacao: string | null;
-  status: "agendada" | "cancelada" | "concluida";
-  criadoEm: string;
 };
 
 export type EstoqueMovimentoDto = {
@@ -87,3 +58,17 @@ export type EstoqueMovimentoDto = {
 };
 
 export * from "./cotacao.js";
+export * from "./fundacao.js";
+export * from "./solicitacao.js";
+export * from "./rodada.js";
+export * from "./rodada-publica.js";
+export * from "./adjudicacao.js";
+export * from "./decisao.js";
+export * from "./contraproposta.js";
+export * from "./pedido-rapido.js";
+export * from "./historico.js";
+export * from "./recorrencia.js";
+export * from "./agendamento.js";
+export * from "./conferencia.js";
+export * from "./painel.js";
+export * from "./solicitacao-compra.js";

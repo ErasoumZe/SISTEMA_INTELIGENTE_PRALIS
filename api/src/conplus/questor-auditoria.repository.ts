@@ -3,7 +3,7 @@ import { questorAuditoria } from "@padaria/db/schema";
 import { banco, type TransacaoBanco } from "../banco/conexao.js";
 
 /**
- * Trilha de auditoria Questor (migration 0070): downloads, tentativas recusadas e cancelamentos. Só
+ * Trilha de auditoria Questor (migration 0079): downloads, tentativas recusadas e cancelamentos. Só
  * inserção — nada aqui é editado ou apagado.
  */
 

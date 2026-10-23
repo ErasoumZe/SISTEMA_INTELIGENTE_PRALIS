@@ -104,7 +104,7 @@ function gateway(): GoogleAdmissionTestGateway {
 }
 
 describe("executor isolado da sincronizacao Google de admissao", () => {
-  it("gera a previa sem depender da migration 0062", () => {
+  it("gera a previa sem depender da migration 0071", () => {
     const service = new GoogleAdmissionTestService(gateway());
     expect(service.prepararPlano(entrada)).toMatchObject({
       processoFolderName: "TESTE ADMISSAO - ficticio-001",

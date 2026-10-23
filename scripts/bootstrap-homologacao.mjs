@@ -17,7 +17,7 @@ const expected = {
   hostnames: new Set(["localhost", "127.0.0.1", "::1"]),
   port: "5544",
   database: "padaria_homologacao",
-  constraintMigration: 1792426055938
+  constraintMigration: 1792777061307
 };
 
 function fail(message) {
@@ -97,7 +97,7 @@ async function ensurePrecondition(pool) {
   await pool.query("BEGIN");
   try {
     const table = await pool.query("SELECT to_regclass('public.admissoes_processos_dependentes') AS relation;");
-    if (!table.rows[0].relation) fail("a tabela de dependentes ainda nao existe antes da 0061");
+    if (!table.rows[0].relation) fail("a tabela de dependentes ainda nao existe antes da 0070");
 
     const result = await pool.query(`
       SELECT
@@ -139,7 +139,7 @@ async function main() {
   try {
     const migrations = readMigrationFiles(migrationConfig);
     const constraintMigration = migrations.find((migration) => migration.folderMillis === expected.constraintMigration);
-    if (!constraintMigration) fail("migration 0061 nao encontrada no journal");
+    if (!constraintMigration) fail("migration 0070 nao encontrada no journal");
     if (migrations.length === 0) fail("nenhuma migration encontrada no journal");
 
     const finalMigration = migrations[migrations.length - 1];

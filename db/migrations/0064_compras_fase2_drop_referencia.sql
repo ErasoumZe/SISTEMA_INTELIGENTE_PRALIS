@@ -1,0 +1,1 @@
+ALTER TABLE "produtos_precos_base" DROP COLUMN "referencia_externa";

@@ -49,7 +49,16 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
     const itemBase: Opcao = { id, ...(empresaDoItem ? { empresaId: empresaDoItem } : {}) };
 
     if (tela === "empresas") {
-      const item = { ...itemBase, nome: form.nome, cnpj: form.cnpj || null };
+      // A configuracao operacional tambem entra no cache: a grade que alimenta a PROXIMA abertura e
+      // esta, e um item sem fuso/prazo faria o salvar seguinte apagar o que este acabou de gravar.
+      const item = {
+        ...itemBase,
+        nome: form.nome,
+        cnpj: form.cnpj || null,
+        matriculaPrefixo: form.matriculaPrefixo,
+        fusoHorario: form.fusoHorario,
+        comprasPrazoRespostaHoras: form.comprasPrazoRespostaHoras || null
+      };
       upsertOpcao(deps.empresas(), item);
       upsertOpcao(opcoes.empresas, item);
       return true;
@@ -77,7 +86,9 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
         ...itemBase,
         nome: form.nome,
         documento: form.documento || undefined,
-        whatsapp: form.whatsapp || undefined
+        whatsapp: form.whatsapp || undefined,
+        // A situacao entra no cache para a proxima abertura nao perder o inativo (fio de edicao).
+        situacao: form.ativo ? "ativo" : "inativo"
       });
       return true;
     }
@@ -181,6 +192,7 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
           empresaId: empresaIds[0] ?? empresaAtual,
           nome: form.nome,
           email: form.email,
+          whatsapp: form.whatsapp,
           role: form.role || usuarioAtual?.role,
           colaboradorId: form.colaboradorId,
           setorId: colaborador?.setorId ?? null,

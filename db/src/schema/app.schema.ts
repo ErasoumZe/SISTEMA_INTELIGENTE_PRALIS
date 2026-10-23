@@ -32,6 +32,7 @@ import type {
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
+import type { RankingConferencia, RegraRecorrencia } from "@padaria/shared/compras";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -129,9 +130,18 @@ export const empresas = pgTable(
     // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
     // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
     contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
+    fusoHorario: text("fuso_horario").notNull().default("America/Sao_Paulo"),
+    comprasPrazoRespostaHoras: integer("compras_prazo_resposta_horas"),
     criadoEm
   },
-  (table) => [check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`)]
+  (table) => [
+    check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`),
+    check("empresas_fuso_horario_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "empresas_compras_prazo_resposta_horas_check",
+      sql`${table.comprasPrazoRespostaHoras} is null or ${table.comprasPrazoRespostaHoras} > 0`
+    )
+  ]
 );
 export const perfisUsuarios = pgTable(
   "perfis_usuarios",
@@ -140,11 +150,15 @@ export const perfisUsuarios = pgTable(
     empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
     nome: text("nome").notNull(),
     email: text("email").notNull().unique(),
+    whatsapp: text("whatsapp"),
     role: text("role").$type<"usuario_comum" | "usuario_admin" | "admin">().notNull().default("usuario_comum"),
     criadoEm,
     atualizadoEm
   },
-  (table) => [check("perfis_usuarios_role_check", sql`${table.role} in ('usuario_comum', 'usuario_admin', 'admin')`)]
+  (table) => [
+    check("perfis_usuarios_role_check", sql`${table.role} in ('usuario_comum', 'usuario_admin', 'admin')`),
+    check("perfis_usuarios_whatsapp_check", sql`${table.whatsapp} is null or ${table.whatsapp} ~ '^[0-9]{10,15}$'`)
+  ]
 );
 
 export const permissoesTabela = pgTable("permissoes", {
@@ -202,6 +216,35 @@ export const contas = pgTable(
     // pagamento poderia apontar para conta de OUTRA empresa e o banco nao reclamaria. Mesmo padrao
     // ja usado por `vendas_id_empresa_unica` e `fechamentos_caixa_id_empresa_unica`.
     unique("contas_id_empresa_unica").on(table.id, table.empresaId)
+  ]
+);
+
+// Ajustes administrativos nao reescrevem o historico nem o fundo da conta. Cada linha e um
+// fato financeiro imutavel que entra na mesma projecao do saldo atual; assim a tesouraria pode
+// corrigir um saldo de partida sem apagar venda, transferencia ou lancamento anterior.
+export const ajustesContas = pgTable(
+  "ajustes_contas",
+  {
+    id: idUuid,
+    empresaId,
+    contaId: uuid("conta_id").notNull(),
+    valor: valorMonetario("valor").notNull(),
+    saldoAnterior: valorMonetario("saldo_anterior").notNull(),
+    saldoPosterior: valorMonetario("saldo_posterior").notNull(),
+    motivo: text("motivo").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    check("ajustes_contas_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    foreignKey({
+      columns: [table.contaId, table.empresaId],
+      foreignColumns: [contas.id, contas.empresaId],
+      name: "ajustes_contas_conta_empresa_fk"
+    }).onDelete("restrict"),
+    index("ajustes_contas_conta_criado_em_idx").on(table.contaId, table.criadoEm)
   ]
 );
 
@@ -375,18 +418,29 @@ export const maquininhas = pgTable(
   ]
 );
 
-export const fornecedores = pgTable("fornecedores", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  documento: text("documento"),
-  // Canal operacional do fornecedor para o pedido de compra. O documento continua sendo fiscal;
-  // WhatsApp nao substitui CNPJ/CPF nem e obrigatorio para fornecedores historicos.
-  whatsapp: text("whatsapp"),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+export const fornecedores = pgTable(
+  "fornecedores",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    documento: text("documento"),
+    // Canal operacional do fornecedor para o pedido de compra. O documento continua sendo fiscal;
+    // WhatsApp nao substitui CNPJ/CPF nem e obrigatorio para fornecedores historicos.
+    whatsapp: text("whatsapp"),
+    // R-219/R-221: fornecedor inativo nao aparece no seletor da rodada. Mesmo padrao de
+    // `produtos.status`. WhatsApp continua opcional no cadastro; a obrigatoriedade e no convite.
+    situacao: text("situacao").$type<"ativo" | "inativo">().notNull().default("ativo"),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [
+    unique("fornecedores_id_empresa_unica").on(table.id, table.empresaId),
+    check("fornecedores_situacao_check", sql`${table.situacao} in ('ativo', 'inativo')`),
+    index("fornecedores_empresa_situacao_idx").on(table.empresaId, table.situacao)
+  ]
+);
 
 // SOCIOS / GESTORES (R-047, D1 do PROJECT_BRAIN/17): cadastro MINIMO — nome, empresa, ativo.
 // Nada alem disso de proposito: a planilha confirma que a lista e curta (RET. SOCIOS - RODRIGO,
@@ -465,7 +519,9 @@ export const colaboradores = pgTable(
     cpf: text("cpf"),
     setorId: uuid("setor_id").references(() => setores.id),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
-    // Turno habitual do colaborador — pre-seleciona o turno na abertura do caixa (editavel no ato).
+    // Vinculo operacional do Caixa. Quando preenchidos, PDV e turno nao sao escolhas do operador na
+    // abertura: a sessao abre exclusivamente o posto e o turno configurados pelo administrador.
+    pdvPadraoId: uuid("pdv_padrao_id").references(() => pdvs.id, { onDelete: "set null" }),
     turnoPadraoId: uuid("turno_padrao_id").references(() => turnos.id, { onDelete: "set null" }),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
@@ -480,7 +536,8 @@ export const colaboradores = pgTable(
       .where(sql`regexp_replace(${table.cpf}, '\\D', '', 'g') ~ '^[0-9]{11}$'`),
     uniqueIndex("colaboradores_usuario_id_unico")
       .on(table.usuarioId)
-      .where(sql`${table.usuarioId} is not null`)
+      .where(sql`${table.usuarioId} is not null`),
+    index("colaboradores_empresa_pdv_padrao_idx").on(table.empresaId, table.pdvPadraoId)
   ]
 );
 
@@ -662,16 +719,27 @@ export const gruposDespesas = pgTable("grupos_despesas", {
   idImportado: uuid("id_importado")
 });
 
-export const gruposMercadorias = pgTable("grupos_mercadorias", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposMercadorias.id),
-  ativa: boolean("ativa").notNull().default(true),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+export const gruposMercadorias = pgTable(
+  "grupos_mercadorias",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    grupoPaiId: uuid("grupo_pai_id"),
+    ativa: boolean("ativa").notNull().default(true),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [
+    unique("grupos_mercadorias_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "grupos_mercadorias_pai_mesma_empresa_fk",
+      columns: [table.grupoPaiId, table.empresaId],
+      foreignColumns: [table.id, table.empresaId]
+    }).onDelete("restrict")
+  ]
+);
 
 export const gruposRetiradas = pgTable("grupos_retiradas", {
   id: idUuid,
@@ -843,7 +911,7 @@ export const produtos = pgTable(
   {
     id: idUuid,
     empresaId,
-    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id"),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
     codigo: text("codigo"), // codigo externo (PR-XXXX-XXXX gerado quando vazio; ou manual)
@@ -873,6 +941,8 @@ export const produtos = pgTable(
     areaEstoque: text("area_estoque"),
     setorEstoque: text("setor_estoque"),
     curvaAbc: text("curva_abc").$type<"A" | "B" | "C" | null>(),
+    quantidadeVariavel: boolean("quantidade_variavel").notNull().default(false),
+    toleranciaQuantidadePercentual: numeric("tolerancia_quantidade_percentual", { precision: 5, scale: 2 }),
     // Locais de venda e foto
     localVenda1: text("local_venda_1"),
     localVenda2: text("local_venda_2"),
@@ -884,11 +954,348 @@ export const produtos = pgTable(
     idImportado: uuid("id_importado")
   },
   (table) => [
+    unique("produtos_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "produtos_grupo_mercadoria_mesma_empresa_fk",
+      columns: [table.grupoMercadoriaId, table.empresaId],
+      foreignColumns: [gruposMercadorias.id, gruposMercadorias.empresaId]
+    }).onDelete("restrict"),
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
     uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
     check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
     check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`),
-    check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`)
+    check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),
+    check(
+      "produtos_quantidade_variavel_tolerancia_check",
+      sql`(${table.quantidadeVariavel} = false and ${table.toleranciaQuantidadePercentual} is null) or (${table.quantidadeVariavel} = true and ${table.toleranciaQuantidadePercentual} between 0 and 30)`
+    )
+  ]
+);
+
+export const fornecedoresProdutos = pgTable(
+  "fornecedores_produtos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    status: text("status").$type<"pendente" | "aprovado" | "rejeitado">().notNull().default("pendente"),
+    origem: text("origem").$type<"compras" | "fornecedor">().notNull(),
+    precoOfertado: numeric("preco_ofertado", { precision: 14, scale: 4 }),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    aprovadoPor: text("aprovado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    aprovadoEm: timestamp("aprovado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("fornecedores_produtos_empresa_fornecedor_produto_unico").on(
+      table.empresaId,
+      table.fornecedorId,
+      table.produtoId
+    ),
+    foreignKey({
+      name: "fornecedores_produtos_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "fornecedores_produtos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    check("fornecedores_produtos_status_check", sql`${table.status} in ('pendente', 'aprovado', 'rejeitado')`),
+    check("fornecedores_produtos_origem_check", sql`${table.origem} in ('compras', 'fornecedor')`),
+    check("fornecedores_produtos_preco_check", sql`${table.precoOfertado} is null or ${table.precoOfertado} >= 0`),
+    index("fornecedores_produtos_empresa_status_idx").on(table.empresaId, table.status),
+    index("fornecedores_produtos_fornecedor_idx").on(table.fornecedorId)
+  ]
+);
+
+export const fornecedoresProdutosEventos = pgTable(
+  "fornecedores_produtos_eventos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorProdutoId: uuid("fornecedor_produto_id")
+      .notNull()
+      .references(() => fornecedoresProdutos.id, { onDelete: "cascade" }),
+    statusAnterior: text("status_anterior").$type<"pendente" | "aprovado" | "rejeitado">(),
+    statusNovo: text("status_novo").$type<"pendente" | "aprovado" | "rejeitado">().notNull(),
+    precoOfertado: numeric("preco_ofertado", { precision: 14, scale: 4 }),
+    atorTipo: text("ator_tipo").$type<"usuario" | "fornecedor" | "sistema">().notNull(),
+    usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    observacao: text("observacao"),
+    criadoEm
+  },
+  (table) => [
+    check(
+      "fornecedores_produtos_eventos_status_anterior_check",
+      sql`${table.statusAnterior} is null or ${table.statusAnterior} in ('pendente', 'aprovado', 'rejeitado')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_status_novo_check",
+      sql`${table.statusNovo} in ('pendente', 'aprovado', 'rejeitado')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_ator_tipo_check",
+      sql`${table.atorTipo} in ('usuario', 'fornecedor', 'sistema')`
+    ),
+    check(
+      "fornecedores_produtos_eventos_usuario_check",
+      sql`(${table.atorTipo} = 'usuario' and ${table.usuarioId} is not null) or (${table.atorTipo} <> 'usuario')`
+    ),
+    index("fornecedores_produtos_eventos_vinculo_criado_idx").on(table.fornecedorProdutoId, table.criadoEm)
+  ]
+);
+
+export const comprasImportacoesPrecoBase = pgTable(
+  "compras_importacoes_preco_base",
+  {
+    id: idUuid,
+    empresaId,
+    nomeArquivo: text("nome_arquivo").notNull(),
+    hashArquivo: text("hash_arquivo").notNull(),
+    status: text("status").$type<"analisada" | "aplicada" | "cancelada">().notNull().default("analisada"),
+    totalLinhas: integer("total_linhas").notNull(),
+    totalCorrespondencias: integer("total_correspondencias").notNull().default(0),
+    totalAmbiguidades: integer("total_ambiguidades").notNull().default(0),
+    totalNaoEncontrados: integer("total_nao_encontrados").notNull().default(0),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    aplicadoPor: text("aplicado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm,
+    aplicadoEm: timestamp("aplicado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("compras_importacoes_preco_base_empresa_hash_unico").on(table.empresaId, table.hashArquivo),
+    check(
+      "compras_importacoes_preco_base_status_check",
+      sql`${table.status} in ('analisada', 'aplicada', 'cancelada')`
+    ),
+    check(
+      "compras_importacoes_preco_base_totais_check",
+      sql`${table.totalLinhas} >= 0 and ${table.totalCorrespondencias} >= 0 and ${table.totalAmbiguidades} >= 0 and ${table.totalNaoEncontrados} >= 0`
+    ),
+    index("compras_importacoes_preco_base_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+export const comprasImportacoesPrecoBaseItens = pgTable(
+  "compras_importacoes_preco_base_itens",
+  {
+    id: idUuid,
+    importacaoId: uuid("importacao_id")
+      .notNull()
+      .references(() => comprasImportacoesPrecoBase.id, { onDelete: "cascade" }),
+    numeroLinha: integer("numero_linha").notNull(),
+    codigoInformado: text("codigo_informado"),
+    eanInformado: text("ean_informado"),
+    descricaoInformada: text("descricao_informada").notNull(),
+    descricaoNormalizada: text("descricao_normalizada").notNull(),
+    valorInformado: numeric("valor_informado", { precision: 14, scale: 4 }).notNull(),
+    produtoId: uuid("produto_id").references(() => produtos.id, { onDelete: "restrict" }),
+    resultado: text("resultado").$type<"correspondencia" | "ambiguidade" | "nao_encontrado" | "invalido">().notNull(),
+    detalhe: text("detalhe"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("compras_importacoes_preco_base_itens_importacao_linha_unica").on(table.importacaoId, table.numeroLinha),
+    check("compras_importacoes_preco_base_itens_linha_check", sql`${table.numeroLinha} > 0`),
+    check("compras_importacoes_preco_base_itens_valor_check", sql`${table.valorInformado} >= 0`),
+    check(
+      "compras_importacoes_preco_base_itens_resultado_check",
+      sql`${table.resultado} in ('correspondencia', 'ambiguidade', 'nao_encontrado', 'invalido')`
+    ),
+    index("compras_importacoes_preco_base_itens_importacao_resultado_idx").on(table.importacaoId, table.resultado)
+  ]
+);
+
+export const produtosPrecosBase = pgTable(
+  "produtos_precos_base",
+  {
+    id: idUuid,
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    valor: numeric("valor", { precision: 14, scale: 4 }).notNull(),
+    origem: text("origem").$type<"importacao" | "rodada">().notNull(),
+    importacaoItemId: uuid("importacao_item_id").references(() => comprasImportacoesPrecoBaseItens.id, {
+      onDelete: "restrict"
+    }),
+    // Fase 2: base vinda de rodada aponta a rodada que a gerou. Substitui `referencia_externa`, que
+    // era placeholder de texto sem FK. FK simples (produtos_precos_base tem empresa_id, mesma empresa
+    // garantida no codigo). `referencia_externa` sai na migration seguinte (drop isolado).
+    rodadaId: uuid("rodada_id").references((): AnyPgColumn => comprasRodadas.id, { onDelete: "restrict" }),
+    validoDesde: timestamp("valido_desde", { withTimezone: true }).notNull().defaultNow(),
+    validoAte: timestamp("valido_ate", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      name: "produtos_precos_base_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check("produtos_precos_base_valor_check", sql`${table.valor} >= 0`),
+    check("produtos_precos_base_origem_check", sql`${table.origem} in ('importacao', 'rodada')`),
+    check(
+      "produtos_precos_base_origem_referencia_check",
+      sql`(${table.origem} = 'importacao' and ${table.importacaoItemId} is not null) or (${table.origem} = 'rodada' and ${table.rodadaId} is not null)`
+    ),
+    check(
+      "produtos_precos_base_validade_check",
+      sql`${table.validoAte} is null or ${table.validoAte} > ${table.validoDesde}`
+    ),
+    uniqueIndex("produtos_precos_base_atual_unico_idx")
+      .on(table.empresaId, table.produtoId)
+      .where(sql`${table.validoAte} is null`),
+    index("produtos_precos_base_empresa_produto_historico_idx").on(table.empresaId, table.produtoId, table.validoDesde)
+  ]
+);
+
+// R-222 (PROJECT_BRAIN/55): historico de compras por fornecedor x produto, vindo da planilha de
+// discriminacao e (depois) do recebimento. Duas fases como o preco-base: a ANALISE guarda cada linha
+// com o resultado do pareamento; a APLICACAO grava so as pareadas, em `compras_historico_precos`
+// (imutavel). Nada aqui altera `produtos_precos_base`.
+export const fornecedoresAliases = pgTable(
+  "fornecedores_aliases",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    aliasNormalizado: text("alias_normalizado").notNull(),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    criadoEm
+  },
+  (table) => [
+    unique("fornecedores_aliases_empresa_alias_unico").on(table.empresaId, table.aliasNormalizado),
+    foreignKey({
+      name: "fornecedores_aliases_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("cascade"),
+    index("fornecedores_aliases_fornecedor_idx").on(table.fornecedorId)
+  ]
+);
+
+export const comprasHistoricoImportacoes = pgTable(
+  "compras_historico_importacoes",
+  {
+    id: idUuid,
+    empresaId,
+    nomeArquivo: text("nome_arquivo").notNull(),
+    hashArquivo: text("hash_arquivo").notNull(),
+    status: text("status").$type<"analisada" | "aplicada" | "cancelada">().notNull().default("analisada"),
+    totalLinhas: integer("total_linhas").notNull(),
+    totalPareadas: integer("total_pareadas").notNull().default(0),
+    totalPendentes: integer("total_pendentes").notNull().default(0),
+    totalAplicadas: integer("total_aplicadas").notNull().default(0),
+    periodoInicio: date("periodo_inicio"),
+    periodoFim: date("periodo_fim"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    aplicadoPor: text("aplicado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    aplicadoEm: timestamp("aplicado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("compras_historico_importacoes_empresa_hash_unico").on(table.empresaId, table.hashArquivo),
+    check("compras_historico_importacoes_status_check", sql`${table.status} in ('analisada', 'aplicada', 'cancelada')`),
+    check(
+      "compras_historico_importacoes_totais_check",
+      sql`${table.totalLinhas} >= 0 and ${table.totalPareadas} >= 0 and ${table.totalPendentes} >= 0 and ${table.totalAplicadas} >= 0`
+    ),
+    index("compras_historico_importacoes_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+export const comprasHistoricoImportacaoItens = pgTable(
+  "compras_historico_importacao_itens",
+  {
+    id: idUuid,
+    importacaoId: uuid("importacao_id")
+      .notNull()
+      .references(() => comprasHistoricoImportacoes.id, { onDelete: "cascade" }),
+    numeroLinha: integer("numero_linha").notNull(),
+    fornecedorInformado: text("fornecedor_informado").notNull(),
+    fornecedorNormalizado: text("fornecedor_normalizado").notNull(),
+    produtoInformado: text("produto_informado").notNull(),
+    produtoNormalizado: text("produto_normalizado").notNull(),
+    dataCompra: date("data_compra"),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
+    custoUnitario: numeric("custo_unitario", { precision: 14, scale: 4 }),
+    documento: text("documento"),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id, { onDelete: "restrict" }),
+    produtoId: uuid("produto_id").references(() => produtos.id, { onDelete: "restrict" }),
+    resultado: text("resultado")
+      .$type<"correspondencia" | "fornecedor_nao_encontrado" | "produto_nao_encontrado" | "ambiguidade" | "invalido">()
+      .notNull(),
+    detalhe: text("detalhe")
+  },
+  (table) => [
+    unique("compras_historico_itens_linha_unica").on(table.importacaoId, table.numeroLinha),
+    check("compras_historico_itens_linha_check", sql`${table.numeroLinha} > 0`),
+    check(
+      "compras_historico_itens_resultado_check",
+      sql`${table.resultado} in ('correspondencia', 'fornecedor_nao_encontrado', 'produto_nao_encontrado', 'ambiguidade', 'invalido')`
+    ),
+    index("compras_historico_itens_importacao_resultado_idx").on(table.importacaoId, table.resultado)
+  ]
+);
+
+export const comprasHistoricoPrecos = pgTable(
+  "compras_historico_precos",
+  {
+    id: idUuid,
+    empresaId,
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    dataCompra: date("data_compra").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    custoUnitario: numeric("custo_unitario", { precision: 14, scale: 4 }).notNull(),
+    documento: text("documento"),
+    origem: text("origem").$type<"planilha" | "recebimento">().notNull(),
+    importacaoItemId: uuid("importacao_item_id").references(() => comprasHistoricoImportacaoItens.id, {
+      onDelete: "restrict"
+    }),
+    // Reservado para o recebimento gravar a propria linha (decisao 7 do doc 55); sem escritor ainda.
+    pedidoItemId: uuid("pedido_item_id").references(() => pedidosItens.id, { onDelete: "restrict" }),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    criadoEm
+  },
+  (table) => [
+    check("compras_historico_precos_quantidade_check", sql`${table.quantidade} > 0`),
+    check("compras_historico_precos_custo_check", sql`${table.custoUnitario} > 0`),
+    check("compras_historico_precos_origem_check", sql`${table.origem} in ('planilha', 'recebimento')`),
+    check(
+      "compras_historico_precos_origem_referencia_check",
+      sql`(${table.origem} = 'planilha' and ${table.importacaoItemId} is not null and ${table.pedidoItemId} is null) or (${table.origem} = 'recebimento' and ${table.pedidoItemId} is not null and ${table.importacaoItemId} is null)`
+    ),
+    unique("compras_historico_precos_importacao_unica").on(table.importacaoItemId),
+    foreignKey({
+      name: "compras_historico_precos_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "compras_historico_precos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    index("compras_historico_precos_produto_data_idx").on(table.empresaId, table.produtoId, table.dataCompra.desc()),
+    index("compras_historico_precos_fornecedor_data_idx").on(
+      table.empresaId,
+      table.fornecedorId,
+      table.dataCompra.desc()
+    )
   ]
 );
 
@@ -1525,18 +1932,30 @@ export const pedidos = pgTable(
     criadoPor: text("criado_por"),
     aprovadoPor: text("aprovado_por"),
     aprovadoEm: timestamp("aprovado_em", { withTimezone: true }),
+    // Fase 2: o pedido consolidado nasce de uma rodada. `tipo='rodada'`, e estes apontam a origem.
+    // FK simples porque pedidos nao tem (id, empresa_id) unico; a mesma empresa e garantida no codigo.
+    solicitacaoId: uuid("solicitacao_id").references((): AnyPgColumn => comprasSolicitacoes.id, {
+      onDelete: "restrict"
+    }),
+    rodadaId: uuid("rodada_id").references((): AnyPgColumn => comprasRodadas.id, { onDelete: "restrict" }),
     criadoEm,
     atualizadoEm
   },
   (table) => [
-    check("pedidos_tipo_check", sql`${table.tipo} in ('manual', 'automatico')`),
+    check("pedidos_tipo_check", sql`${table.tipo} in ('manual', 'automatico', 'rodada')`),
     // rascunho/aprovado ficam somente para leitura de historico, sem escritor no fluxo novo.
     check(
       "pedidos_status_check",
-      sql`${table.status} in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+      sql`${table.status} in ('rascunho', 'aprovado', 'a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
     ),
     check("pedidos_recorrencia_check", sql`${table.recorrencia} in ('nenhuma', 'semanal', 'quinzenal', 'mensal')`),
-    index("pedidos_empresa_status_idx").on(table.empresaId, table.status)
+    index("pedidos_empresa_status_idx").on(table.empresaId, table.status),
+    // Consolidacao por fornecedor: um pedido CONFIRMADO por (rodada, fornecedor). A adjudicacao
+    // seguinte acrescenta item ao mesmo pedido enquanto ele estiver confirmado; se ja comecou a ser
+    // recebido, nasce um segundo pedido (por isso o indice e parcial em 'confirmado').
+    uniqueIndex("pedidos_rodada_fornecedor_confirmado_idx")
+      .on(table.rodadaId, table.fornecedorId)
+      .where(sql`${table.status} = 'confirmado'`)
   ]
 );
 
@@ -1556,13 +1975,19 @@ export const pedidosEventos = pgTable(
     // o Comprador como autor de "Retornado" atribuiria a resposta a quem nao respondeu.
     criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
     cotacaoId: uuid("cotacao_id").references((): AnyPgColumn => pedidosCotacoes.id, { onDelete: "restrict" }),
+    // Fase 2: o evento 'confirmado' da compra automatica tem como autor a PROPOSTA do fornecedor,
+    // nao uma pessoa — e literalmente verdadeiro (R-221, pre-autorizacao pelo preco-base).
+    propostaId: uuid("proposta_id").references((): AnyPgColumn => comprasPropostas.id, { onDelete: "restrict" }),
     criadoEm
   },
   (table) => [
-    check("pedidos_eventos_autor_check", sql`${table.criadoPor} is not null or ${table.cotacaoId} is not null`),
+    check(
+      "pedidos_eventos_autor_check",
+      sql`num_nonnulls(${table.criadoPor}, ${table.cotacaoId}, ${table.propostaId}) >= 1`
+    ),
     check(
       "pedidos_eventos_status_check",
-      sql`${table.status} in ('a_fazer', 'enviado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
+      sql`${table.status} in ('a_fazer', 'enviado', 'cotado', 'retornado', 'confirmado', 'recebido_parcial', 'recebido', 'cancelado')`
     ),
     index("pedidos_eventos_empresa_pedido_criado_idx").on(table.empresaId, table.pedidoId, table.criadoEm)
   ]
@@ -1591,6 +2016,36 @@ export const pedidosRecebimentos = pgTable(
   ]
 );
 
+// Doc 58 §7: devolucao no recebimento. O que volta ao fornecedor fecha o item sem entrar no estoque.
+export const pedidosDevolucoes = pgTable(
+  "pedidos_devolucoes",
+  {
+    id: idUuid,
+    empresaId,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    pedidoItemId: uuid("pedido_item_id")
+      .notNull()
+      .references(() => pedidosItens.id, { onDelete: "restrict" }),
+    pedidoRecebimentoId: uuid("pedido_recebimento_id")
+      .notNull()
+      .references(() => pedidosRecebimentos.id, { onDelete: "restrict" }),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    motivo: text("motivo").notNull(),
+    devolvidoPor: text("devolvido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    unique("pedidos_devolucoes_recebimento_item_unico").on(table.pedidoRecebimentoId, table.pedidoItemId),
+    check("pedidos_devolucoes_quantidade_check", sql`${table.quantidade} > 0`),
+    check("pedidos_devolucoes_motivo_check", sql`btrim(${table.motivo}) <> ''`),
+    index("pedidos_devolucoes_empresa_pedido_idx").on(table.empresaId, table.pedidoId)
+  ]
+);
+
 // Agenda da conferencia fisica. Agendar nao altera saldo: a divergencia so tera efeito quando a
 // regra propria de inventario for definida e implementada.
 export const conferenciasEstoque = pgTable(
@@ -1610,15 +2065,140 @@ export const conferenciasEstoque = pgTable(
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
     criadoEm,
-    atualizadoEm
+    atualizadoEm,
+    // Doc 57 §2: a conferencia do dia nasce de uma agenda, tem quem conta e um recorte por ranking.
+    agendaId: uuid("agenda_id").references((): AnyPgColumn => conferenciasAgendas.id, { onDelete: "set null" }),
+    previstoPara: timestamp("previsto_para", { withTimezone: true }),
+    responsavelId: text("responsavel_id").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    ranking: text("ranking").$type<RankingConferencia | null>(),
+    concluidaPor: text("concluida_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    concluidaEm: timestamp("concluida_em", { withTimezone: true })
   },
   (table) => [
     check("conferencias_estoque_status_check", sql`${table.status} in ('agendada', 'cancelada', 'concluida')`),
+    check(
+      "conferencias_estoque_ranking_check",
+      sql`${table.ranking} is null or ${table.ranking} in ('mais_vendidos', 'mais_comprados', 'mais_lucro')`
+    ),
+    unique("conferencias_estoque_agenda_data_unica").on(table.agendaId, table.previstoPara),
     check(
       "conferencias_estoque_curva_abc_check",
       sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`
     ),
     index("conferencias_estoque_empresa_agendada_idx").on(table.empresaId, table.agendadaPara)
+  ]
+);
+
+// Doc 57 §2: agendamento de conferencia de estoque, com a mesma recorrencia do agendamento de pedido.
+export const conferenciasAgendas = pgTable(
+  "conferencias_agendas",
+  {
+    id: idUuid,
+    empresaId,
+    // Quem conta: recebe o aviso no sino na data.
+    responsavelId: text("responsavel_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id, { onDelete: "restrict" }),
+    ranking: text("ranking").$type<RankingConferencia | null>(),
+    areaEstoque: text("area_estoque"),
+    localEstoque: text("local_estoque"),
+    localVenda: text("local_venda"),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fusoHorario: text("fuso_horario").notNull(),
+    regra: jsonb("regra").$type<RegraRecorrencia>().notNull(),
+    terminoTipo: text("termino_tipo").$type<"nunca" | "data" | "quantidade">().notNull().default("nunca"),
+    terminoEm: date("termino_em"),
+    terminoQuantidade: integer("termino_quantidade"),
+    observacao: text("observacao"),
+    status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
+    encerradaEm: timestamp("encerrada_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "conferencias_agendas_ranking_check",
+      sql`${table.ranking} is null or ${table.ranking} in ('mais_vendidos', 'mais_comprados', 'mais_lucro')`
+    ),
+    check("conferencias_agendas_status_check", sql`${table.status} in ('ativa', 'encerrada')`),
+    check(
+      "conferencias_agendas_encerramento_check",
+      sql`(${table.status} = 'encerrada') = (${table.encerradaEm} is not null)`
+    ),
+    check("conferencias_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "conferencias_agendas_termino_check",
+      sql`(${table.terminoTipo} = 'nunca' and ${table.terminoEm} is null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'data' and ${table.terminoEm} is not null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'quantidade' and ${table.terminoQuantidade} between 1 and 999 and ${table.terminoEm} is null)`
+    ),
+    index("conferencias_agendas_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+// A contagem: o saldo do sistema no momento e o que foi contado. NAO move estoque (doc 57 §6.2).
+export const conferenciasEstoqueItens = pgTable(
+  "conferencias_estoque_itens",
+  {
+    id: idUuid,
+    empresaId,
+    conferenciaId: uuid("conferencia_id")
+      .notNull()
+      .references(() => conferenciasEstoque.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").notNull(),
+    saldoSistema: numeric("saldo_sistema", { precision: 14, scale: 3 }).notNull(),
+    quantidadeContada: numeric("quantidade_contada", { precision: 14, scale: 3 }),
+    contadoPor: text("contado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    contadoEm: timestamp("contado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("conferencias_estoque_itens_unico").on(table.conferenciaId, table.produtoId),
+    foreignKey({
+      name: "conferencias_estoque_itens_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check(
+      "conferencias_estoque_itens_contagem_check",
+      sql`${table.quantidadeContada} is null or ${table.quantidadeContada} >= 0`
+    ),
+    check(
+      "conferencias_estoque_itens_autoria_check",
+      sql`(${table.quantidadeContada} is null) = (${table.contadoPor} is null and ${table.contadoEm} is null)`
+    )
+  ]
+);
+
+// Doc 57 §3: o sistema envia pelo WhatsApp (ninguem copia link). Fila de saida, processada no tick de Compras.
+export const comprasWhatsappEnvios = pgTable(
+  "compras_whatsapp_envios",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").$type<"convite" | "pedido_confirmado">().notNull(),
+    conviteId: uuid("convite_id").references((): AnyPgColumn => comprasRodadasConvites.id, { onDelete: "cascade" }),
+    pedidoId: uuid("pedido_id").references((): AnyPgColumn => pedidos.id, { onDelete: "cascade" }),
+    telefone: text("telefone").notNull(),
+    status: text("status").$type<"pendente" | "enviado" | "falhou">().notNull().default("pendente"),
+    tentativas: integer("tentativas").notNull().default(0),
+    ultimoErro: text("ultimo_erro"),
+    mensagemExternaId: text("mensagem_externa_id"),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("compras_whatsapp_envios_tipo_check", sql`${table.tipo} in ('convite', 'pedido_confirmado')`),
+    check("compras_whatsapp_envios_status_check", sql`${table.status} in ('pendente', 'enviado', 'falhou')`),
+    check(
+      "compras_whatsapp_envios_referencia_check",
+      sql`(${table.tipo} = 'convite' and ${table.conviteId} is not null) or (${table.tipo} = 'pedido_confirmado' and ${table.pedidoId} is not null)`
+    ),
+    check("compras_whatsapp_envios_tentativas_check", sql`${table.tentativas} >= 0`),
+    index("compras_whatsapp_envios_status_idx").on(table.status, table.criadoEm),
+    index("compras_whatsapp_envios_convite_idx").on(table.conviteId)
   ]
 );
 
@@ -2834,6 +3414,9 @@ export const notificacoes = pgTable(
         | "mensagem_admin"
         | "campanha"
         | "lancamento_vencimento"
+        | "compras_decisao_pendente"
+        | "compras_agendamento_conferir"
+        | "conferencia_estoque_fazer"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -2861,7 +3444,7 @@ export const notificacoes = pgTable(
     check(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
-        'mensagem_admin', 'campanha', 'lancamento_vencimento')`
+        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(
@@ -4478,5 +5061,558 @@ export const colaboradoresEventos = pgTable(
       table.ocorridoEm,
       table.id
     )
+  ]
+);
+
+// ================================================================================================
+// FASE 2 — rodada de cotacao multi-fornecedor (R-221, PROJECT_BRAIN/54)
+//
+// Fluxo: solicitacao sem fornecedor -> rodada -> convites -> propostas versionadas -> vencedor por
+// item -> compra consolidada. As tabelas estao em ordem de dependencia de FK (alvo antes do
+// referenciador). Toda tabela tem empresa_id e, quando e alvo de FK composta, UNIQUE (id, empresa_id)
+// para o isolamento por empresa viver no banco.
+// ================================================================================================
+
+export const comprasSolicitacoes = pgTable(
+  "compras_solicitacoes",
+  {
+    id: idUuid,
+    empresaId,
+    status: text("status")
+      .$type<"rascunho" | "em_cotacao" | "parcialmente_comprada" | "comprada" | "encerrada" | "cancelada">()
+      .notNull()
+      .default("rascunho"),
+    // `rapida` e o atalho "pedido rapido" (decisao 2): o dado registra que foi atalho, o mecanismo e o
+    // mesmo da rodada normal.
+    origem: text("origem").$type<"manual" | "sugestao" | "rapida" | "agendamento">().notNull(),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm,
+    encerradaEm: timestamp("encerrada_em", { withTimezone: true })
+  },
+  (table) => [
+    check(
+      "compras_solicitacoes_status_check",
+      sql`${table.status} in ('rascunho', 'em_cotacao', 'parcialmente_comprada', 'comprada', 'encerrada', 'cancelada')`
+    ),
+    // `agendamento`: nasce sozinha na data de um agendamento de pedido (doc 56), para o comprador conferir.
+    check("compras_solicitacoes_origem_check", sql`${table.origem} in ('manual', 'sugestao', 'rapida', 'agendamento')`),
+    check(
+      "compras_solicitacoes_encerramento_check",
+      sql`(${table.status} in ('encerrada', 'cancelada', 'comprada')) = (${table.encerradaEm} is not null)`
+    ),
+    unique("compras_solicitacoes_id_empresa_unica").on(table.id, table.empresaId),
+    index("compras_solicitacoes_empresa_status_idx").on(table.empresaId, table.status, table.criadoEm)
+  ]
+);
+
+export const comprasSolicitacoesItens = pgTable(
+  "compras_solicitacoes_itens",
+  {
+    id: idUuid,
+    empresaId,
+    solicitacaoId: uuid("solicitacao_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    descricaoProduto: text("descricao_produto").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    estoqueAtual: numeric("estoque_atual", { precision: 14, scale: 3 }),
+    estoqueMin: numeric("estoque_min", { precision: 14, scale: 3 }),
+    estoqueMax: numeric("estoque_max", { precision: 14, scale: 3 })
+  },
+  (table) => [
+    foreignKey({
+      name: "compras_solicitacoes_itens_solicitacao_empresa_fk",
+      columns: [table.solicitacaoId, table.empresaId],
+      foreignColumns: [comprasSolicitacoes.id, comprasSolicitacoes.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compras_solicitacoes_itens_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check("compras_solicitacoes_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    // Alvo da FK composta de compras_rodadas_itens (o envelope aponta a linha de necessidade).
+    unique("compras_solicitacoes_itens_id_empresa_unica").on(table.id, table.empresaId),
+    // Produto repetido na mesma solicitacao = duas adjudicacoes para a mesma necessidade. Invariante.
+    unique("compras_solicitacoes_itens_solicitacao_produto_unica").on(table.solicitacaoId, table.produtoId),
+    index("compras_solicitacoes_itens_solicitacao_idx").on(table.solicitacaoId)
+  ]
+);
+
+// Agendamento de pedido (PROJECT_BRAIN/56). A serie guarda a regra; as datas futuras sao CALCULADAS
+// (shared/compras/recorrencia). Uma ocorrencia so vira linha quando acontece (solicitacao para o
+// comprador conferir), quando e cancelada ou quando e movida ("editar so esta").
+export const pedidosAgendas = pgTable(
+  "pedidos_agendas",
+  {
+    id: idUuid,
+    empresaId,
+    // O subgrupo escolhido no card (ou o grupo, quando nao ha subgrupo).
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").notNull(),
+    responsavelId: text("responsavel_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fusoHorario: text("fuso_horario").notNull(),
+    regra: jsonb("regra").$type<RegraRecorrencia>().notNull(),
+    terminoTipo: text("termino_tipo").$type<"nunca" | "data" | "quantidade">().notNull().default("nunca"),
+    terminoEm: date("termino_em"),
+    terminoQuantidade: integer("termino_quantidade"),
+    prazoRespostaHoras: integer("prazo_resposta_horas").notNull(),
+    margemVariacaoPercentual: smallint("margem_variacao_percentual").notNull().default(10),
+    // Doc 58 §8: a loja recebe pedido nesta janela (o fornecedor ve na cotacao).
+    recebimentoInicio: time("recebimento_inicio"),
+    recebimentoFim: time("recebimento_fim"),
+    status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
+    serieAnteriorId: uuid("serie_anterior_id").references((): AnyPgColumn => pedidosAgendas.id, {
+      onDelete: "restrict"
+    }),
+    encerradaEm: timestamp("encerrada_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("pedidos_agendas_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      name: "pedidos_agendas_grupo_empresa_fk",
+      columns: [table.grupoMercadoriaId, table.empresaId],
+      foreignColumns: [gruposMercadorias.id, gruposMercadorias.empresaId]
+    }).onDelete("restrict"),
+    check("pedidos_agendas_status_check", sql`${table.status} in ('ativa', 'encerrada')`),
+    check(
+      "pedidos_agendas_encerramento_check",
+      sql`(${table.status} = 'encerrada') = (${table.encerradaEm} is not null)`
+    ),
+    check("pedidos_agendas_prazo_check", sql`${table.prazoRespostaHoras} between 1 and 720`),
+    check("pedidos_agendas_margem_check", sql`${table.margemVariacaoPercentual} in (10, 20, 30, 40)`),
+    check(
+      "pedidos_agendas_recebimento_check",
+      sql`(${table.recebimentoInicio} is null) = (${table.recebimentoFim} is null) and (${table.recebimentoFim} is null or ${table.recebimentoFim} > ${table.recebimentoInicio})`
+    ),
+    check("pedidos_agendas_fuso_check", sql`btrim(${table.fusoHorario}) <> ''`),
+    check(
+      "pedidos_agendas_termino_check",
+      sql`(${table.terminoTipo} = 'nunca' and ${table.terminoEm} is null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'data' and ${table.terminoEm} is not null and ${table.terminoQuantidade} is null) or (${table.terminoTipo} = 'quantidade' and ${table.terminoQuantidade} between 1 and 999 and ${table.terminoEm} is null)`
+    ),
+    index("pedidos_agendas_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+export const pedidosAgendasProdutos = pgTable(
+  "pedidos_agendas_produtos",
+  {
+    id: idUuid,
+    empresaId,
+    agendaId: uuid("agenda_id").notNull(),
+    produtoId: uuid("produto_id").notNull(),
+    // Opcional: vazio = sugestao pelo estoque (maximo - saldo) na data.
+    quantidadePadrao: numeric("quantidade_padrao", { precision: 14, scale: 3 })
+  },
+  (table) => [
+    unique("pedidos_agendas_produtos_unico").on(table.agendaId, table.produtoId),
+    foreignKey({
+      name: "pedidos_agendas_produtos_agenda_empresa_fk",
+      columns: [table.agendaId, table.empresaId],
+      foreignColumns: [pedidosAgendas.id, pedidosAgendas.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "pedidos_agendas_produtos_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("restrict"),
+    check(
+      "pedidos_agendas_produtos_quantidade_check",
+      sql`${table.quantidadePadrao} is null or ${table.quantidadePadrao} > 0`
+    )
+  ]
+);
+
+export const pedidosAgendaOcorrencias = pgTable(
+  "pedidos_agenda_ocorrencias",
+  {
+    id: idUuid,
+    empresaId,
+    agendaId: uuid("agenda_id").notNull(),
+    // Instante calculado pela regra: chave contra a mesma data criada duas vezes pelo agendador.
+    previstoPara: timestamp("previsto_para", { withTimezone: true }).notNull(),
+    // Igual ao previsto, ou a nova data de "editar so esta".
+    dataAtual: timestamp("data_atual", { withTimezone: true }).notNull(),
+    situacao: text("situacao")
+      .$type<"agendada" | "aguardando_conferencia" | "enviada" | "cancelada">()
+      .notNull()
+      .default("aguardando_conferencia"),
+    solicitacaoId: uuid("solicitacao_id").references(() => comprasSolicitacoes.id, { onDelete: "restrict" }),
+    enviadaPor: text("enviada_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    enviadaEm: timestamp("enviada_em", { withTimezone: true }),
+    canceladaPor: text("cancelada_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    canceladaEm: timestamp("cancelada_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("pedidos_agenda_ocorrencias_unica").on(table.agendaId, table.previstoPara),
+    foreignKey({
+      name: "pedidos_agenda_ocorrencias_agenda_empresa_fk",
+      columns: [table.agendaId, table.empresaId],
+      foreignColumns: [pedidosAgendas.id, pedidosAgendas.empresaId]
+    }).onDelete("cascade"),
+    check(
+      "pedidos_agenda_ocorrencias_situacao_check",
+      sql`${table.situacao} in ('agendada', 'aguardando_conferencia', 'enviada', 'cancelada')`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_conferencia_check",
+      sql`${table.situacao} not in ('aguardando_conferencia', 'enviada') or ${table.solicitacaoId} is not null`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_envio_check",
+      sql`(${table.situacao} = 'enviada') = (${table.enviadaEm} is not null and ${table.enviadaPor} is not null)`
+    ),
+    check(
+      "pedidos_agenda_ocorrencias_cancelamento_check",
+      sql`(${table.situacao} = 'cancelada') = (${table.canceladaEm} is not null and ${table.canceladaPor} is not null)`
+    ),
+    index("pedidos_agenda_ocorrencias_empresa_situacao_idx").on(table.empresaId, table.situacao, table.dataAtual)
+  ]
+);
+
+export const comprasRodadas = pgTable(
+  "compras_rodadas",
+  {
+    id: idUuid,
+    empresaId,
+    solicitacaoId: uuid("solicitacao_id").notNull(),
+    numero: integer("numero").notNull(),
+    status: text("status").$type<"aberta" | "fechada" | "cancelada">().notNull().default("aberta"),
+    // null = usa o padrao (2 dias uteis da R-216); o comprador pode sobrescrever por rodada.
+    prazoRespostaHoras: integer("prazo_resposta_horas"),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    // Snapshot do fuso da empresa na abertura: o vencimento ja corrido continua explicavel depois.
+    fusoHorario: text("fuso_horario").notNull(),
+    // Decisao 14: teto de compra automatica da rodada. null = sem teto.
+    tetoValor: numeric("teto_valor", { precision: 14, scale: 2 }),
+    // Doc 57: variacao de quantidade aceita (para menos e para mais, na resposta e na separacao). Null = rodada
+    // de antes da regra (sem limite).
+    margemVariacaoPercentual: smallint("margem_variacao_percentual"),
+    // Doc 58 §8: a janela de recebimento da loja, congelada na abertura.
+    recebimentoInicio: time("recebimento_inicio"),
+    recebimentoFim: time("recebimento_fim"),
+    abertaPor: text("aberta_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    abertaEm: timestamp("aberta_em", { withTimezone: true }).notNull().defaultNow(),
+    // null no fechamento automatico por prazo: nao ha autor humano (decisao 6).
+    fechadaPor: text("fechada_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    fechadaEm: timestamp("fechada_em", { withTimezone: true }),
+    motivoFechamento: text("motivo_fechamento"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "compras_rodadas_recebimento_check",
+      sql`(${table.recebimentoInicio} is null) = (${table.recebimentoFim} is null) and (${table.recebimentoFim} is null or ${table.recebimentoFim} > ${table.recebimentoInicio})`
+    ),
+    check(
+      "compras_rodadas_margem_check",
+      sql`${table.margemVariacaoPercentual} is null or ${table.margemVariacaoPercentual} in (10, 20, 30, 40)`
+    ),
+    check("compras_rodadas_status_check", sql`${table.status} in ('aberta', 'fechada', 'cancelada')`),
+    check("compras_rodadas_prazo_check", sql`${table.prazoRespostaHoras} is null or ${table.prazoRespostaHoras} > 0`),
+    check("compras_rodadas_teto_check", sql`${table.tetoValor} is null or ${table.tetoValor} > 0`),
+    check("compras_rodadas_expira_check", sql`${table.expiraEm} > ${table.abertaEm}`),
+    check("compras_rodadas_fechamento_check", sql`(${table.status} = 'aberta') = (${table.fechadaEm} is null)`),
+    check(
+      "compras_rodadas_motivo_check",
+      sql`${table.fechadaEm} is null or ${table.motivoFechamento} in ('prazo', 'comprador', 'cancelada')`
+    ),
+    // Fechamento por prazo e sem autor humano; qualquer fechamento com autor nao e por prazo.
+    check(
+      "compras_rodadas_motivo_autor_check",
+      sql`${table.motivoFechamento} is distinct from 'prazo' or ${table.fechadaPor} is null`
+    ),
+    unique("compras_rodadas_id_empresa_unica").on(table.id, table.empresaId),
+    unique("compras_rodadas_solicitacao_numero_unica").on(table.solicitacaoId, table.numero),
+    foreignKey({
+      name: "compras_rodadas_solicitacao_empresa_fk",
+      columns: [table.solicitacaoId, table.empresaId],
+      foreignColumns: [comprasSolicitacoes.id, comprasSolicitacoes.empresaId]
+    }).onDelete("restrict"),
+    // Uma rodada aberta por solicitacao (sobe o nivel do antigo "1 cotacao aberta por pedido").
+    uniqueIndex("compras_rodadas_solicitacao_aberta_unica")
+      .on(table.solicitacaoId)
+      .where(sql`${table.status} = 'aberta'`),
+    // A unica consulta do agendador: rodada aberta com prazo vencido.
+    index("compras_rodadas_expira_aberta_idx")
+      .on(table.expiraEm)
+      .where(sql`${table.status} = 'aberta'`),
+    index("compras_rodadas_empresa_solicitacao_idx").on(table.empresaId, table.solicitacaoId)
+  ]
+);
+
+export const comprasRodadasItens = pgTable(
+  "compras_rodadas_itens",
+  {
+    id: idUuid,
+    empresaId,
+    rodadaId: uuid("rodada_id").notNull(),
+    solicitacaoItemId: uuid("solicitacao_item_id").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    // Base congelada no instante da abertura: a compra automatica compara contra isto, imutavel
+    // enquanto os fornecedores respondem.
+    precoBaseValor: numeric("preco_base_valor", { precision: 14, scale: 4 }),
+    precoBaseId: uuid("preco_base_id").references(() => produtosPrecosBase.id, { onDelete: "restrict" })
+  },
+  (table) => [
+    foreignKey({
+      name: "compras_rodadas_itens_rodada_empresa_fk",
+      columns: [table.rodadaId, table.empresaId],
+      foreignColumns: [comprasRodadas.id, comprasRodadas.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compras_rodadas_itens_solicitacao_item_empresa_fk",
+      columns: [table.solicitacaoItemId, table.empresaId],
+      foreignColumns: [comprasSolicitacoesItens.id, comprasSolicitacoesItens.empresaId]
+    }).onDelete("restrict"),
+    check("compras_rodadas_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    check("compras_rodadas_itens_base_check", sql`(${table.precoBaseId} is null) = (${table.precoBaseValor} is null)`),
+    unique("compras_rodadas_itens_id_empresa_unica").on(table.id, table.empresaId),
+    unique("compras_rodadas_itens_rodada_item_unica").on(table.rodadaId, table.solicitacaoItemId),
+    index("compras_rodadas_itens_rodada_idx").on(table.rodadaId)
+  ]
+);
+
+export const comprasRodadasConvites = pgTable(
+  "compras_rodadas_convites",
+  {
+    id: idUuid,
+    empresaId,
+    rodadaId: uuid("rodada_id").notNull(),
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    // So o hash SHA-256; o token sai uma vez. Prazo e um so (o da rodada), por isso sem expira_em.
+    tokenHash: text("token_hash").notNull(),
+    status: text("status")
+      .$type<"aberto" | "aguardando_comprador" | "encerrado" | "revogado">()
+      .notNull()
+      .default("aberto"),
+    whatsappEnviado: text("whatsapp_enviado"),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm,
+    atualizadoEm,
+    respondidoEm: timestamp("respondido_em", { withTimezone: true }),
+    revogadoEm: timestamp("revogado_em", { withTimezone: true })
+  },
+  (table) => [
+    check(
+      "compras_rodadas_convites_status_check",
+      sql`${table.status} in ('aberto', 'aguardando_comprador', 'encerrado', 'revogado')`
+    ),
+    foreignKey({
+      name: "compras_rodadas_convites_rodada_empresa_fk",
+      columns: [table.rodadaId, table.empresaId],
+      foreignColumns: [comprasRodadas.id, comprasRodadas.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compras_rodadas_convites_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("restrict"),
+    unique("compras_rodadas_convites_id_empresa_unica").on(table.id, table.empresaId),
+    uniqueIndex("compras_rodadas_convites_token_hash_unico").on(table.tokenHash),
+    unique("compras_rodadas_convites_rodada_fornecedor_unica").on(table.rodadaId, table.fornecedorId),
+    index("compras_rodadas_convites_empresa_rodada_idx").on(table.empresaId, table.rodadaId)
+  ]
+);
+
+export const comprasConvitesItens = pgTable(
+  "compras_convites_itens",
+  {
+    id: idUuid,
+    empresaId,
+    conviteId: uuid("convite_id").notNull(),
+    rodadaItemId: uuid("rodada_item_id").notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "compras_convites_itens_convite_empresa_fk",
+      columns: [table.conviteId, table.empresaId],
+      foreignColumns: [comprasRodadasConvites.id, comprasRodadasConvites.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compras_convites_itens_rodada_item_empresa_fk",
+      columns: [table.rodadaItemId, table.empresaId],
+      foreignColumns: [comprasRodadasItens.id, comprasRodadasItens.empresaId]
+    }).onDelete("restrict"),
+    unique("compras_convites_itens_id_empresa_unica").on(table.id, table.empresaId),
+    unique("compras_convites_itens_convite_item_unica").on(table.conviteId, table.rodadaItemId),
+    index("compras_convites_itens_rodada_item_idx").on(table.rodadaItemId)
+  ]
+);
+
+export const comprasPropostas = pgTable(
+  "compras_propostas",
+  {
+    id: idUuid,
+    empresaId,
+    conviteId: uuid("convite_id").notNull(),
+    versao: integer("versao").notNull(),
+    // Fornecedor e contraproposta do comprador no MESMO livro, distintos por autor_tipo (decisao 7).
+    autorTipo: text("autor_tipo").$type<"fornecedor" | "comprador">().notNull(),
+    autorUsuarioId: text("autor_usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    status: text("status").$type<"rascunho" | "enviada">().notNull(),
+    // Um frete por proposta, rateado so sobre os itens livres no envio (decisao 5).
+    frete: numeric("frete", { precision: 14, scale: 2 }),
+    descontoGeralTipo: text("desconto_geral_tipo"),
+    descontoGeralValor: numeric("desconto_geral_valor", { precision: 14, scale: 4 }),
+    observacao: text("observacao"),
+    prazoEntrega: date("prazo_entrega", { mode: "string" }),
+    condicaoPagamento: text("condicao_pagamento"),
+    totalBruto: numeric("total_bruto", { precision: 14, scale: 2 }),
+    totalFinal: numeric("total_final", { precision: 14, scale: 2 }),
+    criadoEm,
+    atualizadoEm,
+    enviadaEm: timestamp("enviada_em", { withTimezone: true })
+  },
+  (table) => [
+    check("compras_propostas_autor_tipo_check", sql`${table.autorTipo} in ('fornecedor', 'comprador')`),
+    check(
+      "compras_propostas_autor_check",
+      sql`(${table.autorTipo} = 'comprador' and ${table.autorUsuarioId} is not null) or (${table.autorTipo} = 'fornecedor' and ${table.autorUsuarioId} is null)`
+    ),
+    check("compras_propostas_status_check", sql`${table.status} in ('rascunho', 'enviada')`),
+    // Contraproposta do comprador nasce enviada; rascunho e so do fornecedor.
+    check("compras_propostas_rascunho_check", sql`${table.autorTipo} = 'fornecedor' or ${table.status} = 'enviada'`),
+    check("compras_propostas_frete_check", sql`${table.frete} is null or ${table.frete} >= 0`),
+    check(
+      "compras_propostas_desconto_geral_tipo_check",
+      sql`${table.descontoGeralTipo} is null or ${table.descontoGeralTipo} in ('valor', 'percentual')`
+    ),
+    unique("compras_propostas_id_empresa_unica").on(table.id, table.empresaId),
+    // Livro de versoes: nada sobrescreve (decisao 7).
+    unique("compras_propostas_convite_versao_unica").on(table.conviteId, table.versao),
+    // Um rascunho vivo por convite: o autosave tem sempre um alvo unico.
+    uniqueIndex("compras_propostas_convite_rascunho_unica")
+      .on(table.conviteId)
+      .where(sql`${table.status} = 'rascunho'`),
+    foreignKey({
+      name: "compras_propostas_convite_empresa_fk",
+      columns: [table.conviteId, table.empresaId],
+      foreignColumns: [comprasRodadasConvites.id, comprasRodadasConvites.empresaId]
+    }).onDelete("cascade"),
+    index("compras_propostas_empresa_convite_idx").on(table.empresaId, table.conviteId, table.versao)
+  ]
+);
+
+export const comprasPropostasItens = pgTable(
+  "compras_propostas_itens",
+  {
+    id: idUuid,
+    empresaId,
+    propostaId: uuid("proposta_id").notNull(),
+    conviteItemId: uuid("convite_item_id").notNull(),
+    indisponivel: boolean("indisponivel").notNull().default(false),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 2 }),
+    descontoTipo: text("desconto_tipo"),
+    descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
+    valorUnitarioFinal: numeric("valor_unitario_final", { precision: 14, scale: 4 }),
+    freteRateado: numeric("frete_rateado", { precision: 14, scale: 2 }),
+    // GRAVADO, nao recalculado na leitura: e o numero comparado com o preco-base e o que alimenta a
+    // base nova. Forma de dinheiro congelada com a linha.
+    custoFinalUnitario: numeric("custo_final_unitario", { precision: 14, scale: 4 }),
+    totalFinal: numeric("total_final", { precision: 14, scale: 2 }),
+    // Doc 57 §5: quanto o fornecedor TEM do produto, e por que nao tem ("sem estoque" ou "nao trabalha mais").
+    quantidadeDisponivel: numeric("quantidade_disponivel", { precision: 14, scale: 3 }),
+    motivoIndisponivel: text("motivo_indisponivel").$type<"sem_estoque" | "nao_trabalha">()
+  },
+  (table) => [
+    check("compras_propostas_itens_valor_check", sql`${table.valorUnitario} is null or ${table.valorUnitario} >= 0`),
+    check(
+      "compras_propostas_itens_quantidade_disponivel_check",
+      sql`${table.quantidadeDisponivel} is null or ${table.quantidadeDisponivel} > 0`
+    ),
+    check(
+      "compras_propostas_itens_motivo_check",
+      sql`${table.motivoIndisponivel} is null or (${table.indisponivel} and ${table.motivoIndisponivel} in ('sem_estoque', 'nao_trabalha'))`
+    ),
+    check(
+      "compras_propostas_itens_desconto_tipo_check",
+      sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('valor', 'percentual')`
+    ),
+    foreignKey({
+      name: "compras_propostas_itens_proposta_empresa_fk",
+      columns: [table.propostaId, table.empresaId],
+      foreignColumns: [comprasPropostas.id, comprasPropostas.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "compras_propostas_itens_convite_item_empresa_fk",
+      columns: [table.conviteItemId, table.empresaId],
+      foreignColumns: [comprasConvitesItens.id, comprasConvitesItens.empresaId]
+    }).onDelete("restrict"),
+    unique("compras_propostas_itens_id_empresa_unica").on(table.id, table.empresaId),
+    unique("compras_propostas_itens_proposta_item_unica").on(table.propostaId, table.conviteItemId),
+    index("compras_propostas_itens_convite_item_idx").on(table.conviteItemId)
+  ]
+);
+
+export const comprasAdjudicacoes = pgTable(
+  "compras_adjudicacoes",
+  {
+    id: idUuid,
+    empresaId,
+    rodadaItemId: uuid("rodada_item_id").notNull(),
+    propostaItemId: uuid("proposta_item_id").notNull(),
+    fornecedorId: uuid("fornecedor_id").notNull(),
+    // FK simples: pedidos nao tem (id, empresa_id) unico e pedidos_itens nem tem empresa_id. A mesma
+    // empresa e garantida porque a adjudicacao e criada na mesma transacao que cria o pedido.
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "restrict" }),
+    pedidoItemId: uuid("pedido_item_id")
+      .notNull()
+      .references(() => pedidosItens.id, { onDelete: "restrict" }),
+    modo: text("modo").$type<"automatica" | "comprador">().notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    custoFinalUnitario: numeric("custo_final_unitario", { precision: 14, scale: 4 }).notNull(),
+    precoBaseValor: numeric("preco_base_valor", { precision: 14, scale: 4 }),
+    // Excecao acima da base exige aprovador nomeado; a automatica (pre-autorizada) nao tem autor.
+    aprovadoPor: text("aprovado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "restrict" }),
+    criadoEm
+  },
+  (table) => [
+    check("compras_adjudicacoes_modo_check", sql`${table.modo} in ('automatica', 'comprador')`),
+    check(
+      "compras_adjudicacoes_aprovador_check",
+      sql`(${table.modo} = 'automatica' and ${table.aprovadoPor} is null) or (${table.modo} = 'comprador' and ${table.aprovadoPor} is not null)`
+    ),
+    foreignKey({
+      name: "compras_adjudicacoes_rodada_item_empresa_fk",
+      columns: [table.rodadaItemId, table.empresaId],
+      foreignColumns: [comprasRodadasItens.id, comprasRodadasItens.empresaId]
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "compras_adjudicacoes_proposta_item_empresa_fk",
+      columns: [table.propostaItemId, table.empresaId],
+      foreignColumns: [comprasPropostasItens.id, comprasPropostasItens.empresaId]
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "compras_adjudicacoes_fornecedor_empresa_fk",
+      columns: [table.fornecedorId, table.empresaId],
+      foreignColumns: [fornecedores.id, fornecedores.empresaId]
+    }).onDelete("restrict"),
+    // "Resposta tardia nunca substitui compra realizada" (R-218): um vencedor por item da rodada.
+    unique("compras_adjudicacoes_rodada_item_unica").on(table.rodadaItemId),
+    // Uma linha de preco vence no maximo um item.
+    unique("compras_adjudicacoes_proposta_item_unica").on(table.propostaItemId),
+    index("compras_adjudicacoes_pedido_idx").on(table.pedidoId),
+    index("compras_adjudicacoes_empresa_fornecedor_idx").on(table.empresaId, table.fornecedorId)
   ]
 );

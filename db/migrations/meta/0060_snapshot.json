@@ -1,5 +1,5 @@
 {
-  "id": "1b01e5fc-4478-443a-a39e-87cda5fde97b",
+  "id": "e00ac308-3c33-4d75-aa6d-7d7b7fc93fcc",
   "prevId": "8e376c06-7f24-4fab-a3e5-e8c72d8e9025",
   "version": "7",
   "dialect": "postgresql",
@@ -1045,161 +1045,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.admissoes_processos_ficha_anexos": {
-      "name": "admissoes_processos_ficha_anexos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ficha_id": {
-          "name": "ficha_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "processo_id": {
-          "name": "processo_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tipo": {
-          "name": "tipo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nome_original": {
-          "name": "nome_original",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nome_arquivo": {
-          "name": "nome_arquivo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caminho": {
-          "name": "caminho",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tamanho_bytes": {
-          "name": "tamanho_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "admissoes_processos_ficha_anexos_empresa_ficha_idx": {
-          "name": "admissoes_processos_ficha_anexos_empresa_ficha_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ficha_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admissoes_processos_ficha_anexos_empresa_id_empresas_id_fk": {
-          "name": "admissoes_processos_ficha_anexos_empresa_id_empresas_id_fk",
-          "tableFrom": "admissoes_processos_ficha_anexos",
-          "tableTo": "empresas",
-          "columnsFrom": ["empresa_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_ficha_anexos_ficha_id_admissoes_processos_ficha_id_fk": {
-          "name": "admissoes_processos_ficha_anexos_ficha_id_admissoes_processos_ficha_id_fk",
-          "tableFrom": "admissoes_processos_ficha_anexos",
-          "tableTo": "admissoes_processos_ficha",
-          "columnsFrom": ["ficha_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_ficha_anexos_processo_id_admissoes_processos_id_fk": {
-          "name": "admissoes_processos_ficha_anexos_processo_id_admissoes_processos_id_fk",
-          "tableFrom": "admissoes_processos_ficha_anexos",
-          "tableTo": "admissoes_processos",
-          "columnsFrom": ["processo_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_ficha_anexos_processo_empresa_fk": {
-          "name": "admissoes_processos_ficha_anexos_processo_empresa_fk",
-          "tableFrom": "admissoes_processos_ficha_anexos",
-          "tableTo": "admissoes_processos",
-          "columnsFrom": ["processo_id", "empresa_id"],
-          "columnsTo": ["id", "empresa_id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "admissoes_processos_ficha_anexos_ficha_tipo_unico": {
-          "name": "admissoes_processos_ficha_anexos_ficha_tipo_unico",
-          "nullsNotDistinct": false,
-          "columns": ["ficha_id", "tipo"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "admissoes_processos_ficha_anexos_tipo_check": {
-          "name": "admissoes_processos_ficha_anexos_tipo_check",
-          "value": "\"admissoes_processos_ficha_anexos\".\"tipo\" in ('rg', 'cpf', 'titulo_eleitor', 'certidao_nascimento_casamento', 'comprovante_residencia', 'foto_3x4', 'ctps_digital', 'pis_pasep_nit', 'certificado_reservista', 'comprovante_escolaridade', 'certificados_profissionais', 'aso_admissional')"
-        },
-        "admissoes_processos_ficha_anexos_tamanho_check": {
-          "name": "admissoes_processos_ficha_anexos_tamanho_check",
-          "value": "\"admissoes_processos_ficha_anexos\".\"tamanho_bytes\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.admissoes_processos_historico": {
       "name": "admissoes_processos_historico",
       "schema": "",
@@ -2002,6 +1847,130 @@
         "admissoes_testes_historico_versao_check": {
           "name": "admissoes_testes_historico_versao_check",
           "value": "\"admissoes_testes_historico\".\"versao\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ajustes_contas": {
+      "name": "ajustes_contas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuid_generate_v7()"
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conta_id": {
+          "name": "conta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor": {
+          "name": "valor",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saldo_anterior": {
+          "name": "saldo_anterior",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saldo_posterior": {
+          "name": "saldo_posterior",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_por": {
+          "name": "criado_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ajustes_contas_conta_criado_em_idx": {
+          "name": "ajustes_contas_conta_criado_em_idx",
+          "columns": [
+            {
+              "expression": "conta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ajustes_contas_empresa_id_empresas_id_fk": {
+          "name": "ajustes_contas_empresa_id_empresas_id_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "empresas",
+          "columnsFrom": ["empresa_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ajustes_contas_criado_por_perfis_usuarios_usuario_id_fk": {
+          "name": "ajustes_contas_criado_por_perfis_usuarios_usuario_id_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "perfis_usuarios",
+          "columnsFrom": ["criado_por"],
+          "columnsTo": ["usuario_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ajustes_contas_conta_empresa_fk": {
+          "name": "ajustes_contas_conta_empresa_fk",
+          "tableFrom": "ajustes_contas",
+          "tableTo": "contas",
+          "columnsFrom": ["conta_id", "empresa_id"],
+          "columnsTo": ["id", "empresa_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ajustes_contas_valor_nao_zero_check": {
+          "name": "ajustes_contas_valor_nao_zero_check",
+          "value": "\"ajustes_contas\".\"valor\" <> 0"
         }
       },
       "isRLSEnabled": false

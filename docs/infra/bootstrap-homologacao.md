@@ -23,15 +23,19 @@ modo não aceita o banco de homologação real.
 
 ## Sequência e compatibilidade
 
+> **Após o merge da main (PR #202):** as migrations da integração foram renumeradas para 0069–0079 com
+> `when` novos. Um banco que já aplicou a numeração antiga (caso da 5544) não é prefixo do journal e o
+> script recusa por desenho. Reconciliar esse histórico é decisão separada; não force.
+
 1. O script lê o journal e identifica automaticamente a última migration disponível; atualmente é
-   `0066_questor_contrato_dp`.
-2. Em banco novo, o Drizzle aplica o prefixo anterior à `0061`.
+   `0079_eventos_layout_oficial`.
+2. Em banco novo, o Drizzle aplica o prefixo anterior à `0070`.
 3. O script verifica/cria, em transação, a UNIQUE
-   `admissoes_processos_dependentes_id_processo_empresa_unico`, necessária pela FK da `0061`.
-4. O migrator oficial aplica a lista completa, registrando `0061` até a última migration pendente,
-   incluindo `0062`, `0063`, `0064`, `0065` e `0066`.
+   `admissoes_processos_dependentes_id_processo_empresa_unico`, necessária pela FK da `0070`.
+4. O migrator oficial aplica a lista completa, registrando `0070` até a última migration pendente,
+   incluindo `0071` a `0079`.
 5. Em banco já inicializado com 64 migrations, o script valida o prefixo do journal e aplica apenas
-   as migrations pendentes até `0066`; não recria o banco nem altera dados existentes.
+   as migrations pendentes até a última do journal; não recria o banco nem altera dados existentes.
 
 O histórico armazenado precisa ser exatamente um prefixo do journal local: timestamps, quantidade e
 ordem devem corresponder. Histórico divergente, migration posterior desconhecida ou banco com tabelas
@@ -39,10 +43,10 @@ sem histórico interrompem o procedimento.
 
 ## Idempotência e segurança
 
-- Banco já em `0066`: somente leitura de estado e encerramento sem alterações.
+- Banco já em `0075`: somente leitura de estado e encerramento sem alterações.
 - Execução repetida após sucesso: não duplica registros no journal nem objetos.
 - Nenhuma migration é marcada artificialmente e nenhum hash é alterado.
-- A exceção `0061/0062` é preservada apenas como pré-condição controlada da UNIQUE necessária.
+- A exceção `0070/0071` é preservada apenas como pré-condição controlada da UNIQUE necessária.
 - O procedimento não deve ser executado no PostgreSQL principal, em produção ou em banco com dados
   que não tenham sido explicitamente autorizados para homologação.
 
@@ -50,8 +54,8 @@ sem histórico interrompem o procedimento.
 
 Antes de usar no banco 5544, execute a mesma versão em dois PostgreSQL descartáveis:
 
-- banco vazio: migrations `0000` até `0066`;
-- banco com o prefixo validado de 64 migrations: avanço somente de `0064` até `0066`.
+- banco vazio: migrations `0000` até `0075`;
+- banco com o prefixo validado de 64 migrations: avanço somente de `0073` até `0075`.
 
 Em ambos, repita o bootstrap e confira que o journal tem 67 entradas, o último timestamp corresponde
-à `0066`, as constraints/FKs Questor estão presentes e a segunda execução não altera o estado.
+à `0075`, as constraints/FKs Questor estão presentes e a segunda execução não altera o estado.

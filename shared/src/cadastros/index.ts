@@ -33,6 +33,8 @@ export type CadastroForm = {
   estado: string;
   cnpj: string;
   matriculaPrefixo: string;
+  fusoHorario: string;
+  comprasPrazoRespostaHoras: string;
   email: string;
   senha: string;
   // `""` = papel DESCONHECIDO, e nao "papel padrao". O formulario de edicao e montado da linha da
@@ -72,6 +74,8 @@ export type CadastroForm = {
   novoColaboradorCpf: string;
   novoColaboradorSetorId: string;
   novoColaboradorCargoId: string;
+  novoColaboradorPdvPadraoId: string;
+  novoColaboradorTurnoPadraoId: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
@@ -100,9 +104,10 @@ export const MENSAGEM_PERFIL_ACESSO_INDISPONIVEL =
 export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
   "Marque ao menos uma empresa ou desmarque a substituicao para manter os vinculos atuais.";
 
-export const MENSAGEM_NOVO_USUARIO_SEM_CPF = "Informe o CPF do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
+export const MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO =
+  "Para vincular ao Caixa, selecione o PDV e o turno juntos.";
 
 export function bloqueioCadastroUsuario(
   tela: string,
@@ -112,20 +117,24 @@ export function bloqueioCadastroUsuario(
     | "empresaIds"
     | "empresaIdsTocado"
     | "novoColaborador"
-    | "novoColaboradorCpf"
     | "novoColaboradorSetorId"
     | "novoColaboradorCargoId"
+    | "novoColaboradorPdvPadraoId"
+    | "novoColaboradorTurnoPadraoId"
   >,
   edicao = false
 ): string | null {
   if (tela !== "usuarios") return null;
   if (!form.role) return MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
-  // Criar o login e a pessoa operacional e um unico ato. Estes tres campos alimentam a resolucao de
-  // permissoes (setor -> cargo -> usuario) e a deduplicacao por CPF; deixar o servidor descobrir a
-  // ausencia somente depois do clique produzia uma tela que parecia salvavel, mas nunca concluia.
-  if (form.novoColaborador && !form.novoColaboradorCpf.trim()) return MENSAGEM_NOVO_USUARIO_SEM_CPF;
+  // Criar o login e a pessoa operacional e um unico ato. Setor e cargo alimentam a resolucao de
+  // permissoes (setor -> cargo -> usuario). CPF e opcional: quando informado, apenas evita criar
+  // um segundo colaborador com o mesmo documento. Deixar o servidor descobrir a ausência de setor
+  // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
   if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
   if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
+  if (form.novoColaborador && Boolean(form.novoColaboradorPdvPadraoId) !== Boolean(form.novoColaboradorTurnoPadraoId)) {
+    return MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO;
+  }
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
   // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
   // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
@@ -135,7 +144,14 @@ export function bloqueioCadastroUsuario(
 }
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
-  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null, matriculaPrefixo: form.matriculaPrefixo };
+  if (tela === "empresas")
+    return {
+      nome: form.nome,
+      cnpj: form.cnpj || null,
+      matriculaPrefixo: form.matriculaPrefixo,
+      fusoHorario: form.fusoHorario,
+      comprasPrazoRespostaHoras: numeroCampoOuNulo(form.comprasPrazoRespostaHoras)
+    };
   // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
   // campo em branco significa "sem fundo", e mandar undefined faria o servidor MANTER o fundo
   // anterior — o admin que apagasse o campo veria o valor voltar sozinho.
@@ -172,7 +188,13 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       diasSemana: form.diasSemanaTurno.length ? form.diasSemanaTurno : null
     };
   if (tela === "fornecedores")
-    return { empresaId, nome: form.nome, documento: form.documento || null, whatsapp: form.whatsapp || null };
+    return {
+      empresaId,
+      nome: form.nome,
+      documento: form.documento || null,
+      whatsapp: form.whatsapp || null,
+      situacao: form.ativo ? "ativo" : "inativo"
+    };
   if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")
     return {
@@ -210,6 +232,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     const payload: Record<string, DadosExternos> = {
       nome: form.nome,
       email: form.email,
+      whatsapp: form.whatsapp || null,
       senha: form.senha || undefined,
       // Papel desconhecido NAO vira payload. A tela ja recusa salvar nesse estado
       // (bloqueioCadastroUsuario); aqui e a segunda tranca: omitir o campo faz o servidor manter o
@@ -234,7 +257,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId
+        cargoId: form.novoColaboradorCargoId,
+        pdvPadraoId: form.novoColaboradorPdvPadraoId || null,
+        turnoPadraoId: form.novoColaboradorTurnoPadraoId || null
       };
     } else {
       // Mesma regra de `empresaIds`: colaborador vazio NAO viaja. A listagem recorta `colaboradorId`

@@ -17,7 +17,7 @@ import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql } from "../../setup/integracao.js";
 
 /**
- * E2/E3/E4 pela rota HTTP real, com as tabelas das migrations 0064–0066 (o banco efêmero da suíte
+ * E2/E3/E4 pela rota HTTP real, com as tabelas das migrations 0073–0075 (o banco efêmero da suíte
  * é criado pelo schema oficial). Rotas e permissão (`conplus_questor_configurar`, do cargo DP)
  * exatamente como registradas em `api/src/app.ts`. Códigos todos FICTÍCIOS (9xx).
  */
@@ -301,7 +301,7 @@ describe("Questor E2/E3/E4 — rotas", () => {
         });
         expect(soEspacos.statusCode, `tipo ${tipo}`).toBe(400);
       }
-      // Mesmo que alguém grave por fora da API, o banco recusa (CHECK condicional da 0066).
+      // Mesmo que alguém grave por fora da API, o banco recusa (CHECK condicional da 0075).
       await expect(
         executarSql(
           "update admissoes_processos_internos set questor_tipo_salario = 6, descricao_salario = '   ' where processo_id = $1",

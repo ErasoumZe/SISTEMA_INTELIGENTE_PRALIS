@@ -1,15 +1,18 @@
 import { z } from "zod";
-import type { CotacaoResumoDto } from "../compras/cotacao.js";
 
 const uuidSchema = z.string().uuid();
 
-export const pedidoTipos = ["manual", "automatico"] as const;
+// `manual` e `automatico` sao so de LEITURA (pedidos criados antes do E8); `rodada` e o unico tipo que nasce
+// hoje (compra automatica ou excecao do comprador, R-221).
+export const pedidoTipos = ["manual", "automatico", "rodada"] as const;
 // Os dois primeiros valores sao somente leitura para pedidos criados antes do modulo Compras.
 export const pedidoStatus = [
   "rascunho",
   "aprovado",
   "a_fazer",
   "enviado",
+  // Doc 57 §5: o fornecedor ganhou os itens e esta separando (pode ajustar a quantidade real).
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",
@@ -19,6 +22,7 @@ export const pedidoStatus = [
 export const pedidoStatusNovo = [
   "a_fazer",
   "enviado",
+  "cotado",
   "retornado",
   "confirmado",
   "recebido_parcial",
@@ -31,52 +35,35 @@ export type PedidoStatus = (typeof pedidoStatus)[number];
 export type PedidoStatusNovo = (typeof pedidoStatusNovo)[number];
 export type PedidoRecorrencia = (typeof pedidoRecorrencias)[number];
 
-export const pedidoItemPayloadSchema = z.object({
-  produtoId: uuidSchema,
-  quantidade: z.coerce.number().positive()
-});
-
-const agendamentoPedidoSchema = z.object({
-  dataAgendada: z.string().min(10).optional().nullable(),
-  recorrencia: z.enum(pedidoRecorrencias).default("nenhuma")
-});
-
-export const pedidoPayloadSchema = agendamentoPedidoSchema.extend({
-  empresaId: uuidSchema,
-  fornecedorId: uuidSchema,
-  observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z.array(pedidoItemPayloadSchema).min(1)
-});
-
-export const pedidoEdicaoPayloadSchema = agendamentoPedidoSchema.extend({
-  fornecedorId: uuidSchema.optional(),
-  observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z.array(pedidoItemPayloadSchema).min(1)
-});
-
-export const gerarPedidoAutomaticoPayloadSchema = agendamentoPedidoSchema.extend({
-  empresaId: uuidSchema,
-  fornecedorId: uuidSchema
-});
-
 export const pedidoSituacaoPayloadSchema = z.object({
-  // R-216: "Enviado" so nasce da cotacao gerada e "Retornado" so da resposta do fornecedor. A troca
-  // manual fica restrita a decidir: confirmar a negociacao ou cancelar o pedido.
-  status: z.enum(["confirmado", "cancelado"]),
+  // Depois do E8 (R-221) o unico ato manual sobre a situacao e CANCELAR. "Confirmado" nasce da rodada
+  // (compra automatica ou excecao do comprador); nao existe mais confirmar na mao.
+  status: z.enum(["cancelado"]),
   observacao: z.string().trim().max(1_000).optional().nullable()
 });
+
+// Doc 58 §7: por item, quanto recebeu e quanto devolveu (com motivo). Devolver fecha o item: o estoque entra so o
+// recebido e o que faltou nao fica esperando.
+export const pedidoRecebimentoItemSchema = z
+  .object({
+    pedidoItemId: uuidSchema,
+    quantidadeConferida: z.coerce.number().min(0),
+    quantidadeDevolvida: z.coerce.number().min(0).default(0),
+    motivoDevolucao: z.string().trim().max(500).optional().nullable()
+  })
+  .refine((item) => item.quantidadeConferida > 0 || item.quantidadeDevolvida > 0, {
+    message: "Informe quanto recebeu ou quanto devolveu",
+    path: ["quantidadeConferida"]
+  })
+  .refine((item) => item.quantidadeDevolvida === 0 || Boolean(item.motivoDevolucao), {
+    message: "Diga o motivo da devolucao",
+    path: ["motivoDevolucao"]
+  });
 
 export const pedidoRecebimentoPayloadSchema = z.object({
   idempotenciaChave: uuidSchema,
   observacao: z.string().trim().max(1_000).optional().nullable(),
-  itens: z
-    .array(
-      z.object({
-        pedidoItemId: uuidSchema,
-        quantidadeConferida: z.coerce.number().positive()
-      })
-    )
-    .min(1)
+  itens: z.array(pedidoRecebimentoItemSchema).min(1)
 });
 
 export const pedidosQuerySchema = z.object({
@@ -84,11 +71,15 @@ export const pedidosQuerySchema = z.object({
   status: z.enum(pedidoStatus).optional()
 });
 
-export type PedidoPayload = z.infer<typeof pedidoPayloadSchema>;
-export type PedidoEdicaoPayload = z.infer<typeof pedidoEdicaoPayloadSchema>;
-export type GerarPedidoAutomaticoPayload = z.infer<typeof gerarPedidoAutomaticoPayloadSchema>;
 export type PedidoSituacaoPayload = z.infer<typeof pedidoSituacaoPayloadSchema>;
 export type PedidoRecebimentoPayload = z.infer<typeof pedidoRecebimentoPayloadSchema>;
+// O que a tela manda por item (o coerce do schema deixaria o tipo de entrada como unknown).
+export type PedidoRecebimentoItem = {
+  pedidoItemId: string;
+  quantidadeConferida: number;
+  quantidadeDevolvida: number;
+  motivoDevolucao: string | null;
+};
 export type PedidosQuery = z.infer<typeof pedidosQuerySchema>;
 
 export type PedidoItemDto = {
@@ -97,6 +88,8 @@ export type PedidoItemDto = {
   descricaoProduto: string;
   quantidade: string;
   quantidadeRecebida: string;
+  /** Doc 58 §7: o que voltou com o entregador. Item com devolucao esta fechado (pendente 0). */
+  quantidadeDevolvida: string;
   quantidadePendente: string;
   estoqueAtual: string | null;
   estoqueMin: string | null;
@@ -107,7 +100,7 @@ export type PedidoEventoDto = {
   id: string;
   status: PedidoStatusNovo;
   observacao: string | null;
-  /** Nulo quando o ato foi do fornecedor pelo link de cotacao (R-216); o nome vem preenchido assim mesmo. */
+  /** Nulo quando o ato foi do fornecedor pelo link (compra automatica ou cotacao legada); o nome vem preenchido assim mesmo. */
   criadoPor: string | null;
   // Quem agiu precisa ser legivel na tela: o id sozinho nao responde "quem enviou" nem "quem recebeu".
   criadoPorNome: string;
@@ -130,8 +123,6 @@ export type PedidoDto = {
   aprovadoEm: string | null;
   itens?: PedidoItemDto[];
   eventos?: PedidoEventoDto[];
-  /** Cotacao mais recente do pedido (R-216), so no detalhe. */
-  cotacao?: CotacaoResumoDto | null;
 };
 
 export type ProdutoEstoque = {

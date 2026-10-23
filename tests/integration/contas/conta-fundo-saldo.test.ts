@@ -30,11 +30,15 @@ async function usuarioIdPorEmail(email: string): Promise<string> {
 describe("conta com fundo e saldo derivado (D8) integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
+  let cookieGerente: string;
   let usuarioCaixaId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieTesouraria = await cookieSessao(contexto.app, "tesouraria");
+    cookieGerente = await cookieSessao(contexto.app, "gerente");
     usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
   }, 120_000);
 
@@ -227,6 +231,46 @@ describe("conta com fundo e saldo derivado (D8) integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Conta com fundo negativo", saldoInicial: -1 }
     });
     expect(resposta.statusCode).toBe(400);
+  });
+
+  it("ajuste auditado leva o saldo atual ao alvo sem reescrever o fundo", async () => {
+    const contaId = await criarConta({ nome: "Conta para ajuste", saldoInicial: 100 });
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: `/api/contas/${contaId}/ajustes`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, saldoDesejado: 0, motivo: "Zeragem inicial de teste" }
+    });
+    assertOk(resposta);
+    expect((await saldos()).find((linha) => linha.id === contaId)).toMatchObject({ saldoInicial: 100, saldoAtual: 0 });
+    const ajuste = await consultarUm<{
+      valor: string;
+      saldo_anterior: string;
+      saldo_posterior: string;
+      motivo: string;
+    }>("select valor, saldo_anterior, saldo_posterior, motivo from ajustes_contas where conta_id = $1", [contaId]);
+    expect(ajuste).toMatchObject({ valor: "-100.00", saldo_anterior: "100.00", saldo_posterior: "0.00" });
+    expect(ajuste?.motivo).toBe("Zeragem inicial de teste");
+  });
+
+  it("somente Tesouraria e Administrador total podem ajustar saldo", async () => {
+    const contaId = await criarConta({ nome: "Conta de escopo do ajuste", saldoInicial: 50 });
+    const tesouraria = await contexto.app.inject({
+      method: "POST",
+      url: `/api/contas/${contaId}/ajustes`,
+      headers: { cookie: cookieTesouraria },
+      payload: { empresaId: idsTeste.empresaA, saldoDesejado: 25, motivo: "Ajuste autorizado da tesouraria" }
+    });
+    assertOk(tesouraria);
+
+    const gerente = await contexto.app.inject({
+      method: "POST",
+      url: `/api/contas/${contaId}/ajustes`,
+      headers: { cookie: cookieGerente },
+      payload: { empresaId: idsTeste.empresaA, saldoDesejado: 0, motivo: "Tentativa sem autoridade" }
+    });
+    expect(gerente.statusCode).toBe(403);
+    expect((await saldos()).find((linha) => linha.id === contaId)?.saldoAtual).toBe(25);
   });
 
   it("contas existentes seguem com fundo 0 (migration aditiva, sem backfill)", async () => {

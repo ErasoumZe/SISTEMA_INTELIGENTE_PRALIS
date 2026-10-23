@@ -81,6 +81,17 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-90000}
+      # WhatsApp de Compras (doc 57 §7): o sistema manda a cotacao e o "pode entregar". Sem provedor, a fila
+      # espera e a tela avisa. O TOKEN e segredo: so no painel do Coolify ou no .env.local ignorado, nunca no Git.
+      WHATSAPP_PROVEDOR: ${WHATSAPP_PROVEDOR:-desligado}
+      WHATSAPP_META_TOKEN: ${WHATSAPP_META_TOKEN:-}
+      WHATSAPP_META_TELEFONE_ID: ${WHATSAPP_META_TELEFONE_ID:-}
+      WHATSAPP_META_VERSAO_API: ${WHATSAPP_META_VERSAO_API:-v21.0}
+      WHATSAPP_META_MODELO_COTACAO: ${WHATSAPP_META_MODELO_COTACAO:-cotacao_compra}
+      WHATSAPP_META_MODELO_CONFIRMACAO: ${WHATSAPP_META_MODELO_CONFIRMACAO:-pedido_confirmado}
+      WHATSAPP_META_IDIOMA: ${WHATSAPP_META_IDIOMA:-pt_BR}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      WHATSAPP_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_TOKEN:-}
     restart: unless-stopped
     expose:
       - "4100"

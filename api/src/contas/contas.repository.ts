@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
-import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
+import { ajustesContas, contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
@@ -124,13 +124,13 @@ export async function listarContasRepository() {
 // `computar = true` e `status <> 'cancelado'`; venda entra pelo liquido (original - desconto +
 // acrescimo), o resto por valor_original puro. Se um dia essa convencao mudar, muda nos dois.
 //
-// Uma consulta por tabela (5 no total) e a soma em memoria, no mesmo formato do caixa: o volume
-// aqui e o de lancamentos da empresa, e o agrupamento em JS evita cinco SUB-SELECTs correlacionados
+// Uma consulta por fonte de saldo e a soma em memoria, no mesmo formato do caixa: o volume
+// aqui e o de lancamentos da empresa, e o agrupamento em JS evita varios SUB-SELECTs correlacionados
 // por conta (que seria N+1 disfarcado de uma query so).
 // `contasFiltroIds` NAO muda a formula — muda o UNIVERSO lido. O acumulador sempre ignorou conta
 // fora da lista (`acumular` so soma quando o id esta no mapa), entao restringir devolve exatamente
 // os mesmos numeros para as contas pedidas. Existe porque a porta de saldo (R-165) chama esta
-// funcao A CADA ESCRITA: sem o filtro, cada despesa varreria as 5 tabelas da empresa inteira —
+// funcao A CADA ESCRITA: sem o filtro, cada despesa varreria as fontes de saldo da empresa inteira —
 // e nao ha indice em `conta_origem_id`/`conta_destino_id` (D-XX, registrado no relatorio da OS).
 export async function saldosDasContasRepository(
   empresasPermitidasIds: string[] | null,
@@ -263,6 +263,12 @@ export async function saldosDasContasRepository(
         ne(mercadorias.status, "cancelado")
       )
     );
+  // Ajustes sao fatos imutaveis de conciliacao administrativa. A conta ja foi filtrada pelo
+  // tenant acima; por isso este acumulador nao pode trazer ajuste de outra empresa.
+  const linhasAjustes = await db
+    .select({ contaId: ajustesContas.contaId, valor: ajustesContas.valor })
+    .from(ajustesContas)
+    .where(inArray(ajustesContas.contaId, contaIds));
 
   const totaisPorConta = new Map<string, TotaisContaCentavos>(
     contaIds.map((id) => [
@@ -273,6 +279,7 @@ export async function saldosDasContasRepository(
         transferenciasEntrada: 0,
         transferenciasSaida: 0,
         transferenciasPendentes: 0,
+        ajustes: 0,
         despesas: 0,
         retiradas: 0,
         mercadorias: 0
@@ -310,6 +317,7 @@ export async function saldosDasContasRepository(
   for (const linha of linhasRetiradas) acumular(linha.contaOrigemId, "retiradas", paraCentavos(linha.valorOriginal));
   for (const linha of linhasMercadorias)
     acumular(linha.contaOrigemId, "mercadorias", paraCentavos(linha.valorOriginal));
+  for (const linha of linhasAjustes) acumular(linha.contaId, "ajustes", paraCentavos(linha.valor));
 
   return new Map(
     linhasContas.map((conta) => {
@@ -320,6 +328,39 @@ export async function saldosDasContasRepository(
       return [conta.id, deCentavos(saldo)];
     })
   );
+}
+
+export async function listarIdsContasDaEmpresaRepository(empresaId: string, db: TransacaoBanco) {
+  return db.select({ id: contas.id }).from(contas).where(eq(contas.empresaId, empresaId)).orderBy(asc(contas.id));
+}
+
+export async function inserirAjustesContasRepository(
+  ajustes: Array<{
+    empresaId: string;
+    contaId: string;
+    valor: number;
+    saldoAnterior: number;
+    saldoPosterior: number;
+    motivo: string;
+    criadoPor: string;
+  }>,
+  db: TransacaoBanco
+) {
+  if (!ajustes.length) return [];
+  return db
+    .insert(ajustesContas)
+    .values(
+      ajustes.map((ajuste) => ({
+        empresaId: ajuste.empresaId,
+        contaId: ajuste.contaId,
+        valor: centavosParaDecimalBanco(paraCentavos(ajuste.valor)),
+        saldoAnterior: centavosParaDecimalBanco(paraCentavos(ajuste.saldoAnterior)),
+        saldoPosterior: centavosParaDecimalBanco(paraCentavos(ajuste.saldoPosterior)),
+        motivo: ajuste.motivo,
+        criadoPor: ajuste.criadoPor
+      }))
+    )
+    .returning({ id: ajustesContas.id, contaId: ajustesContas.contaId });
 }
 
 // Contas da empresa com fundo, saldo derivado e os usuarios vinculados — a tela de Contas (D8).
@@ -399,6 +440,7 @@ export async function saldosComPendenciaDasContasRepository(
             transferenciasEntrada: 0,
             transferenciasSaida: pendentes.get(id) ?? 0,
             transferenciasPendentes: pendentes.get(id) ?? 0,
+            ajustes: 0,
             despesas: 0,
             retiradas: 0,
             mercadorias: 0

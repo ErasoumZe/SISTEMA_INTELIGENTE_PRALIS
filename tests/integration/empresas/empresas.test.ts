@@ -75,4 +75,43 @@ describe("empresas integration", () => {
       await executarSql("delete from empresas where id = $1", [empresaId]);
     }
   });
+
+  // A tela de cadastro monta o formulario de EDICAO a partir da linha da grade, e a grade e
+  // alimentada preferencialmente pela lista de empresas da SESSAO (`/api/me`), caindo para
+  // `/api/empresas` so quando a sessao nao traz nenhuma. Se qualquer uma das duas deixar de projetar
+  // a configuracao operacional, o formulario reabre no default e o salvar seguinte apaga o valor
+  // gravado — que foi exatamente o defeito corrigido na fundacao de Compras.
+  it("projeta a configuracao operacional da empresa na sessao e na listagem", async () => {
+    await executarSql("update empresas set fuso_horario = $2, compras_prazo_resposta_horas = $3 where id = $1", [
+      idsTeste.empresaA,
+      "America/Belem",
+      48
+    ]);
+    try {
+      const sessao = await contexto.app.inject({ method: "GET", url: "/api/me", headers: { cookie: cookieAdmin } });
+      assertOk(sessao);
+      const empresaDaSessao = json<{
+        data: { empresas: Array<{ id: string; fusoHorario?: string; comprasPrazoRespostaHoras?: number | null }> };
+      }>(sessao).data.empresas.find((empresa) => empresa.id === idsTeste.empresaA);
+      expect(empresaDaSessao?.fusoHorario).toBe("America/Belem");
+      expect(empresaDaSessao?.comprasPrazoRespostaHoras).toBe(48);
+
+      const listar = await contexto.app.inject({
+        method: "GET",
+        url: "/api/empresas",
+        headers: { cookie: cookieAdmin }
+      });
+      assertOk(listar);
+      const empresaDaLista = json<{
+        data: Array<{ id: string; fusoHorario?: string; comprasPrazoRespostaHoras?: number | null }>;
+      }>(listar).data.find((empresa) => empresa.id === idsTeste.empresaA);
+      expect(empresaDaLista?.fusoHorario).toBe("America/Belem");
+      expect(empresaDaLista?.comprasPrazoRespostaHoras).toBe(48);
+    } finally {
+      await executarSql("update empresas set fuso_horario = $2, compras_prazo_resposta_horas = null where id = $1", [
+        idsTeste.empresaA,
+        "America/Sao_Paulo"
+      ]);
+    }
+  });
 });

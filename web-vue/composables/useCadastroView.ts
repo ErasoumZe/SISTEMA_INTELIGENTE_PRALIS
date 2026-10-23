@@ -21,7 +21,17 @@ export function useCadastroView(params: {
       return toValue(params.empresas).map((item) => ({
         id: item.id,
         nome: item.nome ?? "",
-        cnpj: item.cnpj ? String(item.cnpj) : undefined
+        cnpj: item.cnpj ? String(item.cnpj) : undefined,
+        // Projetados porque o formulario de EDICAO e montado desta linha (`formCadastroDeLinha`): o
+        // campo que nao chega aqui reabre com o default e o salvar seguinte grava esse default em
+        // cima do valor correto. Sem isto, corrigir o nome da empresa zerava o prazo de cotacao e
+        // devolvia o fuso para America/Sao_Paulo (fio-edicao-empresa.test.ts).
+        matriculaPrefixo: item.matriculaPrefixo ?? undefined,
+        fusoHorario: item.fusoHorario ?? undefined,
+        comprasPrazoRespostaHoras:
+          item.comprasPrazoRespostaHoras === null || item.comprasPrazoRespostaHoras === undefined
+            ? undefined
+            : String(item.comprasPrazoRespostaHoras)
       }));
     if (tela === "contas")
       return listas.contas.map((item) => ({
@@ -53,7 +63,10 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.nome,
         documento: item.documento,
-        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined
+        whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined,
+        // Projetado para a edicao preservar a situacao: sem isto, editar o nome reabriria o form com
+        // o default e o salvar seguinte reativaria um fornecedor inativo (R-219).
+        ativo: item.situacao === "inativo" ? "Não" : "Sim"
       }));
     if (tela === "socios_gestores")
       return listas.sociosGestores.map((item) => ({
@@ -143,6 +156,10 @@ export function useCadastroView(params: {
         usuarioId: item.usuarioId ?? item.id,
         nome: item.nome,
         email: item.email,
+        // Projetado pelo mesmo motivo do fuso da empresa: `cadastroPayload` manda
+        // `form.whatsapp || null`, entao linha sem telefone = formulario vazio = PUT que apaga o
+        // numero gravado (fio-edicao-usuario.test.ts).
+        whatsapp: item.whatsapp,
         role: item.role,
         perfil:
           item.role === "usuario_admin"

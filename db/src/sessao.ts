@@ -45,9 +45,42 @@ export function sqlTravarAdmissaoDaPessoa(empresaId: string, cpf: string) {
   return sql`select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext(${empresaId}::text || ':' || ${cpf}::text))`;
 }
 
+/**
+ * Serializa a APLICACAO da carga inicial de preco-base de UMA empresa.
+ *
+ * Por que advisory e nao a trava da linha: a regra ("a carga inicial acontece uma unica vez por
+ * empresa", R-218) depende de um agregado — "existe alguma importacao aplicada?" — e nao da linha
+ * sendo aplicada. O `FOR UPDATE` da importacao escolhida nao impede duas importacoes DIFERENTES de
+ * passarem juntas pela mesma pre-checagem em READ COMMITTED: com produtos disjuntos as duas gravam
+ * e a regra e violada em silencio; com produtos em comum uma morre no indice parcial e devolve 500.
+ *
+ * Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
+ */
+export function sqlTravarPrecoBaseDaEmpresa(empresaId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('compras:preco-base'), hashtext(${empresaId}::text))`;
+}
+
 /** Serializa a escolha da próxima matrícula dentro de uma empresa. */
 export function sqlTravarMatriculaDaEmpresa(empresaId: string) {
   return sql`select pg_advisory_xact_lock(hashtext('dp:matricula'), hashtext(${empresaId}::text))`;
+}
+
+/**
+ * Serializa, dentro da transacao corrente, tudo que decide sobre a rodada de cotacao de UMA
+ * solicitacao — abrir, enviar convite, registrar resposta e adjudicar/fechar (Fase 2 do Compras).
+ *
+ * Por que advisory e nao so a linha da rodada: a regra "uma rodada aberta por solicitacao" e
+ * "resposta tardia nunca substitui compra realizada" dependem de agregados que cruzam rodada,
+ * convite, proposta e adjudicacao; o `FOR UPDATE` de uma linha nao impede duas transacoes de
+ * passarem juntas pela pre-checagem em READ COMMITTED. O escopo e a SOLICITACAO (casa com o unique
+ * parcial `compras_rodadas_solicitacao_aberta_unica`): solicitacoes diferentes nunca esperam uma
+ * pela outra. Solta sozinho no commit/rollback. É a primeira trava da ordem canonica (PROJECT_BRAIN
+ * 54): advisory por rodada -> rodada FOR UPDATE -> convite FOR UPDATE -> itens do envelope.
+ *
+ * Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
+ */
+export function sqlTravarRodadaDeCompras(solicitacaoId: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('compras:rodada'), hashtext(${solicitacaoId}::text))`;
 }
 
 /** Expressao unica para comparar CPF com ou sem mascara nas consultas do dominio. */

@@ -47,17 +47,13 @@ function tabelasDoArrayDa0002(): string[] {
 // real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
-  // 0061 (fila Google da admissao), 0063 (importacoes Conplus) e 0068 (exportacoes Questor) criaram
+  // 0070 (fila Google da admissao), 0072 (importacoes Conplus) e 0077 (exportacoes Questor) criaram
   // `atualizado_em` sem o bloco de trigger; os servicos gravam a coluna explicitamente. Declaradas
   // aqui pelo nome ate a decisao da migration que instala os triggers (pendencia registrada).
   "admissoes_google_arquivos",
   "admissoes_google_dependentes",
   "admissoes_google_sincronizacoes",
   "campanhas",
-  // Conferencia nasce apenas como agenda; nao ha escritor de atualizacao de status nesta entrega.
-  // Quando a contagem fisica ganhar conclusao/cancelamento, ela precisa sair desta lista com o
-  // trigger correspondente na mesma vertical.
-  "conferencias_estoque",
   "conplus_google_sincronizacoes",
   "conplus_importacoes",
   "conplus_registros",
@@ -128,8 +124,8 @@ const sqlConstraints = `
 
 /**
  * Caminho OFICIAL de banco novo: o mesmo `drizzle-kit migrate` que o deploy roda
- * (`api:prod:migrate`). Ate 22/10/2026 ele quebrava na 0061 (FK apontando para a UNIQUE que so nascia
- * na 0062); a 0061 passou a criar a UNIQUE de forma idempotente, e este teste e a prova.
+ * (`api:prod:migrate`). Ate 22/10/2026 ele quebrava na 0070 (antiga 0061: FK apontando para a UNIQUE que so nascia
+ * na 0071); a 0070 passou a criar a UNIQUE de forma idempotente, e este teste e a prova.
  */
 function executarMigrate(databaseUrl: string) {
   return new Promise<void>((resolve, reject) => {
@@ -329,13 +325,35 @@ describe("migracoes integration", () => {
       "colaboradores_enderecos",
       "colaboradores_onboarding",
       "colaboradores_vinculos",
+      // R-218 (0060): a analise da carga inicial de preco-base muda de estado (analisada ->
+      // aplicada) e os itens sao reavaliados, entao as duas tabelas tem `atualizado_em`.
+      "compras_importacoes_preco_base",
+      "compras_importacoes_preco_base_itens",
+      // R-221 (0063): rodada multi-fornecedor. Solicitacao, rodada, convite e proposta mudam de
+      // estado ao longo do ciclo, entao tem `atualizado_em`.
+      "compras_propostas",
+      "compras_rodadas",
+      "compras_rodadas_convites",
+      "compras_solicitacoes",
+      // Doc 57 (0067): a fila do WhatsApp muda de status; a agenda da conferencia e encerrada; a
+      // conferencia ganhou conclusao (saiu da lista "com coluna e sem gatilho").
+      "compras_whatsapp_envios",
+      "conferencias_agendas",
+      "conferencias_estoque",
       "configuracoes_menu_empresas",
-      // 0069: estado da busca automatica Conplus muda a cada execucao da rotina.
+      // 0078: estado da busca automatica Conplus muda a cada execucao da rotina.
       "conplus_sincronizacao_estado",
+      // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
+      // aprovado/rejeitado).
+      "fornecedores_produtos",
       "funcoes_operacionais",
+      // Doc 56 (0066): a ocorrencia do agendamento muda de situacao (conferir -> enviada/cancelada) e a
+      // serie e encerrada ao editar "esta e as futuras".
+      "pedidos_agenda_ocorrencias",
+      "pedidos_agendas",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
       "pedidos_cotacoes",
-      // 0064: configuracao e catalogo Questor sao editados pelo DP.
+      // 0073: configuracao e catalogo Questor sao editados pelo DP.
       "questor_codigos",
       "questor_configuracoes"
     ]);

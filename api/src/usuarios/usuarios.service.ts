@@ -18,7 +18,9 @@ import {
   bloquearColaboradorPorCpfRepository,
   bloquearColaboradorUsuarioRepository,
   buscarColaboradorUsuarioRepository,
+  buscarPdvEmpresaRepository,
   buscarSetorEmpresaRepository,
+  buscarTurnoEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
   colaboradorTemCargoAtivoRepository,
   existeEmailUsuarioRepository,
@@ -84,6 +86,7 @@ export function recortarUsuariosPorEmpresas(
         empresaIds,
         nome: usuario.nome,
         email: usuario.email,
+        whatsapp: usuario.whatsapp,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
         setorId: setorVisivel ? usuario.setorId : null,
         setorNome: setorVisivel ? usuario.setorNome : null,
@@ -288,6 +291,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   // passava na frente da autorizacao e virava oraculo.
   const ator = exigirAtor(perfil);
   const dados = usuarioPayloadSchema.parse(body);
+  const whatsapp = apenasDigitos(dados.whatsapp) ?? null;
   // A autorizacao do ALVO nao mora aqui — ela precisa da transacao das escritas para travar a linha
   // raiz (ver `autorizarEdicaoUsuario`). Na criacao nao ha alvo previo, so o papel pedido.
   if (!id) autorizarCriacaoUsuario(dados.role, ator);
@@ -319,6 +323,19 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     if (novoColaborador.setorId) {
       const setor = await buscarSetorEmpresaRepository(novoColaborador.setorId);
       if (!setor || setor.empresaId !== novoColaborador.empresaId) falharValidacao("Setor nao pertence a empresa");
+    }
+    if (Boolean(novoColaborador.pdvPadraoId) !== Boolean(novoColaborador.turnoPadraoId)) {
+      falharValidacao("Informe PDV e turno juntos para vincular um usuario ao Caixa");
+    }
+    if (novoColaborador.pdvPadraoId) {
+      const pdv = await buscarPdvEmpresaRepository(novoColaborador.pdvPadraoId);
+      if (!pdv || pdv.empresaId !== novoColaborador.empresaId) falharValidacao("PDV nao pertence a empresa");
+      if (!pdv.ativo) falharValidacao("PDV inativo nao pode ser vinculado ao Caixa");
+    }
+    if (novoColaborador.turnoPadraoId) {
+      const turno = await buscarTurnoEmpresaRepository(novoColaborador.turnoPadraoId);
+      if (!turno || turno.empresaId !== novoColaborador.empresaId) falharValidacao("Turno nao pertence a empresa");
+      if (!turno.ativo) falharValidacao("Turno inativo nao pode ser vinculado ao Caixa");
     }
   } else if (!preservarColaborador) {
     if (!colaboradorPreLido) falharValidacao("Colaborador nao encontrado");
@@ -437,7 +454,9 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         empresaId: novoColaborador.empresaId,
         nome: novoColaborador.nome,
         cpf: novoColaborador.cpf,
-        setorId: novoColaborador.setorId
+        setorId: novoColaborador.setorId,
+        pdvPadraoId: novoColaborador.pdvPadraoId ?? null,
+        turnoPadraoId: novoColaborador.turnoPadraoId ?? null
       },
       tx
     );
@@ -498,7 +517,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         await atualizarSenhaUsuarioAutenticacaoRepository({ id, passwordHash: await hashPassword(dados.senha) }, tx);
       }
       await upsertPerfilUsuarioRepository(
-        { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, ...(role ? { role } : {}) },
+        { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, whatsapp, ...(role ? { role } : {}) },
         tx
       );
       // Sem substituicao explicita nao se toca em `usuarios_empresas`. Um DELETE+INSERT com a mesma
@@ -566,7 +585,14 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
       await marcarEmailVerificadoRepository(usuario.id, tx);
       await upsertPerfilUsuarioRepository(
-        { usuarioId: usuario.id, empresaId: empresaIdsDoCorpo[0]!, nome, email, ...(role ? { role } : {}) },
+        {
+          usuarioId: usuario.id,
+          empresaId: empresaIdsDoCorpo[0]!,
+          nome,
+          email,
+          whatsapp,
+          ...(role ? { role } : {})
+        },
         tx
       );
       await substituirEmpresasUsuarioRepository(usuario.id, empresaIdsDoCorpo, tx);

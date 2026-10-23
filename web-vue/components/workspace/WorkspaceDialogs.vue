@@ -247,9 +247,36 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               :model-value="formCadastro.whatsapp"
               label="WhatsApp"
               maxlength="15"
+              hint="Opcional no cadastro; obrigatório só para convidar o fornecedor para uma cotação."
+              persistent-hint
               @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'fornecedores'" cols="12" md="6">
+            <v-switch
+              v-model="formCadastro.ativo"
+              color="primary"
+              label="Fornecedor ativo"
+              hint="Fornecedor inativo não aparece no seletor de cotação."
+              persistent-hint
+            />
+          </v-col>
+          <template v-if="cadastroTela === 'empresas'">
+            <v-col cols="12" md="6">
+              <v-text-field v-model="formCadastro.fusoHorario" label="Fuso horário" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="formCadastro.comprasPrazoRespostaHoras"
+                type="number"
+                min="1"
+                label="Prazo padrão de cotação"
+                suffix="horas"
+                hint="Pode ser alterado em cada rodada."
+                persistent-hint
+              />
+            </v-col>
+          </template>
           <template v-if="cadastroTela === 'clientes'">
             <v-col v-if="documentoEhCpf(formCadastro.documento)" cols="12" md="6">
               <v-text-field v-model="formCadastro.dataNascimento" type="date" label="Data de nascimento" />
@@ -339,6 +366,14 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
             ><v-text-field v-model="formCadastro.email" type="email" label="Email"
           /></v-col>
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
+            <v-text-field
+              :model-value="formCadastro.whatsapp"
+              label="WhatsApp para alertas"
+              maxlength="15"
+              @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
             <v-select
               v-model="formCadastro.role"
               :items="perfisAcessoUsuario"
@@ -361,16 +396,9 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
             <v-col cols="12">
               <v-alert type="info" variant="tonal" density="compact">
                 O login e o colaborador serão criados juntos. Setor e cargo definem os acessos herdados; depois você
-                poderá ajustar exceções individuais.
+                poderá ajustar exceções individuais. Para operador de Caixa, vincule o PDV e o turno abaixo; para
+                gerência e tesouraria, deixe ambos vazios.
               </v-alert>
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field
-                :model-value="formCadastro.novoColaboradorCpf"
-                label="CPF *"
-                maxlength="14"
-                @update:model-value="formCadastro.novoColaboradorCpf = mascararCpf(String($event || ''))"
-              />
             </v-col>
             <v-col cols="12" md="6">
               <v-select
@@ -388,6 +416,30 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
                 item-title="nome"
                 item-value="id"
                 label="Cargo inicial *"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.novoColaboradorPdvPadraoId"
+                :items="opcoesEmpresa.pdvs"
+                item-title="nome"
+                item-value="id"
+                label="PDV vinculado ao Caixa"
+                clearable
+                hint="Preencha junto com o turno para travar a abertura neste PDV."
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.novoColaboradorTurnoPadraoId"
+                :items="opcoesEmpresa.turnos"
+                item-title="nome"
+                item-value="id"
+                label="Turno vinculado ao Caixa"
+                clearable
+                hint="Preencha junto com o PDV. O usuário de Caixa não poderá escolher outro turno."
+                persistent-hint
               />
             </v-col>
           </template>

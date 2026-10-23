@@ -51,6 +51,8 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       areaEstoque: produtos.areaEstoque,
       setorEstoque: produtos.setorEstoque,
       curvaAbc: produtos.curvaAbc,
+      quantidadeVariavel: produtos.quantidadeVariavel,
+      toleranciaQuantidadePercentual: produtos.toleranciaQuantidadePercentual,
       localVenda1: produtos.localVenda1,
       localVenda2: produtos.localVenda2,
       fotoUrl: produtos.fotoUrl,

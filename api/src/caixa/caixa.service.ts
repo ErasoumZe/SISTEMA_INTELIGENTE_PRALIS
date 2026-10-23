@@ -765,12 +765,18 @@ function _mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
   return executarEmTransacao(async (tx) => {
+    const colaborador = await buscarColaboradorPorUsuarioRepository(perfil.usuarioId, empresaId, tx);
+    const vinculoOperador =
+      colaborador?.pdvPadraoId && colaborador.turnoPadraoId
+        ? { pdvId: colaborador.pdvPadraoId, turnoId: colaborador.turnoPadraoId }
+        : null;
     const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
     // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
     if (!caixa) {
       return {
         caixaAberto: null,
         resumo: null,
+        vinculoOperador,
         lacreFechamentoReservado: null,
         indisponibilidadeAberta: null,
         entregasPendentes: [],
@@ -783,7 +789,7 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     await revincularVendasAoCaixa(caixa, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
+    return { ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador };
   });
 }
 
@@ -912,6 +918,10 @@ export async function resolverEscopoEntradasDoDia(
 
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, dados.empresaId)) throw new Error("Empresa nao permitida");
+  // A sessão autenticada é a única identidade que pode abrir o próprio caixa. Sem esta guarda, uma
+  // requisição direta podia gravar a abertura em nome de outro colaborador da mesma empresa e dar
+  // acesso operacional aos dois perfis.
+  if (dados.usuarioCaixaId !== perfil.usuarioId) throw new Error("Caixa nao permitido");
   // R-184: o instante nasce no servidor. Aceitar um horario do navegador permitiria ao operador
   // abrir o Caixa fora da janela real do CREARE e mudaria quais vendas pertencem ao turno.
   const dataHoraAbertura = new Date();
@@ -982,6 +992,13 @@ export async function consultarMaloteParaAbertura(
   perfil: PerfilUsuario
 ) {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
+  const colaborador = await buscarColaboradorPorUsuarioRepository(perfil.usuarioId, empresaId);
+  if (!colaborador?.pdvPadraoId || !colaborador.turnoPadraoId) {
+    throw new Error("Usuario do caixa precisa ter PDV e turno vinculados pelo administrador");
+  }
+  if (colaborador.pdvPadraoId !== pdvId) {
+    throw new Error("Usuario do caixa so pode consultar o malote do PDV vinculado ao seu cadastro");
+  }
   const pdv = await buscarPdvEmpresaRepository(pdvId, empresaId);
   if (!pdv?.contaId) throw new Error("PDV sem conta vinculada");
   const abertura = await prepararAberturaPorLacre(empresaId, lacre.trim(), pdv.contaId, perfil.usuarioId, banco);
@@ -1026,6 +1043,15 @@ async function abrirCaixaEmTransacao(
     if (!usuarioCaixa) throw new Error("Usuario do caixa nao encontrado");
     const colaborador = await buscarColaboradorPorUsuarioRepository(dados.usuarioCaixaId, dados.empresaId, tx);
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
+    if (!colaborador.pdvPadraoId || !colaborador.turnoPadraoId) {
+      throw new Error("Usuario do caixa precisa ter PDV e turno vinculados pelo administrador");
+    }
+    if (dados.pdvId !== colaborador.pdvPadraoId) {
+      throw new Error("Usuario do caixa so pode abrir o PDV vinculado ao seu cadastro");
+    }
+    if (dados.turnoId && dados.turnoId !== colaborador.turnoPadraoId) {
+      throw new Error("Usuario do caixa so pode abrir o turno vinculado ao seu cadastro");
+    }
     // Um operador representa uma unica gaveta sob responsabilidade. Sem esta guarda, o status
     // escolhia o caixa aberto mais recente e, ao fecha-lo, parecia "abrir" silenciosamente outro
     // caixa antigo do mesmo usuario. O indice parcial no banco e a barreira contra concorrencia;
@@ -1053,8 +1079,9 @@ async function abrirCaixaEmTransacao(
         colaboradorId: colaborador.id,
         dataHoraAbertura,
         tokenEdicao: gerarTokenEdicao(),
-        // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
-        turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
+        // O turno do Caixa e configurado no usuario. A UI pode enviar o mesmo id para exibi-lo,
+        // mas nunca decide a gravacao.
+        turnoId: colaborador.turnoPadraoId,
         observacao: dados.observacao?.trim() || null,
         lacreAbertura: abertura.numeroLacre,
         caixaResponsavelNomeAbertura: dados.caixaResponsavelNome.trim(),

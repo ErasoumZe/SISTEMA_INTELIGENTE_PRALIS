@@ -1,5 +1,9 @@
 # Plano — aplicar a migration 0070 na homologação (5544)
 
+> **SUSPENSO após o merge da main (PR #202).** A 0070 virou `0079_eventos_layout_oficial` (when 1792777123905) e as anteriores da integração viraram 0069–0078 com `when` novos. A 5544 tem a
+> numeração antiga aplicada e não é prefixo do journal novo; este plano só volta a valer depois da
+> decisão de reconciliação do histórico da homologação. O rollback já usa o `when` novo.
+
 Documento interno. **Não executado.** A aplicação depende de autorização específica de Marco.
 Ensaio completo feito em 23/10/2026 sobre uma cópia da homologação (resultados no fim).
 

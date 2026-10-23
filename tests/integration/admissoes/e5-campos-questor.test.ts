@@ -9,7 +9,7 @@ import { consultarUm, executarSql } from "../../setup/integracao.js";
 /**
  * E5 (Questor) pelo fluxo real: o candidato grava os campos novos pelo link, o DP os lê na revisão
  * e a prévia de prontidão os conta. Os campos de saúde não existem no contrato (Q11). Dados
- * fictícios; banco efêmero da suíte (schema oficial, com a 0067).
+ * fictícios; banco efêmero da suíte (schema oficial, com a 0076).
  */
 describe("E5 — campos do candidato e dependentes", () => {
   let contexto: ContextoApiTeste;

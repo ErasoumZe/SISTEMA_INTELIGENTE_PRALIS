@@ -14,7 +14,16 @@ import { registrarRotasCampanhas } from "./campanhas/campanhas.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasCompras } from "./compras/compras.controller.js";
-import { registrarRotasCotacoes } from "./cotacoes/cotacoes.controller.js";
+import { registrarRotasComprasFundacao } from "./compras/compras-fundacao.controller.js";
+import { registrarRotasComprasHistorico } from "./compras/compras-historico.controller.js";
+import { registrarRotasComprasAgendamento } from "./compras/compras-agendamento.controller.js";
+import { registrarRotasConferenciasEstoque } from "./compras/conferencias-estoque.controller.js";
+import { registrarRotasSolicitacaoCompra } from "./compras/compras-solicitacao-compra.controller.js";
+import { registrarRotasComprasSolicitacoes } from "./compras/compras-solicitacoes.controller.js";
+import { registrarRotasComprasRodadas } from "./compras/compras-rodadas.controller.js";
+import { registrarRotasComprasDecisao } from "./compras/compras-decisao.controller.js";
+import { registrarRotasComprasPedidoRapido } from "./compras/compras-pedido-rapido.controller.js";
+import { registrarRotasRodadaPublica } from "./compras/rodada-publica.controller.js";
 import { registrarRotasConplus } from "./conplus/conplus.controller.js";
 import { registrarRotasQuestorProntidao } from "./conplus/questor-prontidao.controller.js";
 import { registrarRotasQuestorConfiguracao } from "./conplus/questor-configuracao.controller.js";
@@ -93,10 +102,19 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/admissao/dependentes/:id",
   "/api/admissao/dependentes/:id/anexos",
   "/api/admissao/dependentes/:id/anexos/:anexoId",
-  // R-216: a cotacao do fornecedor. Ele NAO tem conta — autentica pelo header `x-cotacao-token`,
-  // cujo hash mora em `pedidos_cotacoes`. GET e PUT dividem a primeira entrada.
-  "/api/cotacao",
-  "/api/cotacao/enviar"
+  // Fase 2: a rodada do fornecedor (substituiu a cotacao por link da R-216, removida no E8). Ele NAO
+  // tem conta — autentica pelo header
+  // `x-rodada-token`, cujo hash mora em `compras_rodadas_convites`. GET e POST em entradas proprias.
+  "/api/rodada",
+  "/api/rodada/responder",
+  // E7: aceitar a contraproposta do comprador, pelo mesmo token.
+  "/api/rodada/aceitar",
+  // Doc 57: o passo 2 (separacao com a quantidade real) e a lista do que a padaria compra, onde o
+  // fornecedor marca o que tambem vende. GET e POST de /produtos dividem a entrada.
+  "/api/rodada/separacao",
+  "/api/rodada/produtos",
+  // Doc 58 §4: o fornecedor salva sem enviar (Cotado).
+  "/api/rodada/rascunho"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -118,8 +136,8 @@ export async function buildApp(): Promise<FastifyInstance> {
                 // registra headers, mas isto e cinto e suspensorio para o dia em que alguem logar
                 // `req` inteiro ou o Sentry serializar o contexto.
                 'req.headers["x-admissao-convite"]',
-                // R-216: o link do fornecedor vale dois dias uteis e da acesso a precos.
-                'req.headers["x-cotacao-token"]',
+                // Fase 2: o token da rodada do fornecedor, mesma natureza.
+                'req.headers["x-rodada-token"]',
                 'res.headers["set-cookie"]'
               ],
               censor: "[redigido]"
@@ -158,6 +176,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     // captura de erros com o que nao e bug. Medido no fluxo do dia: PUT sem corpo devolvia 500.
     const statusFastify = (error as { statusCode?: number }).statusCode;
     const codigoFastify = (error as { code?: string }).code;
+    // Upload acima do limite: dizer o motivo. "Requisição inválida" generica fez o operador achar que a
+    // planilha estava errada, quando ela so tinha 10,6 MB contra o teto de 10 MB.
+    if (codigoFastify === "FST_REQ_FILE_TOO_LARGE") {
+      return erro(reply, 413, "Arquivo acima do limite de 10 MB", "FILE_TOO_LARGE");
+    }
     if (statusFastify && statusFastify >= 400 && statusFastify < 500 && codigoFastify?.startsWith("FST_")) {
       return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
     }
@@ -196,8 +219,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       // Sem isto o preflight recusa e o navegador nem chega a mandar a requisicao real —
       // falha silenciosa, sem nada no log do servidor.
       "X-Admissao-Convite",
-      // R-216: o token da cotacao do fornecedor. Mesmo motivo do anterior.
-      "X-Cotacao-Token"
+      // Fase 2: o token da rodada do fornecedor.
+      "X-Rodada-Token"
     ],
     // Downloads (TXT/CSV Questor): sem expor, o navegador cross-origin não lê o nome do arquivo nem a
     // auditoria (SHA-256, id da exportação, reaproveitamento) que a tela mostra depois de gerar.
@@ -306,7 +329,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasGoogle(app);
   await registrarRotasPedidos(app);
   await registrarRotasCompras(app);
-  await registrarRotasCotacoes(app);
+  await registrarRotasComprasFundacao(app);
+  await registrarRotasComprasHistorico(app);
+  await registrarRotasComprasAgendamento(app);
+  await registrarRotasConferenciasEstoque(app);
+  await registrarRotasSolicitacaoCompra(app);
+  await registrarRotasComprasSolicitacoes(app);
+  await registrarRotasComprasRodadas(app);
+  await registrarRotasComprasDecisao(app);
+  await registrarRotasComprasPedidoRapido(app);
+  await registrarRotasRodadaPublica(app);
   await registrarRotasConplus(app);
   await registrarRotasQuestorConfiguracao(app, { permissaoConfigurar: "conplus_questor_configurar" });
   await registrarRotasQuestorExportacao(app);

@@ -1211,9 +1211,144 @@ O link vale até o **fim do 2º dia útil** seguinte ao envio, no fuso do negóc
 
 **Enviado** só nasce da geração do link e **Retornado** só da resposta do fornecedor; a troca manual de situação ficou restrita a confirmar ou cancelar. Gerar novo link revoga o anterior; confirmar ou cancelar o pedido também encerra o link. A resposta não confirma o pedido nem mexe em estoque (R-208): quem confirma é o Comprador.
 
+> **Revogação parcial (R-221, 20/10/2026).** Na rodada multi-fornecedor, a cláusula "quem confirma é
+> o Comprador" vale apenas **fora** do envelope pré-autorizado. Item cujo custo final seja menor ou
+> igual ao preço-base nasce comprado e confirmado pela própria resposta do fornecedor, sem ato do
+> Comprador. A resposta continua não mexendo em estoque (R-213): recebimento físico é a única entrada.
+> O desenho do link e do token desta regra permanece inteiro na rodada.
+
 O token tem 256 bits, viaja no fragmento da URL e no cabeçalho `x-cotacao-token`, nunca em caminho ou query, e só o hash SHA-256 fica no banco — o mesmo desenho da ficha pública de admissão. O transporte por `wa.me` continua até a integração oficial da Meta (documento 51), que troca só o envio, não o formulário.
 
 **Em aberto para decisão:** fornecedor que só responde por telefone hoje não tem como o Comprador registrar a resposta, porque `Enviado → Confirmado` foi retirado antes desta regra; mostrar o último valor pago ao fornecedor pode ancorar o preço dele para cima ou para baixo.
+
+### R-217 — Recorrência de Compras segue uma série de calendário (José, 19/10/2026)
+
+A recorrência de Compras funciona como uma série do Calendário da Apple, e não como uma fila de
+Lembretes dependentes. Cada ocorrência tem data própria e existe independentemente das anteriores:
+uma ocorrência atrasada não impede o nascimento das seguintes.
+
+A configuração aceita frequência diária, semanal, mensal ou anual; intervalo de `N` unidades;
+dias específicos da semana; repetição mensal por dia do mês ou por posição do dia da semana;
+data/hora de início; fuso `America/Sao_Paulo`; e término nunca, em uma data ou após determinada
+quantidade de ocorrências. Alterar uma série oferece **somente esta ocorrência** ou **esta e as
+futuras**; cancelar uma ocorrência não cancela as demais.
+
+Uma ocorrência recorrente nunca confirma compra, envia cotação nem altera estoque por conta
+própria. O ato operacional foi decidido em 20/10/2026: ela cria **uma tarefa de revisão**, nunca um
+pedido, compra ou envio automático. Até a fase própria ser implementada, os campos simples
+`pedidos.data_agendada` e `pedidos.recorrencia` continuam sendo o estado implementado, mas não
+representam a regra-alvo completa.
+
+### R-218 — Reestruturação aditiva de Compras (José e Rodrigo, 20/10/2026)
+
+O fluxo-alvo passa a ser **necessidade sem fornecedor → rodada multi-fornecedor → compra consolidada
+por fornecedor → separação → recebimento/NF → estoque e financeiro**. Cada item pode ter vencedor
+distinto. A compra automática acontece no envio da resposta somente para item ainda livre cujo custo
+final, incluindo descontos, frete e acréscimos rateados, seja menor ou igual ao preço-base. Sem base ou
+acima dela, entra em aprovação/contraproposta; resposta tardia só informa referência e nunca troca uma
+compra realizada.
+
+Produto por peso mantém a quantidade solicitada bloqueada e informa quantidade efetiva na separação,
+com tolerância configurável entre 0% e 30%. Fora da faixa exige Compras, Gerência ou Admin. Compra não
+é pagamento: cada NF recebida e conferida cria lançamento próprio, idempotente.
+
+A base inicial vem uma única vez de `ÚLTIMO MENOR CUSTO`, pareada por código/EAN e descrição
+normalizada, com relatório de ambiguidades antes da aplicação. Depois, a base vigente é o menor custo
+final válido da rodada mais recentemente encerrada e pode subir ou cair; o histórico é preservado.
+
+> **Nota de ajuste (R-221 decisão 12 e E6, 21/10/2026).** A base nova não é "o menor custo de todas as
+> propostas": é o custo final do que foi **comprado automaticamente** na rodada. Como a compra
+> automática exige custo ≤ base e a exceção do Comprador não vira base, a base vinda de rodada **só
+> desce**; só a carga inicial/reimportação a sobe. Pergunta aberta no documento 54 (item 3).
+
+Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Meta Cloud API e só muda
+para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
+
+Implementação é aditiva e protegida por feature flag; legado permanece legível. Cada fase exige SQL
+integral aprovado antes da migration. A Fase 1 está implementada localmente na migration 0062
+(renumerada para 0062 ao integrar a main) e no documento 53; nada foi publicado em produção.
+
+> **Nota de 22/10/2026 (José, doc 57 §10):** a base nova passa a ser a **menor oferta da rodada** (não mais só o custo
+> da compra automática), mas **continua só descendo**: oferta igual ou maior que a vigente não troca a base; produto
+> sem base ganha a menor oferta.
+
+### R-219 — Seleção manual de fornecedores na rodada (José, 20/10/2026)
+
+Ao enviar uma cotação, Compras terá um seletor múltiplo. Os vínculos aprovados do catálogo servem como
+sugestão, não como bloqueio: o comprador pode pesquisar e selecionar qualquer fornecedor ativo da
+empresa, mesmo que ele ainda não esteja associado aos produtos. Para cada fornecedor incluído
+manualmente, o comprador define os itens que serão enviados naquela rodada; essa escolha não cria nem
+aprova silenciosamente um vínculo permanente no catálogo.
+
+Se o fornecedor ainda não existir no cadastro geral, o seletor permite cadastrá-lo rapidamente com
+nome e WhatsApp e o mantém selecionado depois de salvar. O registro passa a integrar o cadastro geral,
+mas o convite só pode ser enviado com WhatsApp válido, conforme R-218. Essa experiência pertence à
+Fase 2 do fluxo multi-fornecedor e não altera o pedido legado de fornecedor único.
+
+### R-220 — Leitura do custo da planilha de preço-base é pt-BR (José, 20/10/2026)
+
+Na coluna de custo da planilha de discriminação, a vírgula é o separador decimal: `1,250` é **R$ 1,25**,
+não mil duzentos e cinquenta. A planilha é exportada em pt-BR, e custo com três ou quatro casas é
+legítimo — `produtos_precos_base.valor` é `numeric(14,4)`.
+
+O caso simétrico é recusado em vez de adivinhado: sem vírgula, um ponto seguido de exatamente três
+dígitos (`1.250`) é separador de milhar, e ler isso como 1,25 erraria o preço-base por mil. A
+importação para e nomeia as linhas para correção.
+
+Decisões da mesma rodada, para o custo não entrar errado em silêncio: custo **zero** não é base válida
+(a linha vira pendência e exige correção, porque zero reprovaria toda compra automática da R-218);
+custo acima de dez dígitos inteiros não cabe na coluna e também vira pendência; e produto **inativo**
+fica fora do pareamento, para não dar preço-base a item descontinuado nem criar ambiguidade falsa com
+o produto ativo de mesma descrição.
+
+### R-221 — Rodada de cotação multi-fornecedor: as 14 decisões (José, 20/10/2026)
+
+Fecha os conflitos e as ausências de regra que o documento 53 listava como pendentes para a Fase 2. O
+contrato completo, com entidades, máquinas de estado, concorrência e ordem de implementação, vive no
+**documento 54**. As decisões, em uma linha cada:
+
+1. **Compra automática é pré-autorização.** Custo final ≤ preço-base compra e confirma no envio, sem o
+   Comprador; acima da base ou sem base vai para decisão. Revoga parcialmente a R-216.
+2. **Um mecanismo só:** o pedido manual de fornecedor único vira rodada de um fornecedor; o segundo
+   caminho de compra morre (regra-mãe).
+3. **Prazo:** horas por empresa quando configurado, senão os 2 dias úteis da R-216; sobrescrevível por
+   rodada.
+4. **Fuso da empresa vale só em Compras;** Caixa e dia de negócio seguem `America/Sao_Paulo` fixo.
+5. **Frete:** um valor por proposta, rateado pelo maior resto **só sobre os itens livres no instante do
+   envio**; entra no custo comparado com a base e na base vigente.
+6. **Fechamento no vencimento:** comprado fica comprado, o resto cai em fila de decisão, a solicitação
+   fica parcialmente comprada.
+7. **Contraproposta versionada,** mesmo token reaberto, nada sobrescrito, sem limite além do prazo.
+8. **O fornecedor vê só o último valor pago a ele;** nunca concorrente, nunca a base. Isolamento é
+   invariante de tipo, não disciplina.
+9. **Separação e recebimento são dois números;** só o recebimento conferido move estoque (R-213).
+10. **Permissões:** solicitação reusa `pedidos_criar`, rodada `pedidos_editar`, exceção acima da base é
+    `compras_excecao_aprovar` (nova), recebimento `pedidos_aprovar`.
+11. **Fornecedor ganha situação ativo/inativo;** WhatsApp opcional no cadastro, obrigatório para
+    convidar.
+12. **Base no fechamento = só o custo de quem venceu,** não o menor de todas as propostas.
+13. **Cancelar compra automática não re-licita** o item na mesma rodada; vira nova solicitação.
+14. **Freio:** aviso no sino a cada compra automática **mais** teto de valor por rodada que a
+    interrompe.
+
+**Adendo da execução do E6 (José, 21/10/2026).** Três lacunas do contrato foram fechadas ao implementar
+o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
+
+- **Base (decisão 12) só nasce de compra automática.** Exceção aprovada pelo Comprador, por definição
+  acima do envelope, não vira base: virar base subiria em silêncio o teto da pré-autorização seguinte.
+- **Item que sobrou na fila** tem duas saídas: encerrar a solicitação (`encerrada`) ou levar os itens
+  para uma **nova** solicitação. Não há segunda rodada sobre a mesma necessidade.
+- **A rodada fecha no prazo ou quando o Comprador a encerra** ("Encerrar rodada agora", motivo
+  `comprador`; decisão de José em 21/10, depois do plano original "só no prazo"). Não há fechamento
+  automático ao completar.
+- **A exceção do Comprador só vale com a rodada fechada** (José, 21/10): com ela aberta, aprovar
+  travaria o item contra uma oferta melhor que chegasse depois. No período aberto, o caminho é a
+  contraproposta (E7). Isso fecha a pergunta 1 do documento 54.
+- **E7 e E8 executados em 21/10/2026** (documento 54): contraproposta versionada pelo mesmo link; remoção
+  do caminho legado de compra (a cotação por link da R-216 deixa de existir), pedido rápido como rodada
+  de um fornecedor e fim da flag `COMPRAS_NOVO_FLUXO`.
+- A revisão do E6 levantou 11 perguntas que o código decidiu em silêncio; estão no documento 54, ao fim
+  de "Ainda sem decisão", para José confirmar.
 
 ## §4 · Como isto deixa de ser mais um documento
 

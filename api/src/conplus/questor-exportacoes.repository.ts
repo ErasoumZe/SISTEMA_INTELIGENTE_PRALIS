@@ -8,7 +8,7 @@ import {
 } from "@padaria/db/schema";
 import { banco, type TransacaoBanco } from "../banco/conexao.js";
 
-/** Auditoria das exportações Questor (tabelas da migration 0068). */
+/** Auditoria das exportações Questor (tabelas da migration 0077). */
 
 export type TipoExportacaoQuestor = "admissao" | "eventos_variaveis";
 export type ResultadoExportacaoQuestor = "previa" | "gerado" | "bloqueado" | "falhou";

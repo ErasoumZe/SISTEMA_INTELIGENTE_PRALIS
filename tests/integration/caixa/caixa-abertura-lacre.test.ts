@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
+import {
+  encerrarCaixaSeedAdminParaTeste,
+  registrarEncerramentoCaixaParaTeste,
+  vincularOperadorAoPdvETurno
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -70,7 +74,16 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       ativo: true
     });
     expect(pdv.statusCode, pdv.body).toBe(201);
-    return { contaId, pdvId: json<{ data: { id: string } }>(pdv).data.id };
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    // O vinculo precisa nascer antes da transferencia: uma transferencia vencida bloqueia novas
+    // chamadas administrativas do proprio operador, mas a abertura pelo lacre deve poder resolve-la.
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: adminId,
+      pdvId,
+      nome: `R040 posto ${nome}`
+    });
+    return { contaId, pdvId };
   }
 
   function composicaoDoMalote(lacre: string, valor: number) {
@@ -119,6 +132,18 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     ator = { cookie: cookieAdmin, usuarioId: adminId },
     maquininhaId: Promise<string> | string = criarMaquininhaParaAbertura(pdvId)
   ) {
+    const vinculo = await consultarUm<{ pdv_padrao_id: string | null }>(
+      "select pdv_padrao_id from colaboradores where usuario_id = $1 and empresa_id = $2",
+      [ator.usuarioId, idsTeste.empresaA]
+    );
+    if (vinculo?.pdv_padrao_id !== pdvId) {
+      await vincularOperadorAoPdvETurno(contexto.app, {
+        cookieAdmin,
+        usuarioId: ator.usuarioId,
+        pdvId,
+        nome: `R040 ${lacreAbertura}`
+      });
+    }
     const maquininha = await maquininhaId;
     const resposta = await request(ator.cookie, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
@@ -144,6 +169,25 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     if (!conta) throw new Error(`Conta ${contaId} nao encontrada nos saldos`);
     return conta;
   }
+
+  it("recusa abrir caixa em nome de outro usuario mesmo quando ambos pertencem a empresa", async () => {
+    const { contaId, pdvId } = await criarContaEPdv("r040-usuario-forjado");
+    const lacre = "R040-USUARIO-FORJADO";
+    await criarTransferencia(lacre, 150, [contaId]);
+
+    const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
+      empresaId: idsTeste.empresaA,
+      pdvId,
+      usuarioCaixaId: tesourariaId,
+      maquininhaId: await criarMaquininhaParaAbertura(pdvId),
+      lacreAbertura: lacre,
+      caixaResponsavelNome: "Operador forjado",
+      supervisorResponsavelNome: "Supervisor R040"
+    });
+
+    assertProblem(resposta, 403);
+    expect(await consultarUm<{ id: string }>("select id from fechamentos_caixa where pdv_id = $1", [pdvId])).toBeNull();
+  });
 
   it("Deve levar TUDO para o caixa que abriu e deixar os outros candidatos sem nada", async () => {
     const a = await criarContaEPdv("r040-cand-a");
@@ -286,6 +330,12 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   it("Deve recusar abertura sem lacre de malote", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r040-sem-lacre");
     const maquininhaId = await criarMaquininhaParaAbertura(pdvId);
+    await vincularOperadorAoPdvETurno(contexto.app, {
+      cookieAdmin,
+      usuarioId: adminId,
+      pdvId,
+      nome: "R040 sem lacre"
+    });
     const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,
@@ -317,7 +367,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const aberta = await abrir(pdvId, "R040-PRAZO-VENCIDO", { cookie: cookieAdmin, usuarioId: adminId }, maquininhaId);
     expect(aberta.statusCode, aberta.body).toBe(201);
     const caixaId = json<{ data: { id: string } }>(aberta).data.id;
-    expect(await consultarUm("select id from fechamentos_caixa where id = $1 and status = 'aberto'", [caixaId])).toBeTruthy();
+    expect(
+      await consultarUm("select id from fechamentos_caixa where id = $1 and status = 'aberto'", [caixaId])
+    ).toBeTruthy();
   });
 
   it.skip("Legado removido: retornos planejados nao fazem parte do malote atual", async () => {

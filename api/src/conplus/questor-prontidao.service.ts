@@ -31,7 +31,7 @@ export async function obterProntidaoQuestor(
 }
 
 /**
- * Antes das migrations 0064–0066 a prévia continua funcionando como na E1: sem parâmetros, os
+ * Antes das migrations 0073–0075 a prévia continua funcionando como na E1: sem parâmetros, os
  * campos de E2–E4 aparecem pendentes. Qualquer outro erro sobe normalmente.
  */
 async function lerParametrosSeDisponiveis(

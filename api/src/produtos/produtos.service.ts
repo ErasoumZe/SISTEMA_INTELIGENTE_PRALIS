@@ -394,6 +394,8 @@ function montarProdutoParaGravar(
     areaEstoque: dados.areaEstoque?.trim() || null,
     setorEstoque: dados.setorEstoque?.trim() || null,
     curvaAbc: dados.curvaAbc ?? null,
+    quantidadeVariavel: dados.quantidadeVariavel,
+    toleranciaQuantidadePercentual: dados.quantidadeVariavel ? (dados.toleranciaQuantidadePercentual ?? 0) : null,
     localVenda1: dados.localVenda1?.trim() || null,
     localVenda2: dados.localVenda2?.trim() || null,
     fotoUrl: dados.fotoUrl?.trim() || null,

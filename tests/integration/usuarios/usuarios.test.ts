@@ -41,10 +41,12 @@ describe("usuarios integration", () => {
     });
     expect(criado.statusCode).toBe(201);
     const usuarioId = json<{ data: { id: string } }>(criado).data.id;
-    const colaborador = await consultarUm<{ id: string }>("select id from colaboradores where usuario_id = $1", [
-      usuarioId
-    ]);
+    const colaborador = await consultarUm<{ id: string; cpf: string | null }>(
+      "select id, cpf from colaboradores where usuario_id = $1",
+      [usuarioId]
+    );
     expect(colaborador?.id).toBeTruthy();
+    expect(colaborador?.cpf).toBeNull();
 
     const editado = await contexto.app.inject({
       method: "PUT",

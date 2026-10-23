@@ -6,11 +6,20 @@ import {
   exportarContaSchema as exportarPayloadSchema,
   importarContasSchema as importarPayloadSchema
 } from "@padaria/shared/contas";
+import { podeAjustarSaldoContas } from "@padaria/shared/autenticacao";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
-import { exportarConta, importarContas, listarContas, listarContasComSaldo, salvarConta } from "./contas.service.js";
+import {
+  ajustarSaldoConta,
+  exportarConta,
+  importarContas,
+  listarContas,
+  listarContasComSaldo,
+  salvarConta,
+  zerarSaldosContas
+} from "./contas.service.js";
 
 export async function registrarRotasContas(app: FastifyInstance): Promise<void> {
   // Lista consumida como OPCAO de formulario (conta origem em despesas/retiradas/transferencias e
@@ -36,6 +45,39 @@ export async function registrarRotasContas(app: FastifyInstance): Promise<void> 
         return paginadoDeArray(await listarContas(escopo), query.page, query.pageSize);
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
+    }
+  );
+
+  // Ajustar saldo nao herda o simples editar cadastro: e ato excepcional de Tesouraria ou
+  // Administrador total. O service repete a guarda para nenhuma futura rota abrir excecao.
+  app.post(
+    "/api/contas/:id/ajustes",
+    { preHandler: exigirPermissao("cadastro_contas_visualizar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      if (!request.perfilUsuario || !podeAjustarSaldoContas(request.perfilUsuario))
+        return erro(reply, 403, "Somente Administrador total ou Tesouraria pode ajustar saldo de conta", "FORBIDDEN");
+      try {
+        return ok(await ajustarSaldoConta(id, request.body, request.perfilUsuario));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/contas/ajustes/zerar",
+    { preHandler: exigirPermissao("cadastro_contas_visualizar") },
+    async (request, reply) => {
+      if (!request.perfilUsuario || !podeAjustarSaldoContas(request.perfilUsuario))
+        return erro(reply, 403, "Somente Administrador total ou Tesouraria pode zerar saldos", "FORBIDDEN");
+      try {
+        return ok(await zerarSaldosContas(request.body, request.perfilUsuario));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : statusErroValidacao(mensagem), mensagem);
       }
     }
   );

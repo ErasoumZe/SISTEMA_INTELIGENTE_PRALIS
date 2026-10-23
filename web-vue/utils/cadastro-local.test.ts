@@ -72,9 +72,26 @@ describe("atualizarCadastroLocal", () => {
 
   it("empresas: upsert em empresas e opcoes.empresas (sem empresaId no item)", () => {
     const { atualizarCadastroLocal, opcoes, empresas } = montarCenario();
-    expect(atualizarCadastroLocal("empresas", form({ nome: "Padaria", cnpj: "123" }), "e1")).toBe(true);
-    expect(empresas).toEqual([{ id: "e1", nome: "Padaria", cnpj: "123" }]);
-    expect(opcoes.empresas).toEqual([{ id: "e1", nome: "Padaria", cnpj: "123" }]);
+    expect(
+      atualizarCadastroLocal(
+        "empresas",
+        form({ nome: "Padaria", cnpj: "123", fusoHorario: "America/Belem", comprasPrazoRespostaHoras: "48" }),
+        "e1"
+      )
+    ).toBe(true);
+    // A configuracao operacional entra no cache junto do nome: a grade que alimenta a PROXIMA
+    // abertura do formulario e esta, e um item sem fuso/prazo fazia o salvar seguinte apagar o que
+    // este acabou de gravar (fio-edicao-empresa.test.ts).
+    const esperado = {
+      id: "e1",
+      nome: "Padaria",
+      cnpj: "123",
+      matriculaPrefixo: "TNP",
+      fusoHorario: "America/Belem",
+      comprasPrazoRespostaHoras: "48"
+    };
+    expect(empresas).toEqual([esperado]);
+    expect(opcoes.empresas).toEqual([esperado]);
     expect(empresas[0]).not.toHaveProperty("empresaId");
   });
 
@@ -95,8 +112,16 @@ describe("atualizarCadastroLocal", () => {
       id: "forn1",
       nome: "Fornecedor",
       documento: "12345678000199",
-      whatsapp: "5511999999999"
+      whatsapp: "5511999999999",
+      // ativo (default do form) vira situacao 'ativo' no cache.
+      situacao: "ativo"
     });
+  });
+
+  it("fornecedores: grava situacao inativa no cache quando desativado", () => {
+    const { atualizarCadastroLocal, opcoes } = montarCenario();
+    atualizarCadastroLocal("fornecedores", form({ nome: "Fornecedor", ativo: false }), "forn2");
+    expect(opcoes.fornecedores[0]).toMatchObject({ id: "forn2", situacao: "inativo" });
   });
 
   it("clientes: mantem dataNascimento so quando o documento e CPF", () => {

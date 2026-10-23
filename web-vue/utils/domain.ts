@@ -126,7 +126,20 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "relatorio_advertencias_visualizar",
     icone: "mdi-clipboard-check"
   },
-  pedidos: { id: "pedidos", titulo: "Pedidos", permissao: "pedidos_visualizar", icone: "mdi-clipboard-list" },
+  // Doc 58 §4: a antiga tela Pedidos virou a Cotacao por fornecedor (o id "pedidos" fica, por causa das permissoes).
+  pedidos: {
+    id: "pedidos",
+    titulo: "Cotação por fornecedor",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-clipboard-list"
+  },
+  // Doc 58 §5: o que ja foi comprado — a caminho e recebido. O recebimento acontece aqui.
+  pedidos_finalizados: {
+    id: "pedidos_finalizados",
+    titulo: "Pedidos finalizados",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-truck-check-outline"
+  },
   perdas_sobras: {
     id: "perdas_sobras",
     titulo: "Perdas e sobras",
@@ -144,6 +157,26 @@ export const itemPorTela: Record<string, ItemMenu> = {
     titulo: "Conferências de estoque",
     permissao: "conferencias_estoque_visualizar",
     icone: "mdi-clipboard-check-outline"
+  },
+  agendamento_pedidos: {
+    id: "agendamento_pedidos",
+    titulo: "Agendamento de pedidos",
+    permissao: "agendamento_pedidos_visualizar",
+    icone: "mdi-calendar-sync-outline"
+  },
+  // Doc 58 §2: o responsavel confere e envia o pedido agendado.
+  solicitacao_compra: {
+    id: "solicitacao_compra",
+    titulo: "Solicitação de compra",
+    permissao: "pedidos_visualizar",
+    icone: "mdi-clipboard-text-clock-outline"
+  },
+  // Doc 57 §4: catalogo fornecedor-produto, historico de compras e preco-base sairam da tela de Pedidos.
+  cadastro_compras: {
+    id: "cadastro_compras",
+    titulo: "Cadastro de compras",
+    permissao: "compras_catalogo_gerir",
+    icone: "mdi-database-cog-outline"
   },
   relatorio_dre: {
     id: "relatorio_dre",
@@ -576,6 +609,13 @@ export const secoesPermissoes = [
       "cadastro_produtos",
       "estoque_produtos",
       "conferencias_estoque",
+      "agendamento_pedidos",
+      // Permissoes da fundacao do novo Compras (migration 0060): catalogo fornecedor-produto e
+      // carga do preco-base. Sem um prefixo aqui elas ficavam FORA de todas as secoes, e a tela de
+      // Permissoes nao as mostrava — ninguem conseguia conceder o acesso pela interface, so pelo
+      // cargo de referencia do seed. O gate `domain.test.ts` ("cada permissao visivel em exatamente
+      // um modulo") estava vermelho por isso desde a entrega da Fase 1.
+      "compras_",
       "perdas_sobras",
       "cadastro_fornecedores",
       "cadastro_ficha_tecnica",
@@ -585,6 +625,10 @@ export const secoesPermissoes = [
       "menu_produtos",
       "menu_estoque_produtos",
       "menu_conferencias_estoque",
+      "menu_agendamento_pedidos",
+      "menu_cadastro_compras",
+      "menu_solicitacao_compra",
+      "menu_pedidos_finalizados",
       "menu_perdas_sobras",
       "menu_fornecedores",
       "menu_ficha_tecnica",
@@ -773,6 +817,8 @@ export function formCadastroVazio(): CadastroForm {
     estado: "",
     cnpj: "",
     matriculaPrefixo: "TNP",
+    fusoHorario: "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: "",
     email: "",
     senha: "",
     role: "usuario_comum",
@@ -807,6 +853,8 @@ export function formCadastroVazio(): CadastroForm {
     novoColaboradorCpf: "",
     novoColaboradorSetorId: "",
     novoColaboradorCargoId: "",
+    novoColaboradorPdvPadraoId: "",
+    novoColaboradorTurnoPadraoId: "",
     cargoId: "",
     empresaIds: [],
     tipoPermissao: "cargo",
@@ -945,6 +993,8 @@ export function formCadastroDeLinha(
     estado: linha.estado ?? "",
     cnpj: linha.cnpj ?? "",
     matriculaPrefixo: linha.matriculaPrefixo ?? "TNP",
+    fusoHorario: linha.fusoHorario ?? "America/Sao_Paulo",
+    comprasPrazoRespostaHoras: linha.comprasPrazoRespostaHoras ?? "",
     email: linha.email ?? "",
     // SEM default. Este e o formulario de EDICAO: `|| "usuario_comum"` transformava "a linha chegou
     // sem papel" em "o papel dele e comum", e o salvar seguinte REBAIXAVA um usuario_admin sem
