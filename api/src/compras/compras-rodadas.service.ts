@@ -44,8 +44,7 @@ function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
 
 /**
  * Abre a rodada e poe os convites na fila do WhatsApp (doc 57 §3: o sistema envia, ninguem copia link).
- * `permitirSemConvites`: o agendamento abre a rodada mesmo quando nenhum produto tem fornecedor — os itens
- * ficam "A fazer" para o comprador escolher o fornecedor.
+ * Doc 58 §2: todo produto sai com ao menos um fornecedor — nao existe mais item "A fazer" na cotacao.
  */
 export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsuario): Promise<RodadaDto> {
   validarEmpresa(perfil, payload.empresaId);
@@ -59,11 +58,9 @@ export async function abrirRodada(payload: AbrirRodadaPayload, perfil: PerfilUsu
 export async function abrirRodadaNaTransacao(
   payload: AbrirRodadaPayload,
   usuarioId: string,
-  tx: TransacaoBanco,
-  opcoes: { permitirSemConvites?: boolean } = {}
+  tx: TransacaoBanco
 ): Promise<RodadaDto> {
-  if (!payload.convites.length && !opcoes.permitirSemConvites)
-    throw erroValidacao("Convide ao menos um fornecedor", "SEM_CONVITES");
+  if (!payload.convites.length) throw erroValidacao("Convide ao menos um fornecedor", "SEM_CONVITES");
   // Fornecedor repetido no mesmo convite-set e erro de montagem.
   const fornecedorIds = payload.convites.map((convite) => convite.fornecedorId);
   if (new Set(fornecedorIds).size !== fornecedorIds.length) {
@@ -78,13 +75,22 @@ export async function abrirRodadaNaTransacao(
   }
 
   const itensValidos = new Set(solicitacao.itens.map((item) => item.id));
+  const cobertos = new Set<string>();
   for (const convite of payload.convites) {
     for (const solicitacaoItemId of convite.solicitacaoItemIds) {
       if (!itensValidos.has(solicitacaoItemId)) {
         throw erroValidacao("Item do convite nao pertence a solicitacao", "ITEM_FORA_DA_SOLICITACAO");
       }
+      cobertos.add(solicitacaoItemId);
     }
   }
+  const semFornecedor = solicitacao.itens.filter((item) => !cobertos.has(item.id));
+  if (semFornecedor.length)
+    throw naoProcessavel(
+      "Escolha o fornecedor de cada produto sem fornecedor",
+      "PRODUCT_WITHOUT_SUPPLIER",
+      semFornecedor.map((item) => item.produtoId)
+    );
 
   // Convidar exige fornecedor ativo e WhatsApp valido (R-221 decisao 11); o erro nomeia o campo.
   const fornecedores = await buscarFornecedoresParaConviteRepository(payload.empresaId, fornecedorIds, tx);

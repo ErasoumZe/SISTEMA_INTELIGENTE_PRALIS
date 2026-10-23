@@ -51,12 +51,6 @@ export const abrirRodadaPayloadSchema = z.object({
 });
 
 // Doc 57 §2: o comprador escolhe o fornecedor de um item "A fazer"; o sistema manda pelo WhatsApp.
-export const convidarFornecedorPayloadSchema = z.object({
-  empresaId: uuid,
-  fornecedorId: uuid,
-  rodadaItemIds: z.array(uuid).min(1).max(500)
-});
-
 /** Manda o link de novo (token novo; o anterior deixa de valer). */
 export const reenviarConvitePayloadSchema = z.object({ empresaId: uuid });
 
@@ -68,7 +62,6 @@ export const rodadasQuerySchema = z.object({
 
 export type AbrirRodadaConvite = z.infer<typeof abrirRodadaConviteSchema>;
 export type AbrirRodadaPayload = z.infer<typeof abrirRodadaPayloadSchema>;
-export type ConvidarFornecedorPayload = z.infer<typeof convidarFornecedorPayloadSchema>;
 export type RodadasQuery = z.infer<typeof rodadasQuerySchema>;
 
 export type RodadaItemDto = {

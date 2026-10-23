@@ -2,26 +2,35 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   abrirRodadaPayloadSchema,
-  convidarFornecedorPayloadSchema,
   painelComprasQuerySchema,
   reenviarConvitePayloadSchema,
   rodadasQuerySchema
 } from "@padaria/shared/compras";
 import { apiIdParamsSchema, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
-import { convidarFornecedor, reenviarConvite } from "./compras-convidar.service.js";
-import { obterPainelCompras } from "./compras-painel.service.js";
+import { reenviarConvite } from "./compras-convidar.service.js";
+import { obterCotacaoDoProduto, obterPainelCompras } from "./compras-painel.service.js";
 import { abrirRodada, listarRodadas, obterRodada } from "./compras-rodadas.service.js";
 
 const rodadaParamsSchema = z.object({ id: z.string().uuid(), conviteId: z.string().uuid() });
 const empresaQuerySchema = z.object({ empresaId: z.string().uuid() });
 
 export async function registrarRotasComprasRodadas(app: FastifyInstance): Promise<void> {
-  // Doc 57 §4: a matriz de Pedidos (o que nao e pedido: item sem fornecedor, decisao pendente, convite enviado).
+  // Doc 58 §4: Cotacao por fornecedor — cada produto em cotacao e onde cada fornecedor esta.
   app.get("/api/compras/painel", { preHandler: exigirPermissao("pedidos_visualizar") }, async (request) => {
     const { empresaId } = painelComprasQuerySchema.parse(request.query);
     return ok(await obterPainelCompras(empresaId, request.perfilUsuario!));
   });
+
+  app.get(
+    "/api/compras/painel/produtos/:id",
+    { preHandler: exigirPermissao("pedidos_visualizar") },
+    async (request) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const { empresaId } = painelComprasQuerySchema.parse(request.query);
+      return ok(await obterCotacaoDoProduto(id, empresaId, request.perfilUsuario!));
+    }
+  );
 
   app.get("/api/compras/rodadas", { preHandler: exigirPermissao("pedidos_visualizar") }, async (request) =>
     ok(await listarRodadas(rodadasQuerySchema.parse(request.query), request.perfilUsuario!))
@@ -49,22 +58,6 @@ export async function registrarRotasComprasRodadas(app: FastifyInstance): Promis
       const { empresaId } = reenviarConvitePayloadSchema.parse(request.body);
       await reenviarConvite(id, conviteId, empresaId, request.perfilUsuario!);
       return semConteudo(reply);
-    }
-  );
-
-  // Doc 57 §2: item "A fazer" ganha o fornecedor escolhido pelo comprador.
-  app.post(
-    "/api/compras/rodadas/:id/convidar",
-    { preHandler: exigirPermissao("pedidos_editar") },
-    async (request, reply) => {
-      const { id } = apiIdParamsSchema.parse(request.params);
-      const convite = await convidarFornecedor(
-        id,
-        convidarFornecedorPayloadSchema.parse(request.body),
-        request.perfilUsuario!
-      );
-      reply.code(201);
-      return ok(convite);
     }
   );
 }

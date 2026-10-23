@@ -1,18 +1,15 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import {
-  comprasConvitesItens,
   comprasRodadas,
   comprasRodadasConvites,
-  comprasRodadasItens,
-  comprasSolicitacoesItens,
   fornecedores,
   fornecedoresProdutos,
   fornecedoresProdutosEventos
 } from "@padaria/db/schema";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
-// MODULO DO COMPRADOR — doc 57 §2: o item que ficou "A fazer" (sem fornecedor) ganha um fornecedor escolhido
-// pelo comprador; o convite sai pelo WhatsApp e o vinculo vai para o catalogo (a proxima data ja manda).
+// MODULO DO COMPRADOR — reenvio do convite e o vinculo que o responsavel escolhe na Solicitacao de compra
+// (doc 58 §2: o vinculo vai para o catalogo e a proxima data ja manda).
 
 export async function rodadaParaConviteRepository(rodadaId: string, empresaId: string, db: ExecutorBanco = banco) {
   const [linha] = await db
@@ -34,63 +31,6 @@ export async function travarRodadaRepository(rodadaId: string, tx: TransacaoBanc
 }
 
 /** Os itens pedidos que sao desta rodada, com o produto (para o catalogo). */
-export async function itensDaRodadaRepository(rodadaId: string, rodadaItemIds: string[], tx: TransacaoBanco) {
-  return tx
-    .select({ id: comprasRodadasItens.id, produtoId: comprasSolicitacoesItens.produtoId })
-    .from(comprasRodadasItens)
-    .innerJoin(comprasSolicitacoesItens, eq(comprasSolicitacoesItens.id, comprasRodadasItens.solicitacaoItemId))
-    .where(and(eq(comprasRodadasItens.rodadaId, rodadaId), inArray(comprasRodadasItens.id, rodadaItemIds)));
-}
-
-export async function conviteDoFornecedorNaRodadaRepository(
-  rodadaId: string,
-  fornecedorId: string,
-  tx: TransacaoBanco
-) {
-  const [linha] = await tx
-    .select({ id: comprasRodadasConvites.id, status: comprasRodadasConvites.status })
-    .from(comprasRodadasConvites)
-    .where(and(eq(comprasRodadasConvites.rodadaId, rodadaId), eq(comprasRodadasConvites.fornecedorId, fornecedorId)))
-    .for("update")
-    .limit(1);
-  return linha ?? null;
-}
-
-export async function criarConviteRepository(
-  input: { empresaId: string; rodadaId: string; fornecedorId: string; tokenHash: string; criadoPor: string },
-  tx: TransacaoBanco
-) {
-  const [linha] = await tx
-    .insert(comprasRodadasConvites)
-    .values({
-      empresaId: input.empresaId,
-      rodadaId: input.rodadaId,
-      fornecedorId: input.fornecedorId,
-      tokenHash: input.tokenHash,
-      criadoPor: input.criadoPor
-    })
-    .returning({ id: comprasRodadasConvites.id });
-  if (!linha) throw new Error("Convite nao criado");
-  return linha.id;
-}
-
-/** Acrescenta os itens ao convite (um item que ja estava nele nao duplica). */
-export async function acrescentarItensAoConviteRepository(
-  input: { empresaId: string; conviteId: string; rodadaItemIds: string[] },
-  tx: TransacaoBanco
-) {
-  await tx
-    .insert(comprasConvitesItens)
-    .values(
-      input.rodadaItemIds.map((rodadaItemId) => ({
-        empresaId: input.empresaId,
-        conviteId: input.conviteId,
-        rodadaItemId
-      }))
-    )
-    .onConflictDoNothing();
-}
-
 /**
  * O comprador escolheu este fornecedor para estes produtos: o vinculo do catalogo fica aprovado (nasce
  * aprovado ou sai de pendente/rejeitado), com a trilha de quem decidiu.
