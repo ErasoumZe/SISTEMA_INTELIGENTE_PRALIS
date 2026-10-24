@@ -22,6 +22,7 @@ const executarLocal = process.argv.includes("--local");
 const forcarBuild = process.argv.includes("--build");
 const forcarInstall = process.argv.includes("--install");
 const forcarPrepare = process.argv.includes("--prepare");
+const pularPrepare = process.argv.includes("--skip-prepare");
 
 const apiPort = process.env.API_PORT ?? process.env.PORT ?? "4100";
 const webPort = process.env.WEB_PORT ?? "5174";
@@ -421,7 +422,9 @@ async function mainContainer() {
     ok("dependencias Node reaproveitadas do volume dev");
   }
 
-  if (forcarPrepare || !bancoDevJaExistia || !existsSync(marcadorPreparo)) {
+  if (pularPrepare) {
+    aviso("preparo do banco e seed ignorados (--skip-prepare); usando o banco dev existente");
+  } else if (forcarPrepare || !bancoDevJaExistia || !existsSync(marcadorPreparo)) {
     info("preparando banco e seed pelo container da API...");
     await executar(
       "prepare",
@@ -518,9 +521,13 @@ async function mainLocal() {
 
   await subirBancoDev();
 
-  info("preparando banco e seed localmente...");
-  await executar("prepare", npm, ["run", "api:dev:prepare", "--workspace", "@padaria/api"], { env: ambienteLocal() });
-  ok("banco preparado e seed aplicado");
+  if (pularPrepare) {
+    aviso("preparo do banco e seed ignorados (--skip-prepare); usando o banco dev existente");
+  } else {
+    info("preparando banco e seed localmente...");
+    await executar("prepare", npm, ["run", "api:dev:prepare", "--workspace", "@padaria/api"], { env: ambienteLocal() });
+    ok("banco preparado e seed aplicado");
+  }
 
   info("iniciando API e Web locais...");
   const api = criarProcesso("api", npm, ["run", "dev", "--workspace", "@padaria/api"], { env: ambienteLocal() });

@@ -8,3 +8,5 @@ coverage
 web/build
 package-lock.json
 
+# Layout oficial Questor gerado: um campo por linha para conferencia contra a documentacao.
+shared/src/conplus/questor-admissao-layout.ts

@@ -35,7 +35,7 @@ export const avisosPrivacidade: readonly AvisoPrivacidade[] = [
       "sinteticos, servem apenas para teste e podem ser apagados a qualquer momento.",
       "",
       "Este NAO e o aviso de privacidade da Pralis e nao vale como base juridica para tratamento de",
-      "dados pessoais. Nao envie documento, foto, exame ou informacao de saude."
+      "dados pessoais reais. Para este teste, use somente arquivos e imagens sinteticos."
     ].join("\n")
   }
 ];

@@ -40,6 +40,7 @@ export * from "./relatorios/index.js";
 export * from "./saude/index.js";
 export * from "./tema/index.js";
 export * from "./pedidos/index.js";
+export * from "./conplus/index.js";
 
 /**
  * Turnos entra NOMEADO, e nao por `export *`, de proposito.

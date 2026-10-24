@@ -24,6 +24,9 @@ import AppShell from "~/components/app/AppShell.vue";
 import FichaRevisaoCampos from "~/components/admissoes/FichaRevisaoCampos.vue";
 import FichaRevisaoDecisao from "~/components/admissoes/FichaRevisaoDecisao.vue";
 import FichaRevisaoDependentes from "~/components/admissoes/FichaRevisaoDependentes.vue";
+import FichaRevisaoAnexos from "~/components/admissoes/FichaRevisaoAnexos.vue";
+import QuestorProntidao from "~/components/admissoes/QuestorProntidao.vue";
+import QuestorContrato from "~/components/admissoes/QuestorContrato.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import {
   corSituacaoFicha,
@@ -58,6 +61,7 @@ const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesab
 // tudo e nao ve botao nenhum. O servidor recusa de qualquer forma; aqui e para nao oferecer o
 // botao que ele recusaria.
 const podeRevisar = computed(() => temPermissao("admissoes_processos_revisar_ficha"));
+const podeEditarInternos = computed(() => temPermissao("admissoes_processos_editar_internos"));
 
 // Empresa do PERFIL, como no resto do modulo — nao ha seletor. `AppShell` so precisa da lista para
 // o cabecalho, e ela sai da sessao, nao de `/api/empresas`: o DP pode nao ter permissao de ler ali.
@@ -232,7 +236,10 @@ onMounted(async () => {
 
       <template v-if="ficha">
         <FichaRevisaoCampos :campos="ficha.campos" />
+        <FichaRevisaoAnexos :processo-id="processoId" :anexos="ficha.anexos" />
         <FichaRevisaoDependentes :dependentes="ficha.dependentes" :sem-dependentes="ficha.semDependentes" />
+        <QuestorProntidao :processo-id="processoId" />
+        <QuestorContrato v-if="podeEditarInternos" :processo-id="processoId" :pode-editar="true" />
         <FichaRevisaoDecisao
           :situacao="ficha.situacao"
           :pode-revisar="podeRevisar"

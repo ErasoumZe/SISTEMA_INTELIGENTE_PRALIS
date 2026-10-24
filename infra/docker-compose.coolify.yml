@@ -55,6 +55,15 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
       PORT: 4100
       HOST: 0.0.0.0
+      # OAuth e destinos Google da admissao. Os valores devem ser cadastrados como secrets/env
+      # no Coolify; nunca entram neste arquivo versionado.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID:-}
+      GOOGLE_ADMISSAO_SYNC_ENABLED: ${GOOGLE_ADMISSAO_SYNC_ENABLED:-false}
+      CONPLUS_GOOGLE_SYNC_ENABLED: ${CONPLUS_GOOGLE_SYNC_ENABLED:-false}
       # E-mail transacional (recuperacao de senha + verificacao), via Resend. Estavam declaradas no
       # .env.example e lidas pelo env.ts, mas NAO eram repassadas aqui — e o compose so injeta no
       # container o que esta listado neste bloco. Sem elas o link de recuperacao nunca sai por

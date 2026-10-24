@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { permissoesPorCargo, regrasPermissoes } from "@padaria/db/referencia-permissoes";
 import { avisoPrivacidadeVigente, type Permissao } from "@padaria/shared";
@@ -23,6 +24,29 @@ describe("admissoes fila de revisao integration", () => {
   let sequencia = 0;
 
   const CABECALHO = "x-admissao-convite";
+
+  /** Anexos obrigatorios do candidato sem dependentes (cpf + comprovante_residencia). */
+  async function anexarDocumentosObrigatorios(token: string) {
+    for (const tipo of ["cpf", "comprovante_residencia"]) {
+      const boundary = `----admissao-teste-${randomUUID()}`;
+      const corpo = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
+            `--${boundary}\r\nContent-Disposition: form-data; name="arquivo"; filename="${tipo}.jpg"\r\n` +
+            "Content-Type: image/jpeg\r\n\r\n"
+        ),
+        Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/admissao/anexos",
+        headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: corpo
+      });
+      expect(resposta.statusCode, resposta.body).toBe(201);
+    }
+  }
 
   function matriz(cargo: string): Permissao[] {
     const lista = permissoesPorCargo[cargo];
@@ -98,6 +122,7 @@ describe("admissoes fila de revisao integration", () => {
   async function enviarFicha(token: string) {
     const aberta = await abrirFicha(token);
     assertOk(aberta, 200);
+    await anexarDocumentosObrigatorios(token);
     const enviar = await contexto.app.inject({
       method: "POST",
       url: "/api/admissao/ficha/enviar",

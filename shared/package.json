@@ -250,6 +250,11 @@
       "types": "./dist/pedidos/index.d.ts",
       "development": "./src/pedidos/index.ts",
       "default": "./dist/pedidos/index.js"
+    },
+    "./conplus": {
+      "types": "./dist/conplus/index.d.ts",
+      "development": "./src/conplus/index.ts",
+      "default": "./dist/conplus/index.js"
     }
   },
   "scripts": {

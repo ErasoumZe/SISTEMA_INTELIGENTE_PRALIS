@@ -9,7 +9,7 @@ import {
   normalizarEstrutura,
   type EstruturaMenu
 } from "./menu-estrutura";
-import { itemPorTela } from "~/utils/domain";
+import { itemPorTela, rotaTela } from "~/utils/domain";
 import { usePermissoes } from "~/composables/usePermissoes";
 
 const telasDe = (permissoes: Permissao[], caixaAberto = true) =>
@@ -78,8 +78,30 @@ describe("estrutura configurável do menu", () => {
     expect(estruturaEfetiva(estruturaLegada).secoes[1]?.ids).toEqual([
       "departamento_pessoal",
       "admissoes_processos",
-      "colaboradores"
+      "colaboradores",
+      "conplus_folha_05",
+      "conplus_adiantamento_20",
+      "conplus_rescisoes",
+      "conplus_ferias"
     ]);
+  });
+
+  it("mantém os quatro itens Conplus dentro do DP quando a estrutura salva já tem a Central", () => {
+    const estrutura: EstruturaMenu = {
+      versao: 1,
+      idsOcultos: [],
+      secoes: [{ id: "dp", titulo: "Departamento pessoal", ids: ["departamento_pessoal", "admissoes_processos"] }]
+    };
+
+    expect(estruturaEfetiva(estrutura).secoes[0]?.ids).toContain("conplus_folha_05");
+    expect(estruturaEfetiva(estrutura).secoes[0]?.ids).toContain("conplus_ferias");
+  });
+
+  it("converte os quatro itens Conplus nas rotas independentes oficiais", () => {
+    expect(rotaTela("conplus_folha_05")).toBe("/conplus/folha-05");
+    expect(rotaTela("conplus_adiantamento_20")).toBe("/conplus/adiantamento-20");
+    expect(rotaTela("conplus_rescisoes")).toBe("/conplus/rescisoes");
+    expect(rotaTela("conplus_ferias")).toBe("/conplus/ferias");
   });
 
   it("oculta somente o atalho do menu, sem alterar a lista de permissões", () => {
@@ -123,5 +145,25 @@ describe("estrutura configurável do menu", () => {
       grupo.itens.flatMap((item) => (item.tipo === "categoria" ? item.itens.map((filho) => filho.id) : [item.id]))
     );
     expect(ids).not.toEqual(expect.arrayContaining(["despesas", "mercadorias", "retiradas"]));
+  });
+
+  it("preserva Compras, Conplus e Questor na estrutura padrão, sem item ou rota duplicada", () => {
+    const compras = ["conferencias_estoque", "agendamento_pedidos", "solicitacao_compra", "cadastro_compras"];
+    const conplus = ["conplus_folha_05", "conplus_adiantamento_20", "conplus_rescisoes", "conplus_ferias"];
+    const questor = ["conplus_exportar"];
+    const ids = estruturaPadrao().secoes.flatMap((secao) => secao.ids);
+
+    for (const id of [...compras, ...conplus, ...questor]) {
+      expect(
+        ids.filter((item) => item === id),
+        id
+      ).toHaveLength(1);
+      expect(itemPorTela[id], id).toBeDefined();
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(idsMenuConfiguraveis).size).toBe(idsMenuConfiguraveis.length);
+    const rotas = [...compras, ...conplus, ...questor].map((id) => rotaTela(id));
+    expect(new Set(rotas).size).toBe(rotas.length);
+    expect(rotaTela("conplus_exportar")).toBe("/conplus/exportar");
   });
 });

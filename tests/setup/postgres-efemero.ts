@@ -32,7 +32,13 @@ export const COMANDO_POSTGRES_SEM_DURABILIDADE = [
   "-c",
   "synchronous_commit=off",
   "-c",
-  "full_page_writes=off"
+  "full_page_writes=off",
+  "-c",
+  "shared_buffers=16MB",
+  "-c",
+  "work_mem=1MB",
+  "-c",
+  "max_connections=20"
 ] as const;
 
 /** Os tres parametros que o comando acima desliga — para os testes afirmarem que ele CHEGOU. */

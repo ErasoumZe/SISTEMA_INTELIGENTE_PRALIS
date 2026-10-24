@@ -14,3 +14,5 @@ export * from "./retirada/retirada.schema.js";
 export * from "./tema/tema.schema.js";
 export * from "./transferencia/transferencia.schema.js";
 export * from "./venda/venda.schema.js";
+export * from "./conplus/conplus.schema.js";
+export * from "./questor/questor.schema.js";
