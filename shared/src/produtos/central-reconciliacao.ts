@@ -158,8 +158,8 @@ export function montarCandidatoProdutoCentral(itens: ItemFonteCentral[]): Candid
   const grupo = primeiroCampo(itens, ["sia_li", "pralis"], (item) => item.grupo);
   const custo = primeiroCampo(itens, comercial, (item) => item.custo);
   const venda = primeiroCampo(itens, comercial, (item) => item.venda);
-  const fiscalLI = itens.find((item) => item.loja === "LI" && item.fiscal)?.fiscal ?? null;
-  const fiscalTNP = itens.find((item) => item.loja === "TNP" && item.fiscal)?.fiscal ?? null;
+  const fiscalLI = itens.find((item) => item.fonte === "sia_li")?.fiscal ?? null;
+  const fiscalTNP = itens.find((item) => item.fonte === "fiscal_tnp")?.fiscal ?? null;
 
   return {
     nome: nome?.valor ?? "",
@@ -260,7 +260,7 @@ export function agruparProdutosCentral(
           nomesDivergentes: nomes.size > 1,
           codigoBarrasConflitante: chavesFortes.some((valor) => chavesBarrasConflitantes.has(valor)),
           semCodigoBarras: grupoItens.every((item) => !normalizarBarras(item.codigoBarras)),
-          semFiscalTnp: lojas.includes("TNP") && !grupoItens.some((item) => item.loja === "TNP" && item.fiscal),
+          semFiscalTnp: lojas.includes("TNP") && !fontes.includes("fiscal_tnp"),
           semGrupo: grupoItens.every((item) => !item.grupo?.trim()),
           jaNaBase:
             fontes.includes("pralis") && grupoItens.some((item) => item.fonte === "pralis" && item.loja === "BASE")

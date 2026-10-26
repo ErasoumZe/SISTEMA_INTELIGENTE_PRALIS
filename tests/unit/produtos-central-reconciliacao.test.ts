@@ -94,4 +94,15 @@ describe("reconciliação da Central de Produtos", () => {
     expect(grupo?.alertas.nomesDivergentes).toBe(true);
     expect(grupo?.candidato.ativo).toBe(true);
   });
+
+  it("não promove fiscal legado do Pralis como se fosse dado fiscal da fonte oficial", () => {
+    const fiscal = { ncm: "19059090" } as ItemFonteCentral["fiscal"];
+    const [grupo] = agruparProdutosCentral([
+      item({ id: "base-1", fonte: "pralis", loja: "BASE", nome: "BISCOITO", fiscal }),
+      item({ id: "tnp-1", fonte: "compilart_tnp", loja: "TNP", nome: "BISCOITO" })
+    ]);
+
+    expect(grupo?.candidato.fiscal.TNP).toBeNull();
+    expect(grupo?.alertas.semFiscalTnp).toBe(true);
+  });
 });

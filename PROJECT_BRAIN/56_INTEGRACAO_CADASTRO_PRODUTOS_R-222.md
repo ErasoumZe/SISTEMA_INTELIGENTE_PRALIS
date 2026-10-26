@@ -276,6 +276,9 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   conta linhas e aponta EANs ligados a nomes diferentes antes de propor os grupos. Ela não salva nem
   aplica as sugestões. Três arquivos de teste da Central (12 testes) passaram, junto com `check` e
   `lint:shared`; integração com banco e UI continuam pendentes.
+- A auditoria da implementação oficial refinou o porte: conflito de EAN é calculado dentro de cada
+  fonte, fiscal de LI vem do SIA e fiscal TNP somente da fonte contábil; valores fiscais legados do
+  cadastro não podem apagar o alerta de ausência. Dois testes de regressão cobrem essas regras.
 - A origem depende de arquivos de fontes e de configuração/credenciais de Google Sheets, enquanto o
   ERP não tem o mesmo contrato nem mapeamento confirmado entre Base/TNP/LI e `empresa_id`. O porte deve
   definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem

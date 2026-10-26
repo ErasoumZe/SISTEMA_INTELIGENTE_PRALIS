@@ -1,6 +1,5 @@
 import {
   agruparProdutosCentral,
-  chaveForteCentral,
   normalizarNomeCentral,
   type GrupoProdutoCentral,
   type ItemFonteCentral
@@ -39,18 +38,27 @@ export function prepararArquivosCentral(arquivos: ArquivoFonteCentral[]): Result
     fontes.push({ fonte: arquivo.fonte, linhas: linhas.length });
   }
 
-  const nomesPorChave = new Map<string, Set<string>>();
+  const nomesPorFonteChave = new Map<string, { chave: string; nomes: Set<string> }>();
   for (const item of itens) {
-    const chave = chaveForteCentral(item);
-    if (!chave || !item.codigoBarras.trim()) continue;
-    const nomes = nomesPorChave.get(chave) ?? new Set<string>();
+    const chave = item.codigoBarras.replace(/\D/gu, "").replace(/^0+(?=\d)/u, "");
+    if (!chave) continue;
+    const chaveFonte = `${item.fonte}:${chave}`;
+    const registro = nomesPorFonteChave.get(chaveFonte) ?? { chave, nomes: new Set<string>() };
     const nome = normalizarNomeCentral(item.nome);
-    if (nome) nomes.add(nome);
-    nomesPorChave.set(chave, nomes);
+    if (nome) registro.nomes.add(nome);
+    nomesPorFonteChave.set(chaveFonte, registro);
   }
-  const barrasConflitantes = [...nomesPorChave]
-    .filter(([, nomes]) => nomes.size > 1)
-    .map(([chave, nomes]) => ({ chave, nomes: [...nomes].sort() }));
+  const conflitos = [...nomesPorFonteChave.values()].filter(({ nomes }) => nomes.size > 1);
+  const nomesDeConflitosPorChave = new Map<string, Set<string>>();
+  for (const { chave, nomes } of conflitos) {
+    const nomesDaChave = nomesDeConflitosPorChave.get(chave) ?? new Set<string>();
+    for (const nome of nomes) nomesDaChave.add(nome);
+    nomesDeConflitosPorChave.set(chave, nomesDaChave);
+  }
+  const barrasConflitantes = [...nomesDeConflitosPorChave].map(([chave, nomes]) => ({
+    chave,
+    nomes: [...nomes].sort()
+  }));
 
   const grupos = agruparProdutosCentral(itens, new Set(barrasConflitantes.map((conflito) => conflito.chave)));
   return { itens, grupos, fontes, barrasConflitantes };
