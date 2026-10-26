@@ -45,6 +45,7 @@ import {
   atualizarEventoVariavelRepository,
   buscarLancamentosVariaveisRepository,
   cancelarLancamentoVariavelRepository,
+  lancamentosAtivosRepository,
   catalogoPorCodigosRepository,
   inserirEventoVariavelRepository,
   inserirEventosCatalogoRepository,
@@ -258,21 +259,27 @@ export async function criarLancamentoVariavel(body: DadosExternos, perfil?: Perf
 
 export async function removerLancamentoVariavel(id: string, perfil?: PerfilUsuario) {
   const empresaId = empresaDoAtor(perfil);
-  await comMigrationQuestor(async () => {
-    if ((await lancamentosJaExportadosRepository(empresaId, [id])).length) {
-      throw conflito(
-        "Este lançamento saiu em arquivo oficial e fica no histórico; lance o ajuste na competência seguinte",
-        ERROS_EXPORTACAO_QUESTOR.lancamentoExportado
-      );
-    }
-    if ((await lancamentosComArquivoRepository(empresaId, [id])).length) {
-      throw conflito(
-        "Este lançamento já saiu em arquivo técnico: cancele-o informando o motivo (o histórico continua apontando para ele)",
-        ERROS_EXPORTACAO_QUESTOR.lancamentoEmArquivoTecnico
-      );
-    }
-    if (!(await removerLancamentoVariavelRepository(empresaId, id))) throw naoEncontrado("Lançamento não encontrado");
-  });
+  // Mesma fila da geração oficial: sem ela, um arquivo em gravação e esta exclusão se cruzam (FK → 500).
+  await comMigrationQuestor(() =>
+    executarEmTransacao(async (tx) => {
+      await travarExportacaoEventosRepository(tx, empresaId);
+      if ((await lancamentosJaExportadosRepository(empresaId, [id], tx)).length) {
+        throw conflito(
+          "Este lançamento saiu em arquivo oficial e fica no histórico; lance o ajuste na competência seguinte",
+          ERROS_EXPORTACAO_QUESTOR.lancamentoExportado
+        );
+      }
+      if ((await lancamentosComArquivoRepository(empresaId, [id], tx)).length) {
+        throw conflito(
+          "Este lançamento já saiu em arquivo técnico: cancele-o informando o motivo (o histórico continua apontando para ele)",
+          ERROS_EXPORTACAO_QUESTOR.lancamentoEmArquivoTecnico
+        );
+      }
+      if (!(await removerLancamentoVariavelRepository(empresaId, id, tx))) {
+        throw naoEncontrado("Lançamento não encontrado");
+      }
+    })
+  );
 }
 
 /**
@@ -286,6 +293,9 @@ export async function cancelarLancamentoVariavel(id: string, body: DadosExternos
   const usuarioId = atorDoPerfil(perfil);
   await comMigrationQuestor(() =>
     executarEmTransacao(async (tx) => {
+      // Mesma fila da geração oficial: ou o arquivo grava antes (e aqui vira 409), ou o cancelamento
+      // grava antes (e a geração recusa ao reconferir). Nunca os dois.
+      await travarExportacaoEventosRepository(tx, empresaId);
       if ((await lancamentosJaExportadosRepository(empresaId, [id], tx)).length) {
         throw conflito(
           "Este lançamento saiu em arquivo oficial e não pode ser cancelado; lance o ajuste na competência seguinte",
@@ -506,6 +516,16 @@ export async function gerarCsvEventosVariaveis(
             "Outra geração acabou de exportar lançamentos desta seleção. Confira o histórico.",
             ERROS_EXPORTACAO_QUESTOR.jaExportado,
             agora
+          );
+        }
+        // O arquivo foi montado fora desta transação: um lançamento cancelado nesse meio tempo não pode sair
+        // no oficial (com o relançamento da correção, o Questor receberia o evento em dobro).
+        const ativos = await lancamentosAtivosRepository(tx, empresaId, dados.lancamentoIds);
+        if (ativos.length !== dados.lancamentoIds.length) {
+          throw conflito(
+            "Um lançamento desta seleção foi cancelado enquanto o arquivo era gerado. Atualize a lista e gere de novo.",
+            ERROS_EXPORTACAO_QUESTOR.lancamentoCancelado,
+            dados.lancamentoIds.filter((lancamentoId) => !ativos.includes(lancamentoId))
           );
         }
       }
