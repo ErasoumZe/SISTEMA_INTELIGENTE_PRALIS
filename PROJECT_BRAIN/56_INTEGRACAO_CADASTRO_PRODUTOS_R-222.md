@@ -65,12 +65,12 @@ schema ERP de `db/src/schema/app.schema.ts`:
 A origem guarda `productNameHistory` com produto, loja, código, nome anterior/novo, usuário e data;
 registra a mudança de nome dentro do serviço de atualização e restringe a consulta a admin. No ERP,
 o nome canônico é `produtos.nome_catalogo` (não a descrição operacional derivada). A implementação
-em andamento registra as alterações na mesma transação do PUT, guarda o nome do ator como snapshot,
-filtra por empresa e exige `cadastro_produtos_editar` para consultar. A tabela exige a migration
-aditiva 0082; SQL apresentado a José, aguardando resposta sobre aplicação somente no banco local.
-Nenhum banco foi alterado por esta etapa. A geração automática de migration/snapshot também está
-temporariamente bloqueada: Node retorna `uv_os_get_passwd ... ENOMEM` inclusive no runtime bundled,
-antes de executar Drizzle. Não gerar snapshot manualmente.
+registra as alterações na mesma transação do PUT, guarda o nome do ator como snapshot e filtra por
+empresa. A consulta exige o perfil `usuario_admin`, conforme a regra observada na origem. A migration
+aditiva 0082 e o snapshot foram gerados automaticamente e commitados; sua aplicação em qualquer banco
+continua pendente de autorização específica. Nenhuma migration 0082 foi aplicada. A falha anterior de
+`uv_os_get_passwd ... ENOMEM` foi contornada apenas no processo local de geração e validação; não
+representa bloqueio atual do Drizzle.
 
 O formato de `montarComoSeCompra` no ERP foi substituído pelo formato do cadastro oficial; quando
 `compraAproximada` está ativo, a frase inclui `APROXIMADAMENTE`. O comportamento tem teste unitário.
@@ -236,4 +236,30 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   responsivos cobrem cards e lista em 1440, 1366, 1024, 768, 412, 390, 360 e 844 px sem overflow.
 - A fonte de dados completa segue pendente: SHA implantado e exportação autenticada atual precisam
   ser confirmados. Nenhuma carga de catálogo foi executada; 0080 e 0081 continuam aplicadas apenas
-  no banco local de desenvolvimento. Não foi criada nova migration.
+  no banco local de desenvolvimento. A migration 0082 de histórico de nomes foi gerada e commitada,
+  mas ainda não foi aplicada em nenhum banco.
+
+### Histórico de nomes e retomada (26/10/2026)
+
+- A branch contém o commit `2f5ee900 feat(produtos): registra historico de nomes`. O PUT do produto
+  grava a alteração na mesma transação, com nome anterior/novo, empresa, autor e data. O endpoint
+  `GET /api/produtos/:id/historico-nomes` verifica perfil `usuario_admin` no servidor, valida o escopo
+  da empresa, e a tela vinculada ao formulário apresenta histórico responsivo. Testes de integração
+  cobrem autoria, acesso negado e isolamento entre empresas.
+- A migration `0082_cadastro_produtos_historico_nomes.sql` e o snapshot foram gerados pelo Drizzle e
+  estão commitados. Não foram aplicados a nenhum banco. A autorização para aplicá-la somente no banco
+  local continua pendente; a aprovação anterior cobre somente a migration 0081.
+- Após o commit, `npm run lint`, `npm run check`, `git diff --check` e `npm run check:migrations`
+  passaram. Os testes de integração que dependem da tabela 0082 ainda não foram executados. Não houve
+  push, PR, merge, deploy nem carga de catálogo.
+- A consulta read-only mais recente ao repositório oficial `ErasoumZe/SISTEMA_PRALIS_PRODUTOS`
+  confirmou que a `main` descreve a Central como fluxo administrativo de reconciliação: staging de
+  fontes, filtros/paginação no servidor, decisões humanas por grupo e ações separadas para incluir,
+  vincular, recusar equivalência ou ignorar. A fonte de serviço também lê o catálogo Pralis, vendas
+  recentes e, quando habilitada, a planilha Google em tempo real. Esses comportamentos ainda não existem
+  no ERP e não são apenas uma tela CRUD.
+- A origem depende de arquivos de fontes e de configuração/credenciais de Google Sheets, enquanto o
+  ERP não tem o mesmo contrato nem mapeamento confirmado entre Base/TNP/LI e `empresa_id`. O porte deve
+  definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem
+  escrever na Base durante recálculo automático. O SHA implantado e uma exportação autenticada atual
+  continuam necessários antes de qualquer carga real.
