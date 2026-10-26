@@ -174,3 +174,29 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   experiência completa da aplicação oficial.
 - Nenhuma importação, decisão na Central, alteração histórica, migration posterior a 0081, push, PR,
   merge ou deploy foi realizada. A integração segue incompleta e não está liberada para merge.
+
+### Conferência da fonte de dados disponível (26/10/2026, retomada)
+
+- A sessão autenticada continua ativa. A listagem oficial de Produtos apresenta os catálogos Geral
+  (Base), TNP e LI; busca por nome/código interno/EAN; filtros de ativos e vendidos; modos cards/lista;
+  e ações de ativar/inativar, editar e excluir. A tela atual mostra 2.366 produtos ativos no catálogo
+  Geral (Base), em 237 páginas. Esse número é o resultado da consulta atual da interface, não o total
+  histórico de produtos.
+- A Central autenticada apresenta 4.217 produtos únicos, 3.049 já na Base, 232 vinculados e 8
+  descartados; 141 páginas no universo atual. Expõe fontes Compilart TNP, Fiscal TNP, duas planilhas,
+  Cadastro Pralis, SIA Lisboa e vendas dos PDVs. As ações mantêm decisões explícitas de
+  vincular/atualizar, adicionar, recusar equivalência ou ignorar, com autoria.
+- O arquivo `stack/api/src/db/base-products.json` obtido do `main` do repositório
+  `ErasoumZe/SISTEMA_PRALIS_PRODUTOS` tem blob `3b49470b184398366d47d15452d40b0215b33c0a` e apenas
+  149 registros. A auditoria sem escrita encontrou zero códigos internos, zero blocos fiscais,
+  zero fotos e três EANs repetidos. Ele não corresponde ao catálogo exibido pela aplicação em uso e
+  não pode ser usado como carga real.
+- O importador local de teste `scripts/importar-catalogo-pralis-teste.ts` é inadequado para a carga
+  oficial: deliberadamente descarta fiscal e foto e gera sequência local de código interno; portanto,
+  permanece restrito a massa descartável local e não deve ser usado para importar o catálogo de
+  produção.
+- Próximo passo de dados: obter exportação autenticada e atual da fonte oficial, confirmar o SHA
+  implantado e produzir relatório dry-run com contagens, amostras, códigos, campos fiscais, EANs
+  duplicados e conflitos por empresa. Não houve download/exportação nem escrita de catálogo nesta
+  conferência. A carga seguirá dependendo de backup validado, plano de reversão e autorização
+  específica, conforme R-222.
