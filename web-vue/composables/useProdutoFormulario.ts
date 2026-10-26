@@ -48,9 +48,13 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     () => unidades.value.find((unidade) => unidade.id === form.value.unidadeIndividualId)?.sigla ?? ""
   );
 
-  const descricaoPreview = computed(() =>
-    montarDescricao(form.value.nomeCatalogo, form.value.quantidadeIndividual, siglaDaUnidade.value)
-  );
+  const descricaoPreview = computed(() => {
+    const descricaoLegadaIntacta =
+      form.value.nomeCatalogoOriginal === null && form.value.nomeCatalogo === form.value.descricao;
+    if (descricaoLegadaIntacta) return form.value.descricao;
+    if (!form.value.nomeCatalogo.trim() || !siglaDaUnidade.value) return "";
+    return montarDescricao(form.value.nomeCatalogo, form.value.quantidadeIndividual, siglaDaUnidade.value);
+  });
 
   const comoSeCompraPreview = computed(() =>
     montarComoSeCompra({
