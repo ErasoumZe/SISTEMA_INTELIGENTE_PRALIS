@@ -1,4 +1,5 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
+import { montarDescricao } from "@padaria/shared";
 
 /**
  * Mapeamento PURO entre o detalhe da API e o formulario de produto, nos dois sentidos. Fica fora do
@@ -118,6 +119,19 @@ export const numero = (texto: string) => {
   const valor = Number(String(texto).replace(",", "."));
   return Number.isFinite(valor) ? valor : null;
 };
+
+export function descricaoPreviewDoProduto(entrada: {
+  nome: string;
+  nomeOriginal: string | null;
+  descricaoAtual: string;
+  quantidade: string;
+  siglaUnidade: string;
+}): string {
+  const descricaoLegadaIntacta = entrada.nomeOriginal === null && entrada.nome === entrada.descricaoAtual;
+  if (descricaoLegadaIntacta) return entrada.descricaoAtual;
+  if (!entrada.nome.trim() || !entrada.siglaUnidade) return "";
+  return montarDescricao(entrada.nome, entrada.quantidade, entrada.siglaUnidade);
+}
 
 export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
   const { fiscal, transformacao } = detalhe;

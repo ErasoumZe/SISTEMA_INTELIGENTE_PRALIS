@@ -1,15 +1,10 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
-import {
-  calcularPrecoVenda,
-  montarComoSeCompra,
-  montarDescricao,
-  montarValidacaoQtd,
-  validarPromocoesDoProduto
-} from "@padaria/shared";
+import { calcularPrecoVenda, montarComoSeCompra, montarValidacaoQtd, validarPromocoesDoProduto } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import {
   formularioDoDetalhe,
   formularioVazio,
+  descricaoPreviewDoProduto,
   numero,
   payloadDoFormulario,
   type ProdutoForm
@@ -48,13 +43,15 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     () => unidades.value.find((unidade) => unidade.id === form.value.unidadeIndividualId)?.sigla ?? ""
   );
 
-  const descricaoPreview = computed(() => {
-    const descricaoLegadaIntacta =
-      form.value.nomeCatalogoOriginal === null && form.value.nomeCatalogo === form.value.descricao;
-    if (descricaoLegadaIntacta) return form.value.descricao;
-    if (!form.value.nomeCatalogo.trim() || !siglaDaUnidade.value) return "";
-    return montarDescricao(form.value.nomeCatalogo, form.value.quantidadeIndividual, siglaDaUnidade.value);
-  });
+  const descricaoPreview = computed(() =>
+    descricaoPreviewDoProduto({
+      nome: form.value.nomeCatalogo,
+      nomeOriginal: form.value.nomeCatalogoOriginal,
+      descricaoAtual: form.value.descricao,
+      quantidade: form.value.quantidadeIndividual,
+      siglaUnidade: siglaDaUnidade.value
+    })
+  );
 
   const comoSeCompraPreview = computed(() =>
     montarComoSeCompra({

@@ -1,8 +1,45 @@
 import { describe, expect, it } from "vitest";
 import type { ProdutoDetalhe } from "@padaria/shared";
-import { formularioDoDetalhe, formularioVazio, payloadDoFormulario } from "./produto-formulario-mapa";
+import {
+  descricaoPreviewDoProduto,
+  formularioDoDetalhe,
+  formularioVazio,
+  payloadDoFormulario
+} from "./produto-formulario-mapa";
 
 describe("produto-formulario-mapa", () => {
+  it("so monta a descrição quando nome e medida existem e preserva descrição legada intacta", () => {
+    expect(
+      descricaoPreviewDoProduto({
+        nome: "",
+        nomeOriginal: null,
+        descricaoAtual: "",
+        quantidade: "1",
+        siglaUnidade: ""
+      })
+    ).toBe("");
+
+    expect(
+      descricaoPreviewDoProduto({
+        nome: "Café",
+        nomeOriginal: null,
+        descricaoAtual: "",
+        quantidade: "500",
+        siglaUnidade: "G"
+      })
+    ).toBe("CAFÉ 500 G");
+
+    expect(
+      descricaoPreviewDoProduto({
+        nome: "BISCOITO 200 G",
+        nomeOriginal: null,
+        descricaoAtual: "BISCOITO 200 G",
+        quantidade: "200",
+        siglaUnidade: "G"
+      })
+    ).toBe("BISCOITO 200 G");
+  });
+
   it("mantem os dois locais de venda ao hidratar e salvar", () => {
     const detalhe = {
       empresaId: "11111111-1111-4111-8111-111111111111",
