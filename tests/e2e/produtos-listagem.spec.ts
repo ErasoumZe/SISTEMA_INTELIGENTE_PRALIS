@@ -62,6 +62,10 @@ test("alterna entre cards e lista sem perder o recorte carregado", async ({ page
   await expect(page.locator(".produto-linha")).toHaveCount(Math.min(total, 12));
   await expect(page.locator(".produto-linha h2").first()).toHaveText(primeiroProduto!);
 
+  await page.reload();
+  await esperarListagem(page);
+  await expect(page.locator(".produto-linha").first()).toBeVisible();
+
   await page.getByRole("button", { name: "Ver em cards" }).click();
   await expect(page.locator(".produto-card h3").first()).toHaveText(primeiroProduto!);
 });

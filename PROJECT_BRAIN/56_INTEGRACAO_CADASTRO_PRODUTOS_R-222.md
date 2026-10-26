@@ -215,6 +215,8 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
 - A listagem do ERP recebeu filtro de ativos inicial e alternância cards/lista, além do filtro de
   vendidos com suporte de API e teste de integração. Isso aproxima a tela, mas não completa a
   paridade dos catálogos Base/TNP/LI, Central, histórico, importações, permissões, relatórios e mídia.
+- O modo de visualização segue a preferência do app oficial em `localStorage` (`pralis:produtos:modo`),
+  com fallback para cards quando o armazenamento do navegador não estiver disponível.
 - Validação local desta fatia: `npm run lint`, `npm run check` e 13 testes de integração de listagem
   passaram. A suíte E2E teve 24/25 aprovados na primeira execução; o único restante reportou uma
   resposta 500 transitória em `/api/caixa/status` (fora do módulo Produtos) e passou ao ser repetido

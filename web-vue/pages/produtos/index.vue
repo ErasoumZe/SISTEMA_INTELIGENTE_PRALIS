@@ -27,6 +27,24 @@ const trocandoEmpresa = ref(false);
 const erroDeAcesso = ref("");
 const mostrarFiltros = ref(false);
 const modoVisualizacao = ref<"cards" | "lista">("cards");
+const CHAVE_MODO_VISUALIZACAO = "pralis:produtos:modo";
+
+onMounted(() => {
+  try {
+    const salvo = localStorage.getItem(CHAVE_MODO_VISUALIZACAO);
+    if (salvo === "card" || salvo === "lista") modoVisualizacao.value = salvo === "card" ? "cards" : salvo;
+  } catch {
+    // A preferência é local; sem acesso ao armazenamento, a tela segue no padrão de cards.
+  }
+});
+
+watch(modoVisualizacao, (modo) => {
+  try {
+    localStorage.setItem(CHAVE_MODO_VISUALIZACAO, modo === "cards" ? "card" : modo);
+  } catch {
+    // O bloqueio de localStorage não impede a navegação entre os modos.
+  }
+});
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
