@@ -68,7 +68,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           @click:append-inner="scannerAberto = true"
         />
         <v-text-field v-model="form.marca" label="Marca" :hint="dica('marca')" :disabled="somenteLeitura" />
-        <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda no PDV" :disabled="somenteLeitura" />
+        <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda" :disabled="somenteLeitura" />
 
         <v-text-field
           v-model="form.descricao"

@@ -12,6 +12,7 @@ import ProdutoSecaoFiscalPromocoes from "~/components/produtos/ProdutoSecaoFisca
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useAjudaDeCampo } from "~/composables/useAjudaDeCampo";
 import { useProdutoFormulario } from "~/composables/useProdutoFormulario";
+import { dicaProduto } from "~/utils/produto-dicas";
 import { mensagemErro } from "~/utils/domain";
 
 const props = defineProps<{ produtoId: string | null }>();
@@ -41,6 +42,7 @@ const somenteLeitura = computed(() =>
 const idDoProduto = computed(() => props.produtoId);
 const formulario = useProdutoFormulario(empresaId, idDoProduto);
 const ajuda = useAjudaDeCampo(computed(() => sessao.value?.user?.id));
+const dicaDoProduto = (campo: string) => dicaProduto(campo, formulario.form.value.habilitarAjuda, ajuda.dica);
 
 async function salvar(forcar = false) {
   const id = await formulario.salvar(forcar);
@@ -158,7 +160,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :descricao-preview="formulario.descricaoPreview.value"
           :como-se-compra-preview="formulario.comoSeCompraPreview.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :dica="dicaDoProduto"
           @foto-escolhida="formulario.fotoPendente.value = $event"
         />
 
@@ -170,7 +172,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :preco-preview="formulario.precoPreview.value"
           :validacao-qtd-preview="formulario.validacaoQtdPreview.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :dica="dicaDoProduto"
         />
 
         <ProdutoSecaoFiscalPromocoes
@@ -179,7 +181,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :erros="formulario.erros.value"
           :erros-de-promocao="formulario.errosDePromocao.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :dica="dicaDoProduto"
         />
       </template>
 

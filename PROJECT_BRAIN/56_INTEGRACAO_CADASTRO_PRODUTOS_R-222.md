@@ -62,6 +62,7 @@ schema ERP de `db/src/schema/app.schema.ts`:
 
 O formato de `montarComoSeCompra` no ERP foi substituído pelo formato do cadastro oficial; quando
 `compraAproximada` está ativo, a frase inclui `APROXIMADAMENTE`. O comportamento tem teste unitário.
+`habilitarAjuda` também ativa as dicas padrão do formulário sem remover as dicas personalizadas.
 
 Não mapear `products.quantidade` automaticamente para `produtos.quantidadeEstoque`: no ERP o saldo é
 derivado de movimentos auditados. A carga deverá guardar a quantidade de origem no relatório/staging;

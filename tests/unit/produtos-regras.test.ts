@@ -110,8 +110,6 @@ describe("produtos/regras — texto e lookups", () => {
     expect(montarDescricao("Farinha de Trigo", 25, "KG")).toBe("FARINHA DE TRIGO 25 KG");
   });
 
-  // Formato OFICIAL (12/08/2026). Havia duas implementacoes divergentes — a compartilhada
-  // (`"1 SACO DE25 (…)"`) e a da tela; sobrou uma so, e este e o caso canonico do enunciado.
   it("montarComoSeCompra: formato oficial com DE e quantidade exata", () => {
     expect(
       montarComoSeCompra({
