@@ -59,6 +59,7 @@ export {
   produtos,
   produtosConversoes,
   produtosFiscal,
+  produtosHistoricoNomes,
   produtosPromocoes,
   produtosTransformacao,
   produtosPrecosBase,

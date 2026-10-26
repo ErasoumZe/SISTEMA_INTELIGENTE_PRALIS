@@ -8,10 +8,12 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 describe("produtos integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieSemPermissao: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieSemPermissao = await cookieSessao(contexto.app, "semPermissao");
   }, 120_000);
 
   afterAll(async () => {
@@ -55,6 +57,7 @@ describe("produtos integration", () => {
         empresaId: idsTeste.empresaA,
         codigo: "PROD-CRUD-EDIT",
         descricao: "Produto editado por integracao",
+        nomeCatalogo: "Produto CRUD renomeado",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
         grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
@@ -67,7 +70,37 @@ describe("produtos integration", () => {
         "select id, nome_catalogo, pesavel from produtos where id = $1 and descricao = $2",
         [produtoId, "Produto editado por integracao"]
       )
-    ).resolves.toMatchObject({ nome_catalogo: "Produto CRUD", pesavel: false });
+    ).resolves.toMatchObject({ nome_catalogo: "Produto CRUD renomeado", pesavel: false });
+
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(historico.statusCode).toBe(200);
+    expect(
+      json<{ data: Array<{ nomeAnterior: string; nomeNovo: string; alteradoPor: string }> }>(historico).data
+    ).toEqual([
+      expect.objectContaining({
+        nomeAnterior: "Produto CRUD",
+        nomeNovo: "Produto CRUD renomeado",
+        alteradoPor: "Admin Integracao"
+      })
+    ]);
+
+    const semAcesso = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(semAcesso.statusCode).toBe(403);
+
+    const outraEmpresa = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaB}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(outraEmpresa.statusCode).toBe(404);
   });
 
   it("Deve_PersistirCamposComerciais_Quando_CriarProduto", async () => {

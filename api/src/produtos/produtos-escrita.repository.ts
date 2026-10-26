@@ -1,4 +1,4 @@
-import { and, eq, ilike, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, ne } from "drizzle-orm";
 import { sqlMaiorCodigoInternoGlobal, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
 import {
   gruposMercadorias,
@@ -6,6 +6,7 @@ import {
   produtos,
   produtosConversoes,
   produtosFiscal,
+  produtosHistoricoNomes,
   produtosPromocoes,
   produtosTransformacao,
   unidadesMedida
@@ -62,6 +63,7 @@ export async function carregarProdutoParaEscritaRepository(
   id: string;
   empresaId: string;
   criadoPor: string | null;
+  descricao: string;
   nomeCatalogo: string | null;
   pesavel: boolean | null;
 } | null> {
@@ -70,6 +72,7 @@ export async function carregarProdutoParaEscritaRepository(
       id: produtos.id,
       empresaId: produtos.empresaId,
       criadoPor: produtos.criadoPor,
+      descricao: produtos.descricao,
       nomeCatalogo: produtos.nomeCatalogo,
       pesavel: produtos.pesavel
     })
@@ -77,6 +80,41 @@ export async function carregarProdutoParaEscritaRepository(
     .where(eq(produtos.id, id))
     .for("update");
   return linha ?? null;
+}
+
+export async function registrarHistoricoNomeProdutoRepository(
+  tx: TransacaoBanco,
+  input: {
+    empresaId: string;
+    produtoId: string;
+    nomeAnterior: string;
+    nomeNovo: string;
+    alteradoPor: string | null;
+    alteradoPorNome: string | null;
+  }
+): Promise<void> {
+  await tx.insert(produtosHistoricoNomes).values(input);
+}
+
+export async function listarHistoricoNomesProdutoRepository(empresaId: string, produtoId: string) {
+  const [produto] = await banco
+    .select({ id: produtos.id })
+    .from(produtos)
+    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.id, produtoId)))
+    .limit(1);
+  if (!produto) return null;
+  return banco
+    .select({
+      id: produtosHistoricoNomes.id,
+      nomeAnterior: produtosHistoricoNomes.nomeAnterior,
+      nomeNovo: produtosHistoricoNomes.nomeNovo,
+      alteradoPor: produtosHistoricoNomes.alteradoPorNome,
+      alteradoEm: produtosHistoricoNomes.alteradoEm
+    })
+    .from(produtosHistoricoNomes)
+    .where(and(eq(produtosHistoricoNomes.empresaId, empresaId), eq(produtosHistoricoNomes.produtoId, produtoId)))
+    .orderBy(desc(produtosHistoricoNomes.alteradoEm), desc(produtosHistoricoNomes.id))
+    .limit(200);
 }
 
 export interface ReferenciasDoProduto {

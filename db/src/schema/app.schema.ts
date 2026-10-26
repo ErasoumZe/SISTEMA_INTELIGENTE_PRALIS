@@ -978,6 +978,33 @@ export const produtos = pgTable(
   ]
 );
 
+/** Trilha imutável das mudanças no nome oficial do produto, sempre isolada por empresa. */
+export const produtosHistoricoNomes = pgTable(
+  "produtos_historico_nomes",
+  {
+    id: idUuid,
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    nomeAnterior: text("nome_anterior").notNull(),
+    nomeNovo: text("nome_novo").notNull(),
+    alteradoPor: text("alterado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    alteradoPorNome: text("alterado_por_nome"),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      name: "produtos_historico_nomes_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    index("produtos_historico_nomes_empresa_produto_data_idx").on(
+      table.empresaId,
+      table.produtoId,
+      table.alteradoEm.desc()
+    )
+  ]
+);
+
 export const fornecedoresProdutos = pgTable(
   "fornecedores_produtos",
   {

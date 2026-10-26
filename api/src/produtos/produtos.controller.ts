@@ -18,7 +18,7 @@ import {
   type DadosExternos,
   type ReplyHttp
 } from "@padaria/shared/api";
-import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirAutenticacao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { FotoInvalidaError, TAMANHO_MAXIMO_DA_FOTO } from "./produtos-foto.js";
@@ -28,6 +28,7 @@ import {
   exportarProduto,
   importarProdutos,
   listarFiltrosDeProduto,
+  listarHistoricoNomesProduto,
   listarOpcoesDeProduto,
   listarProdutos,
   obterFotoDeProdutoNoEscopo,
@@ -164,6 +165,33 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
     }
   );
 
+  app.get(
+    "/api/produtos/:id/historico-nomes",
+    {
+      preHandler: async (request, reply) => {
+        const perfil = await exigirAutenticacao(request, reply);
+        if (!perfil) return;
+        if (perfil.role !== "usuario_admin") {
+          erro(reply, 403, "Somente administradores podem consultar o histórico de nomes", "INSUFFICIENT_PERMISSION");
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        const empresaId = query.empresaId ?? request.perfilUsuario?.empresaId;
+        if (!empresaId) return erro(reply, 400, "Informe a empresa do produto", "INVALID_COMPANY");
+        return ok(await listarHistoricoNomesProduto(empresaId, id, escopo));
+      } catch (error) {
+        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
   app.post("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
     const body = request.body as { empresaId?: string };
     if (body.empresaId && request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
@@ -172,6 +200,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
     try {
       const salvo = await salvarProduto(null, request.body, {
         usuarioId: request.usuarioId,
+        nome: request.perfilUsuario?.nome,
         empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
       });
       registrarEscrita(request, "criar", { produtoId: salvo.id, empresaId: salvo.empresaId });
@@ -190,6 +219,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
     try {
       const salvo = await salvarProduto(id, request.body, {
         usuarioId: request.usuarioId,
+        nome: request.perfilUsuario?.nome,
         empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
       });
       registrarEscrita(request, "editar", { produtoId: salvo.id, empresaId: salvo.empresaId });

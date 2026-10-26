@@ -64,6 +64,11 @@ function sair() {
   void router.push("/produtos");
 }
 
+function abrirHistorico() {
+  if (formulario.alterado.value && !window.confirm("Há alterações não salvas. Abrir o histórico mesmo assim?")) return;
+  void router.push(`/produtos/${props.produtoId}/historico?empresaId=${encodeURIComponent(empresaId.value)}`);
+}
+
 /** Fechar a aba com alteracao pendente tambem avisa. */
 function avisarAoSair(evento: BeforeUnloadEvent) {
   if (!formulario.alterado.value) return;
@@ -124,6 +129,14 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           <p v-if="somenteLeitura">Você pode ver, mas não editar este cadastro.</p>
         </div>
         <v-spacer />
+        <v-btn
+          v-if="produtoId && sessao?.perfil?.role === 'usuario_admin'"
+          variant="outlined"
+          prepend-icon="mdi-history"
+          @click="abrirHistorico"
+        >
+          Histórico de nomes
+        </v-btn>
         <v-btn
           :variant="ajuda.ligada.value ? 'flat' : 'outlined'"
           :color="ajuda.ligada.value ? 'primary' : undefined"

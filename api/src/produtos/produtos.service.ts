@@ -19,6 +19,8 @@ import {
   buscarProdutoPorCodigoBarrasRepository,
   buscarProdutoPorDescricaoRepository,
   carregarProdutoParaEscritaRepository,
+  listarHistoricoNomesProdutoRepository,
+  registrarHistoricoNomeProdutoRepository,
   referenciasForaDaEmpresaRepository,
   salvarProdutoRepository,
   travarCadastroDeProdutos,
@@ -185,6 +187,7 @@ function mensagemDeDuplicado(duplicado: { descricao: string; criadoPorNome: stri
 
 export interface AtorDaEscrita {
   usuarioId: string | null | undefined;
+  nome?: string | null | undefined;
   empresasPermitidas: string[];
 }
 
@@ -227,7 +230,7 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
     });
 
     const precoVenda = precoDeVendaDoServidor(dados);
-    return salvarProdutoRepository(
+    const salvo = await salvarProdutoRepository(
       tx,
       montarProdutoParaGravar(dados, {
         id: alvo?.id,
@@ -240,7 +243,26 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
         criadoPor: ator.usuarioId ?? null
       })
     );
+    const nomeNovo = dados.nomeCatalogo === undefined ? alvo?.nomeCatalogo : dados.nomeCatalogo?.trim() || null;
+    if (alvo && nomeNovo != null && nomeNovo !== (alvo.nomeCatalogo ?? alvo.descricao)) {
+      await registrarHistoricoNomeProdutoRepository(tx, {
+        empresaId: alvo.empresaId,
+        produtoId: alvo.id,
+        nomeAnterior: alvo.nomeCatalogo ?? alvo.descricao,
+        nomeNovo,
+        alteradoPor: ator.usuarioId ?? null,
+        alteradoPorNome: ator.nome ?? null
+      });
+    }
+    return salvo;
   });
+}
+
+export async function listarHistoricoNomesProduto(empresaId: string, produtoId: string, empresasPermitidas: string[]) {
+  if (!empresasPermitidas.includes(empresaId)) throw new ProdutoNaoEncontradoError();
+  const historico = await listarHistoricoNomesProdutoRepository(empresaId, produtoId);
+  if (!historico) throw new ProdutoNaoEncontradoError();
+  return historico;
 }
 
 type DadosDoProduto = ReturnType<typeof produtoPayloadSchema.parse>;

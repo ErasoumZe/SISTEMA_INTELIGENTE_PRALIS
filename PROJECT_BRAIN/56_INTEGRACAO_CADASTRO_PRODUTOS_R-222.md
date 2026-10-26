@@ -60,6 +60,18 @@ schema ERP de `db/src/schema/app.schema.ts`:
 - Governança de reconciliação: tabelas de unificação, recusa de pares, histórico de alteração do
   código interno e histórico de nomes; sem equivalentes identificados no ERP.
 
+### Histórico de nomes (vertical em implementação)
+
+A origem guarda `productNameHistory` com produto, loja, código, nome anterior/novo, usuário e data;
+registra a mudança de nome dentro do serviço de atualização e restringe a consulta a admin. No ERP,
+o nome canônico é `produtos.nome_catalogo` (não a descrição operacional derivada). A implementação
+em andamento registra as alterações na mesma transação do PUT, guarda o nome do ator como snapshot,
+filtra por empresa e exige `cadastro_produtos_editar` para consultar. A tabela exige a migration
+aditiva 0082; SQL apresentado a José, aguardando resposta sobre aplicação somente no banco local.
+Nenhum banco foi alterado por esta etapa. A geração automática de migration/snapshot também está
+temporariamente bloqueada: Node retorna `uv_os_get_passwd ... ENOMEM` inclusive no runtime bundled,
+antes de executar Drizzle. Não gerar snapshot manualmente.
+
 O formato de `montarComoSeCompra` no ERP foi substituído pelo formato do cadastro oficial; quando
 `compraAproximada` está ativo, a frase inclui `APROXIMADAMENTE`. O comportamento tem teste unitário.
 `habilitarAjuda` também ativa as dicas padrão do formulário sem remover as dicas personalizadas.
