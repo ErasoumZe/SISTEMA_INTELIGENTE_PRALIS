@@ -148,3 +148,29 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   Central/reconciliação, histórico, importações oficiais, permissões e relatórios precisam de inventário
   e entrega vertical. Não aprovar merge desta branch como integração completa antes de fechar esses itens,
   validar responsividade e obter gates verdes.
+
+### Inspeção adicional da aplicação oficial (26/10/2026)
+
+- A Central autenticada mostrou 4.217 produtos únicos no universo conciliado, 3.049 já na Base,
+  232 vinculados e 8 descartados. Fontes indicadas na tela: Compilart TNP (4.309), Fiscal TNP (940),
+  planilha nova (1), planilha antiga TNP (3.122), Cadastro Pralis (7.624), SIA Lisboa (4.186) e vendas
+  dos PDVs em 12 meses (1.668). São contagens apresentadas pela Central, não contagem independente
+  recalculada neste repositório.
+- A listagem Geral (Base) mostrou 2.366 itens e 5.041 ocultos pelo filtro inicial “Só ativos”. Existem
+  também catálogos por loja (TNP e LI), busca por nome/código/EAN, filtro de vendidos, visualização em
+  cards/lista, ativação/inativação e exclusão individual.
+- A conferência de planilha declara ser somente leitura. A tela “Importar da planilha” declara que zera
+  a Base e a refaz com a planilha; esse fluxo é destrutivo e não foi executado nem deve ser portado como
+  sincronização automática.
+- A página de histórico de nomes exibiu 44 alterações, com data, produto/código, loja, antes/depois e
+  autor. A Central também tem decisões explícitas: vincular/atualizar, adicionar à Base, marcar que não
+  é o mesmo produto ou ignorar; decisões existentes exibem autoria.
+- A migration `0081_cadastro_produtos_identidade_pesagem.sql` adiciona `nome_catalogo` e `pesavel` e
+  foi aplicada somente no Postgres local de desenvolvimento após autorização específica. Não altera
+  linhas existentes. O teste focal da prévia automática passou 4/4; lint dos arquivos e lint de testes
+  passaram. A correção foi commitada em `eec6c47a`.
+- O ambiente local continua aberto em `/produtos/novo` para conferência visual. O formulário exibe
+  nome, gramatura, medida base, pesagem e demais campos já existentes; isso ainda não representa a
+  experiência completa da aplicação oficial.
+- Nenhuma importação, decisão na Central, alteração histórica, migration posterior a 0081, push, PR,
+  merge ou deploy foi realizada. A integração segue incompleta e não está liberada para merge.
