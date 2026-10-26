@@ -1,4 +1,4 @@
-import { and, arrayContains, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, arrayContains, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { JsonValue } from "@padaria/shared/api";
 import {
   produtosCentralCargas,
@@ -122,18 +122,54 @@ export async function marcarCargaCentralFalhouRepository(cargaId: string, motivo
 }
 
 export async function registrarDecisaoCentralRepository(input: {
+  cargaId: string;
+  grupoId: string;
   chaveGrupo: string;
   acao: "nao_e_o_mesmo" | "ignorado";
   detalhe: Record<string, JsonValue>;
   usuarioId: string;
   usuarioNome: string;
-}) {
-  const [decisao] = await banco.insert(produtosCentralDecisoes).values(input).returning({
-    id: produtosCentralDecisoes.id,
-    acao: produtosCentralDecisoes.acao,
-    criadoEm: produtosCentralDecisoes.criadoEm
+}): Promise<
+  | { estado: "registrada"; decisao: { id: string; acao: string; criadoEm: Date } }
+  | { estado: "nao_encontrada" }
+  | { estado: "ja_decidida" }
+> {
+  return executarEmTransacao(async (tx) => {
+    const [grupo] = await tx
+      .select({ id: produtosCentralGrupos.id, chave: produtosCentralGrupos.chave })
+      .from(produtosCentralGrupos)
+      .where(and(eq(produtosCentralGrupos.id, input.grupoId), eq(produtosCentralGrupos.cargaId, input.cargaId)))
+      .for("update");
+    if (!grupo || grupo.chave !== input.chaveGrupo) return { estado: "nao_encontrada" };
+
+    const [existente] = await tx
+      .select({ id: produtosCentralDecisoes.id })
+      .from(produtosCentralDecisoes)
+      .where(
+        and(
+          eq(produtosCentralDecisoes.chaveGrupo, input.chaveGrupo),
+          sql`${produtosCentralDecisoes.detalhe}->>'cargaId' = ${input.cargaId}`
+        )
+      )
+      .limit(1);
+    if (existente) return { estado: "ja_decidida" };
+
+    const [decisao] = await tx
+      .insert(produtosCentralDecisoes)
+      .values({
+        chaveGrupo: input.chaveGrupo,
+        acao: input.acao,
+        detalhe: input.detalhe,
+        usuarioId: input.usuarioId,
+        usuarioNome: input.usuarioNome
+      })
+      .returning({
+        id: produtosCentralDecisoes.id,
+        acao: produtosCentralDecisoes.acao,
+        criadoEm: produtosCentralDecisoes.criadoEm
+      });
+    return { estado: "registrada", decisao: decisao! };
   });
-  return decisao!;
 }
 
 export async function substituirGruposDaCargaRepository(

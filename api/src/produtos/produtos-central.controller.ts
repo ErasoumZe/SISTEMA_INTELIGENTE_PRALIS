@@ -6,6 +6,7 @@ import { exigirAutenticacao } from "../auth/guards.js";
 import {
   anexarFonteCentral,
   CargaCentralEstadoInvalidoError,
+  CargaCentralDecisaoExistenteError,
   CargaCentralNaoEncontradaError,
   CargaCentralVaziaError,
   criarCargaCentral,
@@ -42,7 +43,11 @@ async function exigirAdmin(request: FastifyRequest, reply: FastifyReply) {
 
 function responderErroCentral(reply: FastifyReply, causa: DadosExternos) {
   if (causa instanceof CargaCentralNaoEncontradaError) return erro(reply, 404, causa.message, "NOT_FOUND");
-  if (causa instanceof CargaCentralEstadoInvalidoError || causa instanceof FonteCentralDuplicadaError) {
+  if (
+    causa instanceof CargaCentralEstadoInvalidoError ||
+    causa instanceof FonteCentralDuplicadaError ||
+    causa instanceof CargaCentralDecisaoExistenteError
+  ) {
     return erro(reply, 409, causa.message, "CENTRAL_CONFLICT");
   }
   if (causa instanceof CargaCentralVaziaError) return erro(reply, 422, causa.message, "CENTRAL_EMPTY_LOAD");

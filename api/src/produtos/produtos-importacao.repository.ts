@@ -18,6 +18,7 @@ import {
   type ResultadoImportacaoEntidade
 } from "../utils.js";
 import { gerarCodigoExternoUnico, proximoCodigoInterno } from "./produtos-escrita.repository.js";
+import { codigoInternoHerdadoDisponivel } from "./codigo-interno.js";
 
 export interface ResultadoCopiaProdutos extends ResultadoImportacaoEntidade {
   /**
@@ -168,9 +169,7 @@ export async function copiarProdutosRepository(
       // Codigo externo novo (unico global); codigo interno herdado da origem, ou proximo se colidir/ausente.
       const codigo = await gerarCodigoExternoUnico(db);
       const codigoInterno =
-        produto.codigoInterno && !internosUsados.has(produto.codigoInterno)
-          ? produto.codigoInterno
-          : await proximoCodigoInterno(db);
+        codigoInternoHerdadoDisponivel(produto.codigoInterno, internosUsados) ?? (await proximoCodigoInterno(db));
       internosUsados.add(codigoInterno);
       const [novo] = await db
         .insert(produtos)

@@ -24,6 +24,7 @@ export class CargaCentralNaoEncontradaError extends Error {}
 export class CargaCentralEstadoInvalidoError extends Error {}
 export class FonteCentralDuplicadaError extends Error {}
 export class CargaCentralVaziaError extends Error {}
+export class CargaCentralDecisaoExistenteError extends Error {}
 
 export async function criarCargaCentral(ator: { id: string; nome: string }) {
   return criarCargaCentralRepository(ator);
@@ -213,11 +214,19 @@ export async function registrarDecisaoCentral(input: {
     nome: grupo.nome,
     ...(input.observacao ? { observacao: input.observacao } : {})
   };
-  return registrarDecisaoCentralRepository({
+  const registro = await registrarDecisaoCentralRepository({
+    cargaId: input.cargaId,
+    grupoId: input.grupoId,
     chaveGrupo: grupo.chave,
     acao: input.acao,
     detalhe,
     usuarioId: input.usuario.id,
     usuarioNome: input.usuario.nome
   });
+  if (registro.estado === "nao_encontrada")
+    throw new CargaCentralNaoEncontradaError("Grupo da Central não encontrado.");
+  if (registro.estado === "ja_decidida") {
+    throw new CargaCentralDecisaoExistenteError("Este grupo já recebeu uma decisão nesta carga.");
+  }
+  return registro.decisao;
 }

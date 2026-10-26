@@ -39,7 +39,7 @@ export type GrupoCentral = {
   alertaSemFiscalTnp: boolean;
   alertaSemGrupo: boolean;
   alertaJaNaBase: boolean;
-  decisao: { acao: string } | null;
+  decisao: { acao: string; usuarioNome: string | null; criadoEm: string } | null;
   itens: ItemFonteCentral[];
 };
 

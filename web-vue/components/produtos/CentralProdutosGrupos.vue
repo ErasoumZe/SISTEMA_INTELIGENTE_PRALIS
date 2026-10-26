@@ -57,11 +57,15 @@ const emit = defineEmits<{
       </v-expansion-panel-title>
       <v-expansion-panel-text>
         <p class="text-caption">Chave: {{ grupo.chave }} · Motivo do agrupamento: {{ grupo.motivo }}</p>
+        <p v-if="grupo.decisao" class="text-caption text-medium-emphasis">
+          Decidido por {{ grupo.decisao.usuarioNome || "usuário removido" }} em
+          {{ new Date(grupo.decisao.criadoEm).toLocaleString("pt-BR") }}.
+        </p>
         <div class="central-grupos__decisoes">
           <v-btn
             size="small"
             variant="outlined"
-            :disabled="processando"
+            :disabled="processando || Boolean(grupo.decisao)"
             @click="emit('decidir', grupo, 'nao_e_o_mesmo')"
           >
             Não é o mesmo produto
@@ -70,7 +74,7 @@ const emit = defineEmits<{
             size="small"
             variant="outlined"
             color="warning"
-            :disabled="processando"
+            :disabled="processando || Boolean(grupo.decisao)"
             @click="emit('decidir', grupo, 'ignorado')"
           >
             Ignorar grupo

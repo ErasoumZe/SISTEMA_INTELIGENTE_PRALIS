@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularProximoCodigoInterno,
+  codigoInternoHerdadoDisponivel,
   PRIMEIRO_CODIGO_FORA_DA_FAIXA,
   ULTIMO_CODIGO_DE_PRODUTO
 } from "../../api/src/produtos/codigo-interno.js";
@@ -23,5 +24,16 @@ describe("código interno de produtos (R-222)", () => {
   it("não volta ao piso histórico nem trunca códigos com mais de cinco dígitos", () => {
     expect(calcularProximoCodigoInterno(442)).toBe(String(ULTIMO_CODIGO_DE_PRODUTO + 1));
     expect(calcularProximoCodigoInterno(99_999)).toBe("100000");
+  });
+
+  it("preserva o código de origem quando ainda está livre na empresa destino", () => {
+    expect(codigoInternoHerdadoDisponivel(" 00131 ", new Set(["00130"]))).toBe("00131");
+  });
+
+  it("pede novo código quando o código da origem está ocupado ou ausente", () => {
+    const usados = new Set(["00131"]);
+    expect(codigoInternoHerdadoDisponivel("00131", usados)).toBeNull();
+    expect(codigoInternoHerdadoDisponivel(null, usados)).toBeNull();
+    expect(codigoInternoHerdadoDisponivel("   ", usados)).toBeNull();
   });
 });

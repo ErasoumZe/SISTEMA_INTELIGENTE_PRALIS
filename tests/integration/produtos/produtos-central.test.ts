@@ -99,6 +99,14 @@ describe("Central de produtos integration", () => {
       usuarioNome: "Admin Integracao"
     });
 
+    const decisaoRepetida = await contexto.app.inject({
+      method: "POST",
+      url: `/api/produtos/central/cargas/${cargaId}/grupos/${gruposDaPagina.grupos[0]!.id}/decisao`,
+      headers: { cookie: cookieAdmin },
+      payload: { acao: "nao_e_o_mesmo" }
+    });
+    expect(decisaoRepetida.statusCode, decisaoRepetida.body).toBe(409);
+
     const depois = await consultarUm<{ total: number }>("select count(*)::int as total from produtos");
     expect(depois?.total).toBe(antes?.total);
   }, 60_000);

@@ -284,3 +284,21 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem
   escrever na Base durante recálculo automático. O SHA implantado e uma exportação autenticada atual
   continuam necessários antes de qualquer carga real.
+
+### Estado atual da retomada — 26/10/2026
+
+- A `main` acessível do repositório oficial `ErasoumZe/SISTEMA_PRALIS_PRODUTOS` foi consultada novamente
+  pela conexão GitHub somente leitura e continua no SHA `1ba67740527f1c9c348d8b013c088af4f12f40c1`
+  (13/10/2026). Isso confirma a referência de código disponível, não o SHA implantado.
+- A migration 0082 de histórico de nomes e a 0083 de staging/auditoria foram aplicadas **somente no
+  PostgreSQL local de desenvolvimento**, após autorização explícita. A 0083 precisou ter a ordem de
+  dois índices e FKs corrigida antes da aplicação; a aplicação corrigida foi verificada. Nenhuma delas
+  foi aplicada em homologação/produção, e nenhum registro do catálogo foi alterado.
+- A gravação de decisão da Central agora bloqueia a linha do grupo dentro da transação e recusa uma
+  segunda decisão para o mesmo grupo/carga com HTTP 409. A UI mostra autor e horário e desabilita as
+  ações já decididas. O teste de integração para decisão repetida foi adicionado, mas ainda aguarda a
+  execução dos gates finais.
+- Continuam pendentes as ações oficiais de vincular/atualizar e adicionar à Base, as fontes vivas de
+  Pralis/PDV, exportação autenticada atual, SHA efetivamente implantado e a carga real com dry-run,
+  backup restaurável, amostras, colisões e plano de reversão. A integração completa, visual e funcional,
+  segue inacabada; sem push, PR, merge ou deploy.

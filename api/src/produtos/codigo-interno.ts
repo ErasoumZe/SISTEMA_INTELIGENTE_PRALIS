@@ -16,3 +16,17 @@ export function calcularProximoCodigoInterno(maiorCodigoAtual: number): string {
   }
   return String(proximo).padStart(5, "0");
 }
+
+/**
+ * Código interno herdado ao copiar um produto entre empresas.
+ * Retorna null quando a origem não tem código ou quando o destino já usa esse código;
+ * nesses casos, o chamador deve gerar o próximo código sob a trava global.
+ */
+export function codigoInternoHerdadoDisponivel(
+  codigoOrigem: string | null | undefined,
+  codigosDestinoUsados: ReadonlySet<string>
+): string | null {
+  const codigo = codigoOrigem?.trim();
+  if (!codigo || codigosDestinoUsados.has(codigo)) return null;
+  return codigo;
+}
