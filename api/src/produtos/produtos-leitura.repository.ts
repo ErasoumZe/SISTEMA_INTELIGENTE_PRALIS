@@ -91,6 +91,8 @@ export async function listarProdutosPaginadoRepository(
       codigoBarras: produtos.codigoBarras,
       descricao: produtos.descricao,
       marca: produtos.marca,
+      compraAproximada: produtos.compraAproximada,
+      habilitarAjuda: produtos.habilitarAjuda,
       tipo: produtos.tipo,
       status: produtos.status,
       grupoMercadoriaId: produtos.grupoMercadoriaId,

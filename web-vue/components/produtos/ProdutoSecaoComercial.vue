@@ -156,6 +156,8 @@ watch(
         :hint="dica('localVenda2')"
         :disabled="somenteLeitura"
       />
+      <v-text-field v-model="form.setorVenda1" label="Setor de venda 1" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.setorVenda2" label="Setor de venda 2" :disabled="somenteLeitura" />
     </div>
 
     <template v-if="form.tipo === 'transformacao'">
@@ -190,6 +192,7 @@ watch(
           :hint="dica('produtoReceituario')"
           :disabled="somenteLeitura"
         />
+        <v-text-field v-model="form.refReceituario" label="Referência do receituário" :disabled="somenteLeitura" />
         <v-text-field
           :model-value="validacaoQtdPreview"
           label="Validação de quantidade (prévia)"

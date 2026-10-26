@@ -160,6 +160,8 @@ export interface ProdutoParaGravar {
   codigoBarras: string | null;
   descricao: string;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   unidadeIndividualId: string;
   quantidadeIndividual: number;
   grupoMercadoriaId: string | null;
@@ -182,6 +184,8 @@ export interface ProdutoParaGravar {
   toleranciaQuantidadePercentual: number | null;
   localVenda1: string | null;
   localVenda2: string | null;
+  setorVenda1: string | null;
+  setorVenda2: string | null;
   fotoUrl: string | null;
   conversoes: Array<{ unidadeMedidaId: string; quantidade: number; unidadesIndividuais: number }>;
   fiscal: {
@@ -195,12 +199,30 @@ export interface ProdutoParaGravar {
     aliquotaCofins: number | null;
     reducaoIcms: number | null;
     icms: number | null;
+    tributacaoSimples: string | null;
+    aliquotaSimples: number | null;
+    icmsRe: number | null;
+    baseFiscal: string | null;
+    codigoFiscal: string | null;
+    produtoFiscal: string | null;
+    cstReforma: string | null;
+    cClassTrib: string | null;
+    aliquotaIbs: number | null;
+    aliquotaCbs: number | null;
+    origemFiscal: string | null;
+    aliquotaEcf: string | null;
+    aliquotaEcfId: string | null;
+    estado: string | null;
+    motivo: string | null;
+    conferidoEm: string | null;
+    pctNcm: number | null;
   } | null;
   transformacao: {
     precisao: string | null;
     quantidade: number | null;
     unidade: string | null;
     produtoReceituario: string | null;
+    refReceituario: string | null;
   } | null;
   promocoes: Array<{
     tipo: "valor" | "desconto";
@@ -237,6 +259,8 @@ export async function salvarProdutoRepository(
     codigoBarras: input.codigoBarras,
     descricao: input.descricao,
     marca: input.marca,
+    compraAproximada: input.compraAproximada,
+    habilitarAjuda: input.habilitarAjuda,
     unidadeMedidaId: input.unidadeIndividualId,
     unidadeIndividualId: input.unidadeIndividualId,
     quantidadeIndividual: String(input.quantidadeIndividual),
@@ -261,6 +285,8 @@ export async function salvarProdutoRepository(
       input.toleranciaQuantidadePercentual != null ? String(input.toleranciaQuantidadePercentual) : null,
     localVenda1: input.localVenda1,
     localVenda2: input.localVenda2,
+    setorVenda1: input.setorVenda1,
+    setorVenda2: input.setorVenda2,
     fotoUrl: input.fotoUrl
   };
 
@@ -325,7 +351,24 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
       aliquotaPis: input.fiscal.aliquotaPis != null ? String(input.fiscal.aliquotaPis) : null,
       aliquotaCofins: input.fiscal.aliquotaCofins != null ? String(input.fiscal.aliquotaCofins) : null,
       reducaoIcms: input.fiscal.reducaoIcms != null ? String(input.fiscal.reducaoIcms) : null,
-      icms: input.fiscal.icms != null ? String(input.fiscal.icms) : null
+      icms: input.fiscal.icms != null ? String(input.fiscal.icms) : null,
+      tributacaoSimples: input.fiscal.tributacaoSimples,
+      aliquotaSimples: input.fiscal.aliquotaSimples != null ? String(input.fiscal.aliquotaSimples) : null,
+      icmsRe: input.fiscal.icmsRe != null ? String(input.fiscal.icmsRe) : null,
+      baseFiscal: input.fiscal.baseFiscal,
+      codigoFiscal: input.fiscal.codigoFiscal,
+      produtoFiscal: input.fiscal.produtoFiscal,
+      cstReforma: input.fiscal.cstReforma,
+      cClassTrib: input.fiscal.cClassTrib,
+      aliquotaIbs: input.fiscal.aliquotaIbs != null ? String(input.fiscal.aliquotaIbs) : null,
+      aliquotaCbs: input.fiscal.aliquotaCbs != null ? String(input.fiscal.aliquotaCbs) : null,
+      origemFiscal: input.fiscal.origemFiscal,
+      aliquotaEcf: input.fiscal.aliquotaEcf,
+      aliquotaEcfId: input.fiscal.aliquotaEcfId,
+      estado: input.fiscal.estado,
+      motivo: input.fiscal.motivo,
+      conferidoEm: input.fiscal.conferidoEm ? new Date(input.fiscal.conferidoEm) : null,
+      pctNcm: input.fiscal.pctNcm != null ? String(input.fiscal.pctNcm) : null
     });
   }
 
@@ -336,7 +379,8 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
       precisao: input.transformacao.precisao,
       quantidade: input.transformacao.quantidade != null ? String(input.transformacao.quantidade) : null,
       unidade: input.transformacao.unidade,
-      produtoReceituario: input.transformacao.produtoReceituario
+      produtoReceituario: input.transformacao.produtoReceituario,
+      refReceituario: input.transformacao.refReceituario
     });
   }
 

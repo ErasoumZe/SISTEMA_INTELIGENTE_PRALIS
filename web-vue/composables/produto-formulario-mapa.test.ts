@@ -25,4 +25,51 @@ describe("produto-formulario-mapa", () => {
       localVenda2: "Ponta de gondola"
     });
   });
+
+  it("preserva os campos oficiais de compra, venda, fiscal e receituário no round-trip", () => {
+    const detalhe = {
+      empresaId: "11111111-1111-4111-8111-111111111111",
+      tipo: "transformacao",
+      descricao: "Produto de transformação",
+      compraAproximada: true,
+      habilitarAjuda: true,
+      setorVenda1: "BALCAO",
+      setorVenda2: "DELIVERY",
+      fiscal: {
+        aliquotaEcf: "18,00%",
+        aliquotaEcfId: "03",
+        estado: "pendente",
+        motivo: "A CLASSIFICAR",
+        conferidoEm: "2026-10-26T12:00:00.000Z",
+        pctNcm: "0.2500"
+      },
+      transformacao: { refReceituario: "REC-001" }
+    } as ProdutoDetalhe;
+
+    const form = formularioDoDetalhe(detalhe);
+    expect(form.compraAproximada).toBe(true);
+    expect(form.habilitarAjuda).toBe(true);
+    expect(form.setorVenda1).toBe("BALCAO");
+    expect(form.fiscal.aliquotaEcf).toBe("18,00%");
+    expect(form.fiscal.aliquotaEcfId).toBe("03");
+    expect(form.fiscal.conferidoEm).toBe("2026-10-26T12:00:00.000Z");
+    expect(form.produtoReceituario).toBe("");
+    expect(form.refReceituario).toBe("REC-001");
+
+    const payload = payloadDoFormulario(form, detalhe.empresaId, false);
+    expect(payload).toMatchObject({
+      compraAproximada: true,
+      habilitarAjuda: true,
+      setorVenda1: "BALCAO",
+      fiscal: {
+        aliquotaEcf: "18,00%",
+        aliquotaEcfId: "03",
+        estado: "pendente",
+        motivo: "A CLASSIFICAR",
+        conferidoEm: "2026-10-26T12:00:00.000Z",
+        pctNcm: 0.25
+      },
+      transformacao: { refReceituario: "REC-001" }
+    });
+  });
 });

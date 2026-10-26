@@ -376,6 +376,8 @@ function montarProdutoParaGravar(
     codigoBarras: extra.codigoBarras,
     descricao: extra.descricao,
     marca: dados.marca?.trim() || null,
+    compraAproximada: dados.compraAproximada,
+    habilitarAjuda: dados.habilitarAjuda,
     unidadeIndividualId: dados.unidadeIndividualId,
     quantidadeIndividual: dados.quantidadeIndividual,
     grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
@@ -398,6 +400,8 @@ function montarProdutoParaGravar(
     toleranciaQuantidadePercentual: dados.quantidadeVariavel ? (dados.toleranciaQuantidadePercentual ?? 0) : null,
     localVenda1: dados.localVenda1?.trim() || null,
     localVenda2: dados.localVenda2?.trim() || null,
+    setorVenda1: dados.setorVenda1?.trim() || null,
+    setorVenda2: dados.setorVenda2?.trim() || null,
     fotoUrl: dados.fotoUrl?.trim() || null,
     conversoes: dados.conversoes,
     fiscal: dados.fiscal
@@ -411,7 +415,24 @@ function montarProdutoParaGravar(
           aliquotaPis: dados.fiscal.aliquotaPis ?? null,
           aliquotaCofins: dados.fiscal.aliquotaCofins ?? null,
           reducaoIcms: dados.fiscal.reducaoIcms ?? null,
-          icms: dados.fiscal.icms ?? null
+          icms: dados.fiscal.icms ?? null,
+          tributacaoSimples: dados.fiscal.tributacaoSimples?.trim() || null,
+          aliquotaSimples: dados.fiscal.aliquotaSimples ?? null,
+          icmsRe: dados.fiscal.icmsRe ?? null,
+          baseFiscal: dados.fiscal.baseFiscal?.trim() || null,
+          codigoFiscal: dados.fiscal.codigoFiscal?.trim() || null,
+          produtoFiscal: dados.fiscal.produtoFiscal?.trim() || null,
+          cstReforma: dados.fiscal.cstReforma?.trim() || null,
+          cClassTrib: dados.fiscal.cClassTrib?.trim() || null,
+          aliquotaIbs: dados.fiscal.aliquotaIbs ?? null,
+          aliquotaCbs: dados.fiscal.aliquotaCbs ?? null,
+          origemFiscal: dados.fiscal.origemFiscal?.trim() || null,
+          aliquotaEcf: dados.fiscal.aliquotaEcf ?? null,
+          aliquotaEcfId: dados.fiscal.aliquotaEcfId ?? null,
+          estado: dados.fiscal.estado ?? null,
+          motivo: dados.fiscal.motivo ?? null,
+          conferidoEm: dados.fiscal.conferidoEm ?? null,
+          pctNcm: dados.fiscal.pctNcm ?? null
         }
       : null,
     transformacao: dados.transformacao
@@ -419,7 +440,8 @@ function montarProdutoParaGravar(
           precisao: dados.transformacao.precisao ?? null,
           quantidade: dados.transformacao.quantidade ?? null,
           unidade: dados.transformacao.unidade ?? null,
-          produtoReceituario: dados.transformacao.produtoReceituario?.trim() || null
+          produtoReceituario: dados.transformacao.produtoReceituario?.trim() || null,
+          refReceituario: dados.transformacao.refReceituario?.trim() || null
         }
       : null,
     promocoes: dados.promocoes.map((promo) => ({

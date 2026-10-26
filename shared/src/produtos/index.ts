@@ -39,7 +39,24 @@ export const produtoFiscalSchema = z.object({
   aliquotaPis: z.coerce.number().min(0).optional().nullable(),
   aliquotaCofins: z.coerce.number().min(0).optional().nullable(),
   reducaoIcms: z.coerce.number().min(0).optional().nullable(),
-  icms: z.coerce.number().min(0).optional().nullable()
+  icms: z.coerce.number().min(0).optional().nullable(),
+  tributacaoSimples: z.string().optional().nullable(),
+  aliquotaSimples: z.coerce.number().min(0).optional().nullable(),
+  icmsRe: z.coerce.number().min(0).optional().nullable(),
+  baseFiscal: z.string().optional().nullable(),
+  codigoFiscal: z.string().optional().nullable(),
+  produtoFiscal: z.string().optional().nullable(),
+  cstReforma: z.string().optional().nullable(),
+  cClassTrib: z.string().optional().nullable(),
+  aliquotaIbs: z.coerce.number().min(0).optional().nullable(),
+  aliquotaCbs: z.coerce.number().min(0).optional().nullable(),
+  origemFiscal: z.string().optional().nullable(),
+  aliquotaEcf: z.string().optional().nullable(),
+  aliquotaEcfId: z.string().optional().nullable(),
+  estado: z.string().optional().nullable(),
+  motivo: z.string().optional().nullable(),
+  conferidoEm: z.string().datetime().optional().nullable(),
+  pctNcm: z.coerce.number().min(0).optional().nullable()
 });
 
 export const precisaoSchema = z.enum(["EXATOS", "APROXIMADOS"]);
@@ -52,7 +69,8 @@ export const produtoTransformacaoSchema = z.object({
   precisao: precisaoSchema.optional().nullable(),
   quantidade: z.coerce.number().min(0).optional().nullable(),
   unidade: unidadeTransformacaoSchema.optional().nullable(),
-  produtoReceituario: z.string().optional().nullable()
+  produtoReceituario: z.string().optional().nullable(),
+  refReceituario: z.string().optional().nullable()
 });
 
 // Promocao (1:N). Porte de promocoes do Pralis: preco fixo ou desconto (fracao), janela + dias da semana.
@@ -109,6 +127,10 @@ export const produtoPayloadSchema = z
     toleranciaQuantidadePercentual: z.coerce.number().min(0).max(30).optional().nullable(),
     localVenda1: z.string().optional().nullable(),
     localVenda2: z.string().optional().nullable(),
+    compraAproximada: z.boolean().optional().default(false),
+    habilitarAjuda: z.boolean().optional().default(false),
+    setorVenda1: z.string().optional().nullable(),
+    setorVenda2: z.string().optional().nullable(),
     fotoUrl: z.string().optional().nullable(),
     fiscal: produtoFiscalSchema.optional().nullable(),
     transformacao: produtoTransformacaoSchema.optional().nullable(),
@@ -187,6 +209,8 @@ export interface ProdutoResumo {
   codigoBarras: string | null;
   descricao: string;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   tipo: string;
   status: string;
   grupoMercadoriaId: string | null;
@@ -240,6 +264,8 @@ export interface ProdutoDetalhe {
   codigoBarras: string | null;
   descricao: string;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   quantidadeIndividual: string;
   embalagem: string | null;
   cDe: string | null;
@@ -262,6 +288,8 @@ export interface ProdutoDetalhe {
   toleranciaQuantidadePercentual: string | null;
   localVenda1: string | null;
   localVenda2: string | null;
+  setorVenda1: string | null;
+  setorVenda2: string | null;
   fotoUrl: string | null;
   criadoPorNome: string | null;
   conversoes: Array<{
@@ -281,12 +309,30 @@ export interface ProdutoDetalhe {
     aliquotaCofins: string | null;
     reducaoIcms: string | null;
     icms: string | null;
+    tributacaoSimples: string | null;
+    aliquotaSimples: string | null;
+    icmsRe: string | null;
+    baseFiscal: string | null;
+    codigoFiscal: string | null;
+    produtoFiscal: string | null;
+    cstReforma: string | null;
+    cClassTrib: string | null;
+    aliquotaIbs: string | null;
+    aliquotaCbs: string | null;
+    origemFiscal: string | null;
+    aliquotaEcf: string | null;
+    aliquotaEcfId: string | null;
+    estado: string | null;
+    motivo: string | null;
+    conferidoEm: string | null;
+    pctNcm: string | null;
   } | null;
   transformacao: {
     precisao: string | null;
     quantidade: string | null;
     unidade: string | null;
     produtoReceituario: string | null;
+    refReceituario: string | null;
   } | null;
   promocoes: Array<{
     id: string;

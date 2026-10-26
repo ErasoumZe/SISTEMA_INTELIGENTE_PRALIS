@@ -38,7 +38,7 @@ function removerConversao(indice: number) {
   <section class="secao">
     <h2 class="secao__titulo">Fiscal</h2>
     <p class="secao__nota">
-      Cadastro manual. Dado fiscal <strong>nunca</strong> vem da planilha (R-145) e não há cálculo tributário aqui.
+      Dados fiscais preservados literalmente do cadastro oficial. Esta tela não calcula tributos.
     </p>
     <div class="secao__grade">
       <v-text-field v-model="form.fiscal.ncm" label="NCM" :hint="dica('ncm')" :disabled="somenteLeitura" />
@@ -91,6 +91,47 @@ function removerConversao(indice: number) {
         :disabled="somenteLeitura"
       />
       <v-text-field v-model="form.fiscal.icms" type="number" min="0" label="ICMS %" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.tributacaoSimples" label="Tributação Simples" :disabled="somenteLeitura" />
+      <v-text-field
+        v-model="form.fiscal.aliquotaSimples"
+        type="number"
+        min="0"
+        label="Alíquota Simples %"
+        :disabled="somenteLeitura"
+      />
+      <v-text-field v-model="form.fiscal.icmsRe" type="number" min="0" label="ICMS RE" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.baseFiscal" label="Base fiscal" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.codigoFiscal" label="Código fiscal" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.produtoFiscal" label="Produto fiscal" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.cstReforma" label="CST reforma tributária" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.cClassTrib" label="Classificação tributária" :disabled="somenteLeitura" />
+      <v-text-field
+        v-model="form.fiscal.aliquotaIbs"
+        type="number"
+        min="0"
+        label="Alíquota IBS %"
+        :disabled="somenteLeitura"
+      />
+      <v-text-field
+        v-model="form.fiscal.aliquotaCbs"
+        type="number"
+        min="0"
+        label="Alíquota CBS %"
+        :disabled="somenteLeitura"
+      />
+      <v-text-field v-model="form.fiscal.origemFiscal" label="Origem fiscal" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.aliquotaEcf" label="Alíquota ECF (literal)" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.aliquotaEcfId" label="Código da alíquota ECF" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.estado" label="Estado fiscal" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.motivo" label="Motivo da pendência" :disabled="somenteLeitura" />
+      <v-text-field
+        v-model="form.fiscal.pctNcm"
+        type="number"
+        min="0"
+        label="Percentual NCM"
+        :disabled="somenteLeitura"
+      />
+      <v-text-field v-model="form.fiscal.conferidoEm" label="Última conferência" readonly />
     </div>
   </section>
 

@@ -68,6 +68,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           @click:append-inner="scannerAberto = true"
         />
         <v-text-field v-model="form.marca" label="Marca" :hint="dica('marca')" :disabled="somenteLeitura" />
+        <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda no PDV" :disabled="somenteLeitura" />
 
         <v-text-field
           v-model="form.descricao"
@@ -173,6 +174,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         placeholder="Preencha a embalagem para gerar"
         class="secao__campo-largo secao__previa"
       />
+      <v-checkbox v-model="form.compraAproximada" label="Quantidade de compra aproximada" :disabled="somenteLeitura" />
     </div>
 
     <ProdutoScanner v-model:aberto="scannerAberto" @lido="form.codigoBarras = $event" />

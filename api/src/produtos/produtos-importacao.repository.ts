@@ -82,7 +82,24 @@ async function copiarSatelitesProduto(db: ExecutorBanco, origemId: string, desti
       aliquotaPis: produtosFiscal.aliquotaPis,
       aliquotaCofins: produtosFiscal.aliquotaCofins,
       reducaoIcms: produtosFiscal.reducaoIcms,
-      icms: produtosFiscal.icms
+      icms: produtosFiscal.icms,
+      tributacaoSimples: produtosFiscal.tributacaoSimples,
+      aliquotaSimples: produtosFiscal.aliquotaSimples,
+      icmsRe: produtosFiscal.icmsRe,
+      baseFiscal: produtosFiscal.baseFiscal,
+      codigoFiscal: produtosFiscal.codigoFiscal,
+      produtoFiscal: produtosFiscal.produtoFiscal,
+      cstReforma: produtosFiscal.cstReforma,
+      cClassTrib: produtosFiscal.cClassTrib,
+      aliquotaIbs: produtosFiscal.aliquotaIbs,
+      aliquotaCbs: produtosFiscal.aliquotaCbs,
+      origemFiscal: produtosFiscal.origemFiscal,
+      aliquotaEcf: produtosFiscal.aliquotaEcf,
+      aliquotaEcfId: produtosFiscal.aliquotaEcfId,
+      estado: produtosFiscal.estado,
+      motivo: produtosFiscal.motivo,
+      conferidoEm: produtosFiscal.conferidoEm,
+      pctNcm: produtosFiscal.pctNcm
     })
     .from(produtosFiscal)
     .where(eq(produtosFiscal.produtoId, origemId));
@@ -93,7 +110,8 @@ async function copiarSatelitesProduto(db: ExecutorBanco, origemId: string, desti
       precisao: produtosTransformacao.precisao,
       quantidade: produtosTransformacao.quantidade,
       unidade: produtosTransformacao.unidade,
-      produtoReceituario: produtosTransformacao.produtoReceituario
+      produtoReceituario: produtosTransformacao.produtoReceituario,
+      refReceituario: produtosTransformacao.refReceituario
     })
     .from(produtosTransformacao)
     .where(eq(produtosTransformacao.produtoId, origemId));
@@ -163,6 +181,8 @@ export async function copiarProdutosRepository(
           codigoBarras: produto.codigoBarras,
           descricao: produto.descricao,
           marca: produto.marca,
+          compraAproximada: produto.compraAproximada,
+          habilitarAjuda: produto.habilitarAjuda,
           // Grupo e unidades ficam NULOS de proposito: apontar para o cadastro da empresa de
           // origem seria referencia cross-tenant. O modo "completo" religa aos equivalentes do destino.
           grupoMercadoriaId: null,
@@ -188,6 +208,8 @@ export async function copiarProdutosRepository(
           curvaAbc: produto.curvaAbc,
           localVenda1: produto.localVenda1,
           localVenda2: produto.localVenda2,
+          setorVenda1: produto.setorVenda1,
+          setorVenda2: produto.setorVenda2,
           fotoUrl: produto.fotoUrl,
           importadoDe: produto.empresaId,
           idImportado: produto.id

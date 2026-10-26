@@ -919,6 +919,8 @@ export const produtos = pgTable(
     codigoBarras: text("codigo_barras"),
     descricao: text("descricao").notNull(), // auto (montarDescricao) por padrao, com override manual
     marca: text("marca"),
+    compraAproximada: boolean("compra_aproximada").notNull().default(false),
+    habilitarAjuda: boolean("habilitar_ajuda").notNull().default(false),
     quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
     // Como se compra (porte do Pralis; enums fieis mantidos como texto)
     embalagem: text("embalagem"), // sigla de unidades_medida (cadastro de Unidades)
@@ -946,6 +948,8 @@ export const produtos = pgTable(
     // Locais de venda e foto
     localVenda1: text("local_venda_1"),
     localVenda2: text("local_venda_2"),
+    setorVenda1: text("setor_venda_1"),
+    setorVenda2: text("setor_venda_2"),
     fotoUrl: text("foto_url"),
     criadoPor: text("criado_por"), // auditoria (usuarioId; nome resolvido via join)
     criadoEm,
@@ -1336,6 +1340,23 @@ export const produtosFiscal = pgTable("produtos_fiscal", {
   aliquotaCofins: numeric("aliquota_cofins", { precision: 6, scale: 4 }),
   reducaoIcms: numeric("reducao_icms", { precision: 6, scale: 4 }),
   icms: numeric("icms", { precision: 6, scale: 4 }),
+  tributacaoSimples: text("tributacao_simples"),
+  aliquotaSimples: numeric("aliquota_simples", { precision: 8, scale: 6 }),
+  icmsRe: numeric("icms_re", { precision: 8, scale: 6 }),
+  baseFiscal: text("base_fiscal"),
+  codigoFiscal: text("codigo_fiscal"),
+  produtoFiscal: text("produto_fiscal"),
+  cstReforma: text("cst_reforma"),
+  cClassTrib: text("cclass_trib"),
+  aliquotaIbs: numeric("aliquota_ibs", { precision: 8, scale: 6 }),
+  aliquotaCbs: numeric("aliquota_cbs", { precision: 8, scale: 6 }),
+  origemFiscal: text("origem_fiscal"),
+  aliquotaEcf: text("aliquota_ecf"),
+  aliquotaEcfId: text("aliquota_ecf_id"),
+  estado: text("estado"),
+  motivo: text("motivo"),
+  conferidoEm: timestamp("conferido_em", { withTimezone: true }),
+  pctNcm: numeric("pct_ncm", { precision: 6, scale: 4 }),
   criadoEm,
   atualizadoEm
 });
@@ -1352,6 +1373,7 @@ export const produtosTransformacao = pgTable(
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
     unidade: text("unidade"), // sigla de unidades_medida (cadastro de Unidades)
     produtoReceituario: text("produto_receituario"),
+    refReceituario: text("ref_receituario"),
     criadoEm,
     atualizadoEm
   },

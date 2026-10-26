@@ -47,6 +47,23 @@ não contagem atual do banco; dry-run deverá recalculá-los. Código fiscal aus
 | SIA / planilhas / importação-exportação | existem importações distintas do ERP                                         | inventariar contratos e arquivos oficiais, idempotência, permissões e relatórios; remover o seed antigo como fonte concorrente quando a substituição vertical estiver pronta                |
 | Histórico e governança                  | auditoria básica no cadastro                                                 | portar trilha reversível de alterações relevantes, autorização e relatórios de operação                                                                                                     |
 
+### Diferenças de schema confirmadas no código
+
+O modelo oficial em `stack/api/src/modules/product/product.table.ts` tem atributos que não existem no
+schema ERP de `db/src/schema/app.schema.ts`:
+
+- Produto: `compraAproximada`, `habilitarAjuda`, `setorVenda1` e `setorVenda2`.
+- Transformação: `refReceituario`.
+- Fiscal: `tributacaoSimples`, `aliquotaSimples`, `icmsRe`, `baseFiscal`, `codigoFiscal`,
+  `produtoFiscal`, `cstReforma`, `cClassTrib`, `aliquotaIbs`, `aliquotaCbs`, `origemFiscal`,
+  `aliquotaEcf`, `aliquotaEcfId`, `estado`, `motivo`, `conferidoEm` e `pctNcm`.
+- Governança de reconciliação: tabelas de unificação, recusa de pares, histórico de alteração do
+  código interno e histórico de nomes; sem equivalentes identificados no ERP.
+
+Não mapear `products.quantidade` automaticamente para `produtos.quantidadeEstoque`: no ERP o saldo é
+derivado de movimentos auditados. A carga deverá guardar a quantidade de origem no relatório/staging;
+qualquer abertura de saldo seguirá processo próprio, com regra e autorização operacional.
+
 Arquivos representativos da origem em `origin/main`: `stack/api/src/modules/product/` contém CRUD,
 código interno, carga-base, cadastro de código, import/export, reconciliação, histórico e fluxo de zerar;
 `stack/shared/src/product/` contém schemas e regras. O módulo ERP equivalente está em
@@ -61,17 +78,20 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
    nesta branch; gerar relatório seguro de valores e colisões entre empresas antes de habilitar na
    instalação compartilhada. Preservar códigos existentes e cópia entre lojas. Gate: nenhuma colisão
    nem renumeração silenciosa.
-3. **Catálogo vertical:** reconciliar CRUD, busca, foto, scanner, códigos de barras, unidades,
-   transformação, comercial e fiscal no backend, schema e UI; um único caminho para cada operação.
-4. **Central e reconciliação:** grupos, diferenças, duplicidades, aprovações, histórico e resolução
+3. **Atributos do cadastro e fiscal:** migration aditiva `0080` gerada com 22 colunas para compra,
+   venda, fiscal e referência de receituário. Contrato, gravação/leitura, cópia entre empresas,
+   formulário e teste de round-trip foram ampliados. Migration apenas versionada; não aplicada.
+4. **Catálogo vertical:** reconciliar CRUD, busca, foto, scanner, códigos de barras, unidades,
+   transformação e comercial no backend e UI; um único caminho para cada operação.
+5. **Central e reconciliação:** grupos, diferenças, duplicidades, aprovações, histórico e resolução
    manual, com teste de isolamento multiempresa.
-5. **Importação/exportação oficial:** adaptar arquivos e fluxos SIA/planilhas para execução idempotente,
+6. **Importação/exportação oficial:** adaptar arquivos e fluxos SIA/planilhas para execução idempotente,
    dry-run, relatório de erros e fiscal literal; desativar o caminho antigo apenas quando a nova vertical
    estiver completa e os testes provarem a troca.
-6. **Carga de dados:** confirmar origem e destino, backup restaurável, relatório atual de contagem e
+7. **Carga de dados:** confirmar origem e destino, backup restaurável, relatório atual de contagem e
    amostra, SQL e reversão. Só depois de revisão e autorização específica, rodar em homologação; produção
    exige nova autorização e janela própria.
-7. **Fechamento:** lint, check, testes unitários e integração proporcionais, revisão da PR e prova dos
+8. **Fechamento:** lint, check, testes unitários e integração proporcionais, revisão da PR e prova dos
    quatro tamanhos responsivos do Definition of Done. PR/merge/deploy são passos separados.
 
 ## Estado em 26/10/2026
@@ -84,4 +104,10 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
 - Validação da fatia do código interno: teste unitário 4/4, `lint` e `check` completos passaram. O teste
   de integração multiempresa foi escrito e typechecked, mas não executou localmente porque Testcontainers
   não encontrou runtime Docker disponível.
-- Nenhuma migration foi criada/aplicada e nenhum dado foi importado.
+- Migration `0080` foi criada, mas não aplicada; nenhum dado foi importado.
+- Migration `0080_cadastro_produtos_oficial.sql` e snapshot Drizzle gerados. Só SQL aditivo; nenhum
+  banco foi alterado. `npm run lint`, `npm run check`, os 3 arquivos de teste unitário de produtos
+  (34 testes) e o round-trip do formulário fiscal (2 testes) passaram. O check Nuxt manteve os avisos
+  preexistentes de `useLayout` e `vue-router/volar/sfc-route-blocks`.
+- Testes de integração com Testcontainers não foram executados: `docker info` não conseguiu conectar
+  ao Docker Engine local (pipe sem acesso). A carga de dados e o restante das verticais seguem pendentes.
