@@ -6,6 +6,13 @@
 > Complementa o `24`, que já havia detectado que o módulo existe. Este documento vai ao detalhe e
 > responde à pergunta prática: **o que ainda falta trazer, e como.**
 
+> **Atualização de 26/10/2026 — R-222:** José definiu que o app Cadastro de Produtos atualmente usado
+> nas lojas é a fonte oficial e deve ser integrado ao ERP, inclusive dados e funcionalidades fiscais.
+> Isso revoga as conclusões conflitantes da R-145/R-165 abaixo, que ficam preservadas apenas como
+> histórico. O app standalone não pode ser considerado aposentado até a paridade ser entregue e
+> verificada. A origem de código consultada é `SISTEMA_PRALIS@1ba6774`; confirmar o SHA real de produção
+> antes de qualquer carga. Ver R-222 em `19_REGISTRO_DE_REGRAS.md`.
+
 ---
 
 > ⚠️ **Errata de 12/08/2026 (P-04).** Este documento foi escrito em 05/08 e seis afirmações dele
