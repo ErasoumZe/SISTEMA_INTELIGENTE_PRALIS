@@ -368,3 +368,4 @@ export type ImportarProdutosPayload = ImportarEmpresaPayload;
 export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
 export * from "./regras.js";
+export * from "./central-reconciliacao.js";

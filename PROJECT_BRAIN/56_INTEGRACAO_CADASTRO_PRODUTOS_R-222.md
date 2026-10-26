@@ -258,6 +258,13 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   vincular, recusar equivalência ou ignorar. A fonte de serviço também lê o catálogo Pralis, vendas
   recentes e, quando habilitada, a planilha Google em tempo real. Esses comportamentos ainda não existem
   no ERP e não são apenas uma tela CRUD.
+- O primeiro núcleo reutilizável da Central foi portado para `shared/src/produtos/central-reconciliacao.ts`:
+  agrupamento determinístico por ID compartilhado, código de barras/CREARE, código interno somente na
+  mesma loja e nome como chave fraca; candidato mantém origem dos campos e o fiscal ausente permanece
+  nulo. Seis testes unitários cobrem nomes divergentes, limites entre lojas, código CREARE, fiscal
+  ausente e conflito de barras. `npm run check --workspace @padaria/shared`, `npm run lint:shared` e
+  esses testes passaram. Ainda não há tabelas de staging/decisões, endpoints ou tela da Central; este
+  motor isolado não constitui entrega funcional da Central.
 - A origem depende de arquivos de fontes e de configuração/credenciais de Google Sheets, enquanto o
   ERP não tem o mesmo contrato nem mapeamento confirmado entre Base/TNP/LI e `empresa_id`. O porte deve
   definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem
