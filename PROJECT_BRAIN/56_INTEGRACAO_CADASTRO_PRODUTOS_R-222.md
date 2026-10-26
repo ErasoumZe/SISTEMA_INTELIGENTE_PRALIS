@@ -265,6 +265,13 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   ausente e conflito de barras. `npm run check --workspace @padaria/shared`, `npm run lint:shared` e
   esses testes passaram. Ainda não há tabelas de staging/decisões, endpoints ou tela da Central; este
   motor isolado não constitui entrega funcional da Central.
+- Na retomada, foi acrescentado um parser CSV com suporte a aspas/separadores em campos, validação de
+  cabeçalhos e preservação literal dos dados de origem. Quatro testes adicionais cobrem CSV com
+  delimitador interno, BOM, fiscal literal e rejeição de arquivo inválido. O modelo Drizzle local e a
+  migration `0083_curly_kulan_gath.sql` descrevem staging isolado para cargas, linhas fonte, grupos,
+  vínculos e decisões; migration apenas gerada, não aplicada. Os 10 testes unitários de
+  reconciliação/parser, `check` de `shared` e `db`, `lint:shared` e `git diff --check` passaram. Ainda
+  não há persistência operacional/endpoints/tela; não houve importação nem escrita no catálogo.
 - A origem depende de arquivos de fontes e de configuração/credenciais de Google Sheets, enquanto o
   ERP não tem o mesmo contrato nem mapeamento confirmado entre Base/TNP/LI e `empresa_id`. O porte deve
   definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem
