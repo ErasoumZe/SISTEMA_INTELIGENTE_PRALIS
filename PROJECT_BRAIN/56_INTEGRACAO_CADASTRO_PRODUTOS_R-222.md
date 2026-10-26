@@ -272,6 +272,10 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   vínculos e decisões; migration apenas gerada, não aplicada. Os 10 testes unitários de
   reconciliação/parser, `check` de `shared` e `db`, `lint:shared` e `git diff --check` passaram. Ainda
   não há persistência operacional/endpoints/tela; não houve importação nem escrita no catálogo.
+- Também existe agora uma preparação de prévia em memória que recusa arquivo duplicado da mesma fonte,
+  conta linhas e aponta EANs ligados a nomes diferentes antes de propor os grupos. Ela não salva nem
+  aplica as sugestões. Três arquivos de teste da Central (12 testes) passaram, junto com `check` e
+  `lint:shared`; integração com banco e UI continuam pendentes.
 - A origem depende de arquivos de fontes e de configuração/credenciais de Google Sheets, enquanto o
   ERP não tem o mesmo contrato nem mapeamento confirmado entre Base/TNP/LI e `empresa_id`. O porte deve
   definir um adaptador isolado e dry-run; não deve tratar arquivos antigos como dados atuais nem

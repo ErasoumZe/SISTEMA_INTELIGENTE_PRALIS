@@ -370,3 +370,4 @@ export type ExportarProdutoPayload = ExportarEmpresaPayload;
 export * from "./regras.js";
 export * from "./central-reconciliacao.js";
 export * from "./central-fontes.js";
+export * from "./central-ingestao.js";
