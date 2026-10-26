@@ -49,9 +49,9 @@ sobrescrito. Nenhum código é inventado.
 - O catálogo oficial só é importado para a empresa cuja razão social no Questor foi configurada no Pralís.
 - O oficial só sai com os gates de homologação ligados. Nada é enviado à Conplus automaticamente.
 
-## Situação (23/10/2026)
+## Situação (26/10/2026)
 
-Implementado e testado (unitário, integração, navegador). Migration `0070_eventos_layout_oficial`
+Implementado e testado (unitário, integração, navegador). Migration `0079_eventos_layout_oficial`
 testada só em bancos descartáveis.
 
 **Depende da Conplus:** código de cada empresa no Questor e respostas às perguntas do documento 7

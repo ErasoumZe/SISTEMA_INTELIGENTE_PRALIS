@@ -54,14 +54,14 @@ funciona.
 
 ## Migrations
 
-- Banco vazio → 70 migrations pelo comando oficial (`drizzle-kit migrate`); colunas, índices,
+- Banco vazio → 80 migrations pelo comando oficial (`drizzle-kit migrate`); colunas, índices,
   constraints e triggers idênticos ao schema.
-- Homologação: 0064–0069 aplicadas depois de backup, restauração testada e ensaio; estrutura final
-  idêntica à de um banco novo (documento 10).
+- Homologação: as antigas 0064–0069 (hoje 0073–0078) aplicadas depois de backup, restauração testada e
+  ensaio; estrutura final idêntica à de um banco novo (documento 10).
 
 ## Pendências conhecidas, declaradas
 
-- Nove tabelas criadas pelas migrations 0061, 0063 e 0068 têm `atualizado_em` sem trigger (os serviços
+- Nove tabelas criadas pelas migrations 0070, 0072 e 0077 têm `atualizado_em` sem trigger (os serviços
   gravam a coluna); estão declaradas pelo nome no teste de migrations até a decisão de uma migration
   que instale os triggers.
 

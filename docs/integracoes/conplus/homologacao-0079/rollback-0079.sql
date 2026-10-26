@@ -1,4 +1,4 @@
--- ROLLBACK da migration 0079_eventos_layout_oficial (antes 0070) — desfaz exatamente o que ela criou.
+-- ROLLBACK da migration 0079_eventos_layout_oficial (antes da renumeração: 0070) — desfaz exatamente o que ela criou.
 --
 -- NÃO é migration e não é executado por nenhum procedimento automático. Só com autorização específica.
 -- Perde, sem volta, o que foi gravado nas estruturas da 0079 depois da aplicação: código e razão social
@@ -6,20 +6,22 @@
 -- cancelamentos de lançamento e a trilha de auditoria (questor_auditoria). Antes de rodar, faça o backup
 -- do procedimento de homologação. Para voltar ao estado EXATO de antes, prefira restaurar o backup.
 --
--- Pré-condição verificada abaixo: sem lançamentos cancelados que colidam com ativos na chave antiga
--- (a 0079 permite relançar um evento cancelado; a 0077 não). Se houver, o script para sem alterar nada.
+-- Pré-condições verificadas abaixo (se falharem, o script para sem alterar nada):
+-- 1. nenhum lançamento cancelado: sem a coluna cancelado_em ele voltaria a ser ATIVO para o código da
+--    0077 e poderia entrar num arquivo oficial (valor cancelado indo para a folha). Havendo cancelados,
+--    a saída é restaurar o backup — ou decisão explícita de Marco sobre o destino deles;
+-- 2. o registro da 0079 existe no controle do Drizzle com o when atual (banco na numeração antiga não
+--    tem: ali este script não se aplica).
 
 BEGIN;
 
 DO $$
 BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM questor_eventos_variaveis_lancamentos
-    GROUP BY empresa_id, competencia, vinculo_id, evento_id
-    HAVING count(*) > 1
-  ) THEN
-    RAISE EXCEPTION 'Rollback interrompido: há lançamentos cancelados e relançados na mesma chave; a unicidade da 0077 não pode ser restaurada';
+  IF (SELECT count(*) FROM drizzle.__drizzle_migrations WHERE created_at = 1792777123905) <> 1 THEN
+    RAISE EXCEPTION 'Rollback interrompido: a 0079 (when 1792777123905) não está registrada exatamente uma vez neste banco';
+  END IF;
+  IF EXISTS (SELECT 1 FROM questor_eventos_variaveis_lancamentos WHERE cancelado_em IS NOT NULL) THEN
+    RAISE EXCEPTION 'Rollback interrompido: há lançamentos cancelados; sem a coluna eles voltariam a valer. Restaure o backup.';
   END IF;
 END $$;
 
@@ -59,7 +61,16 @@ ALTER TABLE questor_configuracoes
   DROP COLUMN codigo_empresa_questor,
   DROP COLUMN razao_social_questor;
 
--- Registro da 0079 no controle do Drizzle (created_at = "when" do journal).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1792777123905;
+-- Registro da 0079 no controle do Drizzle (created_at = "when" do journal). Conferido: exatamente 1 linha.
+DO $$
+DECLARE
+  apagadas integer;
+BEGIN
+  DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1792777123905;
+  GET DIAGNOSTICS apagadas = ROW_COUNT;
+  IF apagadas <> 1 THEN
+    RAISE EXCEPTION 'Rollback interrompido: esperava apagar 1 registro da 0079, apagaria %', apagadas;
+  END IF;
+END $$;
 
 COMMIT;

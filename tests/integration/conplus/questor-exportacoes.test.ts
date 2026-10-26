@@ -55,6 +55,8 @@ describe("exportações Questor — fluxo completo", () => {
   const competencia = "2026-10-01";
   const sha = (dados: string | Buffer) => createHash("sha256").update(dados).digest("hex");
   const arquivoUrl = (id: string) => ROTAS_EXPORTACAO_QUESTOR.arquivo.replace(":id", id);
+  /** Novo download de arquivo TÉCNICO pelo histórico: a mesma confirmação da geração. */
+  const tecnicoUrl = (id: string) => `${arquivoUrl(id)}?confirmacaoArquivoTecnico=true`;
 
   async function vestir(email: string, cargo: "DP" | "Gerencia") {
     const alvo = await consultarUm<{ id: string }>(`select id from "user" where email = $1`, [email]);
@@ -333,7 +335,11 @@ describe("exportações Questor — fluxo completo", () => {
       });
       expect(itens.some((item) => item.id === ids.exportacaoB)).toBe(false);
 
-      const download = await chamar("GET", arquivoUrl(exportacaoTecnicaId));
+      // Técnico pelo histórico também exige a confirmação explícita (o servidor confere).
+      const semConfirmacao = await chamar("GET", arquivoUrl(exportacaoTecnicaId));
+      expect(semConfirmacao.statusCode).toBe(422);
+      expect(semConfirmacao.json().code).toBe(ERROS_EXPORTACAO_QUESTOR.confirmacaoTecnicoObrigatoria);
+      const download = await chamar("GET", tecnicoUrl(exportacaoTecnicaId));
       expect(download.statusCode).toBe(200);
       expect(download.headers["x-questor-sha256"]).toBe(sha(download.rawPayload));
       expect(download.headers["content-disposition"]).toContain("TECNICO-NAO-IMPORTAR-");
@@ -388,10 +394,10 @@ describe("exportações Questor — fluxo completo", () => {
       const caminho = caminhoAbsolutoDocumento(registro!.caminho_arquivo!);
       const original = await readFile(caminho);
       await writeFile(caminho, "adulterado");
-      const adulterado = await chamar("GET", arquivoUrl(registro!.id));
+      const adulterado = await chamar("GET", tecnicoUrl(registro!.id));
       expect(adulterado.statusCode).toBe(409);
       await rm(caminho);
-      const apagado = await chamar("GET", arquivoUrl(registro!.id));
+      const apagado = await chamar("GET", tecnicoUrl(registro!.id));
       expect(apagado.statusCode).toBe(404);
       await writeFile(caminho, original);
     });
@@ -946,9 +952,13 @@ describe("exportações Questor — fluxo completo", () => {
       expect(ultimo.detalhes).toMatchObject({ origem: "geracao", confirmacaoArquivoTecnico: true });
       // O conteúdo do técnico é o layout puro: nada foi inserido para "impedir" a importação.
       expect(comConfirmacao.body.split("\r\n")[0]!.startsWith("A;")).toBe(true);
-      // Novo download pelo histórico também é auditado.
-      await chamar("GET", arquivoUrl(comConfirmacao.headers["x-questor-exportacao-id"] as string));
-      expect((await auditoria("download")).at(-1)!.detalhes).toMatchObject({ origem: "historico" });
+      // Novo download pelo histórico também é auditado, com a confirmação.
+      const historico = await chamar("GET", tecnicoUrl(comConfirmacao.headers["x-questor-exportacao-id"] as string));
+      expect(historico.statusCode).toBe(200);
+      expect((await auditoria("download")).at(-1)!.detalhes).toMatchObject({
+        origem: "historico",
+        confirmacaoArquivoTecnico: true
+      });
     });
 
     it("lançamento só em arquivo técnico: apagar é 409; cancelar com motivo libera o evento para novo lançamento", async () => {
@@ -1031,6 +1041,71 @@ describe("exportações Questor — fluxo completo", () => {
       );
       expect(cancelar.statusCode).toBe(409);
       expect(cancelar.json().code).toBe(ERROS_EXPORTACAO_QUESTOR.lancamentoExportado);
+    });
+
+    it("histórico não é atalho: oficial passa pelos gates e técnico encerra depois da homologação", async () => {
+      const exportacoes = await exportacoesDaEmpresa();
+      const oficial = exportacoes.find((item) => item.tipo === "eventos_variaveis" && item.resultado === "gerado");
+      const tecnico = exportacoes.find((item) => item.tipo === "admissao" && item.resultado === "previa");
+      expect(oficial && tecnico).toBeTruthy();
+
+      const antes = (await auditoria("recusa_homologacao")).length;
+      const oficialSemGates = await chamar("GET", arquivoUrl(oficial!.id));
+      expect(oficialSemGates.statusCode).toBe(422);
+      expect(oficialSemGates.json().code).toBe(ERROS_EXPORTACAO_QUESTOR.naoHomologada);
+      expect((await auditoria("recusa_homologacao")).length - antes).toBe(1);
+
+      ligarGates(true);
+      expect((await chamar("GET", arquivoUrl(oficial!.id))).statusCode).toBe(200);
+      const tecnicoDepois = await chamar("GET", tecnicoUrl(tecnico!.id));
+      expect(tecnicoDepois.statusCode).toBe(422);
+      expect(tecnicoDepois.json().code).toBe(ERROS_EXPORTACAO_QUESTOR.tecnicoEncerrado);
+    });
+
+    it("cancelar e gerar o oficial ao mesmo tempo: nunca termina cancelado E exportado", async () => {
+      const competenciaJan = "2027-01-01";
+      ligarGates(true);
+      for (const valor of ["1", "2", "3"]) {
+        const novo = await chamar("POST", ROTAS_EXPORTACAO_QUESTOR.lancamentos, {
+          competencia: competenciaJan,
+          vinculoId: ids.vinculo1,
+          eventoId: eventoHoras,
+          unidade: "H",
+          valor
+        });
+        expect(novo.statusCode, novo.body).toBe(201);
+        const lancamentoId = novo.json().data.id as string;
+        const [gerar, cancelar] = await Promise.all([
+          chamar("POST", ROTAS_EXPORTACAO_QUESTOR.eventosDownload, {
+            competencia: competenciaJan,
+            codigoPeriodoCalculo: "2701",
+            sequenciaInicial: 1,
+            lancamentoIds: [lancamentoId]
+          }),
+          chamar("POST", ROTAS_EXPORTACAO_QUESTOR.lancamentoCancelar.replace(":id", lancamentoId), {
+            motivo: "Corrida de teste"
+          })
+        ]);
+        const estado = await consultarUm<{ cancelado: boolean; oficial: number }>(
+          `select l.cancelado_em is not null as cancelado,
+                  (select count(*)::int from questor_exportacoes_eventos_variaveis v
+                     join questor_exportacoes e on e.id = v.exportacao_id and e.resultado = 'gerado'
+                    where v.lancamento_id = l.id) as oficial
+             from questor_eventos_variaveis_lancamentos l where l.id = $1`,
+          [lancamentoId]
+        );
+        // Exatamente um dos dois vence; o outro recebe conflito/ausência, nunca 500.
+        expect([gerar.statusCode, cancelar.statusCode].filter((codigo) => codigo < 300)).toHaveLength(1);
+        expect([gerar.statusCode, cancelar.statusCode].every((codigo) => codigo < 500)).toBe(true);
+        expect(estado!.cancelado && estado!.oficial > 0).toBe(false);
+        if (estado!.cancelado) {
+          // Corrige para a próxima volta: o mesmo evento volta a poder ser lançado.
+          continue;
+        }
+        expect(estado!.oficial).toBe(1);
+        // Já exportado no oficial: a próxima volta lança um evento novo só se o anterior não ocupar a chave.
+        break;
+      }
     });
 
     it("arquivo técnico encerra depois da homologação (TXT e eventos)", async () => {

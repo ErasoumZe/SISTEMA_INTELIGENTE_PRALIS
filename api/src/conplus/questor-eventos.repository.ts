@@ -84,8 +84,12 @@ export async function inserirLancamentoVariavelRepository(
  * Remove um lançamento que ainda não saiu em arquivo. Lançamento exportado fica: a FK da auditoria
  * (`ON DELETE RESTRICT`) também impede, mas o serviço responde antes com mensagem clara.
  */
-export async function removerLancamentoVariavelRepository(empresaId: string, id: string) {
-  const [removido] = await banco
+export async function removerLancamentoVariavelRepository(
+  empresaId: string,
+  id: string,
+  executor: TransacaoBanco | typeof banco = banco
+) {
+  const [removido] = await executor
     .delete(questorEventosVariaveisLancamentos)
     .where(
       and(eq(questorEventosVariaveisLancamentos.id, id), eq(questorEventosVariaveisLancamentos.empresaId, empresaId))
@@ -165,9 +169,13 @@ export function listarLancamentosVariaveisRepository(empresaId: string, competen
 }
 
 /** Ids da lista que aparecem em QUALQUER arquivo gravado (técnico ou oficial) — não podem ser apagados. */
-export async function lancamentosComArquivoRepository(empresaId: string, ids: readonly string[]) {
+export async function lancamentosComArquivoRepository(
+  empresaId: string,
+  ids: readonly string[],
+  executor: TransacaoBanco | typeof banco = banco
+) {
   if (!ids.length) return [];
-  const linhas = await banco
+  const linhas = await executor
     .selectDistinct({ lancamentoId: questorExportacoesEventosVariaveis.lancamentoId })
     .from(questorExportacoesEventosVariaveis)
     .where(
@@ -267,4 +275,24 @@ export async function cancelarLancamentoVariavelRepository(
     )
     .returning({ id: questorEventosVariaveisLancamentos.id });
   return linha ?? null;
+}
+
+/**
+ * Ids da lista que continuam ativos (não cancelados), com FOR SHARE: até o fim da transação ninguém
+ * cancela nem apaga esses lançamentos. Usado na gravação do arquivo oficial.
+ */
+export async function lancamentosAtivosRepository(tx: TransacaoBanco, empresaId: string, ids: readonly string[]) {
+  if (!ids.length) return [];
+  const linhas = await tx
+    .select({ id: questorEventosVariaveisLancamentos.id })
+    .from(questorEventosVariaveisLancamentos)
+    .where(
+      and(
+        eq(questorEventosVariaveisLancamentos.empresaId, empresaId),
+        inArray(questorEventosVariaveisLancamentos.id, [...ids]),
+        isNull(questorEventosVariaveisLancamentos.canceladoEm)
+      )
+    )
+    .for("share");
+  return linhas.map((linha) => linha.id);
 }

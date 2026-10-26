@@ -49,7 +49,7 @@ Tela: **Departamento Pessoal → Exportações Questor** (`/conplus/exportar`).
 
 Auditoria e arquivo:
 
-- Tabelas `questor_exportacoes` e `questor_exportacoes_admissoes` (migration **0068**, no journal).
+- Tabelas `questor_exportacoes` e `questor_exportacoes_admissoes` (migration **0077**, no journal).
 - Arquivo no storage em `questor-exportacoes/<empresa>/<sha256>.txt`, gravado **antes** da
   auditoria: se o registro falhar, não fica auditoria apontando para arquivo inexistente.
 - Idempotência: o mesmo conteúdo devolve a exportação existente (`X-Questor-Reutilizado: true`).

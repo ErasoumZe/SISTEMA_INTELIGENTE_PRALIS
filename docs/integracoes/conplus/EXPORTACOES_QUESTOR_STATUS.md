@@ -23,15 +23,16 @@ Atualizado em 23/10/2026 (Tarefa 14: eventos variáveis no layout oficial da Con
 
 ## Migration
 
-`0068_questor_exportacoes` está no journal com snapshot (o snapshot foi gerado fora do repositório,
-contornando o `ENOMEM` do ambiente, e o SQL original foi mantido). A cadeia 0000→0069 sobe em banco
-vazio pelo comando oficial do deploy. A homologação (5544) recebeu 0064–0069 em 22/10/2026, depois de
-backup e ensaio (registro em `HOMOLOGACAO_MIGRATIONS_0064_0069.md`).
+Depois do merge da main (PR #203) as migrations da integração são 0069–0079 (as tabelas de exportação
+vêm da `0077_questor_exportacoes`; o layout oficial, da `0079`). A cadeia 0000→0079 sobe em banco vazio
+pelo comando oficial do deploy. A homologação (5544) recebeu as antigas 0064–0069 em 22/10/2026 (registro
+em `HOMOLOGACAO_MIGRATIONS_0064_0069.md`) e está na numeração antiga: antes de qualquer `migrate` ela
+precisa da reconciliação de `homologacao-0079/PLANO_HOMOLOGACAO_0079.md`.
 
 ## Continua bloqueado (depende da Conplus)
 
 - TXT oficial: respostas e tabelas do `ENTREGA_TECNICA/07` (sem elas o arquivo sempre tem pendências).
 - Arquivo oficial de eventos: código de cada empresa no Questor e as respostas listadas em
-  `EVENTOS_VARIAVEIS_LAYOUT_OFICIAL.md` §9. A migration 0070 ainda não foi aplicada na homologação.
+  `EVENTOS_VARIAVEIS_LAYOUT_OFICIAL.md` §9. A migration 0079 ainda não foi aplicada na homologação.
 - Os gates `CONPLUS_QUESTOR_EXPORT_ENABLED` e `CONPLUS_QUESTOR_EXPORT_HOMOLOGADA` só são ligados depois
   dessa confirmação.

@@ -6,6 +6,7 @@ import {
   questorExportacaoAdmissaoRequisicaoSchema,
   questorExportacaoAdmissaoTecnicoSchema,
   questorExportacaoPreviaRequisicaoSchema,
+  questorDownloadHistoricoQuerySchema,
   questorExportacoesQuerySchema,
   type QuestorEstadoExportacaoDto,
   type QuestorExportacaoHistoricoDto,
@@ -471,11 +472,24 @@ const PERMISSAO_POR_TIPO = {
   eventos_variaveis: "conplus_exportar_eventos"
 } as const;
 
-/** Baixa de novo um arquivo do histórico, conferindo que o disco ainda guarda o que foi auditado. */
+/**
+ * Baixa de novo um arquivo do histórico, conferindo que o disco ainda guarda o que foi auditado. O histórico
+ * não é atalho: o OFICIAL passa pelos mesmos gates da geração (homologação revogada = não baixa), e o
+ * TÉCNICO só sai antes da homologação e com a confirmação explícita, como na geração.
+ */
 export async function baixarArquivoExportacaoQuestor(
   id: string,
+  query: DadosExternos,
   perfil?: PerfilUsuario
-): Promise<{ exportacaoId: string; conteudo: Buffer; nomeArquivo: string; mimeType: string; sha256: string }> {
+): Promise<{
+  exportacaoId: string;
+  conteudo: Buffer;
+  nomeArquivo: string;
+  mimeType: string;
+  sha256: string;
+  tecnico: boolean;
+}> {
+  const { confirmacaoArquivoTecnico } = questorDownloadHistoricoQuerySchema.parse(query ?? {});
   const empresaId = empresaDoAtor(perfil);
   const exportacao = await comMigrationQuestor(() => obterQuestorExportacaoRepository(empresaId, id));
   if (!exportacao) throw naoEncontrado("Exportação não encontrada", ERROS_EXPORTACAO_QUESTOR.arquivoAusente);
@@ -484,6 +498,17 @@ export async function baixarArquivoExportacaoQuestor(
   }
   if (!exportacao.caminhoArquivo || !exportacao.nomeArquivo) {
     throw naoEncontrado("Esta exportação não gerou arquivo", ERROS_EXPORTACAO_QUESTOR.arquivoAusente);
+  }
+  const tecnico = exportacao.resultado === "previa";
+  if (exportacao.resultado === "gerado") await exigirExportacaoHomologada(perfil, exportacao.tipo);
+  if (tecnico) {
+    exigirArquivoTecnicoDisponivel();
+    if (confirmacaoArquivoTecnico !== "true") {
+      throw naoProcessavel(
+        "Confirme que o arquivo técnico não será importado no Questor antes de baixá-lo",
+        ERROS_EXPORTACAO_QUESTOR.confirmacaoTecnicoObrigatoria
+      );
+    }
   }
   const conteudo = await lerArquivoExportacaoQuestor(exportacao.caminhoArquivo);
   if (!conteudo) throw naoEncontrado("Arquivo não está mais no armazenamento", ERROS_EXPORTACAO_QUESTOR.arquivoAusente);
@@ -497,6 +522,7 @@ export async function baixarArquivoExportacaoQuestor(
     conteudo,
     nomeArquivo: exportacao.nomeArquivo,
     mimeType: csv ? "text/csv; charset=utf-8" : MIME_TXT,
-    sha256
+    sha256,
+    tecnico
   };
 }

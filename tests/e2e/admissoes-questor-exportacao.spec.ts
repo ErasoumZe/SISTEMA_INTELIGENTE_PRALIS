@@ -41,6 +41,9 @@ async function semConteudoCortado(page: Page, nome: string) {
     for (const el of raiz.querySelectorAll("*")) {
       const caixa = el.getBoundingClientRect();
       if (caixa.width === 0 || caixa.right <= limite + 1) continue;
+      // Barra de progresso (inclusive o loader oculto de cada campo do Vuetify): a faixa animada passa
+      // da borda e é cortada pela própria barra, por desenho. Não é conteúdo.
+      if (el.closest(".v-progress-linear")) continue;
       let rolagemPropria = false;
       for (let pai = el.parentElement; pai && pai !== raiz; pai = pai.parentElement) {
         if (/(auto|scroll)/u.test(getComputedStyle(pai).overflowX)) {
@@ -104,11 +107,15 @@ test.describe("exportações Questor", () => {
       page.getByText(/admissao-questor-[0-9a-f]{12}\.txt( gerado e registrado no histórico|: mesmo conteúdo)/u)
     ).toBeVisible();
 
-    // Histórico: o arquivo técnico aparece e baixa de novo com o mesmo nome.
+    // Histórico: o técnico aparece e só baixa de novo depois da mesma confirmação da geração.
     const item = page.locator(".historico__item").filter({ hasText: "Técnico (não importar)" }).first();
     await expect(item).toBeVisible();
+    await item.getByRole("button", { name: "Baixar técnico", exact: true }).click();
+    const confirmacao = page.getByRole("dialog");
+    await expect(confirmacao.getByRole("button", { name: "Baixar arquivo técnico" })).toBeDisabled();
+    await confirmacao.getByLabel("Entendi: este arquivo NÃO será importado no Questor").check();
     const deNovo = page.waitForEvent("download");
-    await item.getByRole("button", { name: "Baixar" }).click();
+    await confirmacao.getByRole("button", { name: "Baixar arquivo técnico" }).click();
     expect((await deNovo).suggestedFilename()).toContain("TECNICO-NAO-IMPORTAR-");
 
     expect(problemas, problemas.join("\n")).toEqual([]);

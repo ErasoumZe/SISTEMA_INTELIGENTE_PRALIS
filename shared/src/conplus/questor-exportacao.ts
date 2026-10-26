@@ -44,7 +44,9 @@ export const ERROS_EXPORTACAO_QUESTOR = {
   tecnicoEncerrado: "QUESTOR_ARQUIVO_TECNICO_ENCERRADO",
   lancamentoEmArquivoTecnico: "QUESTOR_LANCAMENTO_EM_ARQUIVO_TECNICO",
   catalogoOutraEmpresa: "QUESTOR_CATALOGO_OUTRA_EMPRESA",
-  catalogoSemIdentidade: "QUESTOR_CATALOGO_SEM_RAZAO_SOCIAL"
+  catalogoSemIdentidade: "QUESTOR_CATALOGO_SEM_RAZAO_SOCIAL",
+  confirmacaoTecnicoObrigatoria: "QUESTOR_CONFIRMACAO_TECNICO_OBRIGATORIA",
+  lancamentoCancelado: "QUESTOR_LANCAMENTO_CANCELADO"
 } as const;
 
 export const VERSAO_LAYOUT_ADMISSAO_QUESTOR = "questor-admissao-v2";
@@ -64,6 +66,14 @@ const competencia = z.string().regex(/^\d{4}-\d{2}-01$/u, "Competência é o pri
 
 export const questorExportacaoPreviaRequisicaoSchema = z
   .object({ processoIds: idsUnicos(z.string().uuid(), 50) })
+  .strict();
+
+/**
+ * Novo download pelo histórico. Arquivo TÉCNICO exige a mesma confirmação da geração (o servidor confere;
+ * a tela só abre o diálogo). Arquivo oficial não leva o campo.
+ */
+export const questorDownloadHistoricoQuerySchema = z
+  .object({ confirmacaoArquivoTecnico: z.literal("true").optional() })
   .strict();
 
 export const questorExportacaoAdmissaoRequisicaoSchema = z

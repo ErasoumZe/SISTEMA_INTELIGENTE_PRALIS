@@ -2,6 +2,7 @@
 import { ROTAS_EXPORTACAO_QUESTOR, type QuestorExportacaoHistoricoDto } from "@padaria/shared";
 import { ErroApiCliente } from "~/composables/useApi";
 import { useArquivoQuestor } from "~/composables/useArquivoQuestor";
+import QuestorConfirmacaoTecnico from "~/components/conplus/QuestorConfirmacaoTecnico.vue";
 
 const { apiGet } = useApi();
 const { baixar } = useArquivoQuestor();
@@ -9,6 +10,9 @@ const itens = ref<QuestorExportacaoHistoricoDto[]>([]);
 const carregando = ref(false);
 const baixando = ref("");
 const erro = ref("");
+/** Técnico pede a mesma confirmação da geração; o servidor recusa sem ela. */
+const tecnicoPendente = ref<QuestorExportacaoHistoricoDto | null>(null);
+const confirmacaoAberta = ref(false);
 
 const ROTULO_RESULTADO: Record<QuestorExportacaoHistoricoDto["resultado"], string> = {
   previa: "Técnico (não importar)",
@@ -35,11 +39,23 @@ async function carregar() {
   }
 }
 
-async function baixarDeNovo(item: QuestorExportacaoHistoricoDto) {
+function pedirDownload(item: QuestorExportacaoHistoricoDto) {
+  if (item.resultado !== "previa") return void baixarDeNovo(item, false);
+  tecnicoPendente.value = item;
+  confirmacaoAberta.value = true;
+}
+
+function confirmarTecnico() {
+  if (tecnicoPendente.value) void baixarDeNovo(tecnicoPendente.value, true);
+  tecnicoPendente.value = null;
+}
+
+async function baixarDeNovo(item: QuestorExportacaoHistoricoDto, tecnicoConfirmado: boolean) {
   baixando.value = item.id;
   erro.value = "";
+  const rota = ROTAS_EXPORTACAO_QUESTOR.arquivo.replace(":id", item.id);
   try {
-    await baixar(ROTAS_EXPORTACAO_QUESTOR.arquivo.replace(":id", item.id));
+    await baixar(tecnicoConfirmado ? `${rota}?confirmacaoArquivoTecnico=true` : rota);
   } catch (falha) {
     erro.value = falha instanceof ErroApiCliente ? falha.message : "Não foi possível baixar o arquivo.";
   } finally {
@@ -97,13 +113,14 @@ onMounted(() => void carregar());
             prepend-icon="mdi-download"
             class="historico__baixar"
             :loading="baixando === item.id"
-            @click="baixarDeNovo(item)"
-            >Baixar</v-btn
+            @click="pedirDownload(item)"
+            >{{ item.resultado === "previa" ? "Baixar técnico" : "Baixar" }}</v-btn
           >
         </li>
       </ul>
       <p v-else-if="!erro && !carregando" class="muted">Nenhuma exportação registrada.</p>
     </v-card-text>
+    <QuestorConfirmacaoTecnico v-model="confirmacaoAberta" @confirmar="confirmarTecnico" />
   </v-card>
 </template>
 

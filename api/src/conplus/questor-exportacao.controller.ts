@@ -90,11 +90,8 @@ export async function registrarRotasQuestorExportacao(app: FastifyInstance): Pro
   // A permissão depende do tipo da exportação (admissão ou eventos): o serviço confere depois de achar.
   app.get(ROTAS_EXPORTACAO_QUESTOR.arquivo, autenticado, async (request, reply) => {
     const { id } = processoParamsSchema.parse(request.params);
-    return entregarArquivoQuestor(
-      reply,
-      request.perfilUsuario,
-      await baixarArquivoExportacaoQuestor(id, request.perfilUsuario),
-      "historico"
-    );
+    const arquivo = await baixarArquivoExportacaoQuestor(id, request.query, request.perfilUsuario);
+    // Técnico só chega aqui confirmado (o serviço recusa sem a confirmação): a auditoria registra isso.
+    return entregarArquivoQuestor(reply, request.perfilUsuario, arquivo, "historico", arquivo.tecnico);
   });
 }

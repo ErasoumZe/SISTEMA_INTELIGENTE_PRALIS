@@ -79,7 +79,7 @@ com outros dados aparece como divergente e não é alterado; arquivo com linha i
   reservada; **encerrado** quando a exportação estiver homologada (evita um segundo caminho de importação).
 - Nome do arquivo: `Eventos <código da empresa> - <MM-AAAA>.csv` (padrão do manual).
 
-## 6. Banco — migration 0070 (`0070_eventos_layout_oficial`)
+## 6. Banco — migration 0079 (`0079_eventos_layout_oficial`; era 0070 antes da renumeração)
 
 Aditiva: colunas novas nulas e CHECKs que as linhas existentes satisfazem.
 
@@ -97,16 +97,16 @@ desenvolvimento (5543) **não foram alterados**: continuam com 70 e 64 migration
 banco descartável: dropar o índice `questor_exportacoes_eventos_chave_questor_unica`, as constraints
 `questor_configuracoes_codigo_empresa_check`, `questor_eventos_variaveis_natureza_check`,
 `questor_eventos_variaveis_catalogo_check`, `questor_exportacoes_periodo_check`,
-`questor_exportacoes_eventos_linha_check`, as 8 colunas acima e a linha `0070` de
-`drizzle.__drizzle_migrations`. Na homologação, quando for aplicada, seguir o procedimento de backup e
-restauração de `HOMOLOGACAO_MIGRATIONS_0064_0069.md`.
+`questor_exportacoes_eventos_linha_check`, as 8 colunas acima e a linha `0079` de
+`drizzle.__drizzle_migrations`. Na homologação: `homologacao-0079/PLANO_HOMOLOGACAO_0079.md` (reconciliação
+da numeração + aplicação + rollback `homologacao-0079/rollback-0079.sql`).
 
 ## 7. Arquivos
 
 - **shared:** `conplus/questor-eventos-variaveis.ts` (reescrito), `questor-exportacao.ts`,
   `questor-parametros.ts`, `questor-api.ts`.
 - **db:** `schema/questor/questor.schema.ts`, `schema/questor/questor-exportacoes.schema.ts`,
-  `migrations/0070_eventos_layout_oficial.sql` + snapshot e journal.
+  `migrations/0079_eventos_layout_oficial.sql` + snapshot e journal.
 - **api:** `conplus/questor-eventos.{service,repository,controller}.ts`,
   `questor-exportacao.{service,controller}.ts`, `questor-exportacoes.repository.ts`,
   `questor-configuracao.{repository,service}.ts`.

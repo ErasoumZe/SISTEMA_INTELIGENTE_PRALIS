@@ -6,7 +6,7 @@ import {
   questorExportacoesAdmissoes,
   questorExportacoesEventosVariaveis
 } from "@padaria/db/schema";
-import { banco, type TransacaoBanco } from "../banco/conexao.js";
+import { banco, executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 
 /** Auditoria das exportações Questor (tabelas da migration 0077). */
 
@@ -160,7 +160,7 @@ export async function registrarExportacaoQuestorRepository(
   antesDeGravar?: (tx: TransacaoBanco) => Promise<void>
 ): Promise<{ id: string; criada: boolean }> {
   const { processoIds = [], lancamentos = [], ...linha } = dados;
-  return banco.transaction(async (tx) => {
+  return executarEmTransacao(async (tx) => {
     if (antesDeGravar) await antesDeGravar(tx);
     const [inserida] = await tx
       .insert(questorExportacoes)
