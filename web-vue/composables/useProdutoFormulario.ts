@@ -58,7 +58,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       cDe: form.value.cDe,
       quantidadeCaixa: numero(form.value.quantidadeCaixa),
       medidaCompra: form.value.medidaCompra,
-      descricao: descricaoPreview.value || form.value.descricao
+      descricao: descricaoPreview.value || form.value.descricao,
+      aproximado: form.value.compraAproximada
     })
   );
 

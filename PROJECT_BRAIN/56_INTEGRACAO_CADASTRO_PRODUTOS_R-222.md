@@ -60,6 +60,9 @@ schema ERP de `db/src/schema/app.schema.ts`:
 - Governança de reconciliação: tabelas de unificação, recusa de pares, histórico de alteração do
   código interno e histórico de nomes; sem equivalentes identificados no ERP.
 
+O formato de `montarComoSeCompra` no ERP foi substituído pelo formato do cadastro oficial; quando
+`compraAproximada` está ativo, a frase inclui `APROXIMADAMENTE`. O comportamento tem teste unitário.
+
 Não mapear `products.quantidade` automaticamente para `produtos.quantidadeEstoque`: no ERP o saldo é
 derivado de movimentos auditados. A carga deverá guardar a quantidade de origem no relatório/staging;
 qualquer abertura de saldo seguirá processo próprio, com regra e autorização operacional.
@@ -111,3 +114,5 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   preexistentes de `useLayout` e `vue-router/volar/sfc-route-blocks`.
 - Testes de integração com Testcontainers não foram executados: `docker info` não conseguiu conectar
   ao Docker Engine local (pipe sem acesso). A carga de dados e o restante das verticais seguem pendentes.
+- Depois, a regra da frase de compra aproximada passou por lint e check completos; os testes focados
+  tiveram 27 aprovações para regras compartilhadas e 2 para o round-trip do formulário.
