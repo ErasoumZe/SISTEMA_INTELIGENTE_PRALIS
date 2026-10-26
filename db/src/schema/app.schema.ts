@@ -918,6 +918,8 @@ export const produtos = pgTable(
     codigoInterno: text("codigo_interno"), // sequencial global da fonte oficial; preservado na importacao
     codigoBarras: text("codigo_barras"),
     descricao: text("descricao").notNull(), // auto (montarDescricao) por padrao, com override manual
+    nomeCatalogo: text("nome_catalogo"), // nome separado da descricao automatica oficial; NULL identifica cadastro legado
+    pesavel: boolean("pesavel"), // NULL = legado sem conferencia; novos cadastros recebem false
     marca: text("marca"),
     compraAproximada: boolean("compra_aproximada").notNull().default(false),
     habilitarAjuda: boolean("habilitar_ajuda").notNull().default(false),

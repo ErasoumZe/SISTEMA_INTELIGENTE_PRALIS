@@ -49,7 +49,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   );
 
   const descricaoPreview = computed(() =>
-    montarDescricao(form.value.descricao, form.value.quantidadeIndividual, siglaDaUnidade.value)
+    montarDescricao(form.value.nomeCatalogo, form.value.quantidadeIndividual, siglaDaUnidade.value)
   );
 
   const comoSeCompraPreview = computed(() =>
@@ -87,14 +87,14 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
       margemGrupo: 0,
       precoManual: numero(form.value.precoVenda) ?? 0,
-      temProduto: Boolean(form.value.descricao.trim())
+      temProduto: Boolean(form.value.nomeCatalogo.trim())
     })
   );
 
   /** Erros por campo — alimentam `error-messages` e o foco no primeiro invalido. */
   const erros = computed(() => {
     const lista: Record<string, string> = {};
-    if (!form.value.descricao.trim()) lista["descricao"] = "Informe a descrição do produto.";
+    if (!form.value.nomeCatalogo.trim()) lista["nomeCatalogo"] = "Informe o nome do produto.";
     if (!form.value.unidadeIndividualId) lista["unidadeIndividualId"] = "Escolha a unidade individual.";
     const quantidade = numero(form.value.quantidadeIndividual);
     if (quantidade == null || quantidade <= 0) lista["quantidadeIndividual"] = "A quantidade precisa ser maior que 0.";
@@ -164,7 +164,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     erro.value = "";
     duplicado.value = "";
     try {
-      const payload = payloadDoFormulario(form.value, empresaId.value, forcar);
+      const payload = payloadDoFormulario(form.value, empresaId.value, forcar, descricaoPreview.value);
       let id = produtoId.value;
       if (id) {
         await apiPut(`/api/produtos/${id}`, payload);

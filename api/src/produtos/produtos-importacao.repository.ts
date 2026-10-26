@@ -180,6 +180,8 @@ export async function copiarProdutosRepository(
           codigoInterno,
           codigoBarras: produto.codigoBarras,
           descricao: produto.descricao,
+          nomeCatalogo: produto.nomeCatalogo,
+          pesavel: produto.pesavel,
           marca: produto.marca,
           compraAproximada: produto.compraAproximada,
           habilitarAjuda: produto.habilitarAjuda,

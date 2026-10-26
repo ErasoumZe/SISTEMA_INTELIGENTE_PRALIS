@@ -2,6 +2,8 @@ const DICAS_PRODUTO: Record<string, string> = {
   marca: "Marca/fabricante do produto.",
   codigoBarras: "Código de barras (EAN) do produto, se houver.",
   descricao: 'Nome do produto, sem a gramatura. Ex.: "Talento Meio Amargo".',
+  nomeCatalogo: 'Nome do produto, sem gramatura. Ex.: "Talento Meio Amargo".',
+  pesavel: "Marque conforme o cadastro SIA. A medida KG, por si só, não define produto de balança.",
   quantidadeIndividual: "Gramatura/peso da unidade. Ex.: 25 (para 25 g).",
   unidadeIndividual: "Unidade da gramatura: UN, KG, G, LT ou ML.",
   embalagem: "Embalagem de compra: saco, caixa, pacote, fardo...",

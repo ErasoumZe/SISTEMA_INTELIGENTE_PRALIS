@@ -82,9 +82,10 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
    nesta branch; gerar relatório seguro de valores e colisões entre empresas antes de habilitar na
    instalação compartilhada. Preservar códigos existentes e cópia entre lojas. Gate: nenhuma colisão
    nem renumeração silenciosa.
-3. **Atributos do cadastro e fiscal:** migration aditiva `0080` gerada com 22 colunas para compra,
-   venda, fiscal e referência de receituário. Contrato, gravação/leitura, cópia entre empresas,
-   formulário e teste de round-trip foram ampliados. Migration apenas versionada; não aplicada.
+3. **Atributos do cadastro e fiscal:** migration aditiva `0080` com 22 colunas para compra, venda,
+   fiscal e referência de receituário. Contrato, gravação/leitura, cópia entre empresas, formulário e
+   round-trip foram ampliados. Aplicada somente no PostgreSQL local de desenvolvimento em 26/10/2026,
+   após autorização de José; não aplicada em homologação ou produção.
 4. **Catálogo vertical:** reconciliar CRUD, busca, foto, scanner, códigos de barras, unidades,
    transformação e comercial no backend e UI; um único caminho para cada operação.
 5. **Central e reconciliação:** grupos, diferenças, duplicidades, aprovações, histórico e resolução
@@ -108,9 +109,10 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
 - Validação da fatia do código interno: teste unitário 4/4, `lint` e `check` completos passaram. O teste
   de integração multiempresa foi escrito e typechecked, mas não executou localmente porque Testcontainers
   não encontrou runtime Docker disponível.
-- Migration `0080` foi criada, mas não aplicada; nenhum dado foi importado.
-- Migration `0080_cadastro_produtos_oficial.sql` e snapshot Drizzle gerados. Só SQL aditivo; nenhum
-  banco foi alterado. `npm run lint`, `npm run check`, os 3 arquivos de teste unitário de produtos
+- Migration `0080_cadastro_produtos_oficial.sql` e snapshot Drizzle foram gerados. O SQL é aditivo.
+  Depois do registro inicial abaixo, 0080 foi aplicada exclusivamente no PostgreSQL local de
+  desenvolvimento (22 colunas confirmadas); nenhum dado de catálogo foi importado ou atualizado.
+  `npm run lint`, `npm run check`, os 3 arquivos de teste unitário de produtos
   (34 testes) e o round-trip do formulário fiscal (2 testes) passaram. O check Nuxt manteve os avisos
   preexistentes de `useLayout` e `vue-router/volar/sfc-route-blocks`.
 - Testes de integração com Testcontainers não foram executados: `docker info` não conseguiu conectar
@@ -130,3 +132,19 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   não uma migração completa da experiência. O banco de desenvolvimento local tem 54 registros de teste,
   não o catálogo oficial. A migration 0080 foi aplicada somente nesse banco local, após autorização,
   por 22 `ALTER TABLE ... ADD COLUMN`; não foi aplicada em homologação ou produção.
+
+### Retomada e estado corrigido
+
+- Em 26/10/2026 a inspeção da sessão autenticada confirmou a navegação da aplicação oficial em uso:
+  Produtos, Importar da base, importação/conferência de planilha, relatórios, Central de Produtos,
+  duplicados históricos, histórico, manutenção, usuários, régua de pontos e permissões. O formulário
+  oficial também foi inspecionado por acessibilidade: nome, gramatura, medida base, indicador de
+  balança, descrição automática, embalagem/compra, operação e mídia. A branch de código disponível no
+  repositório antigo continua sem representar a versão implantada; portanto, a tela em execução e os
+  contratos observáveis são a referência até que o SHA implantado seja obtido.
+- A migration `0080` continua aplicada apenas localmente; banco local contém 54 registros de teste.
+  Nenhuma carga, atualização histórica, migration em homologação ou alteração de produção foi feita.
+- **Paridade integral ainda não entregue.** O cadastro/listagem do ERP continua diferente e os fluxos
+  Central/reconciliação, histórico, importações oficiais, permissões e relatórios precisam de inventário
+  e entrega vertical. Não aprovar merge desta branch como integração completa antes de fechar esses itens,
+  validar responsividade e obter gates verdes.

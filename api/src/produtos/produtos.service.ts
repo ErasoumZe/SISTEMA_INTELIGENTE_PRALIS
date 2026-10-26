@@ -234,6 +234,9 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
         descricao,
         codigoBarras,
         precoVenda,
+        nomeCatalogo:
+          dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
+        pesavel: dados.pesavel === undefined ? (alvo?.pesavel ?? false) : dados.pesavel,
         criadoPor: ator.usuarioId ?? null
       })
     );
@@ -365,6 +368,8 @@ function montarProdutoParaGravar(
     descricao: string;
     codigoBarras: string | null;
     precoVenda: number | null;
+    nomeCatalogo: string | null;
+    pesavel: boolean | null;
     criadoPor: string | null;
   }
 ): ProdutoParaGravar {
@@ -375,6 +380,8 @@ function montarProdutoParaGravar(
     criadoPor: extra.criadoPor,
     codigoBarras: extra.codigoBarras,
     descricao: extra.descricao,
+    nomeCatalogo: extra.nomeCatalogo,
+    pesavel: extra.pesavel,
     marca: dados.marca?.trim() || null,
     compraAproximada: dados.compraAproximada,
     habilitarAjuda: dados.habilitarAjuda,

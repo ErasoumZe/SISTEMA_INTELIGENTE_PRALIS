@@ -36,6 +36,8 @@ describe("produtos integration", () => {
         empresaId: idsTeste.empresaA,
         codigo: "PROD-CRUD",
         descricao: "Produto criado por integracao",
+        nomeCatalogo: "Produto CRUD",
+        pesavel: false,
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
         grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
@@ -61,11 +63,11 @@ describe("produtos integration", () => {
     });
     expect(editado.statusCode).toBe(204);
     await expect(
-      consultarUm("select id from produtos where id = $1 and descricao = $2", [
-        produtoId,
-        "Produto editado por integracao"
-      ])
-    ).resolves.toBeTruthy();
+      consultarUm<{ id: string; nome_catalogo: string; pesavel: boolean }>(
+        "select id, nome_catalogo, pesavel from produtos where id = $1 and descricao = $2",
+        [produtoId, "Produto editado por integracao"]
+      )
+    ).resolves.toMatchObject({ nome_catalogo: "Produto CRUD", pesavel: false });
   });
 
   it("Deve_PersistirCamposComerciais_Quando_CriarProduto", async () => {

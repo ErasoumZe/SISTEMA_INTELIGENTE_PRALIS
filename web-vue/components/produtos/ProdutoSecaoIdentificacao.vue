@@ -71,11 +71,11 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda" :disabled="somenteLeitura" />
 
         <v-text-field
-          v-model="form.descricao"
-          label="Descrição *"
-          data-campo="descricao"
-          :error-messages="erros['descricao']"
-          :hint="dica('descricao')"
+          v-model="form.nomeCatalogo"
+          label="Nome do produto *"
+          data-campo="nomeCatalogo"
+          :error-messages="erros['nomeCatalogo']"
+          :hint="dica('nomeCatalogo')"
           :disabled="somenteLeitura"
           class="secao__campo-largo"
         />
@@ -84,7 +84,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           v-model="form.quantidadeIndividual"
           type="number"
           min="0"
-          label="Quantidade individual *"
+          label="Gramatura *"
           data-campo="quantidadeIndividual"
           :error-messages="erros['quantidadeIndividual']"
           :hint="dica('quantidadeIndividual')"
@@ -95,11 +95,28 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :items="unidades"
           item-title="sigla"
           item-value="id"
-          label="Unidade individual *"
+          label="Medida base *"
           data-campo="unidadeIndividualId"
           :error-messages="erros['unidadeIndividualId']"
           :hint="dica('unidadeIndividual')"
           :disabled="somenteLeitura"
+        />
+
+        <v-select
+          v-model="form.pesavel"
+          :items="[
+            { title: 'Não informado — conferir no SIA', value: null },
+            { title: 'Não', value: false },
+            { title: 'Sim', value: true }
+          ]"
+          label="Vai para balança?"
+          :hint="
+            form.pesavel === null
+              ? 'Para produtos existentes, confira o cadastro SIA. KG não define este campo.'
+              : dica('pesavel')
+          "
+          :disabled="somenteLeitura"
+          class="secao__campo-largo"
         />
 
         <v-select
@@ -125,10 +142,10 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
 
         <v-text-field
           :model-value="descricaoPreview"
-          label="Descrição automática (prévia)"
+          label="Descrição (automática)"
           readonly
           class="secao__campo-largo secao__previa"
-          hint="NOME + QUANTIDADE + UNIDADE. O servidor monta e valida a versão final."
+          hint="Nome + gramatura + medida base. A descrição é montada automaticamente."
           persistent-hint
         />
       </div>

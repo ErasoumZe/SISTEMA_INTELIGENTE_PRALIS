@@ -47,6 +47,9 @@ export function formularioVazio(empresaId: string) {
     setorVenda1: "",
     setorVenda2: "",
     descricao: "",
+    nomeCatalogo: "",
+    nomeCatalogoOriginal: null as string | null,
+    pesavel: false as boolean | null,
     quantidadeIndividual: "1",
     unidadeIndividualId: "",
     grupoMercadoriaId: "" as string | null,
@@ -131,6 +134,9 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     setorVenda1: detalhe.setorVenda1 ?? "",
     setorVenda2: detalhe.setorVenda2 ?? "",
     descricao: detalhe.descricao,
+    nomeCatalogo: detalhe.nomeCatalogo ?? detalhe.descricao ?? "",
+    nomeCatalogoOriginal: detalhe.nomeCatalogo,
+    pesavel: detalhe.pesavel,
     quantidadeIndividual: detalhe.quantidadeIndividual || "1",
     unidadeIndividualId: detalhe.unidadeIndividualId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId,
@@ -205,14 +211,22 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
   };
 }
 
-export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar: boolean) {
+export function payloadDoFormulario(
+  form: ProdutoForm,
+  empresaId: string,
+  forcar: boolean,
+  descricaoAutomatica?: string
+) {
   const ehRevenda = form.tipo === "revenda";
   const fiscalPreenchido = Object.values(form.fiscal).some((valor) => String(valor).trim());
+  const preservarDescricaoLegada = form.nomeCatalogoOriginal === null && form.nomeCatalogo === form.descricao;
   return {
     empresaId,
     codigo: form.codigo || null,
     codigoBarras: form.codigoBarras || null,
-    descricao: form.descricao.trim(),
+    descricao: (preservarDescricaoLegada ? form.descricao : (descricaoAutomatica ?? form.descricao)).trim(),
+    nomeCatalogo: preservarDescricaoLegada ? null : form.nomeCatalogo.trim() || null,
+    pesavel: form.pesavel,
     marca: form.marca || null,
     compraAproximada: form.compraAproximada,
     habilitarAjuda: form.habilitarAjuda,

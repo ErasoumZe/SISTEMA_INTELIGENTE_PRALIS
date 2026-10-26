@@ -96,6 +96,8 @@ export const produtoPayloadSchema = z
     codigo: z.string().optional().nullable(),
     codigoBarras: z.string().optional().nullable(),
     descricao: z.string().min(1),
+    nomeCatalogo: z.string().trim().min(1).max(200).optional().nullable(),
+    pesavel: z.boolean().nullable().optional(),
     marca: z.string().optional().nullable(),
     unidadeIndividualId: uuidSchema,
     quantidadeIndividual: z.coerce.number().positive(),
@@ -208,6 +210,8 @@ export interface ProdutoResumo {
   codigoInterno: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
@@ -263,6 +267,8 @@ export interface ProdutoDetalhe {
   codigoInterno: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;

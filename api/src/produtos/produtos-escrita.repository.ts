@@ -58,9 +58,21 @@ export async function travarCadastroDeProdutos(tx: ExecutorBanco): Promise<void>
 export async function carregarProdutoParaEscritaRepository(
   tx: TransacaoBanco,
   id: string
-): Promise<{ id: string; empresaId: string; criadoPor: string | null } | null> {
+): Promise<{
+  id: string;
+  empresaId: string;
+  criadoPor: string | null;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
+} | null> {
   const [linha] = await tx
-    .select({ id: produtos.id, empresaId: produtos.empresaId, criadoPor: produtos.criadoPor })
+    .select({
+      id: produtos.id,
+      empresaId: produtos.empresaId,
+      criadoPor: produtos.criadoPor,
+      nomeCatalogo: produtos.nomeCatalogo,
+      pesavel: produtos.pesavel
+    })
     .from(produtos)
     .where(eq(produtos.id, id))
     .for("update");
@@ -159,6 +171,8 @@ export interface ProdutoParaGravar {
   criadoPor?: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
@@ -258,6 +272,8 @@ export async function salvarProdutoRepository(
     codigo: input.codigo,
     codigoBarras: input.codigoBarras,
     descricao: input.descricao,
+    nomeCatalogo: input.nomeCatalogo,
+    pesavel: input.pesavel,
     marca: input.marca,
     compraAproximada: input.compraAproximada,
     habilitarAjuda: input.habilitarAjuda,

@@ -72,4 +72,33 @@ describe("produto-formulario-mapa", () => {
       transformacao: { refReceituario: "REC-001" }
     });
   });
+
+  it("separa nome, descrição automática e estado de pesagem sem inferir o legado", () => {
+    const empresaId = "11111111-1111-4111-8111-111111111111";
+    const novo = formularioVazio(empresaId);
+    novo.nomeCatalogo = "Talento Meio Amargo";
+    novo.quantidadeIndividual = "25";
+    novo.unidadeIndividualId = "22222222-2222-4222-8222-222222222222";
+    novo.pesavel = false;
+
+    expect(payloadDoFormulario(novo, empresaId, false, "TALENTO MEIO AMARGO 25 G")).toMatchObject({
+      nomeCatalogo: "Talento Meio Amargo",
+      descricao: "TALENTO MEIO AMARGO 25 G",
+      pesavel: false
+    });
+
+    const legado = formularioDoDetalhe({
+      empresaId,
+      descricao: "BISCOITO 200 G",
+      nomeCatalogo: null,
+      pesavel: null
+    } as ProdutoDetalhe);
+    expect(legado.nomeCatalogo).toBe("BISCOITO 200 G");
+    expect(legado.pesavel).toBeNull();
+    expect(payloadDoFormulario(legado, empresaId, false, "BISCOITO 200 G 200 G")).toMatchObject({
+      nomeCatalogo: null,
+      descricao: "BISCOITO 200 G",
+      pesavel: null
+    });
+  });
 });

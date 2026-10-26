@@ -48,11 +48,17 @@ const preco = computed(() =>
     <header class="produto-card__topo">
       <div class="produto-card__identidade">
         <div class="produto-card__foto" :class="{ 'produto-card__foto--vazia': !enderecoDaFoto }">
-          <img v-if="enderecoDaFoto" :src="enderecoDaFoto" :alt="produto.descricao" loading="lazy" />
+          <img
+            v-if="enderecoDaFoto"
+            :src="enderecoDaFoto"
+            :alt="produto.nomeCatalogo || produto.descricao"
+            loading="lazy"
+          />
           <v-icon v-else icon="mdi-basket-outline" size="22" />
         </div>
         <div class="produto-card__titulo">
-          <h3 :title="produto.descricao">{{ produto.descricao }}</h3>
+          <h3 :title="produto.descricao">{{ produto.nomeCatalogo || produto.descricao }}</h3>
+          <p v-if="produto.nomeCatalogo" class="produto-card__descricao">{{ produto.descricao }}</p>
           <p class="cx-num">{{ produto.codigoInterno || "sem código" }}</p>
         </div>
       </div>
@@ -172,6 +178,12 @@ const preco = computed(() =>
   margin: 0;
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
+}
+.produto-card__titulo .produto-card__descricao {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .produto-card__status {

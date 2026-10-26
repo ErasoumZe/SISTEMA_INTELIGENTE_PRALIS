@@ -568,6 +568,13 @@
       "when": 1793032170351,
       "tag": "0080_cadastro_produtos_oficial",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "tag": "0081_cadastro_produtos_identidade_pesagem",
+      "breakpoints": true,
+      "when": 1793036657763
     }
   ]
 }
