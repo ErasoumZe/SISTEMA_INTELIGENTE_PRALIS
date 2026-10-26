@@ -117,3 +117,16 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   ao Docker Engine local (pipe sem acesso). A carga de dados e o restante das verticais seguem pendentes.
 - Depois, a regra da frase de compra aproximada passou por lint e check completos; os testes focados
   tiveram 27 aprovações para regras compartilhadas e 2 para o round-trip do formulário.
+- A tela real `https://produtos.cicluzieai.com.br/` foi conferida em 26/10/2026 com sessão autenticada:
+  o catálogo Geral (Base) mostrava 2.366 produtos; a navegação também expunha importação da base,
+  importação e conferência de planilha, Central de Produtos, duplicados históricos, histórico de nomes,
+  manutenção, relatórios de vendas e gerentes, usuários, permissões e régua de pontos. O formulário
+  oficial usa nome + gramatura + medida base + indicador de balança e descrição automática, além de
+  embalagem/compra exata ou aproximada, operação, fiscal e mídia por câmera/galeria com opção de fundo
+  por IA. A API e a branch de origem local não confirmam o SHA atualmente implantado.
+- A comparação com o ERP local revelou que a tela continua sendo a versão antiga: descrição livre e
+  quantidade/unidade individual, sem as abas de catálogo Base/TNP/LI nem a navegação e os fluxos
+  operacionais completos do app oficial. Os cinco commits desta branch são uma base de regras/campos,
+  não uma migração completa da experiência. O banco de desenvolvimento local tem 54 registros de teste,
+  não o catálogo oficial. A migration 0080 foi aplicada somente nesse banco local, após autorização,
+  por 22 `ALTER TABLE ... ADD COLUMN`; não foi aplicada em homologação ou produção.
