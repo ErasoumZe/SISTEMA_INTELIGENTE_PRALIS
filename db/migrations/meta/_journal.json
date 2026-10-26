@@ -582,6 +582,13 @@
       "when": 1793045573575,
       "tag": "0082_cadastro_produtos_historico_nomes",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793047446349,
+      "tag": "0083_curly_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

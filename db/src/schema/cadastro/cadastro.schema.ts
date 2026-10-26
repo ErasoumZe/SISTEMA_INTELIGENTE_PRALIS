@@ -77,3 +77,5 @@ export {
   unidadesMedida,
   usuariosEmpresas
 } from "../app.schema.js";
+
+export * from "./produtos-central.schema.js";

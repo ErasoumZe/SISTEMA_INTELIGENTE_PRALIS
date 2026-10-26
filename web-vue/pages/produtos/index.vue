@@ -115,7 +115,16 @@ onMounted(async () => {
           <h1>Produtos</h1>
           <p>{{ lista.paginacao.total }} produto(s) nesta loja</p>
         </div>
-        <v-btn v-if="podeCriar" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
+        <div class="produtos-tela__acoes">
+          <v-btn
+            v-if="sessao.perfil?.role === 'usuario_admin'"
+            variant="outlined"
+            prepend-icon="mdi-merge"
+            to="/produtos/central"
+            >Central de produtos</v-btn
+          >
+          <v-btn v-if="podeCriar" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
+        </div>
       </header>
 
       <div class="produtos-tela__barra">
@@ -260,6 +269,12 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: var(--cx-sp-3);
+}
+
+.produtos-tela__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .produtos-tela__cabecalho h1 {
   font-size: var(--cx-fs-h2);
