@@ -3,7 +3,7 @@
 > **Atualização 26/10/2026 — R-222:** o app Cadastro de Produtos em uso nas lojas é a fonte oficial
 > para funções e dados, inclusive fiscais. As decisões R-145/R-165 descritas abaixo estão revogadas
 > para o trabalho de integração e preservadas como histórico. Não aposentar o app da loja até a
-> paridade ser entregue e validada. Plano atual: `55_INTEGRACAO_CADASTRO_PRODUTOS_R-222.md`.
+> paridade ser entregue e validada. Plano atual: `56_INTEGRACAO_CADASTRO_PRODUTOS_R-222.md`.
 
 > Escrito em 05/08/2026, resgatando `PROJECT_BRAIN - Copia/62_PRALIS_CADASTRO_PRODUTOS.md` antes de
 > arquivá-lo, **depois de conferir tudo contra o código**.

@@ -9,6 +9,7 @@ import {
 } from "@padaria/db/schema/cadastro";
 import { executarComTransacaoOpcional } from "../banco/conexao.js";
 import type { ExecutorBanco } from "../banco/conexao.js";
+import { sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
 import {
   filtrarOrigemEntidade,
   jaImportado,
@@ -129,6 +130,8 @@ export async function copiarProdutosRepository(
   db?: ExecutorBanco
 ): Promise<ResultadoCopiaProdutos> {
   return executarComTransacaoOpcional(db, async (db) => {
+    // A origem serializa o código entre lojas; manter o mesmo escopo também ao copiar produtos.
+    await db.execute(sqlTravarCadastroDeProdutos());
     // A origem so pode ser lida DENTRO do escopo autorizado: `filtrarOrigemEntidade` cruza o filtro
     // com `empresasPermitidasIds`. Produto de empresa alheia simplesmente nao entra na lista.
     const candidatos = filtro.id
@@ -149,7 +152,7 @@ export async function copiarProdutosRepository(
       const codigoInterno =
         produto.codigoInterno && !internosUsados.has(produto.codigoInterno)
           ? produto.codigoInterno
-          : await proximoCodigoInterno(db, empresaDestinoId);
+          : await proximoCodigoInterno(db);
       internosUsados.add(codigoInterno);
       const [novo] = await db
         .insert(produtos)

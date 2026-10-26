@@ -21,7 +21,7 @@ import {
   carregarProdutoParaEscritaRepository,
   referenciasForaDaEmpresaRepository,
   salvarProdutoRepository,
-  travarCadastroDeProdutosDaEmpresa,
+  travarCadastroDeProdutos,
   type ProdutoParaGravar
 } from "./produtos-escrita.repository.js";
 import {
@@ -207,7 +207,7 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
   validarCoerenciaDoProduto(dados);
 
   return executarEmTransacao(async (tx) => {
-    await travarCadastroDeProdutosDaEmpresa(tx, dados.empresaId);
+    await travarCadastroDeProdutos(tx);
 
     const alvo = id ? await carregarProdutoAlvoValidado(tx, id, dados.empresaId, ator.empresasPermitidas) : null;
 

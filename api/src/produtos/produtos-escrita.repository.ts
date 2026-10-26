@@ -1,5 +1,5 @@
-import { and, eq, ilike, inArray, max, ne } from "drizzle-orm";
-import { sqlTravarCadastroDeProdutosDaEmpresa } from "@padaria/db/sessao";
+import { and, eq, ilike, inArray, ne } from "drizzle-orm";
+import { sqlMaiorCodigoInternoGlobal, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
 import {
   gruposMercadorias,
   perfisUsuarios,
@@ -12,6 +12,7 @@ import {
 } from "@padaria/db/schema/cadastro";
 import { banco } from "../banco/conexao.js";
 import type { ExecutorBanco, TransacaoBanco } from "../banco/conexao.js";
+import { calcularProximoCodigoInterno, ULTIMO_CODIGO_DE_PRODUTO } from "./codigo-interno.js";
 
 // Codigo externo: PR-XXXX-XXXX (alfabeto sem caracteres ambiguos I/O/0/1). Unico global — tenta ate achar livre.
 const ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,25 +35,19 @@ export async function gerarCodigoExternoUnico(tx: ExecutorBanco): Promise<string
   return `PR-${blocoCodigo(4)}-${blocoCodigo(4)}`;
 }
 
-// Codigo interno: sequencial de 5 digitos por empresa (00001, 00002, ...). Zero-padded => max lexicografico = numerico.
-// SO e seguro sob `travarCadastroDeProdutosDaEmpresa`: `max()` nao trava linha nenhuma, entao dois
-// cadastros simultaneos leriam o mesmo maximo.
-export async function proximoCodigoInterno(tx: ExecutorBanco, empresaIdAlvo: string): Promise<string> {
-  const [linha] = await tx
-    .select({ maximo: max(produtos.codigoInterno) })
-    .from(produtos)
-    .where(eq(produtos.empresaId, empresaIdAlvo));
-  const atual = Number(linha?.maximo ?? 0) || 0;
-  return String(atual + 1).padStart(5, "0");
+// Regra R-222: sequência global do app oficial; a consulta ignora a faixa >=700000.
+export async function proximoCodigoInterno(tx: ExecutorBanco): Promise<string> {
+  const [linha] = await tx.select({ maximo: sqlMaiorCodigoInternoGlobal() }).from(produtos);
+  return calcularProximoCodigoInterno(Number(linha?.maximo ?? ULTIMO_CODIGO_DE_PRODUTO));
 }
 
 /**
- * Serializa o cadastro de produtos DA EMPRESA pelo resto da transacao. Precisa vir ANTES de
+ * Serializa o cadastro de produtos globalmente pelo resto da transacao. Precisa vir ANTES de
  * `proximoCodigoInterno` e das buscas de duplicidade — e o que impede que duas requisicoes
  * simultaneas escolham o mesmo codigo interno ou passem as duas pela checagem de duplicado.
  */
-export async function travarCadastroDeProdutosDaEmpresa(tx: TransacaoBanco, empresaId: string): Promise<void> {
-  await tx.execute(sqlTravarCadastroDeProdutosDaEmpresa(empresaId));
+export async function travarCadastroDeProdutos(tx: ExecutorBanco): Promise<void> {
+  await tx.execute(sqlTravarCadastroDeProdutos());
 }
 
 /**
@@ -284,7 +279,7 @@ export async function salvarProdutoRepository(
     // Criacao: codigo externo (PR-XXXX-XXXX) se nao veio manual; codigo interno sequencial
     // (ou herdado na importacao), escolhido sob a trava da empresa.
     const codigo = valores.codigo || (await gerarCodigoExternoUnico(tx));
-    const codigoInterno = input.codigoInterno ?? (await proximoCodigoInterno(tx, input.empresaId));
+    const codigoInterno = input.codigoInterno ?? (await proximoCodigoInterno(tx));
     const inserido = await tx
       .insert(produtos)
       .values({

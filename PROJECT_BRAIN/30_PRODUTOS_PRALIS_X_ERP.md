@@ -11,7 +11,7 @@
 > Isso revoga as conclusões conflitantes da R-145/R-165 abaixo, que ficam preservadas apenas como
 > histórico. O app standalone não pode ser considerado aposentado até a paridade ser entregue e
 > verificada. A origem de código consultada é `SISTEMA_PRALIS@1ba6774`; confirmar o SHA real de produção
-> antes de qualquer carga. Ver R-222 em `19_REGISTRO_DE_REGRAS.md`.
+> antes de qualquer carga. Ver R-222 em `19_REGISTRO_DE_REGRAS.md` e plano `56`.
 
 ---
 

@@ -1373,9 +1373,9 @@ histórico e fluxos de loja, adaptando autenticação, permissões, empresas e p
 O código interno deve seguir a regra vigente no código-fonte oficial do app: usar o maior código
 numérico dentro da faixa de produto, ignorar códigos a partir de 700000, respeitar 13129 como piso
 histórico e gerar o próximo com no mínimo cinco dígitos. Cópias para lojas devem preservar o código
-interno de origem quando não houver conflito, como no app oficial. Antes de alterar o gerador do ERP,
-validar concorrência, escopo entre empresas e colisões contra o catálogo real; não renumerar códigos
-existentes automaticamente.
+interno de origem quando não houver conflito, como no app oficial. A implementação deve validar
+concorrência e escopo entre empresas. Antes de habilitar a nova sequência no ambiente compartilhado,
+conferir os códigos existentes e possíveis colisões; desenvolvimento e testes não renumeram registros.
 
 Dados fiscais devem ser copiados literalmente do app de origem, sem inferência ou preenchimento por
 semelhança. Ausências permanecem ausentes e entram em relatório de pendências. Importação, migração,

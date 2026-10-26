@@ -201,6 +201,34 @@ describe("produtos - isolamento entre empresas", () => {
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 
+  it("Deve_GerarCodigosInternosGlobaisUnicos_EmCadastrosConcorrentesDeLojasDiferentes", async () => {
+    const criar = (empresaId: string, unidadeIndividualId: string, descricao: string) =>
+      contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos",
+        headers: { cookie: cookieMultiempresa },
+        payload: { empresaId, descricao, unidadeIndividualId, quantidadeIndividual: 1, conversoes: [] }
+      });
+
+    const [respostaA, respostaB] = await Promise.all([
+      criar(idsTeste.empresaA, unidadeA, "Código global concorrente loja A"),
+      criar(idsTeste.empresaB, unidadeB, "Código global concorrente loja B")
+    ]);
+    expect(respostaA.statusCode).toBe(201);
+    expect(respostaB.statusCode).toBe(201);
+
+    const idA = json<RespostaId>(respostaA).data.id;
+    const idB = json<RespostaId>(respostaB).data.id;
+    const codigos = await consultarUm<{ codigo_a: string; codigo_b: string }>(
+      "select a.codigo_interno as codigo_a, b.codigo_interno as codigo_b from produtos a cross join produtos b where a.id = $1 and b.id = $2",
+      [idA, idB]
+    );
+    expect(codigos).toBeTruthy();
+    expect(Number(codigos?.codigo_a)).toBeGreaterThanOrEqual(13_130);
+    expect(Number(codigos?.codigo_b)).toBeGreaterThanOrEqual(13_130);
+    expect(codigos?.codigo_a).not.toBe(codigos?.codigo_b);
+  });
+
   it("Deve_Recusar_Quando_GrupoDeMercadoriaEDeOutraEmpresa", async () => {
     const grupoB = await contexto.app.inject({
       method: "POST",

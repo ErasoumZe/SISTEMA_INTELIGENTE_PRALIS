@@ -1,4 +1,4 @@
-# 55 · Integração do Cadastro de Produtos em uso nas lojas
+# 56 · Integração do Cadastro de Produtos em uso nas lojas
 
 **Regra de produto:** R-222 (José, 26/10/2026). **Branch de trabalho:** `feat/cadastro-produtos-integracao`.
 
@@ -36,16 +36,16 @@ não contagem atual do banco; dry-run deverá recalculá-los. Código fiscal aus
 
 ## Inventário preliminar de paridade
 
-| Área                                    | Já existe no ERP                                                             | Origem oficial / trabalho de integração                                                                                                                                      |
-| --------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cadastro e consulta                     | CRUD, listagem/busca, foto, scanner, código de barras, conversões e unidades | comparar campos, validação e regras de nome/código; fechar diferenças sem duplicar telas/rotas                                                                               |
-| Fiscal e promoções                      | seção fiscal/promoções e tabelas `produtos_fiscal`, `produtos_promocoes`     | comparar schema e regras de ida/volta; preservar conteúdo fiscal sem transformação                                                                                           |
-| Comercial e estoque                     | custo, margem, preço, mínimo/máximo, áreas/setores e saldo                   | mapear campos que são catálogo versus saldo operacional; saldo da loja fonte não pode virar movimento do ERP                                                                 |
-| Transformação                           | tipo e receita/transformação                                                 | comparar unidades, precisão, quantidades e relações; adaptar sem cruzar tenant                                                                                               |
-| Código interno                          | atual sequência de cinco dígitos por empresa                                 | divergência: origem usa sequência global com piso/teto; validar catálogo ERP e unicidade antes de alterar o gerador                                                          |
-| Central e reconciliação                 | não identificado equivalente completo no ERP                                 | portar classificação de grupo, conciliação, divergências, duplicidades e histórico, sem perda de evidência                                                                   |
-| SIA / planilhas / importação-exportação | existem importações distintas do ERP                                         | inventariar contratos e arquivos oficiais, idempotência, permissões e relatórios; remover o seed antigo como fonte concorrente quando a substituição vertical estiver pronta |
-| Histórico e governança                  | auditoria básica no cadastro                                                 | portar trilha reversível de alterações relevantes, autorização e relatórios de operação                                                                                      |
+| Área                                    | Já existe no ERP                                                             | Origem oficial / trabalho de integração                                                                                                                                                     |
+| --------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cadastro e consulta                     | CRUD, listagem/busca, foto, scanner, código de barras, conversões e unidades | comparar campos, validação e regras de nome/código; fechar diferenças sem duplicar telas/rotas                                                                                              |
+| Fiscal e promoções                      | seção fiscal/promoções e tabelas `produtos_fiscal`, `produtos_promocoes`     | comparar schema e regras de ida/volta; preservar conteúdo fiscal sem transformação                                                                                                          |
+| Comercial e estoque                     | custo, margem, preço, mínimo/máximo, áreas/setores e saldo                   | mapear campos que são catálogo versus saldo operacional; saldo da loja fonte não pode virar movimento do ERP                                                                                |
+| Transformação                           | tipo e receita/transformação                                                 | comparar unidades, precisão, quantidades e relações; adaptar sem cruzar tenant                                                                                                              |
+| Código interno                          | sequência antiga de cinco dígitos por empresa                                | origem usa sequência global, piso 13129 e faixa >=700000 reservada; gerador foi atualizado com trava global, sem renumerar registros; conferir catálogo antes de habilitar via merge/deploy |
+| Central e reconciliação                 | não identificado equivalente completo no ERP                                 | portar classificação de grupo, conciliação, divergências, duplicidades e histórico, sem perda de evidência                                                                                  |
+| SIA / planilhas / importação-exportação | existem importações distintas do ERP                                         | inventariar contratos e arquivos oficiais, idempotência, permissões e relatórios; remover o seed antigo como fonte concorrente quando a substituição vertical estiver pronta                |
+| Histórico e governança                  | auditoria básica no cadastro                                                 | portar trilha reversível de alterações relevantes, autorização e relatórios de operação                                                                                                     |
 
 Arquivos representativos da origem em `origin/main`: `stack/api/src/modules/product/` contém CRUD,
 código interno, carga-base, cadastro de código, import/export, reconciliação, histórico e fluxo de zerar;
@@ -57,9 +57,10 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
 1. **Baseline e contrato (em andamento):** confirmar SHA implantado; fechar matriz campo-a-campo e
    rotas; comparar migrations/schema; conferir regras de permissão, tenant e fluxo antigo. Sem escrita
    no banco.
-2. **Identidade e código interno:** gerar relatório local/seguro de valores atuais e colisões entre
-   empresas; implementar sequência da origem com lock concorrente e testes, preservando códigos
-   existentes e cópia entre lojas. Gate: nenhuma colisão ou renumeração silenciosa.
+2. **Identidade e código interno:** sequência da origem com lock concorrente e testes está implementada
+   nesta branch; gerar relatório seguro de valores e colisões entre empresas antes de habilitar na
+   instalação compartilhada. Preservar códigos existentes e cópia entre lojas. Gate: nenhuma colisão
+   nem renumeração silenciosa.
 3. **Catálogo vertical:** reconciliar CRUD, busca, foto, scanner, códigos de barras, unidades,
    transformação, comercial e fiscal no backend, schema e UI; um único caminho para cada operação.
 4. **Central e reconciliação:** grupos, diferenças, duplicidades, aprovações, histórico e resolução
@@ -76,8 +77,11 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
 ## Estado em 26/10/2026
 
 - PR de Compras #205 está em branch/PR separado; não misturar com esta entrega.
-- Branch de Produtos foi criada sobre `main` `80eccf85` e não tem alterações de aplicação até agora.
-- R-222 e esta documentação registram a decisão e o plano. Código interno do ERP ainda não foi alterado,
-  porque não foi possível consultar o catálogo real do ERP para quantificar colisões e confirmar o SHA
-  implantado da origem.
+- Branch de Produtos foi criada sobre `main` `80eccf85`; R-222 e este plano estão commitados em
+  `5088f967`.
+- O gerador de código interno da branch já segue o piso/faixa do app, serializa lojas e não renumera
+  registros. O catálogo compartilhado ainda não foi consultado; revisar os códigos antes de merge/deploy.
+- Validação da fatia do código interno: teste unitário 4/4, `lint` e `check` completos passaram. O teste
+  de integração multiempresa foi escrito e typechecked, mas não executou localmente porque Testcontainers
+  não encontrou runtime Docker disponível.
 - Nenhuma migration foi criada/aplicada e nenhum dado foi importado.
