@@ -172,6 +172,10 @@ export const produtosListaQuerySchema = empresaQuerySchema.extend({
   tipo: tipoProdutoSchema.optional(),
   grupoMercadoriaId: uuidSchema.optional(),
   setorEstoque: z.string().trim().max(120).optional(),
+  somenteVendidos: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((valor) => valor === "true"),
   ordenar: ordenacaoProdutosSchema
 });
 

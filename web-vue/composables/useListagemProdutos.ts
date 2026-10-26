@@ -33,7 +33,8 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   const erro = ref("");
 
   const busca = ref("");
-  const status = ref<string | null>(null);
+  const status = ref<string | null>("ativo");
+  const somenteVendidos = ref(false);
   const tipo = ref<string | null>(null);
   const grupoMercadoriaId = ref<string | null>(null);
   const setorEstoque = ref<string | null>(null);
@@ -44,13 +45,19 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   /** Quantos filtros estao ativos — vira o contador no botao "Filtros". */
   const quantidadeDeFiltros = computed(
     () =>
-      [status.value, tipo.value, grupoMercadoriaId.value, setorEstoque.value].filter(Boolean).length +
-      (ordenar.value === "recentes" ? 0 : 1)
+      [
+        status.value && status.value !== "ativo" ? status.value : null,
+        tipo.value,
+        grupoMercadoriaId.value,
+        setorEstoque.value,
+        somenteVendidos.value
+      ].filter(Boolean).length + (ordenar.value === "recentes" ? 0 : 1)
   );
   const temFiltroOuBusca = computed(() => quantidadeDeFiltros.value > 0 || Boolean(busca.value));
 
   function limparFiltros() {
-    status.value = null;
+    status.value = "ativo";
+    somenteVendidos.value = false;
     tipo.value = null;
     grupoMercadoriaId.value = null;
     setorEstoque.value = null;
@@ -67,6 +74,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     });
     if (busca.value.trim()) parametros.set("busca", busca.value.trim());
     if (status.value) parametros.set("status", status.value);
+    if (somenteVendidos.value) parametros.set("somenteVendidos", "true");
     if (tipo.value) parametros.set("tipo", tipo.value);
     if (grupoMercadoriaId.value) parametros.set("grupoMercadoriaId", grupoMercadoriaId.value);
     if (setorEstoque.value) parametros.set("setorEstoque", setorEstoque.value);
@@ -110,7 +118,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
       void carregar();
     }, ATRASO_DA_BUSCA);
   });
-  watch([status, tipo, grupoMercadoriaId, setorEstoque, ordenar], () => {
+  watch([status, somenteVendidos, tipo, grupoMercadoriaId, setorEstoque, ordenar], () => {
     paginacao.page = 1;
     void carregar();
   });
@@ -134,6 +142,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     erro,
     busca,
     status,
+    somenteVendidos,
     tipo,
     grupoMercadoriaId,
     setorEstoque,

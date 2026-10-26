@@ -1,0 +1,137 @@
+<script setup lang="ts">
+import type { ProdutoResumo } from "@padaria/shared/produtos";
+
+defineProps<{
+  produto: ProdutoResumo;
+  podeEditar: boolean;
+}>();
+</script>
+
+<template>
+  <article class="produto-linha" role="listitem">
+    <div class="produto-linha__identidade">
+      <div class="produto-linha__avatar" aria-hidden="true">
+        {{ (produto.nomeCatalogo || produto.descricao).trim().charAt(0).toLocaleUpperCase("pt-BR") || "•" }}
+      </div>
+      <div class="produto-linha__texto">
+        <h2>{{ produto.nomeCatalogo || produto.descricao }}</h2>
+        <p class="cx-num">{{ produto.codigoInterno || produto.codigo || "Sem código" }}</p>
+      </div>
+    </div>
+    <div class="produto-linha__detalhes">
+      <span>{{ produto.marca || "Sem marca" }}</span>
+      <span>{{ produto.quantidadeIndividual }} {{ produto.unidadeIndividualSigla || "" }}</span>
+      <span class="produto-linha__status" :class="produto.status === 'ativo' ? 'is-ativo' : 'is-inativo'">
+        {{ produto.status === "ativo" ? "Ativo" : "Inativo" }}
+      </span>
+    </div>
+    <div class="produto-linha__acao">
+      <strong v-if="produto.precoVendaAtual != null" class="cx-num">
+        {{ produto.precoVendaAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }}
+      </strong>
+      <span v-else class="produto-linha__sem-preco">Sem preço</span>
+      <v-btn
+        size="small"
+        variant="text"
+        :prepend-icon="podeEditar ? 'mdi-pencil-outline' : 'mdi-eye-outline'"
+        :aria-label="`${podeEditar ? 'Editar' : 'Ver'} ${produto.nomeCatalogo || produto.descricao}`"
+        :to="`/produtos/${produto.id}`"
+      >
+        {{ podeEditar ? "Editar" : "Ver" }}
+      </v-btn>
+    </div>
+  </article>
+</template>
+
+<style scoped>
+.produto-linha {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: var(--cx-sp-3);
+  min-width: 0;
+  padding: var(--cx-sp-3) var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface);
+}
+.produto-linha__identidade,
+.produto-linha__detalhes,
+.produto-linha__acao {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-3);
+  min-width: 0;
+}
+.produto-linha__avatar {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-weight: 700;
+}
+.produto-linha__texto {
+  min-width: 0;
+}
+.produto-linha__texto h2,
+.produto-linha__texto p {
+  margin: 0;
+}
+.produto-linha__texto h2 {
+  overflow: hidden;
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.produto-linha__texto p,
+.produto-linha__detalhes,
+.produto-linha__sem-preco {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.produto-linha__detalhes {
+  flex-wrap: wrap;
+}
+.produto-linha__status {
+  padding: 2px var(--cx-sp-2);
+  border-radius: var(--cx-r-pill);
+  font-size: var(--cx-fs-micro);
+  font-weight: 600;
+}
+.produto-linha__status.is-ativo {
+  color: var(--cx-positive);
+}
+.produto-linha__status.is-inativo {
+  color: var(--cx-ink-soft);
+}
+.produto-linha__acao {
+  justify-content: flex-end;
+}
+.produto-linha__acao strong {
+  color: var(--cx-ink);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .produto-linha {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--cx-sp-2);
+    padding: var(--cx-sp-3);
+  }
+  .produto-linha__identidade {
+    grid-column: 1 / -1;
+  }
+  .produto-linha__detalhes {
+    gap: var(--cx-sp-2);
+  }
+  .produto-linha__acao {
+    gap: var(--cx-sp-1);
+  }
+}
+</style>

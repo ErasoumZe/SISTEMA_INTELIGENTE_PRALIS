@@ -19,6 +19,11 @@ import {
  */
 
 test.beforeEach(async ({ page }) => {
+  // A stack de E2E pode bloquear a saída para Google Fonts. A fonte não participa do contrato
+  // funcional e seu erro de rede não deve invalidar as verificações de console da página.
+  await page.route("https://fonts.googleapis.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/css", body: "" })
+  );
   await entrar(page, USUARIOS.admin);
 });
 
@@ -43,6 +48,35 @@ test("mostra mais de uma pagina e a segunda tem produtos diferentes", async ({ p
   // Nenhum produto se repete entre as paginas: prova que o corte e do banco, nao da tela.
   expect(segundaPagina.filter((nome) => primeiraPagina.includes(nome))).toEqual([]);
   expect(problemas).toEqual([]);
+});
+
+test("alterna entre cards e lista sem perder o recorte carregado", async ({ page }) => {
+  await page.goto("/produtos");
+  await esperarListagem(page);
+
+  const total = await totalDaListagem(page);
+  const primeiroProduto = (await page.locator(".produto-card h3").first().textContent())?.trim();
+  expect(primeiroProduto).toBeTruthy();
+
+  await page.getByRole("button", { name: "Ver em lista" }).click();
+  await expect(page.locator(".produto-linha")).toHaveCount(Math.min(total, 12));
+  await expect(page.locator(".produto-linha h2").first()).toHaveText(primeiroProduto!);
+
+  await page.getByRole("button", { name: "Ver em cards" }).click();
+  await expect(page.locator(".produto-card h3").first()).toHaveText(primeiroProduto!);
+});
+
+test("filtro de vendidos envia o recorte para a API", async ({ page }) => {
+  await page.goto("/produtos");
+  await esperarListagem(page);
+
+  const resposta = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/produtos" && url.searchParams.get("somenteVendidos") === "true";
+  });
+  await page.getByLabel("Só os que já vendi").check();
+  await resposta;
+  await expect(page.getByLabel("Só os que já vendi")).toBeChecked();
 });
 
 test("busca no servidor reduz o resultado e limpar devolve o total", async ({ page }) => {
@@ -77,10 +111,14 @@ test("filtro de status devolve so o status pedido e o contador acompanha", async
   await page.goto("/produtos");
   await esperarListagem(page);
 
+  // O catálogo oficial abre em "Só ativos"; desmarque para provar a aplicação explícita do filtro.
+  await page.getByLabel("Só ativos").uncheck();
+
   await page.getByRole("button", { name: "Filtros" }).click();
   await page.getByRole("button", { name: "Ativos", exact: true }).click();
 
-  await expect(page.locator(".produtos-tela__barra .v-chip")).toHaveText("1");
+  await expect(page.locator(".produtos-tela__barra .v-chip")).toHaveCount(0);
+  await expect(page.getByLabel("Só ativos")).toBeChecked();
   const status = await page.locator(".produto-card__status").allTextContents();
   expect(status.length).toBeGreaterThan(0);
   expect(status.every((s) => s.trim() === "Ativo")).toBe(true);
@@ -88,6 +126,7 @@ test("filtro de status devolve so o status pedido e o contador acompanha", async
   // Clicar de novo na mesma pilula LIMPA o filtro — o gesto herdado do app antigo.
   await page.getByRole("button", { name: "Ativos", exact: true }).click();
   await expect(page.locator(".produtos-tela__barra .v-chip")).toHaveCount(0);
+  await expect(page.getByLabel("Só ativos")).not.toBeChecked();
 });
 
 test("filtros combinam e o contador soma", async ({ page }) => {
@@ -133,6 +172,9 @@ test("nao existe botao de excluir produto — produto e inativado", async ({ pag
 for (const { nome, largura, altura } of LARGURAS) {
   test(`listagem sem rolagem horizontal em ${largura}px (${nome})`, async ({ page }) => {
     const problemas = observarConsole(page);
+    page.on("response", (response) => {
+      if (response.status() >= 500) problemas.push(`HTTP ${response.status()}: ${response.url()}`);
+    });
     await page.setViewportSize({ width: largura, height: altura });
     await page.goto("/produtos");
     await esperarListagem(page);
@@ -144,10 +186,27 @@ for (const { nome, largura, altura } of LARGURAS) {
       const grade = document.querySelector(".produtos-tela__grade");
       return grade ? getComputedStyle(grade).gridTemplateColumns.split(" ").length : 0;
     });
-    if (largura >= 1440) expect(colunas).toBe(3);
+    if (largura > 1024) expect(colunas).toBe(3);
     else if (largura <= 600) expect(colunas).toBe(1);
     else expect(colunas).toBe(2);
 
+    expect(problemas).toEqual([]);
+  });
+}
+
+for (const { nome, largura, altura } of LARGURAS) {
+  test(`modo lista sem rolagem horizontal em ${largura}px (${nome})`, async ({ page }) => {
+    const problemas = observarConsole(page);
+    page.on("response", (response) => {
+      if (response.status() >= 500) problemas.push(`HTTP ${response.status()}: ${response.url()}`);
+    });
+    await page.setViewportSize({ width: largura, height: altura });
+    await page.goto("/produtos");
+    await esperarListagem(page);
+    await page.getByRole("button", { name: "Ver em lista" }).click();
+
+    await expect(page.locator(".produto-linha").first()).toBeVisible();
+    await semRolagemHorizontal(page);
     expect(problemas).toEqual([]);
   });
 }

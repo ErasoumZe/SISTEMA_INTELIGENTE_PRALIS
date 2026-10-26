@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { json } from "../../setup/integracao.js";
+import { executarSql, json } from "../../setup/integracao.js";
 
 /**
  * Listagem, busca, filtros, ordenacao, detalhe e projecao reduzida (P-04, ETAPA 3).
@@ -40,6 +41,7 @@ describe("produtos - listagem paginada no banco", () => {
   let unidadeId: string;
   let grupoId: string;
   const criados: string[] = [];
+  const linhasDeVendaTeste: string[] = [];
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -83,9 +85,35 @@ describe("produtos - listagem paginada no banco", () => {
       expect(resposta.statusCode).toBe(201);
       criados.push(json<RespostaId>(resposta).data.id);
     }
+
+    // Reproduz os dois vínculos reconhecidos pela fonte oficial: produto_id e EAN do PDV,
+    // incluindo zeros à esquerda. A linha cancelada não deve contar como venda.
+    const linhaProduto = randomUUID();
+    const linhaEan = randomUUID();
+    const linhaCancelada = randomUUID();
+    linhasDeVendaTeste.push(linhaProduto, linhaEan, linhaCancelada);
+    await executarSql("UPDATE produtos SET codigo_barras = $2 WHERE id = $1", [criados[1], "0009876543210"]);
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_id, descricao_produto)
+       VALUES ($1, $2, $3, 'Listagem produto vinculado')`,
+      [linhaProduto, idsTeste.vendaSeed, criados[4]]
+    );
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_automacao_codigo, descricao_produto)
+       VALUES ($1, $2, '9876543210', 'Listagem por EAN do PDV')`,
+      [linhaEan, idsTeste.vendaSeed]
+    );
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_id, descricao_produto, cancelado)
+       VALUES ($1, $2, $3, 'Listagem item cancelado', true)`,
+      [linhaCancelada, idsTeste.vendaSeed, criados[2]]
+    );
   }, 240_000);
 
   afterAll(async () => {
+    if (linhasDeVendaTeste.length) {
+      await executarSql("DELETE FROM vendas_produtos WHERE id = ANY($1::uuid[])", [linhasDeVendaTeste]);
+    }
     await contexto.fechar();
   });
 
@@ -143,6 +171,19 @@ describe("produtos - listagem paginada no banco", () => {
 
     const porSetor = await listar({ setorEstoque: "LJ - CAIXAS", pageSize: 50 });
     expect(porSetor.meta.pagination.total).toBe(Math.ceil(TOTAL / 2));
+  });
+
+  it("Deve_FiltrarProdutosJaVendidosPorVinculoOuEAN_EIgnorarCancelados", async () => {
+    const vendidos = await listar({ somenteVendidos: "true", status: "ativo", pageSize: 50 });
+    const idsVendidos = new Set(vendidos.data.map((item) => item.id));
+
+    expect(idsVendidos.has(criados[4] ?? "")).toBe(true);
+    expect(idsVendidos.has(criados[1] ?? "")).toBe(true);
+    expect(idsVendidos.has(criados[2] ?? "")).toBe(false);
+    expect(vendidos.meta.pagination.total).toBe(2);
+
+    const todos = await listar({ somenteVendidos: "false", status: "ativo", pageSize: 50 });
+    expect(todos.meta.pagination.total).toBeGreaterThan(vendidos.meta.pagination.total);
   });
 
   it("Deve_AplicarAsSeisOrdenacoes", async () => {

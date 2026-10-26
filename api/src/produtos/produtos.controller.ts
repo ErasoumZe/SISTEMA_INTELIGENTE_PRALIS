@@ -95,6 +95,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         tipo: query.tipo,
         grupoMercadoriaId: query.grupoMercadoriaId,
         setorEstoque: query.setorEstoque,
+        somenteVendidos: query.somenteVendidos,
         ordenar: query.ordenar,
         page: query.page,
         pageSize: query.pageSize

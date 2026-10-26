@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, ilike, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
+import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
 import type { OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
 import {
   gruposMercadorias,
@@ -7,6 +8,7 @@ import {
   produtosPromocoes,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
+import { vendas, vendasProdutos } from "@padaria/db/schema/venda";
 import { banco } from "../banco/conexao.js";
 
 /**
@@ -27,6 +29,7 @@ export interface FiltroListaProdutos {
   tipo?: string | undefined;
   grupoMercadoriaId?: string | undefined;
   setorEstoque?: string | undefined;
+  somenteVendidos?: boolean | undefined;
   ordenar: OrdenacaoProdutos;
   page: number;
   pageSize: number;
@@ -38,6 +41,31 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
   if (filtro.tipo) condicoes.push(eq(produtos.tipo, filtro.tipo));
   if (filtro.grupoMercadoriaId) condicoes.push(eq(produtos.grupoMercadoriaId, filtro.grupoMercadoriaId));
   if (filtro.setorEstoque) condicoes.push(eq(produtos.setorEstoque, filtro.setorEstoque));
+  if (filtro.somenteVendidos) {
+    const codigoBarrasCorrespondente = and(
+      isNotNull(produtos.codigoBarras),
+      eq(
+        codigoBarrasSemZerosIniciais(vendasProdutos.produtoAutomacaoCodigo),
+        codigoBarrasSemZerosIniciais(produtos.codigoBarras)
+      )
+    );
+    condicoes.push(
+      exists(
+        banco
+          .select({ encontrado: vendasProdutos.id })
+          .from(vendasProdutos)
+          .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+          .where(
+            and(
+              eq(vendas.empresaId, produtos.empresaId),
+              ne(vendas.status, "cancelado"),
+              eq(vendasProdutos.cancelado, false),
+              or(eq(vendasProdutos.produtoId, produtos.id), codigoBarrasCorrespondente)
+            )
+          )
+      )
+    );
+  }
   if (filtro.busca) {
     const termo = termoDeBusca(filtro.busca);
     condicoes.push(

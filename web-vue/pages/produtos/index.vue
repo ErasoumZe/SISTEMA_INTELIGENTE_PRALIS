@@ -10,6 +10,7 @@ import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoCard from "~/components/produtos/ProdutoCard.vue";
 import ProdutoFiltros from "~/components/produtos/ProdutoFiltros.vue";
+import ProdutoListaLinha from "~/components/produtos/ProdutoListaLinha.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useListagemProdutos } from "~/composables/useListagemProdutos";
 import { mensagemErro } from "~/utils/domain";
@@ -25,6 +26,7 @@ const carregandoPagina = ref(true);
 const trocandoEmpresa = ref(false);
 const erroDeAcesso = ref("");
 const mostrarFiltros = ref(false);
+const modoVisualizacao = ref<"cards" | "lista">("cards");
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
@@ -35,6 +37,12 @@ const podeCriar = computed(() => temPermissao("cadastro_produtos_criar"));
 const podeEditar = computed(() => temPermissao("cadastro_produtos_editar"));
 
 const lista = useListagemProdutos(empresaId);
+const soAtivos = computed({
+  get: () => lista.status.value === "ativo",
+  set: (marcado: boolean) => {
+    lista.status.value = marcado ? "ativo" : null;
+  }
+});
 
 async function trocarEmpresa(id: string) {
   trocandoEmpresa.value = true;
@@ -102,6 +110,20 @@ onMounted(async () => {
           prepend-inner-icon="mdi-magnify"
           class="produtos-tela__busca"
         />
+        <v-checkbox
+          v-model="soAtivos"
+          label="Só ativos"
+          density="compact"
+          hide-details
+          class="produtos-tela__so-ativos"
+        />
+        <v-checkbox
+          v-model="lista.somenteVendidos.value"
+          label="Só os que já vendi"
+          density="compact"
+          hide-details
+          class="produtos-tela__so-vendidos"
+        />
         <v-btn
           variant="outlined"
           prepend-icon="mdi-tune"
@@ -115,6 +137,26 @@ onMounted(async () => {
             {{ lista.quantidadeDeFiltros.value }}
           </v-chip>
         </v-btn>
+        <div class="produtos-tela__visualizacao" role="group" aria-label="Modo de visualização">
+          <v-btn
+            icon="mdi-view-grid-outline"
+            size="small"
+            variant="outlined"
+            aria-label="Ver em cards"
+            :aria-pressed="modoVisualizacao === 'cards'"
+            :color="modoVisualizacao === 'cards' ? 'primary' : undefined"
+            @click="modoVisualizacao = 'cards'"
+          />
+          <v-btn
+            icon="mdi-view-list-outline"
+            size="small"
+            variant="outlined"
+            aria-label="Ver em lista"
+            :aria-pressed="modoVisualizacao === 'lista'"
+            :color="modoVisualizacao === 'lista' ? 'primary' : undefined"
+            @click="modoVisualizacao = 'lista'"
+          />
+        </div>
       </div>
 
       <v-expand-transition>
@@ -141,8 +183,17 @@ onMounted(async () => {
         </div>
       </v-alert>
 
-      <div v-else-if="lista.produtos.value.length" class="produtos-tela__grade">
+      <div v-else-if="lista.produtos.value.length && modoVisualizacao === 'cards'" class="produtos-tela__grade">
         <ProdutoCard
+          v-for="produto in lista.produtos.value"
+          :key="produto.id"
+          :produto="produto"
+          :pode-editar="podeEditar"
+        />
+      </div>
+
+      <div v-else-if="lista.produtos.value.length" class="produtos-tela__lista" role="list" aria-label="Produtos">
+        <ProdutoListaLinha
           v-for="produto in lista.produtos.value"
           :key="produto.id"
           :produto="produto"
@@ -215,7 +266,16 @@ onMounted(async () => {
   min-width: 0;
   max-width: 420px;
 }
-
+.produtos-tela__visualizacao {
+  display: flex;
+  gap: var(--cx-sp-1);
+  margin-left: auto;
+}
+.produtos-tela__lista {
+  display: grid;
+  gap: var(--cx-sp-2);
+  min-width: 0;
+}
 /* Progressao 3 -> 2 -> 1. O passo de 2 colunas existe porque 3 em tablet aperta o preco. */
 .produtos-tela__grade {
   display: grid;
@@ -231,6 +291,9 @@ onMounted(async () => {
 @media (max-width: 600px) {
   .produtos-tela__grade {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .produtos-tela__visualizacao {
+    margin-left: 0;
   }
 }
 

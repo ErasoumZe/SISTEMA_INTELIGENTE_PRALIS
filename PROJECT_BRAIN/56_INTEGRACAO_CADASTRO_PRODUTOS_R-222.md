@@ -200,3 +200,26 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   duplicados e conflitos por empresa. Não houve download/exportação nem escrita de catálogo nesta
   conferência. A carga seguirá dependendo de backup validado, plano de reversão e autorização
   específica, conforme R-222.
+
+### Fonte de código e fatia de listagem (26/10/2026, continuação)
+
+- Consulta ao repositório GitHub `ErasoumZe/SISTEMA_PRALIS_PRODUTOS` confirmou que a `main` disponível
+  está no SHA `1ba67740527f1c9c348d8b013c088af4f12f40c1`, commit de 13/10/2026. Como a tela autenticada
+  foi observada em 26/10 e o SHA implantado não foi identificado, esse código é referência parcial,
+  não prova da versão hoje em produção.
+- A fonte disponível define “Só os que já vendi” como correspondência do produto ou do EAN do PDV
+  com zeros à esquerda removidos. A fatia adicionada ao ERP mantém paginação e escopo por empresa,
+  ignora item e venda cancelados, e não presume janela temporal. O ERP não possui o de/para oficial
+  de códigos CREARE nesta entrega; itens sem `produto_id` ou EAN correspondente continuarão fora do
+  filtro até esse vínculo ser integrado.
+- A listagem do ERP recebeu filtro de ativos inicial e alternância cards/lista, além do filtro de
+  vendidos com suporte de API e teste de integração. Isso aproxima a tela, mas não completa a
+  paridade dos catálogos Base/TNP/LI, Central, histórico, importações, permissões, relatórios e mídia.
+- Validação local desta fatia: `npm run lint`, `npm run check` e 13 testes de integração de listagem
+  passaram. A suíte E2E teve 24/25 aprovados na primeira execução; o único restante reportou uma
+  resposta 500 transitória em `/api/caixa/status` (fora do módulo Produtos) e passou ao ser repetido
+  isoladamente. Os testes
+  responsivos cobrem cards e lista em 1440, 1366, 1024, 768, 412, 390, 360 e 844 px sem overflow.
+- A fonte de dados completa segue pendente: SHA implantado e exportação autenticada atual precisam
+  ser confirmados. Nenhuma carga de catálogo foi executada; 0080 e 0081 continuam aplicadas apenas
+  no banco local de desenvolvimento. Não foi criada nova migration.
