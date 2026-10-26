@@ -10,7 +10,6 @@ function item(
   overrides: Partial<ItemFonteCentral> & Pick<ItemFonteCentral, "id" | "fonte" | "loja" | "nome">
 ): ItemFonteCentral {
   return {
-    idSistema: undefined,
     codigoInterno: "",
     codigoBarras: "",
     ativo: null,

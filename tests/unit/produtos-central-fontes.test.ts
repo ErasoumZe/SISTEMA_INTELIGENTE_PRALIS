@@ -15,7 +15,7 @@ describe("leitura de arquivos da Central de Produtos", () => {
       custo: null,
       fiscal: null
     });
-    expect(resultado[0]?.raw.NOME).toBe("CAFÉ; MOÍDO");
+    expect(resultado[0]?.raw["NOME"]).toBe("CAFÉ; MOÍDO");
   });
 
   it("preserva conteúdo fiscal da origem literalmente e deixa demais campos ausentes como null", () => {
