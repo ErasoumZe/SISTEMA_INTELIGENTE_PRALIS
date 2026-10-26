@@ -248,6 +248,36 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "admissoes_processos_visualizar",
     icone: "mdi-clipboard-account"
   },
+  conplus_folha_05: {
+    id: "conplus_folha_05",
+    titulo: "Folha de pagamento — Dia 05",
+    permissao: "conplus_importacoes_visualizar",
+    icone: "mdi-cash-multiple"
+  },
+  conplus_adiantamento_20: {
+    id: "conplus_adiantamento_20",
+    titulo: "Adiantamento — Dia 20",
+    permissao: "conplus_importacoes_visualizar",
+    icone: "mdi-calendar-arrow-right"
+  },
+  conplus_rescisoes: {
+    id: "conplus_rescisoes",
+    titulo: "Rescisões",
+    permissao: "conplus_importacoes_visualizar",
+    icone: "mdi-file-document-remove-outline"
+  },
+  conplus_ferias: {
+    id: "conplus_ferias",
+    titulo: "Férias",
+    permissao: "conplus_importacoes_visualizar",
+    icone: "mdi-beach"
+  },
+  conplus_exportar: {
+    id: "conplus_exportar",
+    titulo: "Exportações Questor",
+    permissao: "conplus_exportar_admissoes",
+    icone: "mdi-file-export-outline"
+  },
   folha_ponto: {
     id: "folha_ponto",
     titulo: "Folhas de ponto",
@@ -611,6 +641,8 @@ export const secoesPermissoes = [
     titulo: "Pessoas e departamento pessoal",
     prefixos: [
       "admissoes_",
+      // Importações, exportações e configuração Conplus/Questor são atos do DP.
+      "conplus_",
       "cadastro_colaboradores",
       "cadastro_areas_setores",
       "cadastro_turnos",
@@ -1007,7 +1039,14 @@ export function formCadastroDeLinha(
 }
 
 export function rotaTela(tela: string) {
-  return tela === "fechamento" ? "/pendencias" : `/${tela}`;
+  const rotasConplus: Record<string, string> = {
+    conplus_folha_05: "/conplus/folha-05",
+    conplus_adiantamento_20: "/conplus/adiantamento-20",
+    conplus_rescisoes: "/conplus/rescisoes",
+    conplus_ferias: "/conplus/ferias",
+    conplus_exportar: "/conplus/exportar"
+  };
+  return rotasConplus[tela] ?? (tela === "fechamento" ? "/pendencias" : `/${tela}`);
 }
 
 export { temPermissao };

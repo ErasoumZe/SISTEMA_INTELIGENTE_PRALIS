@@ -54,6 +54,7 @@ const permissaoAcessoPorTela = {
   // acao de criacao nela e "Novo cadastro", e nao ha segundo verbo para o mesmo ato.
   admissoes_processos: "admissoes_processos_visualizar",
   folha_ponto: "folha_ponto_visualizar",
+  conplus_importacoes: "conplus_importacoes_visualizar",
   avaliacao_qualidade: "avaliacao_qualidade_visualizar",
   avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
   relatorio_fiscal: "relatorio_fiscal_visualizar",
@@ -312,6 +313,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "despesas",
       "colaboradores",
       "folha_ponto",
+      "conplus_importacoes",
       "admissoes_testes",
       "admissoes_processos"
     ],
@@ -339,6 +341,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_processos_revisar_ficha",
       // Efetivação é uma decisão terminal do DP; Gerência acompanha, mas não efetiva.
       "admissoes_processos_efetivar",
+      "conplus_importacoes_confirmar",
+      "conplus_importacoes_sincronizar",
+      "conplus_exportar_admissoes",
+      "conplus_exportar_eventos",
+      "conplus_questor_configurar",
       // ADM-003 V1B: o turno e campo OBRIGATORIO da admissao direta, e quem admite precisa poder
       // cadastrar o turno que falta sem depender da Gerencia no meio do atendimento. Ver e criar,
       // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.

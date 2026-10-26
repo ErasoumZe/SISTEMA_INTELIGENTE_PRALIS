@@ -21,6 +21,12 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-90000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID:-}
+      GOOGLE_ADMISSAO_SYNC_ENABLED: ${GOOGLE_ADMISSAO_SYNC_ENABLED:-false}
       # WhatsApp de Compras (doc 57 §7): o sistema manda a cotacao e o "pode entregar". Sem provedor, a fila
       # espera e a tela avisa. O TOKEN e segredo: so no painel do Coolify ou no .env.local ignorado, nunca no Git.
       WHATSAPP_PROVEDOR: ${WHATSAPP_PROVEDOR:-desligado}
@@ -41,6 +47,7 @@ services:
       - padaria_dev_db_node_modules:/app/db/node_modules
       - padaria_dev_shared_node_modules:/app/shared/node_modules
       - padaria_dev_web_vue_node_modules:/app/web-vue/node_modules
+      - padaria_dev_web_vue_nuxt:/app/web-vue/.nuxt
       - padaria_dev_tests_node_modules:/app/tests/node_modules
       - padaria_dev_integracoes_scripts_node_modules:/app/integracoes-scripts/node_modules
     command: ["node", "--conditions=development", "--import", "tsx", "--watch", "api/src/server.ts"]
@@ -58,6 +65,8 @@ volumes:
     name: padaria_dev_shared_node_modules
   padaria_dev_web_vue_node_modules:
     name: padaria_dev_web_vue_node_modules
+  padaria_dev_web_vue_nuxt:
+    name: padaria_dev_web_vue_nuxt
   padaria_dev_tests_node_modules:
     name: padaria_dev_tests_node_modules
   padaria_dev_integracoes_scripts_node_modules:

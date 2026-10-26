@@ -24,6 +24,14 @@ const textoVazio = computed(() => {
   if (props.semDependentes === false) return "Declarou que tem dependentes, mas nenhum foi cadastrado.";
   return "O candidato ainda não respondeu se tem dependentes.";
 });
+
+/** E5 (Questor): sexo, estado civil, escolaridade e nacionalidade — fumo/álcool não são coletados (Q11). */
+function dadosQuestor(dependente: DependenteRevisaoDto): string {
+  const partes = [dependente.sexo, dependente.estadoCivil, dependente.grauInstrucao, dependente.nacionalidade].filter(
+    (valor): valor is string => Boolean(valor)
+  );
+  return partes.length ? partes.join(" · ") : "Sexo, estado civil, escolaridade e nacionalidade não informados";
+}
 </script>
 
 <template>
@@ -52,6 +60,9 @@ const textoVazio = computed(() => {
         </v-chip>
         <p class="dependente__finalidades">
           {{ dependente.finalidades.length ? dependente.finalidades.join(" · ") : "Finalidade não informada" }}
+        </p>
+        <p class="dependente__finalidades">
+          {{ dadosQuestor(dependente) }}
         </p>
       </li>
     </ol>

@@ -1,0 +1,138 @@
+object TnItemImportacao
+  Delimitador = '"'
+  DMClassName = 'TnFpaDMEventoVariavel'
+  EhVariavel = True
+  FormatoData = 'DD/MM/YYYY'
+  IdentificadorRegistro = 'E'
+  NaoIgnorarLookup = False
+  Separador = ';'
+  SeparadorDecimal = ','
+  SohExportarSeTiverDetalhe = False
+  TamanhoRegistro = 109
+  Indice = 'codigoempresa;codigopercalculo;seq;codigofunccontr'
+  object TnCursorLayoutField
+    FieldName = 'codigoempresa'
+    PosicaoInicio = 2
+    Tamanho = 6
+    Precisao = 0
+    Coluna = 2
+    Tipo = itCampo
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigopercalculo'
+    PosicaoInicio = 8
+    Tamanho = 11
+    Precisao = 0
+    Coluna = 3
+    Tipo = itCampo
+  end
+  object TnCursorLayoutField
+    FieldName = 'seq'
+    PosicaoInicio = 19
+    Tamanho = 10
+    Precisao = 0
+    Coluna = 4
+    Tipo = itCampo
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigofunccontr'
+    PosicaoInicio = 29
+    Tamanho = 10
+    Precisao = 0
+    Coluna = 5
+    Tipo = itCampo
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigoevento'
+    PosicaoInicio = 39
+    Tamanho = 5
+    Precisao = 0
+    Coluna = 6
+    Tipo = itCampo
+  end
+  object TnCursorLayoutField
+    FieldName = 'referevento'
+    PosicaoInicio = 44
+    Tamanho = 18
+    Precisao = 2
+    Coluna = 7
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'valorevento'
+    PosicaoInicio = 62
+    Tamanho = 16
+    Precisao = 2
+    Coluna = 8
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigobenef'
+    PosicaoInicio = 78
+    Tamanho = 3
+    Precisao = 0
+    Coluna = 9
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigooutemp'
+    PosicaoInicio = 81
+    Tamanho = 6
+    Precisao = 0
+    Coluna = 10
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigocentrocusto'
+    PosicaoInicio = 87
+    Tamanho = 11
+    Precisao = 0
+    Coluna = 11
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'codigoproftipoaula'
+    PosicaoInicio = 98
+    Tamanho = 11
+    Precisao = 0
+    Coluna = 12
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'buscarultvalorcalc'
+    PosicaoInicio = 109
+    Tamanho = 1
+    Precisao = 0
+    Coluna = 13
+    Tipo = itCampo
+    ConverterValores.Strings = (
+      '=~'
+      ' =~')
+  end
+  object TnCursorLayoutField
+    FieldName = 'origemdado'
+    PosicaoInicio = 110
+    Tamanho = 2
+    Precisao = 0
+    Coluna = 0
+    Tipo = itIgnorar
+  end
+end

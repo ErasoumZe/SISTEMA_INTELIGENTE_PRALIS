@@ -13,13 +13,26 @@ import { banco } from "../banco/conexao.js";
  * filtro torna impossivel de LER e de APAGAR.
  */
 
+/** E5 (Questor): campos comuns do dependente, sempre gravados juntos com o resto da linha. */
+type CamposE5Dependente = {
+  sexo: string | null;
+  estadoCivil: string | null;
+  grauInstrucao: string | null;
+  nacionalidade: string | null;
+};
+
 const selecao = {
   id: admissoesProcessosDependentes.id,
   nomeCompleto: admissoesProcessosDependentes.nomeCompleto,
   nascimento: admissoesProcessosDependentes.nascimento,
   parentesco: admissoesProcessosDependentes.parentesco,
   cpf: admissoesProcessosDependentes.cpf,
-  finalidades: admissoesProcessosDependentes.finalidades
+  finalidades: admissoesProcessosDependentes.finalidades,
+  // E5 (Questor) — campos comuns do dependente.
+  sexo: admissoesProcessosDependentes.sexo,
+  estadoCivil: admissoesProcessosDependentes.estadoCivil,
+  grauInstrucao: admissoesProcessosDependentes.grauInstrucao,
+  nacionalidade: admissoesProcessosDependentes.nacionalidade
 };
 
 function doProcesso(processoId: string, empresaId: string) {
@@ -63,7 +76,11 @@ export async function listarDependentesParaRevisaoRepository(
         nascimento: admissoesProcessosDependentes.nascimento,
         parentesco: admissoesProcessosDependentes.parentesco,
         cpfInformado: isNotNull(admissoesProcessosDependentes.cpf).mapWith(Boolean),
-        finalidades: admissoesProcessosDependentes.finalidades
+        finalidades: admissoesProcessosDependentes.finalidades,
+        sexo: admissoesProcessosDependentes.sexo,
+        estadoCivil: admissoesProcessosDependentes.estadoCivil,
+        grauInstrucao: admissoesProcessosDependentes.grauInstrucao,
+        nacionalidade: admissoesProcessosDependentes.nacionalidade
       })
       .from(admissoesProcessosDependentes)
       // A mesma ordem da tela do candidato: o DP e o candidato precisam falar do "primeiro dependente"
@@ -98,7 +115,7 @@ export async function criarDependenteRepository(
     parentesco: string;
     cpf: string | null;
     finalidades: string[];
-  },
+  } & CamposE5Dependente,
   db: TransacaoBanco
 ) {
   const [linha] = await db
@@ -119,7 +136,7 @@ export async function atualizarDependenteRepository(
     parentesco: string;
     cpf: string | null;
     finalidades: string[];
-  },
+  } & CamposE5Dependente,
   db: TransacaoBanco
 ) {
   const [linha] = await db
@@ -129,7 +146,11 @@ export async function atualizarDependenteRepository(
       nascimento: input.nascimento,
       parentesco: input.parentesco,
       cpf: input.cpf,
-      finalidades: input.finalidades
+      finalidades: input.finalidades,
+      sexo: input.sexo,
+      estadoCivil: input.estadoCivil,
+      grauInstrucao: input.grauInstrucao,
+      nacionalidade: input.nacionalidade
     })
     .where(and(eq(admissoesProcessosDependentes.id, input.id), doProcesso(input.processoId, input.empresaId)))
     .returning({ id: admissoesProcessosDependentes.id });

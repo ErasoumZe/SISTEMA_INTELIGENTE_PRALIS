@@ -54,12 +54,18 @@ const tiposPermitidos = [
       b.length >= 12 && b.toString("ascii", 4, 8) === "ftyp" && ["mif1", "msf1"].includes(b.toString("ascii", 8, 12))
   }
 ] as const;
-const storageRoot = path.resolve(process.cwd(), "storage");
+// O npm executa o workspace da API com `api` como cwd no desenvolvimento local, enquanto o
+// storage compartilhado fica na raiz do monorepo. No Docker/produção o cwd é `/app`, então o
+// mesmo cálculo aponta para `/app/storage`.
+const storageRoot =
+  path.basename(process.cwd()) === "api"
+    ? path.resolve(process.cwd(), "..", "storage")
+    : path.resolve(process.cwd(), "storage");
 
 // Salva o arquivo em storage/<tipo>/<id>/<uuid>.ext e devolve o caminho RELATIVO (persistido em
 // foto_documento_url) + o mime.
 export async function salvarFotoDocumento(
-  tipo: "mercadorias" | "despesas" | "retiradas" | "fechamentos-caixa",
+  tipo: "mercadorias" | "despesas" | "retiradas" | "fechamentos-caixa" | "admissoes" | "admissoes-dependentes",
   id: string,
   arquivo: MultipartFile
 ): Promise<{ caminhoRelativo: string; mimeType: string }> {

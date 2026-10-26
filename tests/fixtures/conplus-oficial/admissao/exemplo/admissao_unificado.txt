@@ -1,0 +1,4 @@
+A;0;0;CNPJ-COMPLETO;3;CPF-COMPLETO;Nome do Funcionário;05/05/2000;27/03/2025;0;01;1;15;15;;;0;56;5;1518;
+B;CNPJ-COMPLETO;;;36037467;1;Rua;54(número);;Bairro;MG(Estado);31;MG(Estado);31;1;2;0;0;0;0;0;0;0;;1;9;10;;;;;0;0;0;MG(Estado);;0;;15;323;1;1;10;0;;;;;0;0;0;0;0;;0;0;1;1;;1;;;;;;;;;;0;0;2;1;2;;0;;;00;0;;Nome da Mãe;1;1;0
+C;CNPJ-COMPLETO;7;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1;1;18;;;;;;;;;;;;
+D;CNPJ-COMPLETO;CPF-SEM CARACTERES;17/01/2025;;;05/05/2000;;;Masculino;2;Educação Superior Completa;;;;;;5;;;;;;;;;;;20;;;10

@@ -47,11 +47,23 @@ function tabelasDoArrayDa0002(): string[] {
 // real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
 const semTriggerConhecidas = [
+  // 0070 (fila Google da admissao), 0072 (importacoes Conplus) e 0077 (exportacoes Questor) criaram
+  // `atualizado_em` sem o bloco de trigger; os servicos gravam a coluna explicitamente. Declaradas
+  // aqui pelo nome ate a decisao da migration que instala os triggers (pendencia registrada).
+  "admissoes_google_arquivos",
+  "admissoes_google_dependentes",
+  "admissoes_google_sincronizacoes",
   "campanhas",
+  "conplus_google_sincronizacoes",
+  "conplus_importacoes",
+  "conplus_registros",
   "fechamentos_caixa_relatorios_maquininha",
   "maquininhas",
   "notas_fiscais",
   "pedidos",
+  "questor_eventos_variaveis",
+  "questor_eventos_variaveis_lancamentos",
+  "questor_exportacoes",
   "regras_recebimento",
   "turnos"
 ];
@@ -110,6 +122,11 @@ const sqlConstraints = `
   order by 1, 2
 `;
 
+/**
+ * Caminho OFICIAL de banco novo: o mesmo `drizzle-kit migrate` que o deploy roda
+ * (`api:prod:migrate`). Ate 22/10/2026 ele quebrava na 0070 (antiga 0061: FK apontando para a UNIQUE que so nascia
+ * na 0071); a 0070 passou a criar a UNIQUE de forma idempotente, e este teste e a prova.
+ */
 function executarMigrate(databaseUrl: string) {
   return new Promise<void>((resolve, reject) => {
     const processo = spawn("npm", ["run", "db:migrate", "--workspace", "@padaria/db"], {
@@ -324,6 +341,8 @@ describe("migracoes integration", () => {
       "conferencias_agendas",
       "conferencias_estoque",
       "configuracoes_menu_empresas",
+      // 0078: estado da busca automatica Conplus muda a cada execucao da rotina.
+      "conplus_sincronizacao_estado",
       // R-218 (0060): o vinculo fornecedor-produto e decidido depois de criado (pendente ->
       // aprovado/rejeitado).
       "fornecedores_produtos",
@@ -333,7 +352,10 @@ describe("migracoes integration", () => {
       "pedidos_agenda_ocorrencias",
       "pedidos_agendas",
       // R-216 (0058): o rascunho do fornecedor e editado varias vezes ate o envio.
-      "pedidos_cotacoes"
+      "pedidos_cotacoes",
+      // 0073: configuracao e catalogo Questor sao editados pelo DP.
+      "questor_codigos",
+      "questor_configuracoes"
     ]);
 
     const esperadas = [...new Set([...tabelasDoArrayDa0002(), ...aMao.map((achado) => achado.tabela)])].sort();

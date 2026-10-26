@@ -14,7 +14,7 @@ import { formatarDataSomenteDia, mascararCep, mascararWhatsapp } from "~/utils/f
  */
 type Campos = FichaRevisaoDto["campos"];
 type Chave = keyof Campos;
-type Formato = "texto" | "data" | "cep" | "telefone";
+type Formato = "texto" | "data" | "cep" | "telefone" | "simNao";
 type Campo = { chave: Chave; rotulo: string; formato?: Formato };
 type Secao = { id: string; titulo: string; campos: Campo[] };
 
@@ -29,9 +29,11 @@ const SECOES: Secao[] = [
       { chave: "sexo", rotulo: "Sexo" },
       { chave: "estadoCivil", rotulo: "Estado civil" },
       { chave: "racaCor", rotulo: "Raça/cor" },
-      { chave: "grauInstrucao", rotulo: "Grau de instrução" },
       { chave: "nacionalidade", rotulo: "Nacionalidade" },
+      { chave: "nacionalidadeEspecifica", rotulo: "Nacionalidade (estrangeira)" },
       { chave: "naturalidade", rotulo: "Naturalidade" },
+      { chave: "naturalidadeUf", rotulo: "UF onde nasceu" },
+      { chave: "grauInstrucao", rotulo: "Escolaridade" },
       { chave: "nomeMae", rotulo: "Nome da mãe" },
       { chave: "nomePai", rotulo: "Nome do pai" },
       { chave: "nomeSocial", rotulo: "Nome social" }
@@ -47,7 +49,8 @@ const SECOES: Secao[] = [
       { chave: "complemento", rotulo: "Complemento" },
       { chave: "bairro", rotulo: "Bairro" },
       { chave: "municipio", rotulo: "Município" },
-      { chave: "uf", rotulo: "UF" }
+      { chave: "uf", rotulo: "UF" },
+      { chave: "municipioIbge", rotulo: "Código IBGE do município" }
     ]
   },
   {
@@ -59,34 +62,20 @@ const SECOES: Secao[] = [
     ]
   },
   {
-    id: "documentos",
-    titulo: "Documentos",
+    // E5 (Questor). Deficiência/reabilitação não aparecem: não são coletadas antes da Q11.
+    id: "trabalho",
+    titulo: "Histórico de trabalho",
     campos: [
-      { chave: "rgNumero", rotulo: "RG — número" },
-      { chave: "rgOrgao", rotulo: "RG — órgão emissor" },
-      { chave: "rgUf", rotulo: "RG — UF" },
-      { chave: "rgEmissao", rotulo: "RG — data de emissão", formato: "data" },
-      { chave: "tituloEleitor", rotulo: "Título de eleitor" },
-      { chave: "tituloZona", rotulo: "Zona" },
-      { chave: "tituloSecao", rotulo: "Seção" }
-    ]
-  },
-  {
-    id: "bancarios",
-    titulo: "Dados bancários",
-    campos: [
-      { chave: "banco", rotulo: "Banco" },
-      { chave: "agencia", rotulo: "Agência" },
-      { chave: "conta", rotulo: "Conta" },
-      { chave: "contaDigito", rotulo: "Dígito" },
-      { chave: "contaTipo", rotulo: "Tipo de conta" }
+      { chave: "primeiroEmprego", rotulo: "Primeiro emprego com carteira assinada", formato: "simNao" },
+      { chave: "recebeSeguroDesemprego", rotulo: "Recebendo seguro-desemprego", formato: "simNao" }
     ]
   }
 ];
 
 /** `null` e "nao informado" — a celula mostra isso em vez de inventar um traco. */
-function exibir(valor: string | null | undefined, formato: Formato = "texto"): string | null {
+function exibir(valor: string | boolean | null | undefined, formato: Formato = "texto"): string | null {
   if (valor === null || valor === undefined || valor === "") return null;
+  if (typeof valor === "boolean" || formato === "simNao") return valor === true ? "Sim" : "Não";
   if (formato === "data") return formatarDataSomenteDia(valor);
   if (formato === "cep") return mascararCep(valor);
   if (formato === "telefone") return mascararWhatsapp(valor);

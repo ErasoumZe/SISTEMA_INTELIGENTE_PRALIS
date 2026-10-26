@@ -7,6 +7,7 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste, type PerfilTeste } from "../../setup/contexto.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
 
 const RAIZ_TESTE = join(import.meta.dirname, "..", "..", "..");
@@ -26,6 +27,50 @@ describe("admissoes ficha publica integration", () => {
   let sequencia = 0;
 
   const CABECALHO = "x-admissao-convite";
+
+  function multipartAnexo(tipo: string, opcoes: { nome?: string; mimeType?: string; bytes?: Buffer } = {}) {
+    const boundary = `----admissao-teste-${randomUUID()}`;
+    const nome = opcoes.nome ?? `${tipo}.jpg`;
+    const mimeType = opcoes.mimeType ?? "image/jpeg";
+    const bytes = opcoes.bytes ?? Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
+          `--${boundary}\r\nContent-Disposition: form-data; name="arquivo"; filename="${nome}"\r\n` +
+          `Content-Type: ${mimeType}\r\n\r\n`
+      ),
+      bytes,
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ]);
+    return { boundary, corpo };
+  }
+
+  async function anexarDocumentosObrigatorios(token: string, dependenteIds: string[] = []) {
+    if (dependenteIds.length === 0) {
+      for (const tipo of ["cpf", "comprovante_residencia"]) {
+        const { boundary, corpo } = multipartAnexo(tipo);
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: "/api/admissao/anexos",
+          headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${boundary}` },
+          payload: corpo
+        });
+        expect(resposta.statusCode, resposta.body).toBe(201);
+      }
+    }
+    for (const dependenteId of dependenteIds) {
+      for (const tipo of ["certidao_nascimento_rg", "cpf", "cartao_vacina", "comprovante_escolaridade"]) {
+        const { boundary, corpo } = multipartAnexo(tipo);
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: `/api/admissao/dependentes/${dependenteId}/anexos`,
+          headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${boundary}` },
+          payload: corpo
+        });
+        expect(resposta.statusCode, resposta.body).toBe(201);
+      }
+    }
+  }
 
   function matriz(cargo: string): Permissao[] {
     const lista = permissoesPorCargo[cargo];
@@ -89,7 +134,11 @@ describe("admissoes ficha publica integration", () => {
       payload: {}
     });
     assertOk(convite, 200);
-    return { processoId, token: convite.json().data.token as string };
+    const token = convite.json().data.token as string;
+    const ficha = await abrirFicha(token);
+    assertOk(ficha, 200);
+    await anexarDocumentosObrigatorios(token);
+    return { processoId, token };
   }
 
   function abrirFicha(token: string) {
@@ -349,6 +398,7 @@ describe("admissoes ficha publica integration", () => {
     assertOk(aberta, 200);
 
     const cpfDoDependente = proximoCpf();
+    const idsDependentes: string[] = [];
     for (const dependente of [
       {
         nomeCompleto: "Dependente Com Documento",
@@ -366,7 +416,10 @@ describe("admissoes ficha publica integration", () => {
         payload: dependente
       });
       assertOk(criado, 200);
+      const itens = criado.json().data.itens as Array<{ id: string }>;
+      idsDependentes.push(itens.at(-1)!.id);
     }
+    await anexarDocumentosObrigatorios(token, idsDependentes);
 
     const depois = await abrirFicha(token);
     const enviar = await contexto.app.inject({
@@ -400,19 +453,25 @@ describe("admissoes ficha publica integration", () => {
     expect(ficha.dependentes.map((d) => d["cpfInformado"])).toEqual([true, false]);
     for (const dependente of ficha.dependentes) {
       expect(Object.keys(dependente).sort()).toEqual([
+        "anexos",
         "cpfInformado",
+        // E5 (Questor): campos comuns do dependente — nenhum é documento.
+        "estadoCivil",
         "finalidades",
+        "grauInstrucao",
         "id",
+        "nacionalidade",
         "nascimento",
         "nomeCompleto",
-        "parentesco"
+        "parentesco",
+        "sexo"
       ]);
     }
     // O numero nao esta em lugar nenhum do corpo — nem cru, nem pontuado, nem em parte.
     expect(paraRevisar.body).not.toContain(cpfDoDependente);
     expect(paraRevisar.body).not.toContain(cpfDoDependente.slice(0, 9));
-    expect(paraRevisar.body).not.toContain(`"cpf"`);
-  });
+    expect(paraRevisar.body).not.toMatch(/"cpf"\s*:/u);
+  }, 120_000);
 
   it("P0-V5 Deve_Responder404_Quando_DpRevisaProcessoDeOutraEmpresa", async () => {
     // Mesma direcao do P0-1 de processos: o alvo e montado direto na empresa B, e quem le e o DP da
@@ -528,13 +587,58 @@ describe("admissoes ficha publica integration", () => {
     expect(rotasPublicas.length).toBeGreaterThan(0);
     for (const rota of rotasPublicas) {
       expect(rota, rota).not.toContain("?");
-      // O UNICO parametro de caminho permitido e `:id`, que e o id do dependente. Qualquer outro
-      // nome (`:token`, `:convite`, `:t`) poria segredo em `req.url`, que o logger registra sempre.
-      const parametros = [...rota.matchAll(/:([A-Za-z0-9_]+)/gu)].map((a) => a[1]);
+      // Somente IDs tecnicos sao permitidos. Nenhum parametro pode carregar token ou convite,
+      // que seriam secretos em `req.url` e nos logs.
+      const parametros = [...rota.matchAll(/:([A-Za-z0-9_]+)/gu)].map((a) => a[1] ?? "");
       expect(
-        parametros.filter((nome) => nome !== "id"),
+        parametros.filter((nome) => !["id", "anexoId"].includes(nome)),
         rota
       ).toEqual([]);
     }
   });
+
+  it("P0-V5 Deve_ServirAnexosJpgPngPdf_E_RespeitarPermissao", async () => {
+    const { token, processoId } = await processoComToken();
+    const formatos = [
+      { tipo: "rg", nome: "rg.png", mimeType: "image/png", bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) },
+      { tipo: "titulo_eleitor", nome: "titulo.pdf", mimeType: "application/pdf", bytes: Buffer.from("%PDF-1.7\n") }
+    ];
+    const idsPorTipo = new Map<string, string>();
+    for (const formato of formatos) {
+      const anexo = multipartAnexo(formato.tipo, formato);
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/admissao/anexos",
+        headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${anexo.boundary}` },
+        payload: anexo.corpo
+      });
+      expect(resposta.statusCode, resposta.body).toBe(201);
+      idsPorTipo.set(formato.tipo, resposta.json().data.id as string);
+    }
+
+    for (const formato of formatos) {
+      const leitura = await contexto.app.inject({
+        method: "GET",
+        url: `/api/admissoes/processos/${processoId}/ficha/anexos/${idsPorTipo.get(formato.tipo)}`,
+        headers: { cookie: cookieDpReal }
+      });
+      expect(leitura.statusCode, leitura.body).toBe(200);
+      expect(leitura.headers["content-type"]).toContain(formato.mimeType);
+      expect(leitura.headers["content-disposition"]).toContain("inline");
+    }
+
+    const semPermissao = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoId}/ficha/anexos/${idsPorTipo.get("rg")}`,
+      headers: { cookie: cookieGerenciaReal }
+    });
+    expect(semPermissao.statusCode).toBe(403);
+
+    const ausente = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoId}/ficha/anexos/00000000-0000-4000-8000-000000000000`,
+      headers: { cookie: cookieDpReal }
+    });
+    expect(ausente.statusCode).toBe(404);
+  }, 120_000);
 });

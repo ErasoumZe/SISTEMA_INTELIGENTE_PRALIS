@@ -159,7 +159,11 @@ export default defineNuxtConfig({
         paths: {
           "@padaria/shared/*": ["../../shared/src/*/index.ts"]
         }
-      }
+      },
+      // O include gerado pelo Nuxt usa ../**/* e acaba incluindo testes do frontend no
+      // typecheck da aplicacao. Os testes continuam cobertos pelo Vitest/ESLint, mas nao
+      // devem ampliar o grafo de tipos do bundle de runtime.
+      exclude: ["../**/*.test.ts", "../**/*.spec.ts", "../test/**", "../tests/**"]
     }
   }
 });

@@ -1,7 +1,16 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import type { AuthSession } from "@padaria/shared";
+import { temPermissao } from "@padaria/shared";
 import { permissoes } from "~/utils/domain";
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
+import QuestorParametrosOperacionais from "~/components/questor/QuestorParametrosOperacionais.vue";
+
+const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
+const podeConfigurarQuestor = computed(() =>
+  temPermissao(sessao.value?.perfil?.permissoes ?? [], "conplus_questor_configurar")
+);
 </script>
 
 <template>
@@ -21,5 +30,6 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
       @editar="ctx.abrirCadastroEditar"
       @extra="ctx.lidarExtraCadastro"
     />
+    <QuestorParametrosOperacionais v-if="podeConfigurarQuestor" modo="turnos" />
   </AppWorkspace>
 </template>

@@ -4,6 +4,7 @@ import type { AuthSession, FuncaoOperacionalDto } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import FuncaoOperacionalDialog from "~/components/funcoes/FuncaoOperacionalDialog.vue";
+import QuestorParametrosOperacionais from "~/components/questor/QuestorParametrosOperacionais.vue";
 
 /**
  * Catalogo de FUNCOES OPERACIONAIS — o que a pessoa faz.
@@ -27,6 +28,7 @@ const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeCriar = computed(() => temPermissao(permissoes.value, "cadastro_funcoes_criar"));
 const podeEditar = computed(() => temPermissao(permissoes.value, "cadastro_funcoes_editar"));
+const podeConfigurarQuestor = computed(() => temPermissao(permissoes.value, "conplus_questor_configurar"));
 
 const linhas = ref<FuncaoOperacionalDto[]>([]);
 const total = ref(0);
@@ -253,6 +255,7 @@ async function alternarSituacao(funcao: FuncaoOperacionalDto) {
       </template>
     </p>
   </section>
+  <QuestorParametrosOperacionais v-if="podeConfigurarQuestor" modo="funcoes" />
 
   <FuncaoOperacionalDialog
     :aberto="dialogoAberto"

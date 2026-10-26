@@ -20,7 +20,14 @@
     "check:texto": "node scripts/verificar-texto.mjs && node scripts/verificar-data-pendente.mjs",
     "typecheck": "npm run check",
     "build:libs": "npm run build --workspace @padaria/shared && npm run build --workspace @padaria/db",
-    "lint": "npm run build:libs && eslint api db shared tests web-vue scripts eslint.config.mjs",
+    "lint": "npm run build:libs && npm run lint:api && npm run lint:db && npm run lint:shared && npm run lint:tests && npm run lint:web && npm run lint:scripts && npm run lint:config",
+    "lint:api": "eslint api",
+    "lint:db": "eslint db",
+    "lint:shared": "eslint shared",
+    "lint:tests": "eslint tests",
+    "lint:web": "eslint web-vue --ignore-pattern '**/*.test.ts' --ignore-pattern '**/*.spec.ts'",
+    "lint:scripts": "eslint scripts",
+    "lint:config": "eslint eslint.config.mjs",
     "lint:fix": "npm run build:libs && eslint api db shared tests web-vue scripts eslint.config.mjs --fix",
     "lint:deps": "dependency-cruiser api/src db/src shared/src web-vue --config .dependency-cruiser.cjs",
     "format": "prettier --write \"*.{json,js,mjs,md,yml,yaml}\" \"infra/**/*.{yml,yaml}\" \"scripts/**/*.{mjs,ts}\" \"api/**/*.ts\" \"db/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" \"web-vue/**/*.{ts,vue,css,json}\"",
@@ -53,6 +60,7 @@
     "fixture:caixa:fechamento:local": "tsx --conditions=development scripts/fixture-caixa-fechamento-local.ts",
     "fixture:caixa:pdv1-turnos:local": "tsx --conditions=development scripts/fixture-caixa-pdv1-turnos-local.ts",
     "importar:catalogo-pralis:teste": "tsx --conditions=development scripts/importar-catalogo-pralis-teste.ts",
+    "google:admissao:teste": "tsx --conditions=development scripts/google-admissao-teste.ts",
     "db:backup": "node scripts/backup-db.mjs",
     "db:restore": "node scripts/restore-db.mjs",
     "db:dev:up": "docker compose -p padaria-db-dev -f db/docker-compose-db.yml -f db/docker-compose-db.dev.yml up -d --wait",
@@ -81,5 +89,8 @@
     "prettier": "^3.8.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.62.0"
+  },
+  "dependencies": {
+    "nuxt": "^4.6.2"
   }
 }

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { avisoPrivacidadeVigente } from "@padaria/shared";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
@@ -25,6 +26,47 @@ describe("admissoes dependentes publicos integration", () => {
   let sequencia = 0;
 
   const CABECALHO = "x-admissao-convite";
+
+  function multipartAnexo(tipo: string) {
+    const boundary = `----admissao-dependente-teste-${randomUUID()}`;
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
+          `--${boundary}\r\nContent-Disposition: form-data; name="arquivo"; filename="${tipo}.jpg"\r\n` +
+          "Content-Type: image/jpeg\r\n\r\n"
+      ),
+      Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ]);
+    return { boundary, corpo };
+  }
+
+  async function anexarDocumentosObrigatorios(token: string, dependenteIds: string[] = []) {
+    if (dependenteIds.length === 0) {
+      for (const tipo of ["cpf", "comprovante_residencia"]) {
+        const { boundary, corpo } = multipartAnexo(tipo);
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: "/api/admissao/anexos",
+          headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${boundary}` },
+          payload: corpo
+        });
+        expect(resposta.statusCode, resposta.body).toBe(201);
+      }
+    }
+    for (const dependenteId of dependenteIds) {
+      for (const tipo of ["certidao_nascimento_rg", "cpf", "cartao_vacina", "comprovante_escolaridade"]) {
+        const { boundary, corpo } = multipartAnexo(tipo);
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: `/api/admissao/dependentes/${dependenteId}/anexos`,
+          headers: { [CABECALHO]: token, "content-type": `multipart/form-data; boundary=${boundary}` },
+          payload: corpo
+        });
+        expect(resposta.statusCode, resposta.body).toBe(201);
+      }
+    }
+  }
 
   function comDigitos(base: string) {
     const dv = (parcial: string) => {
@@ -100,6 +142,7 @@ describe("admissoes dependentes publicos integration", () => {
       headers: { [CABECALHO]: token }
     });
     assertOk(aberta, 200);
+    await anexarDocumentosObrigatorios(token);
     return { processoId, token, versao: aberta.json().data.versao as number };
   }
 
@@ -308,6 +351,7 @@ describe("admissoes dependentes publicos integration", () => {
     const criado = await criar(token, NOVO_DEPENDENTE);
     assertOk(criado, 200);
     const id = criado.json().data.itens[0].id as string;
+    await anexarDocumentosObrigatorios(token, [id]);
 
     const enviar = await contexto.app.inject({
       method: "POST",
@@ -565,6 +609,7 @@ describe("admissoes dependentes publicos integration", () => {
     const comDependente = await processoComToken();
     const criado = await criar(comDependente.token, { ...NOVO_DEPENDENTE, cpf: cpfDeDependente(6) });
     assertOk(criado, 200);
+    await anexarDocumentosObrigatorios(comDependente.token, [criado.json().data.itens[0].id as string]);
     const enviarUm = await contexto.app.inject({
       method: "POST",
       url: "/api/admissao/ficha/enviar",
@@ -587,5 +632,5 @@ describe("admissoes dependentes publicos integration", () => {
       [comDependente.processoId]
     );
     expect(linha?.sem_dependentes).toBe(false);
-  });
+  }, 120_000);
 });

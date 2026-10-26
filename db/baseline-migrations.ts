@@ -30,8 +30,15 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
+import {
+  lerLimiteThrough,
+  selecionarMigrations,
+  validarEntradasDoJournal,
+  validarHistoricoVazio
+} from "./baseline-plan.js";
 
 const APLICAR = process.argv.includes("--apply");
+const LIMITE_INFORMADO = lerLimiteThrough(process.argv.slice(2));
 const PASTA = path.join(import.meta.dirname, "migrations");
 
 type EntradaDoJournal = { idx: number; when: number; tag: string };
@@ -39,14 +46,20 @@ type EntradaDoJournal = { idx: number; when: number; tag: string };
 const journal = JSON.parse(readFileSync(path.join(PASTA, "meta", "_journal.json"), "utf8")) as {
   entries: EntradaDoJournal[];
 };
+validarEntradasDoJournal(journal.entries);
 
 // Mesmo calculo do readMigrationFiles do drizzle: sha256 do conteudo CRU do .sql.
-const migrations = journal.entries.map((entrada) => ({
+const migrationsComHash = journal.entries.map((entrada) => ({
   tag: entrada.tag,
   quando: entrada.when,
   hash: createHash("sha256")
     .update(readFileSync(path.join(PASTA, `${entrada.tag}.sql`)))
     .digest("hex")
+}));
+const migrations = selecionarMigrations(journal.entries, LIMITE_INFORMADO).map((migration) => ({
+  tag: migration.tag,
+  quando: migration.when,
+  hash: migrationsComHash.find((item) => item.tag === migration.tag)?.hash ?? ""
 }));
 
 const databaseUrl = process.env["DATABASE_URL"]?.trim();
@@ -72,8 +85,34 @@ const MARCADORES = [
   { o_que: "tabela grupos_patrimonio (0016)", sql: "select to_regclass('public.grupos_patrimonio') is not null as ok" }
 ];
 
+const MARCADORES_0059_0061 = [
+  {
+    o_que: "unique estoque_movimentos_recebimento_item_unico (0059)",
+    sql: "select exists(select 1 from pg_constraint where conname='estoque_movimentos_recebimento_item_unico' and conrelid='public.estoque_movimentos'::regclass) as ok"
+  },
+  {
+    o_que: "fk empresa dos anexos de dependentes (0061)",
+    sql: "select exists(select 1 from pg_constraint where conname='admissoes_processos_dependentes_anexos_empresa_id_empresas_id_fk' and conrelid='public.admissoes_processos_dependentes_anexos'::regclass) as ok"
+  },
+  {
+    o_que: "fk dependente dos anexos (0061)",
+    sql: "select exists(select 1 from pg_constraint where conname='admissoes_processos_dependentes_anexos_dependente_fk' and conrelid='public.admissoes_processos_dependentes_anexos'::regclass) as ok"
+  },
+  {
+    o_que: "unique tipo dos anexos de dependentes (0061)",
+    sql: "select exists(select 1 from pg_indexes where schemaname='public' and indexname='admissoes_processos_dependentes_anexos_tipo_unico') as ok"
+  },
+  {
+    o_que: "indice empresa/dependente dos anexos (0061)",
+    sql: "select exists(select 1 from pg_indexes where schemaname='public' and indexname='admissoes_processos_dependentes_anexos_empresa_dependente_idx') as ok"
+  }
+];
+
 try {
-  console.info(`[baseline] ${migrations.length} migrations no journal (0000..${migrations.at(-1)?.tag})`);
+  console.info(
+    `[baseline] ${migrations.length} migrations selecionadas (0000..${migrations.at(-1)?.tag})` +
+      `${LIMITE_INFORMADO ? ` pelo limite ${LIMITE_INFORMADO}` : ""}`
+  );
   console.info(`[baseline] modo: ${APLICAR ? "APLICAR" : "CONFERENCIA (nao grava)"}\n`);
 
   await pool.query("CREATE SCHEMA IF NOT EXISTS drizzle");
@@ -85,7 +124,9 @@ try {
     "select count(*)::text as total from drizzle.__drizzle_migrations"
   );
   const total = Number(jaRegistradas[0]?.total ?? "0");
-  if (total > 0) {
+  try {
+    validarHistoricoVazio(total);
+  } catch {
     console.error(
       `[baseline] RECUSADO: a tabela de controle ja tem ${total} linha(s). Este script e so para o\n` +
         "           banco que nunca passou por migration. Rode 'npm run db:migrate' normalmente."
@@ -95,7 +136,10 @@ try {
 
   console.info("[baseline] conferindo se o schema realmente esta no ponto do journal:");
   let faltando = 0;
-  for (const marcador of MARCADORES) {
+  const marcadores = migrations.some((migration) => migration.tag.startsWith("0061_"))
+    ? [...MARCADORES, ...MARCADORES_0059_0061]
+    : MARCADORES;
+  for (const marcador of marcadores) {
     const { rows } = await pool.query<{ ok: boolean }>(marcador.sql);
     const ok = rows[0]?.ok === true;
     if (!ok) faltando += 1;
