@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { criadoId, erro, ok, type DadosExternos } from "@padaria/shared/api";
-import { ErroFonteCentral, FONTES_ARQUIVO_CENTRAL } from "@padaria/shared/produtos";
+import { ErroFonteCentral, FONTES_CENTRAL } from "@padaria/shared/produtos";
 import { z } from "zod";
 import { exigirAutenticacao } from "../auth/guards.js";
 import {
@@ -9,6 +9,8 @@ import {
   CargaCentralDecisaoExistenteError,
   CargaCentralNaoEncontradaError,
   CargaCentralVaziaError,
+  ErroBackupPralisCentral,
+  anexarBackupPralisCentral,
   criarCargaCentral,
   FonteCentralDuplicadaError,
   listarCargasCentrais,
@@ -19,7 +21,7 @@ import {
 
 const paramsCarga = z.object({ cargaId: z.string().uuid() });
 const paramsGrupo = z.object({ cargaId: z.string().uuid(), grupoId: z.string().uuid() });
-const queryFonte = z.object({ fonte: z.enum(FONTES_ARQUIVO_CENTRAL) });
+const queryFonte = z.object({ fonte: z.enum(FONTES_CENTRAL) });
 const corpoDecisao = z.object({
   acao: z.enum(["nao_e_o_mesmo", "ignorado"]),
   observacao: z.string().trim().max(500).optional()
@@ -51,6 +53,7 @@ function responderErroCentral(reply: FastifyReply, causa: DadosExternos) {
     return erro(reply, 409, causa.message, "CENTRAL_CONFLICT");
   }
   if (causa instanceof CargaCentralVaziaError) return erro(reply, 422, causa.message, "CENTRAL_EMPTY_LOAD");
+  if (causa instanceof ErroBackupPralisCentral) return erro(reply, 400, causa.message, "PRALIS_BACKUP_INVALID");
   if (causa instanceof ErroFonteCentral) return erro(reply, 400, causa.message, causa.code);
   throw causa;
 }
@@ -75,8 +78,16 @@ export async function registrarRotasProdutosCentral(app: FastifyInstance): Promi
     const { fonte } = queryFonte.parse(request.query);
     try {
       const arquivo = await request.file();
-      if (!arquivo) return erro(reply, 400, "Envie um arquivo CSV.", "FILE_REQUIRED");
+      if (!arquivo) return erro(reply, 400, "Envie um arquivo da fonte selecionada.", "FILE_REQUIRED");
       const bytes = await arquivo.toBuffer();
+      if (fonte === "pralis") {
+        if (!arquivo.filename.toLowerCase().endsWith(".xlsx")) {
+          return erro(reply, 400, "Envie o backup completo XLSX do Cadastro de Produtos.", "XLSX_REQUIRED");
+        }
+        const resultado = await anexarBackupPralisCentral(cargaId, bytes);
+        request.log.info({ evento: "produtos.central.fonte.anexada", cargaId, fonte, linhas: resultado.linhas });
+        return ok(resultado);
+      }
       let conteudo: string;
       try {
         conteudo = new TextDecoder("utf-8", { fatal: true }).decode(bytes);

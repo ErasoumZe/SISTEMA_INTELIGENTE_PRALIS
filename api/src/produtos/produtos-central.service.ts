@@ -4,6 +4,7 @@ import {
   agruparProdutosCentral,
   normalizarNomeCentral,
   prepararArquivosCentral,
+  type FonteCentral,
   type FonteArquivoCentral,
   type ItemFonteCentral
 } from "@padaria/shared/produtos";
@@ -19,12 +20,14 @@ import {
   registrarDecisaoCentralRepository,
   substituirGruposDaCargaRepository
 } from "./produtos-central.repository.js";
+import { lerBackupCompletoPralisXlsx } from "./produtos-central-pralis-xlsx.js";
 
 export class CargaCentralNaoEncontradaError extends Error {}
 export class CargaCentralEstadoInvalidoError extends Error {}
 export class FonteCentralDuplicadaError extends Error {}
 export class CargaCentralVaziaError extends Error {}
 export class CargaCentralDecisaoExistenteError extends Error {}
+export class ErroBackupPralisCentral extends Error {}
 
 export async function criarCargaCentral(ator: { id: string; nome: string }) {
   return criarCargaCentralRepository(ator);
@@ -36,7 +39,23 @@ export async function listarCargasCentrais() {
 
 export async function anexarFonteCentral(cargaId: string, fonte: FonteArquivoCentral, conteudo: string) {
   const preparada = prepararArquivosCentral([{ fonte, conteudo }]);
-  const itens = preparada.itens.map((item) => ({
+  return persistirItensFonteCentral(cargaId, fonte, preparada.itens);
+}
+
+export async function anexarBackupPralisCentral(cargaId: string, bytes: Buffer) {
+  let itens: ItemFonteCentral[];
+  try {
+    itens = lerBackupCompletoPralisXlsx(bytes);
+  } catch (causa) {
+    throw new ErroBackupPralisCentral(
+      causa instanceof Error ? causa.message : "Não foi possível ler o backup completo do Cadastro de Produtos."
+    );
+  }
+  return persistirItensFonteCentral(cargaId, "pralis", itens);
+}
+
+async function persistirItensFonteCentral(cargaId: string, fonte: FonteCentral, itensFonte: ItemFonteCentral[]) {
+  const itens = itensFonte.map((item) => ({
     fonte: item.fonte,
     loja: item.loja,
     chaveLinhaFonte: item.id,
@@ -78,7 +97,7 @@ function converterFonteCentral(
     custo: linha.custo,
     venda: linha.venda,
     fiscal: linha.fiscal as ItemFonteCentral["fiscal"],
-    raw: linha.dadosOriginais as ItemFonteCentral["raw"]
+    raw: linha.dadosOriginais
   };
 }
 

@@ -1,3 +1,5 @@
+import type { JsonValue } from "../api/index.js";
+
 /**
  * Núcleo puro da Central de Produtos, portado do comportamento do cadastro
  * oficial. Apenas propõe grupos e valores com proveniência; não grava nem
@@ -55,7 +57,7 @@ export interface ItemFonteCentral {
     conferidoEm: string | null;
   } | null;
   /** Dados brutos da fonte para auditoria; nunca usar para inferir campo ausente. */
-  raw: Record<string, string | number | boolean | null>;
+  raw: Record<string, JsonValue>;
 }
 
 export interface CandidatoProdutoCentral {

@@ -6,7 +6,8 @@ export type FonteCentral =
   | "planilha_tnp"
   | "fiscal_tnp"
   | "planilha_nova"
-  | "vendidos_tnp";
+  | "vendidos_tnp"
+  | "pralis";
 export type LojaCentral = "" | "LI" | "TNP" | "BASE" | "HORA";
 
 export type CargaCentral = {

@@ -10,6 +10,8 @@ export const FONTES_ARQUIVO_CENTRAL = [
 ] as const;
 
 export type FonteArquivoCentral = (typeof FONTES_ARQUIVO_CENTRAL)[number];
+export const FONTES_CENTRAL = [...FONTES_ARQUIVO_CENTRAL, "pralis"] as const;
+export type FonteCentral = (typeof FONTES_CENTRAL)[number];
 
 const LOJA_POR_FONTE: Record<FonteArquivoCentral, LojaProdutoCentral> = {
   sia_li: "LI",

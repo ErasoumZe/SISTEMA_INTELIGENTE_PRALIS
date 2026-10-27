@@ -1,4 +1,4 @@
-import { and, arrayContains, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import type { JsonValue } from "@padaria/shared/api";
 import {
   produtosCentralCargas,
@@ -142,17 +142,18 @@ export async function registrarDecisaoCentralRepository(input: {
       .for("update");
     if (!grupo || grupo.chave !== input.chaveGrupo) return { estado: "nao_encontrada" };
 
-    const [existente] = await tx
-      .select({ id: produtosCentralDecisoes.id })
+    const decisoes = await tx
+      .select({ detalhe: produtosCentralDecisoes.detalhe })
       .from(produtosCentralDecisoes)
-      .where(
-        and(
-          eq(produtosCentralDecisoes.chaveGrupo, input.chaveGrupo),
-          sql`${produtosCentralDecisoes.detalhe}->>'cargaId' = ${input.cargaId}`
-        )
-      )
-      .limit(1);
-    if (existente) return { estado: "ja_decidida" };
+      .where(eq(produtosCentralDecisoes.chaveGrupo, input.chaveGrupo));
+    const jaDecididaNestaCarga = decisoes.some(
+      ({ detalhe }) =>
+        typeof detalhe === "object" &&
+        detalhe !== null &&
+        !Array.isArray(detalhe) &&
+        detalhe["cargaId"] === input.cargaId
+    );
+    if (jaDecididaNestaCarga) return { estado: "ja_decidida" };
 
     const [decisao] = await tx
       .insert(produtosCentralDecisoes)

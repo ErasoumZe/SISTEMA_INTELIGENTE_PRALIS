@@ -302,3 +302,24 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   Pralis/PDV, exportação autenticada atual, SHA efetivamente implantado e a carga real com dry-run,
   backup restaurável, amostras, colisões e plano de reversão. A integração completa, visual e funcional,
   segue inacabada; sem push, PR, merge ou deploy.
+
+### Backup completo XLSX para staging (26/10/2026)
+
+- A leitura do código oficial confirmou que `GET /admin/produtos/export.xlsx` exporta as abas `Resumo`,
+  `Produtos` e `Promocoes`, incluindo todas as lojas, todos os status e os campos operacionais/fiscais.
+  O CSV oficial tem apenas 24 colunas e não é fonte suficiente para uma migração integral. O SHA
+  consultado segue sendo referência GitHub, não confirmação do código implantado.
+- A Central do ERP agora aceita esse XLSX em um campo separado, exige as três abas relevantes, valida
+  data e contagens do resumo, recusa ID duplicado e mantém todos os valores/cabeçalhos originais, fiscal,
+  foto e promoções em `dadosOriginais` no staging. O campo `venda_pontual` foi alinhado ao nome usado
+  pelo exportador oficial. Isso não lê a sessão nem baixa arquivo da origem automaticamente.
+- O endpoint continua limitado pelo multipart global do ERP (10 MiB por arquivo) e o parser limita a
+  expansão ZIP a 50 MiB. O envio é somente staging/prévia; não altera o catálogo nem executa migration.
+  A migration 0083 foi aplicada apenas no PostgreSQL local após autorização; nenhum ambiente
+  compartilhado/produção foi tocado.
+- A suíte unitária completa passou (726 testes/82 arquivos), `npm run check`, `npm run lint` e `git diff
+--check` passaram; o ESLint focado também passou após os últimos ajustes. O Nuxt ainda emite avisos
+  conhecidos de `useLayout` e do plugin `vue-router/volar/sfc-route-blocks`. Testes de integração não
+  rodaram porque o Docker Engine local recusou conexão. Revisão visual desta tela não foi concluída.
+- Nenhuma carga real foi feita; ainda faltam as verticais de cadastro oficial, importação segura,
+  histórico, relatórios e permissões para considerar a paridade concluída.

@@ -33,6 +33,7 @@ const processando = ref(false);
 const erro = ref("");
 const sucesso = ref("");
 const arquivos = ref<Partial<Record<FonteCentral, File>>>({});
+const arquivoPralis = ref<File | null>(null);
 const fontes: Array<{ id: FonteCentral; nome: string }> = [
   { id: "sia_li", nome: "SIA · Lisboa" },
   { id: "compilart_tnp", nome: "Compilart · TNP" },
@@ -99,8 +100,16 @@ async function anexarArquivos() {
       const form = new FormData();
       form.append("arquivo", arquivo);
       await apiUpload(`/api/produtos/central/cargas/${cargaId.value}/fontes?fonte=${fonte.id}`, form);
+      arquivos.value[fonte.id] = undefined;
+    }
+    if (arquivoPralis.value) {
+      const form = new FormData();
+      form.append("arquivo", arquivoPralis.value);
+      await apiUpload(`/api/produtos/central/cargas/${cargaId.value}/fontes?fonte=pralis`, form);
+      arquivoPralis.value = null;
     }
     arquivos.value = {};
+    arquivoPralis.value = null;
     await carregarCargas();
   }, "Arquivos enviados. A prévia só calcula correspondências; não altera o cadastro de produtos.");
 }
@@ -197,6 +206,7 @@ onMounted(async () => {
               prepend-icon="mdi-file-delimited-outline"
               show-size
               hide-details
+              :model-value="arquivos[fonte.id] ?? null"
               :disabled="!cargaId || processando || cargas.find((item) => item.id === cargaId)?.estado !== 'recebida'"
               @update:model-value="
                 (valor) => {
@@ -205,10 +215,27 @@ onMounted(async () => {
               "
             />
           </div>
+          <v-file-input
+            label="Backup completo do Cadastro de Produtos (XLSX)"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            prepend-icon="mdi-microsoft-excel"
+            show-size
+            hide-details
+            class="mt-4"
+            :model-value="arquivoPralis"
+            :disabled="!cargaId || processando || cargas.find((item) => item.id === cargaId)?.estado !== 'recebida'"
+            @update:model-value="
+              (valor) => (arquivoPralis = Array.isArray(valor) ? (valor[0] ?? null) : (valor ?? null))
+            "
+          />
+          <p class="text-body-2 mt-2">
+            Use o backup XLSX exportado pelo Cadastro oficial. O sistema confere a data e as contagens das abas; o envio
+            só alimenta a prévia auditável e não cria nem altera produtos.
+          </p>
           <div class="central-produtos__acoes mt-4">
             <v-btn
               variant="tonal"
-              :disabled="!Object.values(arquivos).some(Boolean) || processando"
+              :disabled="(!Object.values(arquivos).some(Boolean) && !arquivoPralis) || processando"
               :loading="processando"
               @click="anexarArquivos"
               >Enviar fontes selecionadas</v-btn
