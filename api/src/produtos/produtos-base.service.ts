@@ -29,6 +29,7 @@ import { montarPayloadBase } from "./produtos-catalogo-base.service.js";
 import {
   proximoCodigoInterno,
   referenciasForaDaEmpresaRepository,
+  registrarHistoricoNomeProdutoRepository,
   travarCadastroDeProdutos
 } from "./produtos-escrita.repository.js";
 import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
@@ -186,7 +187,8 @@ function payloadNaLoja(
   }
 ): ProdutoPayload {
   const convertido = montarPayloadBase(linha, referencia.unidades, referencia.grupos, referencia.empresaId, {
-    ignorarFoto: true
+    ignorarFoto: true,
+    tolerante: true
   });
   if (!convertido.payload) throw new BaseSemCorrespondenciaError(convertido.erro);
   return convertido.payload;
@@ -213,11 +215,11 @@ export async function editarProdutoBase(
       ...(await unidadesEGruposDaEmpresaRepository(dados.empresaId, tx))
     };
     const anterior = payloadNaLoja(alvo, referencia);
+    const grupoAnterior = typeof alvo.dadosOficiais["grupo"] === "string" ? alvo.dadosOficiais["grupo"] : null;
     // Produto legado sem grupo continua editavel; quem ja tinha grupo nao fica sem (oficial).
-    if (!dados.grupoMercadoriaId && anterior.grupoMercadoriaId) {
+    if (!dados.grupoMercadoriaId && grupoAnterior?.trim()) {
       throw new Error("Selecione o grupo de mercadorias para aplicar a regra fiscal.");
     }
-    const grupoAnterior = typeof alvo.dadosOficiais["grupo"] === "string" ? alvo.dadosOficiais["grupo"] : null;
     const codigoBarras = codigoDeBarras(dados);
     const nome = nomeDoCatalogo(dados);
     const { fiscal } = await resolverFiscalDaGravacao({
@@ -257,7 +259,7 @@ export async function editarProdutoBase(
       })
     };
     await atualizarProdutoBaseRepository(tx, id, novaLinha);
-    const lojasAtualizadas = await propagarParaLojas(tx, alvo, { ...alvo, ...novaLinha });
+    const lojasAtualizadas = await propagarParaLojas(tx, alvo, { ...alvo, ...novaLinha }, ator);
     return { id, lojasAtualizadas };
   });
 }
@@ -267,7 +269,12 @@ export async function editarProdutoBase(
  * copia ainda tinha o valor ANTIGO da BASE. Loja cuja unidade/grupo nao casa com a BASE fica de fora
  * (a copia dela nunca seguiu esse valor). Mesma transacao da edicao: ou tudo, ou nada.
  */
-async function propagarParaLojas(tx: TransacaoBanco, antes: LinhaBase, depois: LinhaBase): Promise<number> {
+async function propagarParaLojas(
+  tx: TransacaoBanco,
+  antes: LinhaBase,
+  depois: LinhaBase,
+  ator?: Pick<AtorDaEscrita, "usuarioId" | "nome">
+): Promise<number> {
   const copias = await copiasDaBaseRepository(tx, antes.id);
   const referencias = new Map<string, Awaited<ReturnType<typeof unidadesEGruposDaEmpresaRepository>>>();
   let atualizadas = 0;
@@ -294,8 +301,21 @@ async function propagarParaLojas(tx: TransacaoBanco, antes: LinhaBase, depois: L
     const valoresDepois = resolver(depois);
     if (!valoresAntes || !valoresDepois) continue;
     const patch = patchDeHeranca(valoresAntes, valoresDepois, copia.valores);
+    // Unidade ou grupo que a loja nao tem fica de fora so naquele campo — o resto (nome, marca...) desce.
+    if (patch.unidadeIndividualId === "") delete patch.unidadeIndividualId;
+    if (patch.grupoMercadoriaId === "") delete patch.grupoMercadoriaId;
     if (!Object.keys(patch).length) continue;
     await aplicarHerancaNaCopiaRepository(tx, copia.id, patch);
+    if (patch.nomeCatalogo !== undefined && patch.nomeCatalogo !== copia.valores.nomeCatalogo) {
+      await registrarHistoricoNomeProdutoRepository(tx, {
+        empresaId: copia.empresaId,
+        produtoId: copia.id,
+        nomeAnterior: copia.valores.nomeCatalogo ?? copia.valores.descricao,
+        nomeNovo: patch.nomeCatalogo ?? patch.descricao ?? copia.valores.descricao,
+        alteradoPor: ator?.usuarioId ?? null,
+        alteradoPorNome: ator?.nome ?? null
+      });
+    }
     atualizadas += 1;
   }
   return atualizadas;
@@ -391,7 +411,7 @@ export async function detalharProdutoBase(
     loja: "BASE",
     produtoBaseId: null,
     heranca: null,
-    grupoMercadoriaId: payload.grupoMercadoriaId ?? null,
+    grupoMercadoriaId: payload.grupoMercadoriaId || null,
     grupoNome: referencia.grupos.find((grupo) => grupo.id === payload.grupoMercadoriaId)?.nome ?? null,
     unidadeMedidaId: payload.unidadeIndividualId,
     unidadeIndividualId: payload.unidadeIndividualId,
@@ -490,7 +510,8 @@ export async function herancaDaCopia(
   if (!linha) return null;
   const referencia = { empresaId: copia.empresaId, ...(await unidadesEGruposDaEmpresaRepository(copia.empresaId)) };
   const convertido = montarPayloadBase(linha, referencia.unidades, referencia.grupos, copia.empresaId, {
-    ignorarFoto: true
+    ignorarFoto: true,
+    tolerante: true
   });
   if (!convertido.payload) return null;
   const valoresCopia = valoresHerdadosDaCopia(copia);

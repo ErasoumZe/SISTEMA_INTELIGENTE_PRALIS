@@ -90,7 +90,11 @@ export function montarPayloadBase(
   unidades: Array<{ id: string; sigla: string }>,
   grupos: Array<{ id: string; nome: string }>,
   empresaId: string,
-  opcoes: { ignorarFoto?: boolean } = {}
+  /**
+   * `tolerante`: para LER e COMPARAR (heranca, formulario), unidade ou grupo sem par na loja nao derruba
+   * tudo — volta "" naquele campo, e quem chama ignora so ele. A copia (gravacao) nunca e tolerante.
+   */
+  opcoes: { ignorarFoto?: boolean; tolerante?: boolean } = {}
 ): { payload: ProdutoPayload; erro?: never } | { erro: string; payload?: never } {
   const dados = mapaDados(produto.dadosOficiais);
   // Caminhos de foto pertencem ao storage da aplicação de origem. Persisti-los
@@ -109,19 +113,23 @@ export function montarPayloadBase(
   if (!medidaBase || quantidade == null || quantidade < 0)
     return { erro: "Produto sem quantidade ou medida base válidas." };
   const unidade = resolverUnidade(medidaBase, unidades);
-  if (!unidade) return { erro: `A loja não tem uma unidade única equivalente a ${medidaBase}.` };
+  if (!unidade && !opcoes.tolerante) {
+    return { erro: `A loja não tem uma unidade única equivalente a ${medidaBase}.` };
+  }
 
   const grupoNome = texto(dados, "grupo");
   let grupoMercadoriaId: string | null = null;
   if (grupoNome) {
     const correspondentes = grupos.filter((grupo) => normalizarGrupo(grupo.nome) === normalizarGrupo(grupoNome));
-    if (correspondentes.length !== 1) return { erro: `O grupo “${grupoNome}” não tem correspondência única na loja.` };
-    grupoMercadoriaId = correspondentes[0]!.id;
+    if (correspondentes.length !== 1 && !opcoes.tolerante) {
+      return { erro: `O grupo “${grupoNome}” não tem correspondência única na loja.` };
+    }
+    grupoMercadoriaId = correspondentes.length === 1 ? correspondentes[0]!.id : "";
   }
 
   for (const campo of ["embalagem", "medida_compra"] as const) {
     const sigla = texto(dados, campo);
-    if (sigla && !resolverUnidade(sigla, unidades))
+    if (sigla && !resolverUnidade(sigla, unidades) && !opcoes.tolerante)
       return { erro: `A loja não tem uma unidade única equivalente a ${sigla}.` };
   }
 
@@ -202,7 +210,7 @@ export function montarPayloadBase(
       codigo: null,
       codigoBarras: produto.codigoBarras,
       // Oficial: `nome` e o nome do catalogo; a descricao e nome + quantidade + medida.
-      descricao: montarDescricao(produto.nome, quantidade, unidade.sigla),
+      descricao: montarDescricao(produto.nome, quantidade, unidade?.sigla ?? medidaBase),
       nomeCatalogo: produto.nome,
       marca: texto(dados, "marca"),
       pesavel: booleano(dados, "pesavel"),
@@ -210,7 +218,7 @@ export function montarPayloadBase(
       validadeBalanca: numero(dados, "validade_balanca"),
       grupoIdExterno: texto(dados, "grupo_id"),
       areaVenda: (areaVendaOrigem as (typeof AREAS_VENDA)[number] | null) ?? null,
-      unidadeIndividualId: unidade.id,
+      unidadeIndividualId: unidade?.id ?? "",
       quantidadeIndividual: quantidade,
       conversoes: [],
       grupoMercadoriaId,

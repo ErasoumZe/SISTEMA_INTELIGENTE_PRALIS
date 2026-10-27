@@ -18,6 +18,8 @@ export async function situacaoDoDeParaRepository(empresaId: string) {
  */
 export async function substituirDeParaRepository(empresaId: string, linhas: LinhaDeParaSia[]): Promise<number> {
   return executarEmTransacao(async (tx) => {
+    // Serializa duas importacoes da mesma loja (a segunda espera a primeira, nunca colide no indice).
+    await tx.select({ id: empresas.id }).from(empresas).where(eq(empresas.id, empresaId)).for("update");
     const apagadas = await tx
       .delete(siaProdutoDepara)
       .where(eq(siaProdutoDepara.empresaId, empresaId))

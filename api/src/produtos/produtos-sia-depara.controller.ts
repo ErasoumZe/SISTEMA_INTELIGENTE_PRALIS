@@ -24,6 +24,10 @@ function ator(request: FastifyRequest) {
 }
 
 async function arquivoDaRequisicao(request: FastifyRequest): Promise<ArquivoDoSia | null> {
+  // So o administrador chega a enviar o arquivo: ninguem mais faz o servidor ler 20 MB.
+  if (request.perfilUsuario?.role !== "usuario_admin") {
+    throw new DeParaSiaError("Apenas o administrador importa o de-para do SIA.", 403, "FORBIDDEN");
+  }
   const arquivo = await request.file({ limits: { fileSize: TAMANHO_MAXIMO_DO_ARQUIVO, files: 1 } });
   if (!arquivo) return null;
   return { nome: arquivo.filename, bytes: await arquivo.toBuffer() };

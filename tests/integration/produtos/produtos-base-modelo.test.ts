@@ -65,7 +65,7 @@ describe("produtos - modelo BASE (igual ao app oficial)", () => {
     }
     await executarSql("delete from produtos where produto_base_id = any($1::uuid[])", [basesCriadas]);
     await executarSql("delete from produtos_catalogo_base where id = any($1::uuid[])", [basesCriadas]);
-    await executarSql("delete from unidades_medida where sigla = 'pctb'");
+    await executarSql("delete from unidades_medida where sigla in ('pctb', 'bdja')");
     await executarSql("delete from grupos_mercadorias where nome = 'MER BASE TESTE'");
     await contexto.fechar();
   });
@@ -236,6 +236,44 @@ describe("produtos - modelo BASE (igual ao app oficial)", () => {
     expect(heranca.produtoBaseId).toBe(baseId);
     expect(heranca.heranca.naoSeguem).toEqual(["Marca"]);
     expect(heranca.heranca.base.marca).toBe("MARCA B");
+  });
+
+  it("Deve_PropagarONome_MesmoQuandoALojaNaoTemAUnidadeNova", async () => {
+    const baseId = await criarNaBase({ nomeCatalogo: "BOLINHO UNIDADE", descricao: "BOLINHO UNIDADE" });
+    await importar(baseId, idsTeste.empresaA);
+    const copiaB = await importar(baseId, idsTeste.empresaB);
+    // Unidade nova que so a loja A tem: a B nao casa a medida, mas o resto tem de chegar.
+    const so = await contexto.app.inject({
+      method: "POST",
+      url: "/api/unidades-medida",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Bandeja so A", sigla: "bdja" }
+    });
+    expect(so.statusCode, so.body).toBe(201);
+    const edicao = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/produtos/base/${baseId}`,
+      headers: { cookie: cookieAdmin },
+      payload: payloadBase({
+        nomeCatalogo: "BOLINHO UNIDADE NOVA",
+        descricao: "BOLINHO UNIDADE NOVA",
+        unidadeIndividualId: json<RespostaId>(so).data.id
+      })
+    });
+    expect(edicao.statusCode, edicao.body).toBe(200);
+    expect(json<{ data: { lojasAtualizadas: number } }>(edicao).data.lojasAtualizadas).toBe(2);
+    const linhaB = await consultarUm<{ nome_catalogo: string; unidade_individual_id: string }>(
+      "select nome_catalogo, unidade_individual_id from produtos where id = $1",
+      [copiaB]
+    );
+    expect(linhaB?.nome_catalogo).toBe("BOLINHO UNIDADE NOVA");
+    expect(linhaB?.unidade_individual_id).toBe(referencia[idsTeste.empresaB]!.unidade);
+    // A troca de nome que veio da BASE deixa rastro no historico da loja.
+    const historico = await consultarUm<{ nome_novo: string }>(
+      "select nome_novo from produtos_historico_nomes where produto_id = $1 order by alterado_em desc limit 1",
+      [copiaB]
+    );
+    expect(historico?.nome_novo).toBe("BOLINHO UNIDADE NOVA");
   });
 
   it("Deve_SoAdministradorEditarABase_E_DevolverODetalheNoFormatoDoFormulario", async () => {

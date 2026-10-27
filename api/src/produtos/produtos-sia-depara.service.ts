@@ -87,7 +87,16 @@ async function lojaDaEmpresa(empresaId: string, ator: { administrador: boolean; 
     throw new DeParaSiaError("Empresa não permitida.", 403, "FORBIDDEN_COMPANY");
   }
   const contexto = await contextoDaEmpresaFiscalRepository(empresaId);
-  return lojaFiscalDaEmpresa(contexto?.matriculaPrefixo);
+  const loja = lojaFiscalDaEmpresa(contexto?.matriculaPrefixo);
+  // De-para so serve a TNP, LI e HORA: gravado em empresa sem loja, nunca seria lido pelo fiscal.
+  if (!["TNP", "LI", "HORA"].includes(loja)) {
+    throw new DeParaSiaError(
+      `Esta empresa não é uma loja com SIA (${loja}). Confira o prefixo de matrícula da empresa.`,
+      422,
+      "SIA_EMPRESA_SEM_LOJA"
+    );
+  }
+  return loja;
 }
 
 /** Confere sem gravar (o equivalente ao script sem `--apply` do oficial). */
