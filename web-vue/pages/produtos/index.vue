@@ -119,6 +119,13 @@ onMounted(async () => {
           <v-btn
             v-if="sessao.perfil?.role === 'usuario_admin'"
             variant="outlined"
+            prepend-icon="mdi-wrench-outline"
+            to="/produtos/manutencao"
+            >Manutenção</v-btn
+          >
+          <v-btn
+            v-if="sessao.perfil?.role === 'usuario_admin'"
+            variant="outlined"
             prepend-icon="mdi-database-outline"
             to="/produtos/base"
             >Catálogo BASE</v-btn

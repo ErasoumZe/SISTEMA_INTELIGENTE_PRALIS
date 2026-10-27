@@ -21,10 +21,15 @@ import {
 import { exigirAlgumaPermissao, exigirAutenticacao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
+import { montarCsvCatalogo } from "./produtos-csv.js";
+import { montarXlsxCatalogo } from "./produtos-xlsx.js";
 import { FotoInvalidaError, TAMANHO_MAXIMO_DA_FOTO } from "./produtos-foto.js";
 import {
   CodigoBarrasDuplicadoError,
+  buscarBackupCatalogoProdutos,
+  consultarPanoramaFiscalProdutos,
   detalharProduto,
+  exportarCatalogoCsvProdutos,
   exportarProduto,
   importarProdutos,
   listarFiltrosDeProduto,
@@ -78,6 +83,57 @@ function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
 }
 
 export async function registrarRotasProdutos(app: FastifyInstance): Promise<void> {
+  app.get(
+    "/api/produtos/fiscal/panorama",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(
+          reply,
+          403,
+          "Somente administradores podem consultar o panorama fiscal.",
+          "INSUFFICIENT_PERMISSION"
+        );
+      }
+      return ok(await consultarPanoramaFiscalProdutos(request.perfilUsuario));
+    }
+  );
+
+  app.get(
+    "/api/produtos/export.csv",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(reply, 403, "Somente administradores podem exportar o catálogo.", "INSUFFICIENT_PERMISSION");
+      }
+      const linhas = await exportarCatalogoCsvProdutos(request.perfilUsuario);
+      reply.header("Content-Type", "text/csv; charset=utf-8");
+      reply.header("Content-Disposition", 'attachment; filename="produtos-pralis.csv"');
+      reply.header("Cache-Control", "no-store");
+      return reply.send(montarCsvCatalogo(linhas));
+    }
+  );
+
+  app.get(
+    "/api/produtos/backup.xlsx",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(
+          reply,
+          403,
+          "Somente administradores podem exportar o backup do catálogo.",
+          "INSUFFICIENT_PERMISSION"
+        );
+      }
+      const dados = await buscarBackupCatalogoProdutos(request.perfilUsuario);
+      reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      reply.header("Content-Disposition", 'attachment; filename="backup-produtos-pralis.xlsx"');
+      reply.header("Cache-Control", "no-store");
+      return reply.send(montarXlsxCatalogo(dados));
+    }
+  );
+
   /**
    * Listagem COMPLETA da tela de Produtos: busca, quatro filtros, seis ordenacoes e paginacao —
    * tudo no banco. Exige `cadastro_produtos_visualizar`; quem so opera mercadorias usa `/opcoes`.

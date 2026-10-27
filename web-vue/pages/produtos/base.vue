@@ -15,9 +15,19 @@ type ProdutoBase = {
   dadosOficiais: Record<string, unknown>;
   atualizadoEm: string;
 };
+type ResultadoCopiaLote = {
+  total: number;
+  importados: number;
+  jaImportados: number;
+  ignorados: number;
+  bloqueados: number;
+  naoEncontrados: number;
+  erros: number;
+  itens: Array<{ produtoBaseId: string; nome: string; estado: string; motivo?: string }>;
+};
 
 const router = useRouter();
-const { apiGet, carregarSessao } = useApi();
+const { apiGet, apiPost, carregarSessao } = useApi();
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
 const caixaStatus = ref<CaixaStatus | null>(null);
@@ -30,6 +40,11 @@ const pageSize = 30;
 const total = ref(0);
 const carregando = ref(true);
 const erro = ref("");
+const aviso = ref("");
+const copiandoId = ref<string | null>(null);
+const copiandoLote = ref(false);
+const idsSelecionados = ref<string[]>([]);
+const lote = ref<ResultadoCopiaLote | null>(null);
 const buscaAplicada = ref("");
 let temporizadorBusca: ReturnType<typeof setTimeout> | undefined;
 const { telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
@@ -117,15 +132,87 @@ function valorOficial(valor: unknown) {
   return String(valor);
 }
 
+async function copiarParaLoja(produto: ProdutoBase) {
+  const empresaId = sessao.value?.perfil?.empresaId;
+  if (!empresaId || !sessao.value?.perfil?.permissoes?.includes("cadastro_produtos_criar")) return;
+  if (!window.confirm(`Copiar “${produto.nome}” para a loja ativa? O saldo de estoque será iniciado em zero.`)) return;
+  lote.value = null;
+  copiandoId.value = produto.id;
+  aviso.value = "";
+  try {
+    const resultado = await apiPost<{ estado: string; motivo?: string; mensagem?: string }>(
+      `/api/produtos/catalogo-base/${produto.id}/importar`,
+      { empresaId }
+    );
+    aviso.value =
+      resultado.estado === "importado"
+        ? "Produto copiado para a loja. O saldo começou em zero."
+        : (resultado.motivo ?? resultado.mensagem ?? "O produto não foi copiado.");
+  } catch (falha) {
+    aviso.value = mensagemErro(falha);
+  } finally {
+    copiandoId.value = null;
+  }
+}
+
+function selecionarProduto(produtoBaseId: string, selecionado: boolean | null) {
+  idsSelecionados.value = selecionado
+    ? [...new Set([...idsSelecionados.value, produtoBaseId])]
+    : idsSelecionados.value.filter((id) => id !== produtoBaseId);
+}
+
+function selecionarPagina(selecionado: boolean | null) {
+  idsSelecionados.value = selecionado ? itens.value.map((produto) => produto.id) : [];
+}
+
+async function copiarSelecionadosParaLoja() {
+  const empresaId = sessao.value?.perfil?.empresaId;
+  if (!empresaId || !idsSelecionados.value.length || copiandoLote.value) return;
+  const nomes = new Map(itens.value.map((produto) => [produto.id, produto.nome]));
+  if (
+    !window.confirm(
+      `Copiar ${idsSelecionados.value.length} produto(s) selecionado(s) para a loja ativa? O saldo será iniciado em zero.`
+    )
+  )
+    return;
+  copiandoLote.value = true;
+  aviso.value = "";
+  lote.value = null;
+  try {
+    const resultado = await apiPost<
+      Omit<ResultadoCopiaLote, "itens"> & {
+        itens: Array<{ produtoBaseId: string; estado: string; motivo?: string }>;
+      }
+    >("/api/produtos/catalogo-base/importar", {
+      empresaId,
+      produtoBaseIds: idsSelecionados.value
+    });
+    lote.value = {
+      ...resultado,
+      itens: resultado.itens.map((item) => ({ ...item, nome: nomes.get(item.produtoBaseId) ?? item.produtoBaseId }))
+    };
+    idsSelecionados.value = [];
+    await carregar();
+  } catch (falha) {
+    aviso.value = mensagemErro(falha);
+  } finally {
+    copiandoLote.value = false;
+  }
+}
+
 watch(busca, (valor) => {
   if (temporizadorBusca) clearTimeout(temporizadorBusca);
   temporizadorBusca = setTimeout(() => (buscaAplicada.value = valor), 300);
 });
 watch([buscaAplicada, status], () => {
   page.value = 1;
+  idsSelecionados.value = [];
   void carregar();
 });
-watch(page, () => void carregar());
+watch(page, () => {
+  idsSelecionados.value = [];
+  void carregar();
+});
 onBeforeUnmount(() => {
   if (temporizadorBusca) clearTimeout(temporizadorBusca);
 });
@@ -175,6 +262,25 @@ onMounted(async () => {
         aqui não altera produtos operacionais nem saldo de estoque.
       </v-alert>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
+      <v-alert v-if="aviso" type="info" variant="tonal">{{ aviso }}</v-alert>
+      <v-alert v-if="lote" type="info" variant="tonal">
+        Lote concluído: {{ lote.importados }} importado(s), {{ lote.jaImportados }} já existente(s),
+        {{ lote.ignorados }} ignorado(s), {{ lote.bloqueados }} bloqueado(s), {{ lote.naoEncontrados }} não
+        encontrado(s) e {{ lote.erros }} com falha.
+        <ul
+          v-if="lote.itens.some((item) => item.estado === 'bloqueado' || item.estado === 'erro')"
+          class="catalogo-base__falhas"
+        >
+          <li
+            v-for="item in lote.itens.filter(
+              (resultado) => resultado.estado === 'bloqueado' || resultado.estado === 'erro'
+            )"
+            :key="item.produtoBaseId"
+          >
+            {{ item.nome }}: {{ item.motivo ?? item.estado }}
+          </li>
+        </ul>
+      </v-alert>
 
       <div class="catalogo-base__filtros">
         <v-text-field
@@ -200,9 +306,32 @@ onMounted(async () => {
       <v-alert v-else-if="!itens.length" type="info" variant="tonal">
         Nenhum produto BASE corresponde a esta busca e situação.
       </v-alert>
-      <v-table v-else class="catalogo-base__tabela">
+      <div
+        v-if="!carregando && itens.length && sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')"
+        class="catalogo-base__lote"
+      >
+        <span>{{ idsSelecionados.length }} selecionado(s) nesta página</span>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :disabled="!idsSelecionados.length || copiandoLote || Boolean(copiandoId)"
+          :loading="copiandoLote"
+          @click="copiarSelecionadosParaLoja"
+        >
+          Copiar selecionados para loja
+        </v-btn>
+      </div>
+      <v-table v-if="!carregando && itens.length" class="catalogo-base__tabela">
         <thead>
           <tr>
+            <th v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')">
+              <v-checkbox-btn
+                :model-value="itens.length > 0 && idsSelecionados.length === itens.length"
+                :indeterminate="idsSelecionados.length > 0 && idsSelecionados.length < itens.length"
+                aria-label="Selecionar todos os produtos desta página"
+                @update:model-value="selecionarPagina"
+              />
+            </th>
             <th>Nome oficial</th>
             <th>Código interno</th>
             <th>EAN</th>
@@ -213,6 +342,14 @@ onMounted(async () => {
         </thead>
         <tbody>
           <tr v-for="produto in itens" :key="produto.id" class="catalogo-base__linha">
+            <td v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')">
+              <v-checkbox-btn
+                :model-value="idsSelecionados.includes(produto.id)"
+                :disabled="copiandoLote || Boolean(copiandoId)"
+                :aria-label="`Selecionar ${produto.nome}`"
+                @update:model-value="selecionarProduto(produto.id, $event)"
+              />
+            </td>
             <td>{{ produto.nome }}</td>
             <td class="cx-num">{{ produto.codigoInterno || "—" }}</td>
             <td class="cx-num">{{ produto.codigoBarras || "—" }}</td>
@@ -222,7 +359,20 @@ onMounted(async () => {
                 produto.status
               }}</v-chip>
             </td>
-            <td><v-btn size="small" variant="text" @click="selecionado = produto">Ver cadastro</v-btn></td>
+            <td class="catalogo-base__acoes">
+              <v-btn size="small" variant="text" @click="selecionado = produto">Ver cadastro</v-btn>
+              <v-btn
+                v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')"
+                size="small"
+                color="primary"
+                variant="tonal"
+                :loading="copiandoId === produto.id"
+                :disabled="Boolean(copiandoId)"
+                @click="copiarParaLoja(produto)"
+              >
+                Copiar para loja
+              </v-btn>
+            </td>
           </tr>
         </tbody>
       </v-table>
@@ -296,6 +446,21 @@ onMounted(async () => {
 }
 .catalogo-base__linha {
   cursor: pointer;
+}
+.catalogo-base__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.catalogo-base__lote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.catalogo-base__falhas {
+  margin-top: 8px;
 }
 .catalogo-base__detalhes {
   display: grid;

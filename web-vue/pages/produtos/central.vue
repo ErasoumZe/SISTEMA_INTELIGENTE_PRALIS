@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
+import CentralCatalogoBase from "~/components/produtos/CentralCatalogoBase.vue";
 import CentralProdutosGrupos from "~/components/produtos/CentralProdutosGrupos.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import type {
@@ -130,6 +131,28 @@ async function gerarPreviaCatalogoBase() {
     previaBase.value = await apiGet<PreviaCatalogoBase>(
       `/api/produtos/central/cargas/${cargaId.value}/catalogo-base/previa`
     );
+  });
+}
+async function importarCatalogoBase() {
+  if (!cargaId.value || previaBase.value?.estado !== "ok") return;
+  const total = previaBase.value.total;
+  if (
+    !window.confirm(
+      `Importar ${total} produtos BASE desta carga validada para o catálogo mestre? ` +
+        "Registros com o mesmo ID de origem serão atualizados. Produtos que não estão no arquivo não serão removidos."
+    )
+  ) {
+    return;
+  }
+  await executar(async () => {
+    const resultado = await apiPost<{ total: number; novos: number; atualizados: number }>(
+      `/api/produtos/central/cargas/${cargaId.value}/catalogo-base/importar`,
+      {}
+    );
+    previaBase.value = await apiGet<PreviaCatalogoBase>(
+      `/api/produtos/central/cargas/${cargaId.value}/catalogo-base/previa`
+    );
+    sucesso.value = `Catálogo BASE atualizado: ${resultado.novos} novos, ${resultado.atualizados} atualizados; ${resultado.total} no total da carga.`;
   });
 }
 async function decidir(grupo: GrupoCentral, acao: "nao_e_o_mesmo" | "ignorado") {
@@ -277,95 +300,14 @@ onMounted(async () => {
         </v-card>
       </section>
 
-      <v-card v-if="resumo" rounded="lg">
-        <v-card-title>Prévia de carga do catálogo mestre BASE</v-card-title>
-        <v-card-text>
-          <p>
-            Compara os registros BASE do backup XLSX com o catálogo mestre. Esta prévia não grava nem atualiza produtos.
-          </p>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            :loading="processando"
-            :disabled="processando || cargas.find((item) => item.id === cargaId)?.estado === 'recebida'"
-            @click="gerarPreviaCatalogoBase"
-            >Gerar prévia da BASE</v-btn
-          >
-          <v-alert v-if="previaBase?.estado === 'sem_base'" type="warning" variant="tonal" class="mt-4">
-            O backup validado não contém produtos da loja BASE.
-          </v-alert>
-          <template v-else-if="previaBase?.estado === 'ok'">
-            <div class="central-produtos__resumo mt-4">
-              <v-card
-                v-for="[rotulo, valor] in Object.entries({
-                  total: previaBase.total,
-                  novos: previaBase.novos,
-                  existentes: previaBase.existentes,
-                  'códigos internos repetidos': previaBase.codigosInternosDuplicados,
-                  'EANs repetidos': previaBase.eansDuplicados,
-                  'códigos em lojas': previaBase.codigosInternosEmProdutos,
-                  'EANs já em lojas': previaBase.eansEmProdutos,
-                  'sem NCM': previaBase.semNcm,
-                  'sem CST': previaBase.semCst
-                })"
-                :key="rotulo"
-                variant="tonal"
-                rounded="lg"
-              >
-                <v-card-text
-                  ><strong>{{ valor }}</strong
-                  ><span>{{ rotulo }}</span></v-card-text
-                >
-              </v-card>
-            </div>
-            <v-alert
-              v-if="
-                previaBase.idsDuplicados ||
-                previaBase.codigosInternosDuplicados ||
-                previaBase.eansDuplicados ||
-                previaBase.codigosInternosEmProdutos ||
-                previaBase.eansEmProdutos
-              "
-              type="warning"
-              variant="tonal"
-              class="mb-4"
-            >
-              Há identificadores repetidos na fonte ou em produtos das lojas. Revise os conflitos antes de copiar itens
-              para uma loja.
-            </v-alert>
-            <v-table v-if="previaBase.amostra?.length" density="compact">
-              <thead>
-                <tr>
-                  <th>Ação</th>
-                  <th>Nome</th>
-                  <th>Código</th>
-                  <th>EAN</th>
-                  <th>NCM</th>
-                  <th>CST</th>
-                  <th>Conflitos</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, indice) in previaBase.amostra" :key="item.idOrigem ?? `${item.acao}-${indice}`">
-                  <td>{{ item.acao }}</td>
-                  <td>{{ item.nome }}</td>
-                  <td>{{ item.codigoInterno || "—" }}</td>
-                  <td>{{ item.codigoBarras || "—" }}</td>
-                  <td>{{ item.ncm || "—" }}</td>
-                  <td>{{ item.cstPisCofins || "—" }}</td>
-                  <td>
-                    {{
-                      [item.conflitoCodigoInterno ? "código" : "", item.conflitoEan ? "EAN" : ""]
-                        .filter(Boolean)
-                        .join(", ") || "—"
-                    }}
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </template>
-        </v-card-text>
-      </v-card>
+      <CentralCatalogoBase
+        v-if="resumo"
+        :previa="previaBase"
+        :processando="processando"
+        :carga-validada="cargas.find((item) => item.id === cargaId)?.estado !== 'recebida'"
+        @gerar-previa="gerarPreviaCatalogoBase"
+        @importar="importarCatalogoBase"
+      />
 
       <CentralProdutosGrupos
         v-model:busca="busca"

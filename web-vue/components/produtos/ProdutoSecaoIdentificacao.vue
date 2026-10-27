@@ -53,7 +53,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           label="Código interno"
           readonly
           class="cx-num"
-          hint="Gerado pelo sistema, sequencial por loja."
+          hint="Gerado pelo sistema, sequencial no catálogo oficial."
           persistent-hint
         />
         <v-text-field v-model="form.codigo" label="Código externo" :hint="dica('codigo')" :disabled="somenteLeitura" />
@@ -117,6 +117,46 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           "
           :disabled="somenteLeitura"
           class="secao__campo-largo"
+        />
+
+        <v-text-field
+          v-model="form.teclaBalanca"
+          type="number"
+          min="0"
+          label="Tecla da balança"
+          :disabled="somenteLeitura"
+        />
+        <v-text-field
+          v-model="form.validadeBalanca"
+          type="number"
+          min="0"
+          label="Validade na balança (dias)"
+          :disabled="somenteLeitura"
+        />
+        <v-text-field v-model="form.grupoIdExterno" label="Grupo oficial (ID externo)" :disabled="somenteLeitura" />
+        <v-select
+          v-model="form.areaVenda"
+          :items="[
+            { value: 'caixa', title: 'Caixa' },
+            { value: 'vitrine', title: 'Vitrine' },
+            { value: 'copa', title: 'Copa' },
+            { value: 'chapa', title: 'Chapa' },
+            { value: 'mesas', title: 'Mesas' },
+            { value: 'vasca_paes', title: 'Vasca de pães' },
+            { value: 'vitrine_paes', title: 'Vitrine de pães' },
+            { value: 'paes_empacotados', title: 'Pães empacotados' },
+            { value: 'mesa_paes', title: 'Mesa de pães' },
+            { value: 'frios', title: 'Frios' },
+            { value: 'bebidas', title: 'Bebidas' },
+            { value: 'laticinios', title: 'Laticínios' },
+            { value: 'mercearia', title: 'Mercearia' },
+            { value: 'estoque_bebidas', title: 'Estoque de bebidas' },
+            { value: 'biscoitos', title: 'Biscoitos' },
+            { value: 'dml_limpeza', title: 'DML / limpeza' }
+          ]"
+          label="Área de venda"
+          clearable
+          :disabled="somenteLeitura"
         />
 
         <v-select

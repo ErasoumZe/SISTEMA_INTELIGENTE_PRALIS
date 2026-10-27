@@ -63,6 +63,27 @@ describe("produto-formulario-mapa", () => {
     });
   });
 
+  it("preserva campos oficiais de balança e área de venda no round-trip", () => {
+    const detalhe = {
+      empresaId: "11111111-1111-4111-8111-111111111111",
+      descricao: "Produto oficial",
+      nomeCatalogo: "Produto oficial",
+      teclaBalanca: 131,
+      validadeBalanca: 7,
+      grupoIdExterno: "GR-09",
+      areaVenda: "vitrine_paes"
+    } as ProdutoDetalhe;
+    const form = formularioDoDetalhe(detalhe);
+    expect(form.teclaBalanca).toBe("131");
+    expect(form.validadeBalanca).toBe("7");
+    expect(payloadDoFormulario(form, detalhe.empresaId, false)).toMatchObject({
+      teclaBalanca: 131,
+      validadeBalanca: 7,
+      grupoIdExterno: "GR-09",
+      areaVenda: "vitrine_paes"
+    });
+  });
+
   it("preserva os campos oficiais de compra, venda, fiscal e receituário no round-trip", () => {
     const detalhe = {
       empresaId: "11111111-1111-4111-8111-111111111111",

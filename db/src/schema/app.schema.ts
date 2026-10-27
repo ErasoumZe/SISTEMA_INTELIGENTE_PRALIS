@@ -946,6 +946,10 @@ export const produtos = pgTable(
     descricao: text("descricao").notNull(), // auto (montarDescricao) por padrao, com override manual
     nomeCatalogo: text("nome_catalogo"), // nome separado da descricao automatica oficial; NULL identifica cadastro legado
     pesavel: boolean("pesavel"), // NULL = legado sem conferencia; novos cadastros recebem false
+    teclaBalanca: integer("tecla_balanca"),
+    validadeBalanca: integer("validade_balanca"),
+    grupoIdExterno: text("grupo_id_externo"),
+    areaVenda: text("area_venda"),
     marca: text("marca"),
     compraAproximada: boolean("compra_aproximada").notNull().default(false),
     habilitarAjuda: boolean("habilitar_ajuda").notNull().default(false),

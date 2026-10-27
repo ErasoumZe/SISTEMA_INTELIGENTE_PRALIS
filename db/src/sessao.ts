@@ -26,13 +26,17 @@ export function sqlTravarCadastroDeProdutos() {
   return sql`select pg_advisory_xact_lock(hashtext('produtos:codigo-interno-global'))`;
 }
 
-/** Maior código numérico dentro da faixa de produtos, seguindo o app oficial. */
-export function sqlMaiorCodigoInternoGlobal() {
+/**
+ * Consulta completa do maior código interno numérico dentro da faixa de produtos (app oficial): empresas e
+ * catálogo BASE juntos. Sempre devolve UMA linha (`maximo`), mesmo sem nenhum produto — selecionar a expressão
+ * "from produtos" devolvia zero linhas com a tabela vazia e ignorava os códigos da BASE.
+ */
+export function sqlConsultaMaiorCodigoInterno() {
   const codigoEmpresa = sql.raw('"produtos"."codigo_interno"');
   const numeroEmpresa = sql`NULLIF(regexp_replace(${codigoEmpresa}, '\\D', '', 'g'), '')`;
   const codigoBase = sql.raw('"produtos_catalogo_base"."codigo_interno"');
   const numeroBase = sql`NULLIF(regexp_replace(${codigoBase}, '\\D', '', 'g'), '')`;
-  return sql<number>`(
+  return sql`SELECT (
     SELECT COALESCE(MAX(codigo), 13129)::numeric
     FROM (
       SELECT CASE
@@ -48,7 +52,8 @@ export function sqlMaiorCodigoInternoGlobal() {
         ELSE NULL
       END AS codigo
       FROM produtos_catalogo_base
-    ) AS codigos_internos`;
+    ) AS codigos_internos
+  ) AS maximo`;
 }
 
 /**

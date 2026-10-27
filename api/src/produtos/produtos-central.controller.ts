@@ -19,6 +19,7 @@ import {
   simularImportacaoCatalogoBase,
   validarCargaCentral
 } from "./produtos-central.service.js";
+import { importarCatalogoBase, ImportacaoCatalogoBaseInvalidaError } from "./produtos-catalogo-base.service.js";
 
 const paramsCarga = z.object({ cargaId: z.string().uuid() });
 const paramsGrupo = z.object({ cargaId: z.string().uuid(), grupoId: z.string().uuid() });
@@ -54,6 +55,8 @@ function responderErroCentral(reply: FastifyReply, causa: DadosExternos) {
     return erro(reply, 409, causa.message, "CENTRAL_CONFLICT");
   }
   if (causa instanceof CargaCentralVaziaError) return erro(reply, 422, causa.message, "CENTRAL_EMPTY_LOAD");
+  if (causa instanceof ImportacaoCatalogoBaseInvalidaError)
+    return erro(reply, 409, causa.message, "BASE_IMPORT_CONFLICT");
   if (causa instanceof ErroBackupPralisCentral) return erro(reply, 400, causa.message, "PRALIS_BACKUP_INVALID");
   if (causa instanceof ErroFonteCentral) return erro(reply, 400, causa.message, causa.code);
   throw causa;
@@ -120,6 +123,24 @@ export async function registrarRotasProdutosCentral(app: FastifyInstance): Promi
     const { cargaId } = paramsCarga.parse(request.params);
     try {
       return ok(await simularImportacaoCatalogoBase(cargaId));
+    } catch (causa) {
+      return responderErroCentral(reply, causa);
+    }
+  });
+
+  app.post("/api/produtos/central/cargas/:cargaId/catalogo-base/importar", async (request, reply) => {
+    const perfil = await exigirAdmin(request, reply);
+    if (!perfil) return;
+    const { cargaId } = paramsCarga.parse(request.params);
+    try {
+      const resultado = await importarCatalogoBase(cargaId);
+      request.log.info({
+        evento: "produtos.central.catalogo_base.importado",
+        cargaId,
+        usuarioId: perfil.usuarioId,
+        ...resultado
+      });
+      return ok(resultado);
     } catch (causa) {
       return responderErroCentral(reply, causa);
     }

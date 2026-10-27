@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid
 } from "drizzle-orm/pg-core";
@@ -68,7 +69,8 @@ export const produtosCentralFontes = pgTable(
   (t) => [
     foreignKey({ columns: [t.cargaId], foreignColumns: [produtosCentralCargas.id] }).onDelete("cascade"),
     uniqueIndex("produtos_central_fontes_carga_fonte_chave_unico").on(t.cargaId, t.fonte, t.chaveLinhaFonte),
-    uniqueIndex("produtos_central_fontes_id_carga_unico").on(t.id, t.cargaId),
+    // Restricao (nao so indice): alvo das FKs compostas de produtos_central_grupos_fontes (0086).
+    unique("produtos_central_fontes_id_carga_unico").on(t.id, t.cargaId),
     check(
       "produtos_central_fontes_fonte_check",
       sql`${t.fonte} in ('sia_li', 'compilart_tnp', 'planilha_tnp', 'fiscal_tnp', 'planilha_nova', 'vendidos_tnp', 'pralis', 'vendas_pdv_12m')`
@@ -105,7 +107,7 @@ export const produtosCentralGrupos = pgTable(
   (t) => [
     foreignKey({ columns: [t.cargaId], foreignColumns: [produtosCentralCargas.id] }).onDelete("cascade"),
     uniqueIndex("produtos_central_grupos_carga_chave_unico").on(t.cargaId, t.chave),
-    uniqueIndex("produtos_central_grupos_id_carga_unico").on(t.id, t.cargaId),
+    unique("produtos_central_grupos_id_carga_unico").on(t.id, t.cargaId),
     check(
       "produtos_central_grupos_motivo_check",
       sql`${t.motivo} in ('mesmo_id_sistema', 'mesmo_cod_barras', 'mesmo_cod_interno', 'nome_parecido', 'unico')`

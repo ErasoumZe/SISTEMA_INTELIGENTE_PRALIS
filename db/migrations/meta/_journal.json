@@ -596,6 +596,20 @@
       "when": 1793060897397,
       "tag": "0084_catalogo_base_separado",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793100000000,
+      "tag": "0085_produtos_campos_oficiais",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793104759411,
+      "tag": "0086_central_chaves_restricao",
+      "breakpoints": true
     }
   ]
 }

@@ -72,6 +72,55 @@ describe("produtos integration", () => {
       )
     ).resolves.toMatchObject({ nome_catalogo: "Produto CRUD renomeado", pesavel: false });
 
+    const exportacao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/export.csv",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(exportacao.statusCode, exportacao.body).toBe(200);
+    expect(exportacao.headers["content-type"]).toContain("text/csv");
+    expect(exportacao.headers["content-disposition"]).toContain("produtos-pralis.csv");
+    expect(exportacao.body).toContain("codigo_interno");
+    expect(exportacao.body).toContain("Produto CRUD renomeado");
+
+    const exportacaoSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/export.csv",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(exportacaoSemPermissao.statusCode).toBe(403);
+
+    const backup = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/backup.xlsx",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(backup.statusCode, backup.body).toBe(200);
+    expect(backup.headers["content-type"]).toContain("spreadsheetml.sheet");
+    expect(backup.headers["content-disposition"]).toContain("backup-produtos-pralis.xlsx");
+
+    const backupSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/backup.xlsx",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(backupSemPermissao.statusCode).toBe(403);
+
+    const panoramaFiscal = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/fiscal/panorama",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(panoramaFiscal.statusCode, panoramaFiscal.body).toBe(200);
+    expect(json<{ data: Record<string, number> }>(panoramaFiscal).data).toEqual(expect.any(Object));
+
+    const panoramaFiscalSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/fiscal/panorama",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(panoramaFiscalSemPermissao.statusCode).toBe(403);
+
     const historico = await contexto.app.inject({
       method: "GET",
       url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaA}`,

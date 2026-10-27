@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 /**
  * Isolamento entre empresas e concorrencia no cadastro de produtos (P-04, ETAPA 2).
@@ -401,6 +401,40 @@ describe("produtos - duplicidade e concorrencia", () => {
     );
     expect(new Set(codigos).size).toBe(codigos.length);
     expect(codigos.every((codigo) => /^\d{5}$/.test(codigo))).toBe(true);
+  });
+
+  it("Deve_ContinuarAcimaDoCatalogoBase_Quando_GerarCodigoInterno", async () => {
+    // Regressao (R-222): a sequencia e global e inclui o catalogo mestre BASE. A consulta antiga abria um
+    // parentese sem fechar (todo cadastro dava 500) e, com a tabela de produtos vazia, ignorava a BASE.
+    await executarSql(
+      `insert into produtos_catalogo_base (id_origem, nome, status, codigo_interno, dados_oficiais)
+       values ('regressao-codigo-base', 'REGRESSAO CODIGO BASE', 'ativo', '650000', '{}'::jsonb)`
+    );
+    let produtoId = "";
+    try {
+      const criado = await contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos",
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          descricao: "Produto depois da BASE",
+          unidadeIndividualId: unidade,
+          quantidadeIndividual: 1,
+          conversoes: []
+        }
+      });
+      expect(criado.statusCode, criado.body).toBe(201);
+      produtoId = json<RespostaId>(criado).data.id;
+      const linha = await consultarUm<{ codigo_interno: string }>("select codigo_interno from produtos where id = $1", [
+        produtoId
+      ]);
+      expect(linha?.codigo_interno).toBe("650001");
+    } finally {
+      // Volta a sequencia ao normal para os demais casos (os arquivos rodam em sequencia).
+      if (produtoId) await executarSql("delete from produtos where id = $1", [produtoId]);
+      await executarSql("delete from produtos_catalogo_base where id_origem = 'regressao-codigo-base'");
+    }
   });
 
   it("Deve_DeixarPassarUmSo_Quando_DuplicadosSimultaneos", async () => {

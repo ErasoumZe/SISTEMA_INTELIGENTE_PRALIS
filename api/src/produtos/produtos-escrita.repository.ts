@@ -1,5 +1,5 @@
 import { and, desc, eq, ilike, inArray, ne } from "drizzle-orm";
-import { sqlMaiorCodigoInternoGlobal, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
+import { sqlConsultaMaiorCodigoInterno, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
 import {
   gruposMercadorias,
   perfisUsuarios,
@@ -38,8 +38,9 @@ export async function gerarCodigoExternoUnico(tx: ExecutorBanco): Promise<string
 
 // Regra R-222: sequência global do app oficial; a consulta ignora a faixa >=700000.
 export async function proximoCodigoInterno(tx: ExecutorBanco): Promise<string> {
-  const [linha] = await tx.select({ maximo: sqlMaiorCodigoInternoGlobal() }).from(produtos);
-  return calcularProximoCodigoInterno(Number(linha?.maximo ?? ULTIMO_CODIGO_DE_PRODUTO));
+  const resultado = await tx.execute<{ maximo: string | number | null }>(sqlConsultaMaiorCodigoInterno());
+  const maximo = resultado.rows[0]?.maximo;
+  return calcularProximoCodigoInterno(Number(maximo ?? ULTIMO_CODIGO_DE_PRODUTO));
 }
 
 /**
@@ -62,19 +63,29 @@ export async function carregarProdutoParaEscritaRepository(
 ): Promise<{
   id: string;
   empresaId: string;
+  produtoBaseId: string | null;
   criadoPor: string | null;
   descricao: string;
   nomeCatalogo: string | null;
   pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
 } | null> {
   const [linha] = await tx
     .select({
       id: produtos.id,
       empresaId: produtos.empresaId,
+      produtoBaseId: produtos.produtoBaseId,
       criadoPor: produtos.criadoPor,
       descricao: produtos.descricao,
       nomeCatalogo: produtos.nomeCatalogo,
-      pesavel: produtos.pesavel
+      pesavel: produtos.pesavel,
+      teclaBalanca: produtos.teclaBalanca,
+      validadeBalanca: produtos.validadeBalanca,
+      grupoIdExterno: produtos.grupoIdExterno,
+      areaVenda: produtos.areaVenda
     })
     .from(produtos)
     .where(eq(produtos.id, id))
@@ -203,6 +214,7 @@ export async function buscarProdutoPorDescricaoRepository(
 
 export interface ProdutoParaGravar {
   id?: string;
+  produtoBaseId?: string | null;
   empresaId: string;
   codigo: string | null;
   codigoInterno?: string | null;
@@ -211,6 +223,10 @@ export interface ProdutoParaGravar {
   descricao: string;
   nomeCatalogo: string | null;
   pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
@@ -307,11 +323,16 @@ export async function salvarProdutoRepository(
 ): Promise<{ id: string; empresaId: string }> {
   const valores = {
     empresaId: input.empresaId,
+    produtoBaseId: input.produtoBaseId,
     codigo: input.codigo,
     codigoBarras: input.codigoBarras,
     descricao: input.descricao,
     nomeCatalogo: input.nomeCatalogo,
     pesavel: input.pesavel,
+    teclaBalanca: input.teclaBalanca,
+    validadeBalanca: input.validadeBalanca,
+    grupoIdExterno: input.grupoIdExterno,
+    areaVenda: input.areaVenda,
     marca: input.marca,
     compraAproximada: input.compraAproximada,
     habilitarAjuda: input.habilitarAjuda,

@@ -35,6 +35,9 @@ import {
 } from "./produtos-foto.js";
 import { copiarProdutosRepository } from "./produtos-importacao.repository.js";
 import {
+  buscarCatalogoParaBackupRepository,
+  buscarPanoramaFiscalProdutosRepository,
+  exportarCatalogoCsvRepository,
   filtrosDeProdutoRepository,
   listarProdutosPaginadoRepository,
   opcoesDeProdutoRepository,
@@ -180,6 +183,18 @@ export async function listarFiltrosDeProduto(escopoDados: string[]) {
   return filtrosDeProdutoRepository(escopoDados);
 }
 
+export async function consultarPanoramaFiscalProdutos(perfil: PerfilComEmpresa) {
+  return buscarPanoramaFiscalProdutosRepository(empresasPermitidas(perfil));
+}
+
+export async function exportarCatalogoCsvProdutos(perfil: PerfilComEmpresa) {
+  return exportarCatalogoCsvRepository(empresasPermitidas(perfil));
+}
+
+export async function buscarBackupCatalogoProdutos(perfil: PerfilComEmpresa) {
+  return buscarCatalogoParaBackupRepository(empresasPermitidas(perfil));
+}
+
 function mensagemDeDuplicado(duplicado: { descricao: string; criadoPorNome: string | null }, motivo: string) {
   const porQuem = duplicado.criadoPorNome ? ` (cadastrado por ${duplicado.criadoPorNome})` : "";
   return `Ja existe o produto "${duplicado.descricao}" nesta loja${porQuem}${motivo}.`;
@@ -201,7 +216,12 @@ export interface AtorDaEscrita {
  * 4. aplica as duas regras de duplicidade (EAN absoluto, descricao com confirmacao);
  * 5. grava produto + satelites.
  */
-export async function salvarProduto(id: string | null, body: DadosExternos, ator: AtorDaEscrita) {
+export async function salvarProduto(
+  id: string | null,
+  body: DadosExternos,
+  ator: AtorDaEscrita,
+  opcoes: { produtoBaseId?: string; preservarPrecoImportado?: boolean } = {}
+) {
   const dados = produtoPayloadSchema.parse(body);
   const descricao = dados.descricao.trim();
   const codigoBarras = apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null;
@@ -229,7 +249,7 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
       forcar: dados.forcar
     });
 
-    const precoVenda = precoDeVendaDoServidor(dados);
+    const precoVenda = opcoes.preservarPrecoImportado ? (dados.precoVenda ?? null) : precoDeVendaDoServidor(dados);
     const salvo = await salvarProdutoRepository(
       tx,
       montarProdutoParaGravar(dados, {
@@ -240,6 +260,11 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
         nomeCatalogo:
           dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
         pesavel: dados.pesavel === undefined ? (alvo?.pesavel ?? false) : dados.pesavel,
+        teclaBalanca: dados.teclaBalanca === undefined ? (alvo?.teclaBalanca ?? null) : dados.teclaBalanca,
+        validadeBalanca: dados.validadeBalanca === undefined ? (alvo?.validadeBalanca ?? null) : dados.validadeBalanca,
+        grupoIdExterno: dados.grupoIdExterno === undefined ? (alvo?.grupoIdExterno ?? null) : dados.grupoIdExterno,
+        areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
+        produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
         criadoPor: ator.usuarioId ?? null
       })
     );
@@ -392,18 +417,28 @@ function montarProdutoParaGravar(
     precoVenda: number | null;
     nomeCatalogo: string | null;
     pesavel: boolean | null;
+    teclaBalanca: number | null;
+    validadeBalanca: number | null;
+    grupoIdExterno: string | null;
+    areaVenda: string | null;
+    produtoBaseId: string | null;
     criadoPor: string | null;
   }
 ): ProdutoParaGravar {
   return {
     ...(extra.id ? { id: extra.id } : {}),
     empresaId: dados.empresaId,
+    produtoBaseId: extra.produtoBaseId,
     codigo: dados.codigo?.trim() || null,
     criadoPor: extra.criadoPor,
     codigoBarras: extra.codigoBarras,
     descricao: extra.descricao,
     nomeCatalogo: extra.nomeCatalogo,
     pesavel: extra.pesavel,
+    teclaBalanca: extra.teclaBalanca,
+    validadeBalanca: extra.validadeBalanca,
+    grupoIdExterno: extra.grupoIdExterno?.trim() || null,
+    areaVenda: extra.areaVenda,
     marca: dados.marca?.trim() || null,
     compraAproximada: dados.compraAproximada,
     habilitarAjuda: dados.habilitarAjuda,

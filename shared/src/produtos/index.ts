@@ -98,6 +98,30 @@ export const produtoPayloadSchema = z
     descricao: z.string().min(1),
     nomeCatalogo: z.string().trim().min(1).max(200).optional().nullable(),
     pesavel: z.boolean().nullable().optional(),
+    teclaBalanca: z.coerce.number().int().min(0).nullable().optional(),
+    validadeBalanca: z.coerce.number().int().min(0).nullable().optional(),
+    grupoIdExterno: z.string().trim().max(120).nullable().optional(),
+    areaVenda: z
+      .enum([
+        "caixa",
+        "vitrine",
+        "copa",
+        "chapa",
+        "mesas",
+        "vasca_paes",
+        "vitrine_paes",
+        "paes_empacotados",
+        "mesa_paes",
+        "frios",
+        "bebidas",
+        "laticinios",
+        "mercearia",
+        "estoque_bebidas",
+        "biscoitos",
+        "dml_limpeza"
+      ])
+      .nullable()
+      .optional(),
     marca: z.string().optional().nullable(),
     unidadeIndividualId: uuidSchema,
     quantidadeIndividual: z.coerce.number().positive(),
@@ -216,6 +240,10 @@ export interface ProdutoResumo {
   descricao: string;
   nomeCatalogo: string | null;
   pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
@@ -273,6 +301,10 @@ export interface ProdutoDetalhe {
   descricao: string;
   nomeCatalogo: string | null;
   pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
