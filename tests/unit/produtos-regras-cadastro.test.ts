@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   codigoBarrasNaCriacao,
+  fracaoParaMargemPercentual,
+  margemPercentualParaFracao,
   montarDescricao,
   normalizarTextosProduto,
   TECLA_BALANCA_FIXA,
@@ -98,5 +100,15 @@ describe("produtos/regras — descricao sem gramatura", () => {
   it("quantidade 0 nao aparece na descricao (oficial)", () => {
     expect(montarDescricao("Bolo de laranja", 0, "UN")).toBe("BOLO DE LARANJA UN");
     expect(montarDescricao("Farinha", "1,5", "KG")).toBe("FARINHA 1,5 KG");
+  });
+});
+
+describe("produtos/regras — margem padrao do grupo", () => {
+  it("converte percentual digitado em fracao e volta", () => {
+    expect(margemPercentualParaFracao("30")).toBe(0.3);
+    expect(margemPercentualParaFracao("12,5")).toBe(0.125);
+    expect(margemPercentualParaFracao("")).toBeNull();
+    expect(fracaoParaMargemPercentual("0.4000")).toBe("40");
+    expect(fracaoParaMargemPercentual(null)).toBe("");
   });
 });

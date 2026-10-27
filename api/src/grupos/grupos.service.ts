@@ -36,7 +36,9 @@ export async function salvarGrupo(tipo: string, id: string | null, body: DadosEx
     tipoGrupo,
     nome: dados.nome.trim(),
     grupoPaiId: dados.grupoPaiId ?? null,
-    ativa: dados.ativa
+    ativa: dados.ativa,
+    // Margem padrao so existe em grupo de mercadoria; nos outros tipos o campo e ignorado.
+    ...(tipoGrupo === "mercadoria" && dados.margemPadrao !== undefined ? { margemPadrao: dados.margemPadrao } : {})
   });
 }
 

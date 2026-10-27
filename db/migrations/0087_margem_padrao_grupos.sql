@@ -1,0 +1,2 @@
+ALTER TABLE "grupos_mercadorias" ADD COLUMN "margem_padrao" numeric(6, 4);--> statement-breakpoint
+ALTER TABLE "grupos_mercadorias" ADD CONSTRAINT "grupos_mercadorias_margem_padrao_check" CHECK ("grupos_mercadorias"."margem_padrao" is null or "grupos_mercadorias"."margem_padrao" >= 0);

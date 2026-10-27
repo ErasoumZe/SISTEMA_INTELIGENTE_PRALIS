@@ -531,3 +531,35 @@ Implementado e coberto por teste (unitário `tests/unit/produtos-regras-cadastro
   ignorados sem distinguir de inexistentes.
 - Listagem: status clicável em card e linha; seleção e "Inativar selecionados" para o administrador; botão
   "Importar da base" para quem cria produto (antes só o admin via "Catálogo BASE").
+
+### V2 — margem padrão por grupo (27/10/2026)
+
+- Migration aditiva `0087_margem_padrao_grupos.sql` (SQL mostrado e aprovado por José): coluna
+  `grupos_mercadorias.margem_padrao numeric(6,4)` nula + CHECK `>= 0`. Aplicada **só** no Postgres local
+  (`localhost:5543`), em transação. Nenhum preço existente foi recalculado.
+- Margem em fração (0,30 = 30%), como o `margemPadrao` do oficial. Produto com preço automático e sem margem
+  própria usa a do grupo, no servidor (ADR-002) e na prévia; a margem própria continua tendo prioridade.
+- Campo "Margem padrão do grupo" no cadastro de grupos de mercadoria; editar sem mandar a margem preserva a
+  gravada. Teste: `produtos-preco.test.ts` (custo 50 / caixa 10 + 40% do grupo = 7,00; margem própria 30% = 6,50).
+- Diferença conhecida: no oficial a margem vem da aba `(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA`
+  (`M5:N130`) do Google Sheets. No ERP é editada na tela; a carga da planilha deve preencher os valores atuais.
+
+### Fiscal pelo grupo — como o oficial funciona (levantamento de 27/10/2026, pendente de implementação)
+
+Decisão de José: o fiscal do produto **não é digitado**; é puxado pelo grupo como no app da loja. O oficial
+(`stack/api/src/modules/apoio/tax-rule.service.ts`) lê ao vivo do Google Sheets, sem tabela no banco:
+
+- aba `(TNP) FISCAL - DE PARA PRODUTOS`: `AB4:AG79` regra por grupo (grupo, CST PIS/COFINS, tributação
+  Simples, alíquota Simples, % ICMS RE, base fiscal); `A4:E2000` de-para por produto (código EAN/PLU, NCM, CST,
+  % ICMS RE, nome); `H4:M200` reforma por NCM (CST reforma, cClassTrib, IBS, CBS); `O4:Q20` CST → Simples;
+- aba `(TNP) FISCAL - CADASTRO ECF` (`A2:Q4000`): alíquotas de ECF casadas pelo NOME do produto (nome repetido =
+  ambíguo); LI/HORA usam o de-para do SIA (`sia_produto_depara`) por código de barras;
+- classificação: regra do grupo (nome normalizado) + de-para por EAN/PLU de balança + ECF por nome/SIA; estados
+  `completo`, `parcial`, `pendente_grupo_invalido`, `pendente_fonte_da_loja`, `pendente_ambiguo`,
+  `pendente_conflito`, `fonte_indisponivel`; roda na criação e quando grupo/EAN mudam ("completar" quando o
+  produto não tem carga fiscal); a cópia BASE→loja copia o fiscal, não reclassifica;
+- campos que pessoa edita (só admin): NCM, CEST, categoria, alíquotas cheia/FCP/PIS/COFINS, redução, ICMS; o resto
+  é derivado.
+
+Para portar: as abas precisam virar dados do ERP (tabelas novas, migration a mostrar a José com base nas colunas
+reais) carregados do XLSX da planilha inteira. **Bloqueado até José enviar o XLSX completo.**

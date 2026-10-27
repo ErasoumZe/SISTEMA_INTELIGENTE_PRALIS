@@ -171,6 +171,21 @@ export async function referenciasForaDaEmpresaRepository(
   return problemas;
 }
 
+/** Margem padrao (fracao) do grupo de mercadoria DA EMPRESA; 0 quando o grupo nao tem margem. */
+export async function margemPadraoDoGrupoRepository(
+  tx: ExecutorBanco,
+  empresaId: string,
+  grupoMercadoriaId: string | null
+): Promise<number> {
+  if (!grupoMercadoriaId) return 0;
+  const [linha] = await tx
+    .select({ margemPadrao: gruposMercadorias.margemPadrao })
+    .from(gruposMercadorias)
+    .where(and(eq(gruposMercadorias.id, grupoMercadoriaId), eq(gruposMercadorias.empresaId, empresaId)))
+    .limit(1);
+  return Number(linha?.margemPadrao ?? 0) || 0;
+}
+
 /** Codigo de barras repetido na MESMA empresa. Pede confirmacao ("cadastrar mesmo assim"), como no app oficial. */
 export async function buscarProdutoPorCodigoBarrasRepository(
   tx: ExecutorBanco,

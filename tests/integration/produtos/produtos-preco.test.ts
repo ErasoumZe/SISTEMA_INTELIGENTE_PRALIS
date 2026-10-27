@@ -151,4 +151,65 @@ describe("produtos preco autoritativo integration", () => {
     expect(itens.find((item) => item.id === comPromocaoId)?.precoVendaAtual).toBe(8);
     expect(itens.find((item) => item.id === semPromocaoId)?.precoVendaAtual).toBe(10);
   });
+
+  it("Deve_UsarMargemPadraoDoGrupo_Quando_ProdutoSemMargemPropria", async () => {
+    // Oficial: preco automatico sem margem propria usa a margem padrao do grupo (fracao).
+    const grupo = await contexto.app.inject({
+      method: "POST",
+      url: "/api/grupos-mercadorias",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "mercadoria", nome: "Grupo com margem 40", margemPadrao: 0.4 }
+    });
+    expect(grupo.statusCode, grupo.body).toBe(201);
+    const grupoId = json<{ data: { id: string } }>(grupo).data.id;
+    const gravada = await consultarUm<{ margem_padrao: string }>(
+      "select margem_padrao from grupos_mercadorias where id = $1",
+      [grupoId]
+    );
+    expect(gravada?.margem_padrao).toBe("0.4000");
+
+    const criar = (descricao: string, margem: number | null) =>
+      contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos",
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          descricao,
+          unidadeIndividualId: idsTeste.unidade,
+          quantidadeIndividual: 1,
+          grupoMercadoriaId: grupoId,
+          conversoes: [],
+          auto: true,
+          custo: 50,
+          quantidadeCaixa: 10,
+          margem
+        }
+      });
+    const preco = async (resposta: Awaited<ReturnType<typeof criar>>) => {
+      expect(resposta.statusCode, resposta.body).toBe(201);
+      const linha = await consultarUm<{ preco_venda: string }>("select preco_venda from produtos where id = $1", [
+        json<{ data: { id: string } }>(resposta).data.id
+      ]);
+      return Number(linha?.preco_venda);
+    };
+
+    // (50 / 10) * (1 + 0.4) = 7.00 pela margem do grupo; a margem propria (0.3) continua tendo prioridade.
+    expect(await preco(await criar("Produto margem do grupo", null))).toBe(7);
+    expect(await preco(await criar("Produto margem propria", 0.3))).toBe(6.5);
+
+    // Editar o grupo sem mandar a margem preserva a gravada.
+    const semMargem = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/grupos-mercadorias/${grupoId}`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "mercadoria", nome: "Grupo com margem 40 renomeado" }
+    });
+    expect(semMargem.statusCode, semMargem.body).toBeLessThan(300);
+    const depois = await consultarUm<{ margem_padrao: string }>(
+      "select margem_padrao from grupos_mercadorias where id = $1",
+      [grupoId]
+    );
+    expect(depois?.margem_padrao).toBe("0.4000");
+  });
 });

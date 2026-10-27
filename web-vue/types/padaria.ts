@@ -82,6 +82,8 @@ export type Opcao = {
   tipo?: string;
   tipoGrupo?: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId?: string | null;
+  /** Grupo de mercadoria: margem padrao em fracao (numeric do banco, vem como texto). */
+  margemPadrao?: string | null;
   areaId?: string | null;
   setorPaiId?: string | null;
   setorId?: string | null;

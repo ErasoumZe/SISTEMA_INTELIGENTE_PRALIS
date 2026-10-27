@@ -199,7 +199,8 @@ export function useCadastroView(params: {
           nome: item.nome,
           tipo: "Mercadoria",
           tipoGrupo: "mercadoria",
-          grupoPaiId: item.grupoPaiId ?? ""
+          grupoPaiId: item.grupoPaiId ?? "",
+          margemPadrao: item.margemPadrao ?? ""
         })),
         ...listas.gruposRetiradas.map((item) => ({
           id: item.id,

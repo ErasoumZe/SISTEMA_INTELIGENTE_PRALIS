@@ -610,6 +610,13 @@
       "when": 1793104759411,
       "tag": "0086_central_chaves_restricao",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793110959961,
+      "tag": "0087_margem_padrao_grupos",
+      "breakpoints": true
     }
   ]
 }

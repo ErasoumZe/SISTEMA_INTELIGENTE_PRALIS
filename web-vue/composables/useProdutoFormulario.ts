@@ -1,6 +1,7 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
 import {
   calcularPrecoVenda,
+  fracaoParaMargemPercentual,
   montarComoSeCompra,
   montarValidacaoQtd,
   validarBalanca,
@@ -27,7 +28,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
 
   const form = ref<ProdutoForm>(formularioVazio(empresaId.value));
   const unidades = ref<Array<{ id: string; sigla: string; nome: string }>>([]);
-  const grupos = ref<Array<{ id: string; nome: string }>>([]);
+  const grupos = ref<Array<{ id: string; nome: string; margemPadrao?: string | null }>>([]);
 
   const carregando = ref(false);
   const salvando = ref(false);
@@ -85,10 +86,18 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       : ""
   );
 
+  /** Margem padrao (fracao) do grupo escolhido; 0 quando o grupo nao tem margem. */
+  const margemDoGrupo = computed(
+    () => Number(grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.margemPadrao ?? 0) || 0
+  );
+  /** "30" para mostrar na dica do campo de margem; vazio quando o grupo nao tem margem. */
+  const margemDoGrupoPercentual = computed(() =>
+    margemDoGrupo.value ? fracaoParaMargemPercentual(margemDoGrupo.value) : ""
+  );
+
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
-   * numero antes de salvar. `margemGrupo: 0` porque `grupos_mercadorias.margem` ainda nao existe
-   * (migration bloqueada; ver PROJECT_BRAIN/30 §7).
+   * numero antes de salvar. Sem margem propria vale a margem padrao do grupo (oficial).
    */
   const precoPreview = computed(() =>
     calcularPrecoVenda({
@@ -96,7 +105,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       custo: numero(form.value.custo) ?? 0,
       quantidadeCaixa: numero(form.value.quantidadeCaixa) ?? 1,
       margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
-      margemGrupo: 0,
+      margemGrupo: margemDoGrupo.value,
       precoManual: numero(form.value.precoVenda) ?? 0,
       temProduto: Boolean(form.value.nomeCatalogo.trim())
     })
@@ -158,7 +167,9 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     const consulta = `?empresaId=${empresaId.value}&pageSize=100`;
     const [listaUnidades, listaGrupos] = await Promise.all([
       apiGet<Array<{ id: string; sigla: string; nome: string }>>(`/api/unidades_medida${consulta}`),
-      apiGet<{ gruposMercadorias: Array<{ id: string; nome: string }> }>(`/api/grupos${consulta}`)
+      apiGet<{ gruposMercadorias: Array<{ id: string; nome: string; margemPadrao?: string | null }> }>(
+        `/api/grupos${consulta}`
+      )
     ]);
     unidades.value = listaUnidades;
     grupos.value = listaGrupos.gruposMercadorias;
@@ -254,6 +265,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     comoSeCompraPreview,
     validacaoQtdPreview,
     precoPreview,
+    margemDoGrupoPercentual,
     carregar,
     salvar
   };

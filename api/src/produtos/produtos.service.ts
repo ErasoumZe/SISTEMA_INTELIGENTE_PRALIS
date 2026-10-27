@@ -24,6 +24,7 @@ import {
   buscarProdutoPorDescricaoRepository,
   carregarProdutoParaEscritaRepository,
   listarHistoricoNomesProdutoRepository,
+  margemPadraoDoGrupoRepository,
   registrarHistoricoNomeProdutoRepository,
   referenciasForaDaEmpresaRepository,
   salvarProdutoRepository,
@@ -274,7 +275,12 @@ export async function salvarProduto(
       forcar: dados.forcar
     });
 
-    const precoVenda = opcoes.preservarPrecoImportado ? (dados.precoVenda ?? null) : precoDeVendaDoServidor(dados);
+    const precoVenda = opcoes.preservarPrecoImportado
+      ? (dados.precoVenda ?? null)
+      : precoDeVendaDoServidor(
+          dados,
+          await margemPadraoDoGrupoRepository(tx, dados.empresaId, dados.grupoMercadoriaId ?? null)
+        );
     const salvo = await salvarProdutoRepository(
       tx,
       montarProdutoParaGravar(dados, {
@@ -445,15 +451,18 @@ async function recusarDuplicados(
 /**
  * ADR-002: preco de venda e decisao do servidor. Com `auto=true` o valor enviado pelo cliente e
  * IGNORADO e recalculado pela regra oficial do shared; manual (`auto=false`) aceita o digitado.
- * Mesma formula que o front usa no preview.
+ * Mesma formula que o front usa no preview. Sem margem propria vale a margem padrao do grupo.
  */
-function precoDeVendaDoServidor(dados: {
-  auto: boolean;
-  custo?: number | null | undefined;
-  quantidadeCaixa?: number | undefined;
-  margem?: number | null | undefined;
-  precoVenda?: number | null | undefined;
-}) {
+function precoDeVendaDoServidor(
+  dados: {
+    auto: boolean;
+    custo?: number | null | undefined;
+    quantidadeCaixa?: number | undefined;
+    margem?: number | null | undefined;
+    precoVenda?: number | null | undefined;
+  },
+  margemGrupo: number
+) {
   if (!dados.auto) return dados.precoVenda ?? null;
   if (dados.custo == null) return null;
   return calcularPrecoVenda({
@@ -461,8 +470,7 @@ function precoDeVendaDoServidor(dados: {
     custo: dados.custo,
     quantidadeCaixa: dados.quantidadeCaixa ?? 1,
     margem: dados.margem ?? null,
-    // TODO(P-04/ETAPA 4): margem do grupo entra quando `grupos_mercadorias.margem` existir.
-    margemGrupo: 0,
+    margemGrupo,
     precoManual: 0
   });
 }

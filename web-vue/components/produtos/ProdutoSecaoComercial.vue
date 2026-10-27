@@ -13,6 +13,8 @@ const props = defineProps<{
   setores: string[];
   erros: Record<string, string>;
   precoPreview: number;
+  /** Margem padrao do grupo escolhido, em % ("30"); vazio = grupo sem margem. */
+  margemDoGrupo: string;
   validacaoQtdPreview: string;
   somenteLeitura: boolean;
   dica: (campo: string) => string | undefined;
@@ -50,7 +52,8 @@ watch(
         min="0"
         label="Margem do produto"
         suffix="%"
-        placeholder="vazio = usa a do grupo"
+        :placeholder="margemDoGrupo ? `vazio = usa a do grupo (${margemDoGrupo}%)` : 'vazio = grupo sem margem (0%)'"
+        persistent-placeholder
         :hint="dica('margem')"
         :disabled="somenteLeitura"
       />
