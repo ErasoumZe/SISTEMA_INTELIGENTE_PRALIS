@@ -610,3 +610,24 @@ cache de 5 min, e classifica na criação, na troca de grupo/EAN e para completa
 admin altera o fiscal manual. Pendências: a conta Google do ERP precisa ter acesso a essa planilha; a loja de
 cada empresa é lida do `matricula_prefixo` (TNP/LI/HORA) — **confirmar em produção**; o de-para do SIA por
 loja (LI/HORA) depende da tabela `sia_produto_depara` (migration a aprovar).
+
+### Paridade completa com o app da loja — inventário do `origin/main` (27/10/2026)
+
+José: "IGUAL ao cadastro de produtos que funciona na loja". O inventário do código de produção mostra que o
+app faz bem mais que o cadastro. Situação de cada parte no ERP:
+
+| Parte do app oficial                                                                                                                                 | No ERP                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Cadastro: regras de entrada, código interno, EAN, maiúsculas, balança, estoque por embalagem                                                         | feito (V1)                                           |
+| Fiscal puxado pelo grupo (regras, de-para, reforma, ECF por nome, margem da aba de grupos)                                                           | feito; falta de-para SIA por loja                    |
+| Listagem: ativar/inativar, lote do admin, importar da base                                                                                           | feito (V3); excluir não portado (decisão 3)          |
+| Modelo BASE: só admin cria na BASE, herança travada, propagação BASE→loja                                                                            | falta (V5)                                           |
+| Espelho na planilha: grava cada produto na aba `(BASE) CADASTRO PRODUTOS` + abas de loja, fila de reenvio                                            | falta                                                |
+| TXT do CREARE (363 posições) publicado no Drive a cada gravação + download por lote dos robôs da loja (`/creare/produtos.txt`, entrega, confirmação) | falta — **é o que leva o cadastro ao PDV**           |
+| De-para SIA por loja (upload do export do SIA), pesáveis, código de cadastro, duplicados históricos, Giulia/SIA                                      | falta                                                |
+| Custo pela discriminação (DB-05), backfill fiscal, panorama fiscal, reconciliação planilha × banco, backup                                           | parcial (panorama/backup existem no ERP)             |
+| Central de produtos (unificação)                                                                                                                     | existe outra versão no ERP                           |
+| Vendas/Gerentes/metas/fator de pontos/curva ABC do app                                                                                               | fora do cadastro; o ERP tem módulo de vendas próprio |
+
+Risco central: enquanto o app estiver no ar ele é quem escreve a planilha e publica o TXT do PDV. O ERP não
+pode escrever nos mesmos lugares ao mesmo tempo (dois escritores). A troca precisa de um corte planejado.
