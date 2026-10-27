@@ -1387,3 +1387,9 @@ O escopo completo será entregue em verticais; até cada fluxo ter sido portado 
 paridade nem aposentar o app das lojas. O app oficial consultado foi `origin/main` do repositório
 `SISTEMA_PRALIS`, commit `1ba6774` (26/10/2026); confirmar o SHA implantado antes de usar dados de
 produção, pois o checkout local está defasado.
+
+**Adendo de arquitetura (José, 26/10/2026):** o catálogo `BASE` será um catálogo mestre separado no
+ERP, sem `empresa_id` de loja e sem ser convertido em TNP. Catálogos TNP/LI/HORA continuam associados
+às respectivas empresas do ERP; a operação de copiar da BASE para uma empresa deve preservar a
+proveniência e respeitar conflitos de código interno. A persistência, permissões e cópia serão
+implementadas sem misturar a BASE com os produtos operacionais de uma empresa.

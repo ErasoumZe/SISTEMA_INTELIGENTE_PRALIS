@@ -33,6 +33,9 @@ não contagem atual do banco; dry-run deverá recalculá-los. Código fiscal aus
 - **Ação de zerar catálogo:** a origem possui fluxo destrutivo que exclui produtos exceto o piloto
   `13125`. Replicar a capacidade funcional somente após mapear efeitos e protegê-la com escopo explícito,
   confirmação forte e trilha de auditoria; nunca executar como parte da importação.
+- **Catálogo BASE:** decisão de José em 26/10/2026: BASE será catálogo mestre separado, sem ser mapeado
+  para uma empresa do ERP. TNP/LI/HORA permanecem catálogos operacionais associados às empresas. A
+  persistência e a cópia BASE→empresa precisam manter essa distinção e a proveniência.
 
 ## Inventário preliminar de paridade
 
