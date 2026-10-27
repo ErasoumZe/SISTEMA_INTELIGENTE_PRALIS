@@ -483,3 +483,16 @@ web 844/844; `lint`, `check` (avisos conhecidos do Nuxt) e `check:migrations` (8
 
 **Ainda pendente:** importação da planilha oficial (aguarda o XLSX), paridade de listagem/formulário/telas
 (inventário em andamento), rotinas de manutenção, E2E e 4 larguras, PR.
+
+### Decisões de José (27/10/2026) após o inventário de paridade
+
+1. **Modelo do catálogo igual ao oficial:** produto novo nasce na BASE (só admin cria); a loja importa da BASE;
+   campos herdados ficam travados na loja e acompanham as edições da BASE (propagação), como no app oficial.
+   Substitui o desenho anterior do ERP (loja cria direto; BASE só para copiar).
+2. **Código de barras repetido:** igual ao oficial — avisa ao digitar e ao salvar e permite "Cadastrar mesmo
+   assim" com confirmação (kit, fracionado). Substitui o bloqueio absoluto do ERP.
+3. **Excluir produto:** NÃO portar. Mantém-se só inativar (preserva histórico de vendas, estoque e compras);
+   inativar em lote pela lista para admin.
+4. **Margem padrão por grupo:** implementar como no oficial (produto sem margem própria usa a do grupo), com
+   migration aditiva — SQL mostrado antes e aplicado só no banco local.
+5. **App oficial não é alterado** (está estável em uso); dados vêm da planilha do Google Sheets baixada por José.
