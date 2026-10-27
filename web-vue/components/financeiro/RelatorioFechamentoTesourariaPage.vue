@@ -5,8 +5,15 @@ import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
+import RelatorioFechamentoTransferencias from "./RelatorioFechamentoTransferencias.vue";
 
-const props = defineProps<{ empresaId: string; pdvs: Opcao[]; turnos: Opcao[]; podeConferir: boolean }>();
+const props = defineProps<{
+  empresaId: string;
+  pdvs: Opcao[];
+  turnos: Opcao[];
+  podeConferir: boolean;
+  podeConferirTransferencia?: boolean;
+}>();
 
 type Situacao =
   | "aberto"
@@ -182,6 +189,11 @@ async function carregarDossie(caixaId: string) {
   } finally {
     carregandoDossie.value = false;
   }
+}
+
+async function aoAlterarTransferencias() {
+  if (caixaSelecionado.value) await carregarDossie(caixaSelecionado.value.id);
+  await buscar();
 }
 
 function fecharDossie() {
@@ -489,6 +501,13 @@ watch(
               >Alteração de status</v-btn
             >
           </div>
+          <RelatorioFechamentoTransferencias
+            v-if="caixaSelecionado"
+            :empresa-id="props.empresaId"
+            :caixa-id="caixaSelecionado.id"
+            :pode-conferir="props.podeConferirTransferencia === true"
+            @alterado="aoAlterarTransferencias"
+          />
           <v-card class="conferencia-tesouraria mb-3" variant="outlined">
             <v-card-text class="d-flex flex-wrap align-center justify-space-between ga-3">
               <div>

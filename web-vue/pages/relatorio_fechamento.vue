@@ -19,6 +19,7 @@ const podeVerRelatorio = computed(() =>
         :pdvs="ctx.opcoesEmpresa.pdvs"
         :turnos="ctx.opcoesEmpresa.turnos"
         :pode-conferir="ctx.podeConferirFechamento"
+        :pode-conferir-transferencia="ctx.podeConferirTransferencia"
       />
     </template>
     <v-alert v-else type="error" variant="tonal" class="ma-4">
