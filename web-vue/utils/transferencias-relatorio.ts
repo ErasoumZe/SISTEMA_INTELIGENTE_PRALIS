@@ -121,3 +121,23 @@ export function composicaoDoMalote(
 export function horaCurta(valor: string | Date | null | undefined): string {
   return valor ? new Date(valor).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "-";
 }
+
+// Cor de cada situacao: UMA fonte, usada pelo chip de situacao e pela barra lateral da linha. A cor
+// reforca o rotulo (que sempre aparece com icone e palavra); nunca e o unico sinal.
+export const COR_SITUACAO: Record<string, string> = {
+  pendente: "#e0a100",
+  disponivel: "#3b82f6",
+  agendado: "#8b5cf6",
+  agendada: "#8b5cf6",
+  usado: "#22a35a",
+  recebido: "#22a35a",
+  recebido_sem_caixa: "#14a3a3",
+  divergente: "var(--cx-negative)",
+  cancelado: "#8a8f98",
+  cancelada: "#8a8f98",
+  desconhecido: "#8a8f98"
+};
+
+export function corDaSituacao(chave: string): string {
+  return COR_SITUACAO[chave] ?? COR_SITUACAO.desconhecido!;
+}

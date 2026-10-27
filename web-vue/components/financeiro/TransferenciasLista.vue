@@ -12,14 +12,12 @@ defineProps<{
   pagina: number;
   totalPaginas: number;
   podeEditar?: boolean;
-  podeConferir?: boolean;
   podeCancelarPlanejamento?: boolean;
   salvando?: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "editar", operacao: OperacaoResumo): void;
-  (event: "conferir", operacao: OperacaoResumo): void;
   (event: "cancelar-planejamento", operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
 }>();
@@ -53,11 +51,9 @@ function alternar(id: string) {
       :operacao="op"
       :aberta="abertas.has(op.id)"
       :pode-editar="podeEditar"
-      :pode-conferir="podeConferir"
       :pode-cancelar-planejamento="podeCancelarPlanejamento"
       :salvando="salvando"
       @editar="emit('editar', $event)"
-      @conferir="emit('conferir', $event)"
       @cancelar-planejamento="emit('cancelar-planejamento', $event)"
       @alternar="alternar"
     />
@@ -97,7 +93,7 @@ function alternar(id: string) {
 }
 .lista-transferencias__cabecalho {
   display: grid;
-  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(210px, 1.7fr) minmax(150px, 1.1fr) auto;
+  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(110px, 0.6fr) minmax(150px, 1.1fr) auto;
   gap: var(--cx-sp-3);
   padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) calc(var(--cx-sp-4) + 3px);
   border-bottom: 1px solid var(--cx-line);

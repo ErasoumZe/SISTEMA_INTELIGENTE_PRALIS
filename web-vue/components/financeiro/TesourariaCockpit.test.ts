@@ -39,7 +39,10 @@ const ListaTransferenciasStub = defineComponent({
               ? h("button", { "data-teste": "botao-conferir", onClick: () => emit("conferir", operacao) })
               : null,
             props.podeCancelarPlanejamento && operacao.ehPlanejamentoRetorno && operacao.status === "agendada"
-              ? h("button", { "data-teste": "cancelar-planejamento-retorno", onClick: () => emit("cancelar-planejamento", operacao) })
+              ? h("button", {
+                  "data-teste": "cancelar-planejamento-retorno",
+                  onClick: () => emit("cancelar-planejamento", operacao)
+                })
               : null
           ])
         )
@@ -130,7 +133,8 @@ describe("TesourariaCockpit - planejamento de retorno", () => {
     expect(filha.find('[data-teste="botao-editar"]').exists()).toBe(false);
     expect(filha.findAll('[data-teste="cancelar-planejamento-retorno"]')).toHaveLength(1);
     expect(comum.find('[data-teste="botao-editar"]').exists()).toBe(true);
-    expect(comum.find('[data-teste="botao-conferir"]').exists()).toBe(true);
+    // A tela virou relatorio: nao ha mais "Conferir" aqui (a conferencia vai para o Relatorio de fechamento).
+    expect(comum.find('[data-teste="botao-conferir"]').exists()).toBe(false);
 
     await filha.get('[data-teste="cancelar-planejamento-retorno"]').trigger("click");
     const dialogo = wrapper.get('[data-teste="dialogo-cancelamento-stub"]');
@@ -141,7 +145,8 @@ describe("TesourariaCockpit - planejamento de retorno", () => {
     expect(montar(false).find('[data-teste="cancelar-planejamento-retorno"]').exists()).toBe(false);
   });
 
-  it("exibe o resumo completo antes de aceitar uma transferencia", async () => {
+  // Conferencia sai desta tela (vira Relatorio de fechamento, proxima etapa): sem botao, o modal fica inalcancavel.
+  it.skip("exibe o resumo completo antes de aceitar uma transferencia", async () => {
     const wrapper = montar(false);
 
     await wrapper.get('[data-operacao-id="comum"] [data-teste="botao-conferir"]').trigger("click");
@@ -155,7 +160,7 @@ describe("TesourariaCockpit - planejamento de retorno", () => {
     expect(resumo.text()).toContain("L-1");
   });
 
-  it("mostra observacao e provas do fechamento vinculadas a sangria", async () => {
+  it.skip("mostra observacao e provas do fechamento vinculadas a sangria", async () => {
     apiGet.mockImplementation((url: string) =>
       url.includes("fechamento-conferencia")
         ? {

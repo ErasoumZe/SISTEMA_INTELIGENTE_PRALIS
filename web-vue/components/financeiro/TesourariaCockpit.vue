@@ -6,19 +6,12 @@
 // NAO depende de caixa aberto.
 //
 // A lista recebe da API o trajeto nominal, lacre, estado e data de recebimento.
-import {
-  statusTransferenciaSchema,
-  transferenciaContaComoEntrada,
-  transferenciaContaComoSaida,
-  valorEntradaCentavos,
-  type StatusTransferencia
-} from "@padaria/shared";
+import { statusTransferenciaSchema, valorEntradaCentavos, type StatusTransferencia } from "@padaria/shared";
 import { computed, inject, reactive, ref } from "vue";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import CancelarPlanejamentoRetornoDialog from "./CancelarPlanejamentoRetornoDialog.vue";
 import TransferenciasFiltros from "./TransferenciasFiltros.vue";
 import TransferenciasLista from "./TransferenciasLista.vue";
-import TransferenciasResumoCards from "./TransferenciasResumoCards.vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import {
@@ -392,34 +385,6 @@ async function enviarConferencia() {
   }
 }
 
-// Split direcional Saida/Entrada/Saldo: so existe quando ha resumo (contexto de caixa). Para o
-// tesoureiro puro (sem caixa) o resumo e nulo -> os cards ficam pendentes de backend.
-// R-183 · `divergente` entra nos dois lados, com numeros DIFERENTES. A saida e sempre o declarado
-// (o dinheiro saiu do caixa e nao volta); a entrada e o que o cofre CONTOU. Somar o declarado nos
-// dois lados faria a divergencia desaparecer do cockpit — que e justamente onde a Tesouraria olha.
-//
-// Os tres predicados vem do `shared`, e nao de uma copia local: o servidor decide o saldo por essas
-// mesmas funcoes, e uma lista de status escrita a mao aqui divergiria em silencio no dia em que
-// nascesse o sexto status. E o mesmo motivo pelo qual o predicado da entrega ao cofre tem casa
-// unica no back.
-// O coalesce fica local de proposito: `valorEntradaCentavos` fala em CENTAVOS e esta tela trabalha
-// em reais. Passar reais para um parametro chamado `...Centavos` seria mentir no nome para economizar
-// uma linha. O que precisava sair daqui era a LISTA DE STATUS, que e onde a divergencia silenciosa
-// mora — e ela agora vem do shared.
-const valorQueEntrou = (op: OperacaoResumo) => Number(op.valorRecebido ?? op.valorOriginal);
-
-const saida = computed(() =>
-  props.operacoesTela
-    .filter((op) => transferenciaContaComoSaida(op.status))
-    .reduce((total, op) => total + Number(op.valorOriginal), 0)
-);
-const entrada = computed(() =>
-  props.operacoesTela
-    .filter((op) => transferenciaContaComoEntrada(op.status))
-    .reduce((total, op) => total + valorQueEntrou(op), 0)
-);
-const saldo = computed(() => entrada.value - saida.value);
-
 const rotulosStatus: Record<StatusTransferencia, string> = {
   pendente: "Pendente",
   recebido: "Recebido",
@@ -436,7 +401,6 @@ function atualizarStatusFiltro(status: unknown) {
   const resultado = statusTransferenciaSchema.safeParse(status);
   emit("update:status-filtro", resultado.success ? resultado.data : "");
 }
-
 </script>
 
 <template>
@@ -444,11 +408,13 @@ function atualizarStatusFiltro(status: unknown) {
     <AppCabecalhoTela :titulo="telaAtual?.titulo ?? 'Tesouraria'">
       <template #subtitulo>
         Acompanhe o dinheiro em trânsito entre cofre, caixas e banco.
-        <span class="tes-count">{{ totalOperacoes }} registro{{ totalOperacoes === 1 ? "" : "s" }} encontrado{{ totalOperacoes === 1 ? "" : "s" }}</span>
+        <span class="tes-count"
+          >{{ totalOperacoes }} registro{{ totalOperacoes === 1 ? "" : "s" }} encontrado{{
+            totalOperacoes === 1 ? "" : "s"
+          }}</span
+        >
       </template>
     </AppCabecalhoTela>
-
-    <TransferenciasResumoCards :saida="saida" :entrada="entrada" :saldo="saldo" />
 
     <v-card class="tes-list-card" rounded="lg" elevation="1">
       <TransferenciasFiltros
@@ -466,11 +432,9 @@ function atualizarStatusFiltro(status: unknown) {
         :pagina="pagina"
         :total-paginas="totalPaginas"
         :pode-editar="podeEditar"
-        :pode-conferir="podeConferir"
         :pode-cancelar-planejamento="podeCancelarPlanejamento"
         :salvando="salvando"
         @editar="emit('editar', $event)"
-        @conferir="abrirConferencia"
         @cancelar-planejamento="cancelandoPlanejamento = $event"
         @update:pagina="emit('update:pagina', $event)"
       />

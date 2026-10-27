@@ -35,6 +35,7 @@ function montar(props: Record<string, unknown> = {}, operacao: OperacaoResumo = 
     global: {
       stubs: {
         "v-icon": { template: "<i />" },
+        "v-menu": { template: '<div><slot name="activator" :props="{}" /><slot /></div>' },
         "v-btn": { template: '<button v-bind="$attrs"><slot /></button>' }
       }
     }
@@ -49,12 +50,29 @@ describe("TransferenciasRelatorioLinha", () => {
     expect(texto).toContain("300,00");
     expect(texto).toContain("Dinheiro");
     expect(texto).toContain("Moedas");
-    expect(texto).toContain("Abertura A-1001");
-    expect(texto).toContain("Fechamento F-1001");
-    expect(texto).toContain("1 bolsa");
+    expect(texto).toContain("Lacres");
     expect(texto).toContain("Disponível");
     expect(texto).toContain("Previsto: PDV 1");
     expect(texto).toContain("por Leo");
+  });
+
+  it("a coluna Lacres e um botao; os numeros ficam no popup, agrupados por tipo e com o estado", () => {
+    const wrapper = montar();
+    expect(wrapper.get('[data-teste="botao-lacres"]').text()).toContain("3");
+    const popup = wrapper.get('[data-teste="popup-lacres"]').text();
+    expect(popup).toContain("Abertura");
+    expect(popup).toContain("A-1001");
+    expect(popup).toContain("F-1001");
+    expect(popup).toContain("S-1");
+    expect(popup).toContain("Reservado");
+  });
+
+  it("numero oculto vira 'Oculto' no popup, nunca vazio", () => {
+    const oculto = {
+      ...base,
+      lacres: [{ tipo: "fechamento", numero: null, situacao: "reservado", usadoEmTransferenciaId: null }]
+    } as unknown as OperacaoResumo;
+    expect(montar({}, oculto).get('[data-teste="popup-lacres"]').text()).toContain("Oculto");
   });
 
   it("composicao nao informada aparece como texto, nunca como zero", () => {
@@ -83,33 +101,24 @@ describe("TransferenciasRelatorioLinha", () => {
     expect(texto).toContain("PDV 1 · Manhã");
   });
 
-  it("as acoes seguem as mesmas permissoes de antes", () => {
-    const semPermissao = montar();
-    expect(semPermissao.find('[data-teste="botao-editar"]').exists()).toBe(false);
-    expect(semPermissao.find('[data-teste="botao-conferir"]').exists()).toBe(false);
-
-    const comPermissao = montar({ podeEditar: true, podeConferir: true });
-    expect(comPermissao.find('[data-teste="botao-editar"]').exists()).toBe(true);
-    expect(comPermissao.find('[data-teste="botao-conferir"]').exists()).toBe(true);
-
-    const recebida = { ...base, status: "recebido" } as unknown as OperacaoResumo;
-    const naoEditaRecebida = montar({ podeEditar: true, podeConferir: true }, recebida);
-    expect(naoEditaRecebida.find('[data-teste="botao-editar"]').exists()).toBe(false);
-    expect(naoEditaRecebida.find('[data-teste="botao-conferir"]').exists()).toBe(false);
-
-    const comPlano = { ...base, possuiPlanejamentoRetorno: true } as unknown as OperacaoResumo;
-    expect(
-      montar({ podeEditar: true, podeConferir: true }, comPlano).find('[data-teste="botao-conferir"]').exists()
-    ).toBe(false);
+  it("nao existe mais Conferir na tela: a conferencia fica no Relatorio de fechamento", () => {
+    const wrapper = montar({ podeEditar: true });
+    expect(wrapper.find('[data-teste="botao-conferir"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Conferir");
   });
 
-  it("conferir, editar e cancelar emitem o evento com a operacao", async () => {
-    const wrapper = montar({ podeEditar: true, podeConferir: true });
-    await wrapper.get('[data-teste="botao-conferir"]').trigger("click");
+  it("editar segue a mesma regra de antes e emite a operacao", async () => {
+    expect(montar().find('[data-teste="botao-editar"]').exists()).toBe(false);
+
+    const wrapper = montar({ podeEditar: true });
     await wrapper.get('[data-teste="botao-editar"]').trigger("click");
-    expect(wrapper.emitted("conferir")?.[0]).toEqual([base]);
     expect(wrapper.emitted("editar")?.[0]).toEqual([base]);
 
+    const recebida = { ...base, status: "recebido" } as unknown as OperacaoResumo;
+    expect(montar({ podeEditar: true }, recebida).find('[data-teste="botao-editar"]').exists()).toBe(false);
+  });
+
+  it("cancelar planejamento emite o evento com a operacao", async () => {
     const plano = { ...base, status: "agendada", ehPlanejamentoRetorno: true } as unknown as OperacaoResumo;
     const cancelavel = montar({ podeCancelarPlanejamento: true }, plano);
     await cancelavel.get('[data-teste="cancelar-planejamento-retorno"]').trigger("click");
@@ -144,7 +153,8 @@ describe("TransferenciasRelatorioLinha", () => {
     } as unknown as OperacaoResumo;
     const texto = montar({}, comum).text();
     expect(texto).toContain("Transferência");
-    expect(texto).toContain("Lacre DEP-9001");
+    expect(texto).toContain("Lacres");
+    expect(montar({}, comum).get('[data-teste="popup-lacres"]').text()).toContain("DEP-9001");
     expect(texto).toContain("Pendente");
     expect(texto).not.toContain("Composição não informada");
   });

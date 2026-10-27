@@ -3,12 +3,18 @@ import { computed } from "vue";
 import type { OperacaoResumo } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia, formatarDiaDeTimestamp } from "~/utils/formatacao";
-import { composicaoDoMalote, horaCurta, rotuloMovimento } from "~/utils/transferencias-relatorio";
+import {
+  composicaoDoMalote,
+  corDaSituacao,
+  horaCurta,
+  rotuloMovimento,
+  situacaoDaLinha
+} from "~/utils/transferencias-relatorio";
+import LacresBotao from "./LacresBotao.vue";
 import SituacaoMalote from "./SituacaoMalote.vue";
 import TransferenciasRelatorioDetalhe from "./TransferenciasRelatorioDetalhe.vue";
-import TrilhaLacres from "./TrilhaLacres.vue";
 
-// Uma linha do relatorio de Transferencias = uma transferencia. As regras de quem pode editar, conferir
+// Uma linha do relatorio de Transferencias = uma transferencia. As regras de quem pode editar
 // ou cancelar sao AS MESMAS da lista anterior (movidas, nao alteradas); o que e novo e so a apresentacao
 // e o botao de expandir, que nao grava nada.
 const props = withDefaults(
@@ -16,16 +22,14 @@ const props = withDefaults(
     operacao: OperacaoResumo;
     aberta?: boolean;
     podeEditar?: boolean;
-    podeConferir?: boolean;
     podeCancelarPlanejamento?: boolean;
     salvando?: boolean;
   }>(),
-  { aberta: false, podeEditar: false, podeConferir: false, podeCancelarPlanejamento: false, salvando: false }
+  { aberta: false, podeEditar: false, podeCancelarPlanejamento: false, salvando: false }
 );
 
 const emit = defineEmits<{
   (event: "editar", operacao: OperacaoResumo): void;
-  (event: "conferir", operacao: OperacaoResumo): void;
   (event: "cancelar-planejamento", operacao: OperacaoResumo): void;
   (event: "alternar", id: string): void;
 }>();
@@ -38,9 +42,6 @@ const permiteEditar = computed(() =>
     !props.operacao.ehPlanejamentoRetorno
   )
 );
-const permiteConferir = computed(() =>
-  Boolean(props.operacao.status === "pendente" && props.podeConferir && !props.operacao.possuiPlanejamentoRetorno)
-);
 const permiteCancelar = computed(() =>
   Boolean(
     props.podeCancelarPlanejamento && props.operacao.ehPlanejamentoRetorno && props.operacao.status === "agendada"
@@ -51,6 +52,7 @@ const ehMalote = computed(() => Boolean(props.operacao.situacaoMalote));
 const composicao = computed(() => composicaoDoMalote(props.operacao));
 const idPainel = computed(() => `detalhe-${props.operacao.id}`);
 const idTitulo = computed(() => `linha-${props.operacao.id}`);
+const corLinha = computed(() => corDaSituacao(situacaoDaLinha(props.operacao).chave));
 const cancelada = computed(() => props.operacao.status === "cancelada");
 
 const diaLancamento = computed(() =>
@@ -83,7 +85,13 @@ const rotuloExpandir = computed(
 
 <template>
   <div class="trl" role="rowgroup" :data-operacao-id="operacao.id" :data-aberta="aberta ? 'sim' : undefined">
-    <div class="trl__linha" role="row" :class="{ 'trl__linha--cancelada': cancelada }" :aria-labelledby="idTitulo">
+    <div
+      class="trl__linha"
+      role="row"
+      :class="{ 'trl__linha--cancelada': cancelada }"
+      :style="{ '--sit': corLinha }"
+      :aria-labelledby="idTitulo"
+    >
       <div class="trl__lanc" role="cell" data-col="Lançamento">
         <time :id="idTitulo" :datetime="operacao.criadoEm ?? operacao.dataReferencia">
           <strong>{{ diaLancamento }}</strong>
@@ -115,7 +123,12 @@ const rotuloExpandir = computed(
       </div>
 
       <div class="trl__lacres" role="cell" data-col="Lacres">
-        <TrilhaLacres :lacres="operacao.lacres ?? []" :n-lacre-doc="operacao.nLacreDoc ?? null" :malote="ehMalote" />
+        <LacresBotao
+          :lacres="operacao.lacres ?? []"
+          :n-lacre-doc="operacao.nLacreDoc ?? null"
+          :malote="ehMalote"
+          :id-titulo="idTitulo"
+        />
       </div>
 
       <div class="trl__situacao" role="cell" data-col="Situação">
@@ -133,14 +146,6 @@ const rotuloExpandir = computed(
           data-teste="botao-editar"
           @click="emit('editar', operacao)"
         />
-        <v-btn
-          v-if="permiteConferir"
-          size="small"
-          variant="tonal"
-          data-teste="botao-conferir"
-          @click="emit('conferir', operacao)"
-          >Conferir</v-btn
-        >
         <v-btn
           v-if="permiteCancelar"
           size="small"
@@ -182,7 +187,7 @@ const rotuloExpandir = computed(
 .trl__linha {
   position: relative;
   display: grid;
-  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(210px, 1.7fr) minmax(150px, 1.1fr) auto;
+  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(110px, 0.6fr) minmax(150px, 1.1fr) auto;
   gap: var(--cx-sp-3);
   align-items: start;
   padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) calc(var(--cx-sp-4) + 3px);
@@ -194,7 +199,7 @@ const rotuloExpandir = computed(
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: var(--cat-transferencias-base);
+  background: var(--sit);
 }
 .trl__linha--cancelada {
   color: var(--cx-ink-soft);
@@ -328,10 +333,6 @@ const rotuloExpandir = computed(
   }
   .trl__acoes :deep(.v-btn) {
     flex: 1 1 auto;
-  }
-  .trl__lacres :deep(.trilha) {
-    flex-direction: column;
-    flex-wrap: nowrap;
   }
 }
 
