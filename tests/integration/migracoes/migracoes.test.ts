@@ -64,6 +64,7 @@ const semTriggerConhecidas = [
   // 0084 (catalogo mestre BASE): a importacao grava `atualizado_em` explicitamente em toda atualizacao
   // (produtos-catalogo-base.repository.ts); o trigger fica para a mesma pendencia acima.
   "produtos_catalogo_base",
+  "produtos_planilha_sincronizacoes",
   "questor_eventos_variaveis",
   "questor_eventos_variaveis_lancamentos",
   "questor_exportacoes",

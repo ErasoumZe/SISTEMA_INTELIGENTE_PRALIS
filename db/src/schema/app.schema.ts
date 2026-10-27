@@ -1078,6 +1078,157 @@ export const produtosHistoricoNomes = pgTable(
   ]
 );
 
+// --- Exportacao para o PDV CREARE e espelho na planilha (R-222, migration 0088) ----------------
+// Porte das tabelas do app oficial de Produtos (creare_export_batch / _delivery_state / _state e
+// product_sheet_sync), com empresa_id no lugar do texto da loja. Escrita DESLIGADA ate a virada.
+
+/** Cada TXT montado para o robo da loja: snapshot imutavel (conteudo, hash e itens). */
+export const creareExportacaoLotes = pgTable(
+  "creare_exportacao_lotes",
+  {
+    id: idUuid,
+    empresaId,
+    conteudo: text("conteudo").notNull(),
+    sha256: text("sha256").notNull(),
+    /** [{ produtoId, hash }] — o que este lote leva, igual ao oficial. */
+    itens: jsonb("itens").$type<Array<{ produtoId: string; hash: string }>>().notNull(),
+    formatoVersao: integer("formato_versao").notNull().default(1),
+    criadoEm,
+    entregueEm: timestamp("entregue_em", { withTimezone: true }),
+    confirmadoEm: timestamp("confirmado_em", { withTimezone: true }),
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("creare_exportacao_lotes_id_empresa_unico").on(table.id, table.empresaId),
+    check("creare_exportacao_lotes_sha256_check", sql`${table.sha256} ~ '^[a-f0-9]{64}$'`),
+    check(
+      "creare_exportacao_lotes_itens_check",
+      sql`jsonb_typeof(${table.itens}) = 'array' and jsonb_array_length(${table.itens}) > 0`
+    ),
+    check("creare_exportacao_lotes_conteudo_check", sql`length(${table.conteudo}) > 0`),
+    check("creare_exportacao_lotes_formato_versao_check", sql`${table.formatoVersao} >= 1`),
+    // Um lote aberto por loja (junto com a trava da empresa na transacao).
+    uniqueIndex("creare_exportacao_lotes_aberto_uidx")
+      .on(table.empresaId)
+      .where(sql`${table.entregueEm} is null and ${table.confirmadoEm} is null and ${table.canceladoEm} is null`),
+    index("creare_exportacao_lotes_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+/** Cursor de ENTREGA no PC da loja: o hash do registro de cada produto que o robo ja salvou. */
+export const creareExportacaoEntregas = pgTable(
+  "creare_exportacao_entregas",
+  {
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    hash: text("hash").notNull(),
+    loteId: uuid("lote_id").notNull(),
+    entregueEm: timestamp("entregue_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({
+      name: "creare_exportacao_entregas_empresa_id_produto_id_pk",
+      columns: [table.empresaId, table.produtoId]
+    }),
+    check("creare_exportacao_entregas_hash_check", sql`${table.hash} ~ '^[a-f0-9]{64}$'`),
+    foreignKey({
+      name: "creare_exportacao_entregas_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "creare_exportacao_entregas_lote_mesma_empresa_fk",
+      columns: [table.loteId, table.empresaId],
+      foreignColumns: [creareExportacaoLotes.id, creareExportacaoLotes.empresaId]
+    }).onDelete("restrict"),
+    index("creare_exportacao_entregas_lote_idx").on(table.loteId)
+  ]
+);
+
+/** Cursor de CONFIRMACAO (auditoria opcional depois de conferir a importacao no SIA). */
+export const creareExportacaoConfirmacoes = pgTable(
+  "creare_exportacao_confirmacoes",
+  {
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    hash: text("hash").notNull(),
+    loteId: uuid("lote_id").notNull(),
+    confirmadoEm: timestamp("confirmado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({
+      name: "creare_exportacao_confirmacoes_empresa_id_produto_id_pk",
+      columns: [table.empresaId, table.produtoId]
+    }),
+    check("creare_exportacao_confirmacoes_hash_check", sql`${table.hash} ~ '^[a-f0-9]{64}$'`),
+    foreignKey({
+      name: "creare_exportacao_confirmacoes_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "creare_exportacao_confirmacoes_lote_mesma_empresa_fk",
+      columns: [table.loteId, table.empresaId],
+      foreignColumns: [creareExportacaoLotes.id, creareExportacaoLotes.empresaId]
+    }).onDelete("restrict"),
+    index("creare_exportacao_confirmacoes_lote_idx").on(table.loteId)
+  ]
+);
+
+/**
+ * Fila (outbox) do espelho na planilha Google: uma linha por produto da BASE (sem empresa) ou por
+ * copia da loja (com empresa) — nunca os dois. Reenvio com espera crescente e teto de tentativas.
+ */
+export const produtosPlanilhaSincronizacoes = pgTable(
+  "produtos_planilha_sincronizacoes",
+  {
+    id: idUuid,
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id"),
+    produtoBaseId: uuid("produto_base_id"),
+    planilhaId: text("planilha_id").notNull(),
+    aba: text("aba").notNull(),
+    linha: integer("linha"),
+    status: text("status").notNull().default("pendente"),
+    tentativas: integer("tentativas").notNull().default(0),
+    ultimoErro: text("ultimo_erro"),
+    proximaTentativaEm: timestamp("proxima_tentativa_em", { withTimezone: true }),
+    sincronizadoEm: timestamp("sincronizado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "produtos_planilha_sincronizacoes_status_check",
+      sql`${table.status} in ('pendente', 'sincronizado', 'falhou')`
+    ),
+    check("produtos_planilha_sincronizacoes_tentativas_check", sql`${table.tentativas} >= 0`),
+    check("produtos_planilha_sincronizacoes_linha_check", sql`${table.linha} is null or ${table.linha} > 0`),
+    check(
+      "produtos_planilha_sincronizacoes_alvo_check",
+      sql`(${table.empresaId} is null and ${table.produtoBaseId} is not null and ${table.produtoId} is null) or (${table.empresaId} is not null and ${table.produtoId} is not null and ${table.produtoBaseId} is null)`
+    ),
+    foreignKey({
+      name: "produtos_planilha_sincronizacoes_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    // Nome curto de proposito: o gerado passaria de 63 bytes e o Postgres o cortaria.
+    foreignKey({
+      name: "produtos_planilha_sincronizacoes_base_fk",
+      columns: [table.produtoBaseId],
+      foreignColumns: [produtosCatalogoBase.id]
+    }).onDelete("cascade"),
+    uniqueIndex("produtos_planilha_sincronizacoes_produto_uidx")
+      .on(table.produtoId)
+      .where(sql`${table.produtoId} is not null`),
+    uniqueIndex("produtos_planilha_sincronizacoes_produto_base_uidx")
+      .on(table.produtoBaseId)
+      .where(sql`${table.produtoBaseId} is not null`),
+    index("produtos_planilha_sincronizacoes_fila_idx").on(table.status, table.proximaTentativaEm, table.atualizadoEm)
+  ]
+);
+
 export const fornecedoresProdutos = pgTable(
   "fornecedores_produtos",
   {
