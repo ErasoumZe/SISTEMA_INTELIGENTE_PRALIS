@@ -424,3 +424,5 @@ export * from "./central-reconciliacao.js";
 export * from "./central-fontes.js";
 export * from "./central-ingestao.js";
 export * from "./sia-depara.js";
+export * from "./creare-layout.js";
+export * from "./creare.js";
