@@ -8,15 +8,11 @@ import {
   validarBalanca,
   validarEstoquePorEmbalagem,
   validarPromocoesDoProduto,
-  type ExportarProdutoPayload as ExportarPayload,
-  type ImportarProdutosPayload as ImportarPayload,
   type PromocaoRegra
 } from "@padaria/shared/produtos";
 import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
-import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
-import { copiarGruposRepository } from "../grupos/grupos.repository.js";
-import { copiarUnidadesMedidaRepository } from "../unidades-medida/unidades-medida.repository.js";
+import { apenasDigitos } from "../utils.js";
 import type { MultipartFile } from "@fastify/multipart";
 import {
   atualizarFotoDoProdutoRepository,
@@ -37,7 +33,6 @@ import {
   mimeDaFoto,
   salvarFotoDeProduto
 } from "./produtos-foto.js";
-import { copiarProdutosRepository } from "./produtos-importacao.repository.js";
 import {
   buscarCatalogoParaBackupRepository,
   buscarPanoramaFiscalProdutosRepository,
@@ -645,58 +640,6 @@ function montarProdutoParaGravar(
       validaAte: promo.validaAte?.trim() || null
     }))
   };
-}
-
-export async function importarProdutos(body: ImportarPayload, perfil?: PerfilComEmpresa) {
-  validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
-  const permitidas = perfil ? empresasPermitidas(perfil) : [];
-  return executarEmTransacao(async (tx) => {
-    let inseridos = 0;
-    if (body.modo === "completo") {
-      inseridos += (
-        await copiarGruposRepository(
-          { empresaOrigemId: body.empresaOrigemId },
-          body.empresaDestinoId,
-          permitidas,
-          body.modo,
-          tx
-        )
-      ).inseridos;
-      inseridos += (
-        await copiarUnidadesMedidaRepository(
-          { empresaOrigemId: body.empresaOrigemId },
-          body.empresaDestinoId,
-          permitidas,
-          body.modo,
-          tx
-        )
-      ).inseridos;
-    }
-    inseridos += (
-      await copiarProdutosRepository(
-        { empresaOrigemId: body.empresaOrigemId },
-        body.empresaDestinoId,
-        permitidas,
-        body.modo,
-        tx
-      )
-    ).inseridos;
-    return { tipo: "produtos", modo: body.modo, inseridos };
-  });
-}
-
-export async function exportarProduto(id: string, body: ExportarPayload, perfil?: PerfilComEmpresa) {
-  validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
-  const resultado = await copiarProdutosRepository(
-    { id },
-    body.empresaDestinoId,
-    perfil ? empresasPermitidas(perfil) : [],
-    body.modo
-  );
-  // Produto inexistente ou de empresa alheia nunca vira "ok, 0 inseridos": isso e sucesso falso, e
-  // a diferenca entre os dois casos permitiria enumerar o cadastro de outra loja.
-  if (!resultado.encontradosNaOrigem) throw new ProdutoNaoEncontradoError();
-  return { tipo: resultado.tipo, inseridos: resultado.inseridos };
 }
 
 // --------------------------------------------------------------------------------------------

@@ -25,7 +25,8 @@ defineProps<{ total: number; ehAdmin: boolean; podeCriar: boolean }>();
       <v-btn v-if="ehAdmin" variant="outlined" prepend-icon="mdi-merge" to="/produtos/central">
         Central de produtos
       </v-btn>
-      <v-btn v-if="podeCriar" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
+      <!-- Produto novo so nasce na BASE, e so o administrador cria (oficial). -->
+      <v-btn v-if="ehAdmin" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
     </div>
   </header>
 </template>

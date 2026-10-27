@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
@@ -65,22 +66,17 @@ describe("produtos - listagem paginada no banco", () => {
 
     // 14 produtos: mais do que o `pageSize` default de 10, que era exatamente o teto do defeito.
     for (let indice = 0; indice < TOTAL; indice += 1) {
-      const resposta = await contexto.app.inject({
-        method: "POST",
-        url: "/api/produtos",
-        headers: { cookie: cookieAdmin },
-        payload: {
-          empresaId: idsTeste.empresaA,
-          descricao: `Listagem P04 item ${String(indice).padStart(2, "0")}`,
-          marca: MARCA,
-          unidadeIndividualId: unidadeId,
-          quantidadeIndividual: 1,
-          grupoMercadoriaId: grupoId,
-          setorEstoque: indice % 2 === 0 ? "LJ - CAIXAS" : "PROD. - PANIFICACAO",
-          status: indice % 3 === 0 ? "inativo" : "ativo",
-          tipo: indice % 4 === 0 ? "transformacao" : "revenda",
-          conversoes: []
-        }
+      const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+        empresaId: idsTeste.empresaA,
+        descricao: `Listagem P04 item ${String(indice).padStart(2, "0")}`,
+        marca: MARCA,
+        unidadeIndividualId: unidadeId,
+        quantidadeIndividual: 1,
+        grupoMercadoriaId: grupoId,
+        setorEstoque: indice % 2 === 0 ? "LJ - CAIXAS" : "PROD. - PANIFICACAO",
+        status: indice % 3 === 0 ? "inativo" : "ativo",
+        tipo: indice % 4 === 0 ? "transformacao" : "revenda",
+        conversoes: []
       });
       expect(resposta.statusCode).toBe(201);
       criados.push(json<RespostaId>(resposta).data.id);
@@ -288,18 +284,13 @@ describe("produtos - listagem e isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: { empresaId: idsTeste.empresaB, nome: "Unidade Listagem B", sigla: "ulb" }
     });
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaB,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
-        descricao: "SO DA EMPRESA B P04",
-        unidadeIndividualId: json<RespostaId>(unidadeB).data.id,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaB,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaB,
+      descricao: "SO DA EMPRESA B P04",
+      unidadeIndividualId: json<RespostaId>(unidadeB).data.id,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
     produtoDaB = json<RespostaId>(criado).data.id;
   }, 180_000);

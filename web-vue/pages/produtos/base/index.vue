@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
+import CatalogoBaseDetalhe from "~/components/produtos/CatalogoBaseDetalhe.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
 
@@ -47,6 +48,8 @@ const idsSelecionados = ref<string[]>([]);
 const lote = ref<ResultadoCopiaLote | null>(null);
 const buscaAplicada = ref("");
 let temporizadorBusca: ReturnType<typeof setTimeout> | undefined;
+/** Oficial: so o administrador cria e altera produto na BASE; a loja importa a copia. */
+const ehAdmin = computed(() => sessao.value?.perfil?.role === "usuario_admin");
 const { telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
   computed(() => sessao.value?.perfil?.permissoes ?? []),
   () => Boolean(caixaStatus.value?.caixaAberto)
@@ -72,64 +75,6 @@ async function carregar() {
 function grupoProduto(produto: ProdutoBase) {
   const grupo = produto.dadosOficiais["grupo"];
   return typeof grupo === "string" && grupo.trim() ? grupo : produto.grupoIdOrigem || "—";
-}
-
-const rotulosOficiais: Record<string, string> = {
-  nome: "Nome oficial",
-  quantidade: "Quantidade informada pela origem (não é saldo do ERP)",
-  medidabase: "Medida base",
-  pesavel: "Produto pesável",
-  teclabalanca: "Tecla de balança",
-  validadebalanca: "Validade na balança",
-  codigobarras: "Código de barras (EAN)",
-  codigointerno: "Código interno Pralis",
-  marca: "Marca",
-  embalagem: "Embalagem",
-  cde: "CDe",
-  qtcad: "Quantidade por embalagem",
-  medidacompra: "Medida de compra",
-  compraaproximada: "Compra aproximada",
-  fotourl: "Foto do produto",
-  grupo: "Grupo",
-  grupoid: "Identificador do grupo",
-  tipo: "Tipo de produto",
-  status: "Situação",
-  habilitarajuda: "Ajuda no cadastro",
-  estoquemin: "Estoque mínimo de origem",
-  estoquemax: "Estoque máximo de origem",
-  setorestoque: "Setor de estoque",
-  custo: "Custo de origem",
-  margempontual: "Margem pontual de origem",
-  vvendapontual: "Preço de venda pontual de origem",
-  auto: "Preço automático",
-  setorvenda1: "Setor de venda 1",
-  areavenda: "Área de venda",
-  setorvenda2: "Setor de venda 2",
-  localvenda1: "Local de venda 1",
-  localvenda2: "Local de venda 2",
-  fiscal: "Dados fiscais oficiais",
-  transformacao: "Transformação",
-  promocoes: "Promoções da origem",
-  loja: "Catálogo de origem",
-  baseproductid: "Referência da BASE na origem",
-  createdbyname: "Incluído por",
-  createdat: "Data de cadastro na origem",
-  importado: "Importado para loja na origem"
-};
-
-function rotuloOficial(campo: string) {
-  const chave = campo
-    .replace(/([a-z0-9])([A-Z])/gu, "$1$2")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/gu, "");
-  return rotulosOficiais[chave] ?? campo.replace(/([a-z0-9])([A-Z])/gu, "$1 $2");
-}
-
-function valorOficial(valor: unknown) {
-  if (valor == null || valor === "") return "—";
-  if (typeof valor === "boolean") return valor ? "Sim" : "Não";
-  if (typeof valor === "object") return JSON.stringify(valor, null, 2);
-  return String(valor);
 }
 
 async function copiarParaLoja(produto: ProdutoBase) {
@@ -254,12 +199,16 @@ onMounted(async () => {
           <h1>Catálogo mestre BASE</h1>
           <p>{{ total.toLocaleString("pt-BR") }} produto(s) · cadastro separado das lojas</p>
         </div>
-        <v-btn variant="outlined" prepend-icon="mdi-arrow-left" to="/produtos">Voltar aos produtos</v-btn>
+        <div class="catalogo-base__acoes">
+          <v-btn variant="outlined" prepend-icon="mdi-arrow-left" to="/produtos">Voltar aos produtos</v-btn>
+          <v-btn v-if="ehAdmin" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
+        </div>
       </header>
 
       <v-alert type="info" variant="tonal">
-        A BASE é o catálogo mestre do Pralis. Alterações e cópias para lojas serão registradas separadamente; consultar
-        aqui não altera produtos operacionais nem saldo de estoque.
+        A BASE é o cadastro geral: só o administrador cria e altera produtos aqui. Cada loja importa a cópia e completa
+        estoque, preço, fiscal e promoção. O que o administrador mudar na BASE desce para as lojas que ainda seguem cada
+        campo.
       </v-alert>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <v-alert v-if="aviso" type="info" variant="tonal">{{ aviso }}</v-alert>
@@ -361,6 +310,7 @@ onMounted(async () => {
             </td>
             <td class="catalogo-base__acoes">
               <v-btn size="small" variant="text" @click="selecionado = produto">Ver cadastro</v-btn>
+              <v-btn v-if="ehAdmin" size="small" variant="text" :to="`/produtos/base/${produto.id}`">Editar</v-btn>
               <v-btn
                 v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')"
                 size="small"
@@ -378,36 +328,7 @@ onMounted(async () => {
       </v-table>
       <v-pagination v-if="total > pageSize" v-model="page" :length="Math.ceil(total / pageSize)" :total-visible="5" />
 
-      <v-dialog
-        :model-value="Boolean(selecionado)"
-        max-width="900"
-        @update:model-value="(aberto) => !aberto && (selecionado = null)"
-      >
-        <v-card v-if="selecionado" rounded="lg">
-          <v-card-title>{{ selecionado.nome }}</v-card-title>
-          <v-card-subtitle>
-            Código {{ selecionado.codigoInterno || "—" }} · EAN {{ selecionado.codigoBarras || "—" }} · origem
-            {{ selecionado.idOrigem }}
-          </v-card-subtitle>
-          <v-card-text>
-            <v-img
-              v-if="typeof selecionado.dadosOficiais['foto_url'] === 'string' && selecionado.dadosOficiais['foto_url']"
-              :src="selecionado.dadosOficiais['foto_url']"
-              :alt="`Foto de ${selecionado.nome}`"
-              max-height="220"
-              class="mb-4"
-              contain
-            />
-            <div class="catalogo-base__detalhes">
-              <div v-for="[campo, valor] in Object.entries(selecionado.dadosOficiais)" :key="campo">
-                <strong>{{ rotuloOficial(campo) }}</strong>
-                <pre>{{ valorOficial(valor) }}</pre>
-              </div>
-            </div>
-          </v-card-text>
-          <v-card-actions><v-spacer /><v-btn variant="text" @click="selecionado = null">Fechar</v-btn></v-card-actions>
-        </v-card>
-      </v-dialog>
+      <CatalogoBaseDetalhe :produto="selecionado" @fechar="selecionado = null" />
     </main>
   </AppShell>
 </template>
@@ -462,31 +383,6 @@ onMounted(async () => {
 .catalogo-base__falhas {
   margin-top: 8px;
 }
-.catalogo-base__detalhes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  max-height: 65vh;
-  overflow: auto;
-}
-.catalogo-base__detalhes > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  padding: 10px;
-  border-radius: 8px;
-  background: rgb(var(--v-theme-surface-variant));
-}
-.catalogo-base__detalhes strong {
-  font-size: 0.8rem;
-}
-.catalogo-base__detalhes pre {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  font: inherit;
-}
 @media (max-width: 600px) {
   .catalogo-base {
     padding: 16px;
@@ -498,9 +394,6 @@ onMounted(async () => {
   }
   .catalogo-base__filtros > * {
     width: 100%;
-  }
-  .catalogo-base__detalhes {
-    grid-template-columns: 1fr;
   }
 }
 </style>

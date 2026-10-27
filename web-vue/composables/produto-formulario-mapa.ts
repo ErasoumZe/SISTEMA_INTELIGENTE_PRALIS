@@ -1,4 +1,4 @@
-import type { ProdutoDetalhe } from "@padaria/shared";
+import type { ProdutoDetalhe, ValoresHerdados } from "@padaria/shared";
 import { montarDescricao } from "@padaria/shared";
 
 /**
@@ -231,6 +231,38 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
       unidadesIndividuais: conversao.unidadesIndividuais
     }))
   };
+}
+
+/**
+ * "Voltar a herdar da base" (oficial): devolve ao formulario os valores ATUAIS da BASE nos campos
+ * herdados. Promocoes, estoque, preco e fiscal sao da loja e nao sao tocados.
+ */
+export function aplicarValoresDaBase(form: ProdutoForm, base: ValoresHerdados): void {
+  Object.assign(form, {
+    descricao: base.descricao,
+    nomeCatalogo: base.nomeCatalogo ?? base.descricao,
+    quantidadeIndividual: String(base.quantidadeIndividual),
+    unidadeIndividualId: base.unidadeIndividualId,
+    pesavel: base.pesavel,
+    teclaBalanca: base.teclaBalanca == null ? "" : String(base.teclaBalanca),
+    validadeBalanca: base.validadeBalanca == null ? "" : String(base.validadeBalanca),
+    codigoBarras: base.codigoBarras ?? "",
+    marca: base.marca ?? "",
+    embalagem: base.embalagem,
+    cDe: base.cDe === "C/" ? "C/" : "DE",
+    quantidadeCaixa: String(base.quantidadeCaixa || 1),
+    medidaCompra: base.medidaCompra,
+    compraAproximada: base.compraAproximada,
+    grupoMercadoriaId: base.grupoMercadoriaId,
+    grupoIdExterno: base.grupoIdExterno ?? "",
+    tipo: base.tipo,
+    habilitarAjuda: base.habilitarAjuda,
+    precisao: base.transformacao?.precisao ?? "EXATOS",
+    quantidadeTransformacao: base.transformacao?.quantidade == null ? "" : String(base.transformacao.quantidade),
+    unidadeTransformacao: base.transformacao?.unidade ?? "",
+    produtoReceituario: base.transformacao?.produtoReceituario ?? "",
+    refReceituario: base.transformacao?.refReceituario ?? ""
+  });
 }
 
 export function payloadDoFormulario(

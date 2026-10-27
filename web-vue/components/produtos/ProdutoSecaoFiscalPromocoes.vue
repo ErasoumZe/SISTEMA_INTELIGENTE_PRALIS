@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * Fiscal, Promocoes e Conversoes.
+ * Fiscal, Promocoes e Conversoes da LOJA.
  *
- * FISCAL continua sendo cadastro MANUAL. A planilha do Rodrigo nunca preenche estes campos
- * (R-145: o dado fiscal dela esta errado e causa pagamento de imposto a maior). Nao ha calculo
- * tributario aqui — os campos so sao guardados.
+ * FISCAL igual ao app oficial (R-222): e puxado pelo grupo de mercadorias (regra da planilha fiscal,
+ * de-para por produto e cadastro de ECF). So o administrador digita os campos manuais; o resto e
+ * derivado e fica em leitura. O estado da classificacao aparece ao lado do titulo, com o motivo.
  */
 import { promocaoVazia, type ProdutoForm } from "~/composables/produto-formulario-mapa";
 
@@ -14,8 +14,25 @@ const props = defineProps<{
   erros: Record<string, string>;
   errosDePromocao: string[];
   somenteLeitura: boolean;
+  /** Administrador pode digitar os campos fiscais manuais (oficial: ONLY_ADMIN_FISCAL para os demais). */
+  fiscalEditavel: boolean;
   dica: (campo: string) => string | undefined;
 }>();
+
+/** Rotulo e cor do estado da classificacao fiscal (vem do servidor, nunca e digitado). */
+const ESTADOS_FISCAIS: Record<string, { rotulo: string; cor: string }> = {
+  completo: { rotulo: "Fiscal completo", cor: "success" },
+  parcial: { rotulo: "Fiscal parcial", cor: "warning" },
+  pendente_grupo_invalido: { rotulo: "Grupo sem regra fiscal", cor: "error" },
+  pendente_ambiguo: { rotulo: "Classificação ambígua", cor: "warning" },
+  pendente_conflito: { rotulo: "Conflito fiscal", cor: "warning" },
+  pendente_fonte_da_loja: { rotulo: "Falta a fonte da loja", cor: "warning" },
+  fonte_indisponivel: { rotulo: "Planilha fiscal fora do ar", cor: "warning" }
+};
+const estadoFiscal = computed(() => {
+  const estado = props.form.fiscal.estado;
+  return estado ? (ESTADOS_FISCAIS[estado] ?? { rotulo: estado, cor: "default" }) : null;
+});
 
 const DIAS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const ehRevenda = computed(() => props.form.tipo === "revenda");
@@ -36,101 +53,77 @@ function removerConversao(indice: number) {
 
 <template>
   <section class="secao">
-    <h2 class="secao__titulo">Fiscal</h2>
+    <div class="secao__cabecalho">
+      <h2 class="secao__titulo">Fiscal</h2>
+      <v-chip v-if="estadoFiscal" size="small" label :color="estadoFiscal.cor">{{ estadoFiscal.rotulo }}</v-chip>
+    </div>
+    <v-alert v-if="form.fiscal.motivo" type="warning" variant="tonal" density="compact">
+      {{ form.fiscal.motivo }}
+    </v-alert>
     <p class="secao__nota">
-      Dados fiscais preservados literalmente do cadastro oficial. Esta tela não calcula tributos.
+      Os dados fiscais são calculados a partir do grupo de mercadorias.
+      {{ fiscalEditavel ? "Só o administrador corrige os campos manuais." : "Trocar o grupo recalcula os impostos." }}
     </p>
     <div class="secao__grade">
-      <v-text-field v-model="form.fiscal.ncm" label="NCM" :hint="dica('ncm')" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.cest" label="Código CEST" :hint="dica('cest')" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.fiscal.ncm" label="NCM" :hint="dica('ncm')" :disabled="!fiscalEditavel" />
+      <v-text-field v-model="form.fiscal.cest" label="Código CEST" :hint="dica('cest')" :disabled="!fiscalEditavel" />
       <v-text-field
         v-model="form.fiscal.categoriaFiscal"
         label="Categoria fiscal"
         :hint="dica('categoriaFiscal')"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
-      <v-text-field
-        v-model="form.fiscal.cstPisCofins"
-        label="CST PIS/COFINS"
-        :hint="dica('cstPisCofins')"
-        :disabled="somenteLeitura"
-      />
+      <v-text-field v-model="form.fiscal.cstPisCofins" label="CST PIS/COFINS" :hint="dica('cstPisCofins')" readonly />
       <v-text-field
         v-model="form.fiscal.aliquotaCheia"
         type="number"
         min="0"
         label="Alíquota cheia %"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
       <v-text-field
         v-model="form.fiscal.aliquotaFcp"
         type="number"
         min="0"
         label="Alíquota FCP %"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
       <v-text-field
         v-model="form.fiscal.aliquotaPis"
         type="number"
         min="0"
         label="Alíquota PIS %"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
       <v-text-field
         v-model="form.fiscal.aliquotaCofins"
         type="number"
         min="0"
         label="Alíquota COFINS %"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
       <v-text-field
         v-model="form.fiscal.reducaoIcms"
         type="number"
         min="0"
         label="Redução ICMS %"
-        :disabled="somenteLeitura"
+        :disabled="!fiscalEditavel"
       />
-      <v-text-field v-model="form.fiscal.icms" type="number" min="0" label="ICMS %" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.tributacaoSimples" label="Tributação Simples" :disabled="somenteLeitura" />
-      <v-text-field
-        v-model="form.fiscal.aliquotaSimples"
-        type="number"
-        min="0"
-        label="Alíquota Simples %"
-        :disabled="somenteLeitura"
-      />
-      <v-text-field v-model="form.fiscal.icmsRe" type="number" min="0" label="ICMS RE" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.baseFiscal" label="Base fiscal" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.codigoFiscal" label="Código fiscal" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.produtoFiscal" label="Produto fiscal" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.cstReforma" label="CST reforma tributária" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.cClassTrib" label="Classificação tributária" :disabled="somenteLeitura" />
-      <v-text-field
-        v-model="form.fiscal.aliquotaIbs"
-        type="number"
-        min="0"
-        label="Alíquota IBS %"
-        :disabled="somenteLeitura"
-      />
-      <v-text-field
-        v-model="form.fiscal.aliquotaCbs"
-        type="number"
-        min="0"
-        label="Alíquota CBS %"
-        :disabled="somenteLeitura"
-      />
-      <v-text-field v-model="form.fiscal.origemFiscal" label="Origem fiscal" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.aliquotaEcf" label="Alíquota ECF (literal)" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.aliquotaEcfId" label="Código da alíquota ECF" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.estado" label="Estado fiscal" :disabled="somenteLeitura" />
-      <v-text-field v-model="form.fiscal.motivo" label="Motivo da pendência" :disabled="somenteLeitura" />
-      <v-text-field
-        v-model="form.fiscal.pctNcm"
-        type="number"
-        min="0"
-        label="Percentual NCM"
-        :disabled="somenteLeitura"
-      />
+      <v-text-field v-model="form.fiscal.icms" type="number" min="0" label="ICMS %" :disabled="!fiscalEditavel" />
+      <v-text-field v-model="form.fiscal.tributacaoSimples" label="Tributação Simples" readonly />
+      <v-text-field v-model="form.fiscal.aliquotaSimples" type="number" min="0" label="Alíquota Simples %" readonly />
+      <v-text-field v-model="form.fiscal.icmsRe" type="number" min="0" label="ICMS RE" readonly />
+      <v-text-field v-model="form.fiscal.baseFiscal" label="Base fiscal" readonly />
+      <v-text-field v-model="form.fiscal.codigoFiscal" label="Código fiscal" readonly />
+      <v-text-field v-model="form.fiscal.produtoFiscal" label="Produto fiscal" readonly />
+      <v-text-field v-model="form.fiscal.cstReforma" label="CST reforma tributária" readonly />
+      <v-text-field v-model="form.fiscal.cClassTrib" label="Classificação tributária" readonly />
+      <v-text-field v-model="form.fiscal.aliquotaIbs" type="number" min="0" label="Alíquota IBS %" readonly />
+      <v-text-field v-model="form.fiscal.aliquotaCbs" type="number" min="0" label="Alíquota CBS %" readonly />
+      <v-text-field v-model="form.fiscal.origemFiscal" label="Origem fiscal" readonly />
+      <v-text-field v-model="form.fiscal.aliquotaEcf" label="Alíquota ECF (literal)" readonly />
+      <v-text-field v-model="form.fiscal.aliquotaEcfId" label="Código da alíquota ECF" readonly />
+      <v-text-field v-model="form.fiscal.pctNcm" type="number" min="0" label="Percentual NCM" readonly />
       <v-text-field v-model="form.fiscal.conferidoEm" label="Última conferência" readonly />
     </div>
   </section>

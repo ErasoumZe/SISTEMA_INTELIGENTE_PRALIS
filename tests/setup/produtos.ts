@@ -42,14 +42,14 @@ export async function cadastrarProdutoNaLoja(
   const copia = json<{ data?: { estado?: string; produtoId?: string } }>(importacao).data;
   if (importacao.statusCode !== 200 || copia?.estado !== "importado" || !copia.produtoId) return importacao;
 
-  // A tela devolve o codigo de barras que carregou; sem ele o PUT apagaria o EAN herdado da BASE.
+  // A tela devolve os codigos que carregou; sem eles o PUT apagaria o EAN e o codigo externo da copia.
   const detalhe = await app.inject({ method: "GET", url: `/api/produtos/${copia.produtoId}`, headers: { cookie } });
-  const codigoBarras = json<{ data: { codigoBarras: string | null } }>(detalhe).data.codigoBarras;
+  const { codigo, codigoBarras } = json<{ data: { codigo: string | null; codigoBarras: string | null } }>(detalhe).data;
   const loja = await app.inject({
     method: "PUT",
     url: `/api/produtos/${copia.produtoId}`,
     headers: { cookie },
-    payload: { codigoBarras, ...payload }
+    payload: { codigo, codigoBarras, ...payload }
   });
   if (loja.statusCode !== 204) return loja;
 

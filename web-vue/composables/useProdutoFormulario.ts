@@ -11,6 +11,7 @@ import {
 } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import {
+  aplicarValoresDaBase,
   formularioDoDetalhe,
   formularioVazio,
   descricaoPreviewDoProduto,
@@ -22,9 +23,15 @@ import {
 /**
  * Estado do formulario de produto. As previas (descricao, "como se compra", preco) usam as MESMAS
  * funcoes puras que o servidor usa — e por isso que previa e valor gravado nunca divergem.
+ *
+ * Dois cadastros, um formulario (igual ao app oficial):
+ *  - `base`: o que o produto E. So o administrador cria e edita; a edicao desce para as lojas.
+ *  - `loja`: a copia importada. A loja completa o que e dela (estoque, preco, fiscal, promocao);
+ *    o que veio da BASE fica em leitura.
  */
+export type ModoDoProduto = "base" | "loja";
 
-export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<string | null>) {
+export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<string | null>, modo: Ref<ModoDoProduto>) {
   const { apiGet, apiPost, apiPut } = useApi();
 
   const form = ref<ProdutoForm>(formularioVazio(empresaId.value));
@@ -41,6 +48,13 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   /** Grupo com que o produto chegou: quem ja tinha grupo nao pode ficar sem (oficial). */
   const grupoOriginal = ref<string | null>(null);
   const grupoObrigatorio = computed(() => !produtoId.value || Boolean(grupoOriginal.value));
+  /** Copia de um produto da BASE: so ela tem campos herdados (produto proprio da loja nao). */
+  const produtoBaseId = ref<string | null>(null);
+  /** Loja do produto (TNP/LI/HORA; "BASE" na base geral). Area de venda so na TNP. */
+  const loja = ref("");
+  /** Selo de heranca: campos em que esta loja nao segue mais a base, e os valores atuais da base. */
+  const heranca = ref<ProdutoDetalhe["heranca"]>(null);
+  const herdadoTravado = computed(() => modo.value === "loja" && Boolean(produtoBaseId.value));
 
   let estadoOriginal = JSON.stringify(form.value);
   watch(
@@ -183,7 +197,17 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     try {
       await carregarOpcoes();
       if (produtoId.value) {
-        form.value = formularioDoDetalhe(await apiGet<ProdutoDetalhe>(`/api/produtos/${produtoId.value}`));
+        const detalhe = await apiGet<ProdutoDetalhe>(
+          modo.value === "base"
+            ? `/api/produtos/base/${produtoId.value}?empresaId=${encodeURIComponent(empresaId.value)}`
+            : `/api/produtos/${produtoId.value}`
+        );
+        form.value = formularioDoDetalhe(detalhe);
+        produtoBaseId.value = detalhe.produtoBaseId;
+        loja.value = detalhe.loja;
+        heranca.value = detalhe.heranca;
+      } else {
+        loja.value = modo.value === "base" ? "BASE" : "";
       }
       grupoOriginal.value = form.value.grupoMercadoriaId || null;
       estadoOriginal = JSON.stringify(form.value);
@@ -207,15 +231,18 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     try {
       const payload = payloadDoFormulario(form.value, empresaId.value, forcar, descricaoPreview.value);
       let id = produtoId.value;
-      if (id) {
+      if (modo.value === "base") {
+        // Produto novo so nasce na BASE (oficial); a loja recebe por importacao.
+        if (id) await apiPut(`/api/produtos/base/${id}`, payload);
+        else id = (await apiPost<{ id: string }>("/api/produtos/base", payload)).id;
+      } else if (id) {
         await apiPut(`/api/produtos/${id}`, payload);
       } else {
-        const criado = await apiPost<{ id: string }>("/api/produtos", payload);
-        id = criado.id;
+        throw new Error("Produto novo é cadastrado na base geral e importado pela loja.");
       }
       // Foto escolhida antes de o produto existir sobe agora. Se ELA falhar, o produto ja esta
       // salvo — o erro aparece, mas ninguem recadastra o produto por causa disso.
-      if (id && fotoPendente.value) {
+      if (id && modo.value === "loja" && fotoPendente.value) {
         await enviarFotoPendente(id);
         fotoPendente.value = null;
       }
@@ -234,6 +261,11 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     } finally {
       salvando.value = false;
     }
+  }
+
+  /** Devolve ao formulario os valores da base nos campos herdados (oficial "Voltar a herdar da base"). */
+  function voltarAHerdar() {
+    if (heranca.value) aplicarValoresDaBase(form.value, heranca.value.base);
   }
 
   const { apiUrl } = useApi();
@@ -268,6 +300,11 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     validacaoQtdPreview,
     precoPreview,
     margemDoGrupo,
+    produtoBaseId,
+    loja,
+    heranca,
+    herdadoTravado,
+    voltarAHerdar,
     carregar,
     salvar
   };

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
@@ -50,21 +51,16 @@ describe("Central de produtos integration", () => {
       payload: { empresaId: idsTeste.empresaB, nome: "Grama BASE import", sigla: "g" }
     });
     expect(unidadeDestino.statusCode, unidadeDestino.body).toBe(201);
-    const produtoComEanEquivalente = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        codigo: "PROD-CENTRAL-EAN",
-        codigoBarras: "789123",
-        descricao: "Colisão de EAN com zero à esquerda",
-        nomeCatalogo: "Colisão EAN Central",
-        unidadeIndividualId: unidadeId,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const produtoComEanEquivalente = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      codigo: "PROD-CENTRAL-EAN",
+      codigoBarras: "789123",
+      descricao: "Colisão de EAN com zero à esquerda",
+      nomeCatalogo: "Colisão EAN Central",
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
     expect(produtoComEanEquivalente.statusCode, produtoComEanEquivalente.body).toBe(201);
     const antes = await consultarUm<{ total: number }>("select count(*)::int as total from produtos");
@@ -154,8 +150,9 @@ describe("Central de produtos integration", () => {
       eansEmProdutos: 1,
       amostra: [{ acao: "incluir", conflitoEan: true }]
     });
+    // So a linha desta carga conta: outros produtos da BASE podem existir (o cadastro novo nasce la).
     const baseSemEscrita = await consultarUm<{ total: number }>(
-      "select count(*)::int as total from produtos_catalogo_base"
+      "select count(*)::int as total from produtos_catalogo_base where id_origem = 'base-1'"
     );
     expect(baseSemEscrita?.total).toBe(0);
 

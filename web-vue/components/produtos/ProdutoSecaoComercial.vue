@@ -15,6 +15,8 @@ const props = defineProps<{
   precoPreview: number;
   validacaoQtdPreview: string;
   somenteLeitura: boolean;
+  /** Copia da loja: a ficha de transformacao vem da BASE e fica em leitura (oficial). */
+  herdadoTravado: boolean;
   dica: (campo: string) => string | undefined;
 }>();
 
@@ -170,7 +172,7 @@ watch(
           :items="['EXATOS', 'APROXIMADOS']"
           label="Precisão"
           :hint="dica('precisao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-text-field
           v-model="form.quantidadeTransformacao"
@@ -178,7 +180,7 @@ watch(
           min="0"
           label="Quantidade"
           :hint="dica('quantidadeTransformacao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-select
           v-model="form.unidadeTransformacao"
@@ -186,15 +188,19 @@ watch(
           label="Unidade"
           clearable
           :hint="dica('unidadeTransformacao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-text-field
           v-model="form.produtoReceituario"
           label="Produto de receituário"
           :hint="dica('produtoReceituario')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
-        <v-text-field v-model="form.refReceituario" label="Referência do receituário" :disabled="somenteLeitura" />
+        <v-text-field
+          v-model="form.refReceituario"
+          label="Referência do receituário"
+          :disabled="somenteLeitura || herdadoTravado"
+        />
         <v-text-field
           :model-value="validacaoQtdPreview"
           label="Validação de quantidade (prévia)"

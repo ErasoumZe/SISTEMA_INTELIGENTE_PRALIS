@@ -73,7 +73,8 @@ type Dados = ReturnType<typeof produtoPayloadSchema.parse>;
 /** Regras de ENTRADA do oficial, as mesmas do cadastro da loja. */
 function lerEntrada(body: DadosExternos, ator: AtorDaEscrita): Dados {
   const dados = normalizarTextosProduto(produtoPayloadSchema.parse(body));
-  if (!ator.empresasPermitidas.includes(dados.empresaId)) throw new Error("Empresa nao permitida");
+  if (!ator.empresasPermitidas.includes(dados.empresaId))
+    throw new ReferenciaDeOutraEmpresaError("Empresa nao permitida");
   if (dados.areaVenda != null) {
     throw new AreaDeVendaForaDaTnpError("Área de venda só pode ser definida no cadastro da TNP.");
   }

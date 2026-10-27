@@ -1,12 +1,5 @@
 import { z } from "zod";
-import {
-  empresaQuerySchema,
-  exportarEmpresaPayloadSchema,
-  apiIdParamsSchema,
-  importarEmpresaPayloadSchema,
-  type ExportarEmpresaPayload,
-  type ImportarEmpresaPayload
-} from "../api/index.js";
+import { empresaQuerySchema, apiIdParamsSchema } from "../api/index.js";
 import type { ValoresHerdados } from "./heranca-base.js";
 
 const uuidSchema = z.string().uuid();
@@ -241,8 +234,6 @@ export const produtosOpcoesQuerySchema = empresaQuerySchema.extend({
 });
 
 export const produtosQuerySchema = empresaQuerySchema;
-export const importarProdutosSchema = importarEmpresaPayloadSchema;
-export const exportarProdutoSchema = exportarEmpresaPayloadSchema;
 export const produtoParamsSchema = apiIdParamsSchema;
 
 export type OrdenacaoProdutos = z.infer<typeof ordenacaoProdutosSchema>;
@@ -424,8 +415,6 @@ export interface ProdutoDetalhe {
 
 export type ProdutoPayload = z.infer<typeof produtoPayloadSchema>;
 export type ProdutoConversaoPayload = z.infer<typeof produtoConversaoPayloadSchema>;
-export type ImportarProdutosPayload = ImportarEmpresaPayload;
-export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
 export * from "./regras.js";
 export * from "./regras-cadastro.js";

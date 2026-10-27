@@ -6,5 +6,5 @@ const produtoId = computed(() => String(rota.params["id"] ?? ""));
 </script>
 
 <template>
-  <ProdutoFormulario :key="produtoId" :produto-id="produtoId" />
+  <ProdutoFormulario :key="produtoId" :produto-id="produtoId" modo="loja" />
 </template>

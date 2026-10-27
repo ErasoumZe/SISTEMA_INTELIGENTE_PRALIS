@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { definirFontesFiscaisParaTeste } from "../../../api/src/produtos/produtos-fiscal.service.js";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
@@ -134,38 +135,44 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
       conferido_em: Date | null;
     }>("select * from produtos_fiscal where produto_id = $1", [produtoId]);
 
-  it("Deve_ClassificarPeloGrupo_DeParaEEcf_Quando_CriarProduto", async () => {
+  /** Fiscal gravado na BASE, com as chaves do banco do app oficial. */
+  const fiscalDaBase = async (produtoBaseId: string) =>
+    (
+      await consultarUm<{ dados_oficiais: Record<string, string | number | null> }>(
+        "select dados_oficiais from produtos_catalogo_base where id = $1",
+        [produtoBaseId]
+      )
+    )?.dados_oficiais;
+
+  it("Deve_ClassificarPeloGrupo_DeParaEEcf_Quando_CriarProdutoNaBase", async () => {
     definirFontesFiscaisParaTeste({ leitor: planilhaFalsa({ ecf: [LINHA_ECF] }) });
     const criado = await contexto.app.inject({
       method: "POST",
-      url: "/api/produtos",
+      url: "/api/produtos/base",
       headers: { cookie: cookieAdmin },
       // O cliente tenta impor o estado e um NCM: o NCM do de-para e o estado do servidor vencem.
       payload: payload({ fiscal: { ncm: "99999999", estado: "completo" } })
     });
     expect(criado.statusCode, criado.body).toBe(201);
-    const fiscal = await fiscalDo(json<RespostaId>(criado).data.id);
-    expect(fiscal).toMatchObject({
+    expect(await fiscalDaBase(json<RespostaId>(criado).data.id)).toMatchObject({
       ncm: "19059090",
       cst_pis_cofins: "1",
       tributacao_simples: "TRIBUTADO INTEGRAL",
       aliquota_ecf: "18,00%",
       aliquota_ecf_id: "03",
-      reducao_icms: "53.3300",
-      categoria_fiscal: "PRODUTOS DA CASA",
+      reducao_icms: 53.33,
+      categoria: "PRODUTOS DA CASA",
       origem_fiscal: "produto",
-      estado: "completo"
+      estado_fiscal: "completo"
     });
-    expect(fiscal?.conferido_em).not.toBeNull();
   });
 
   it("Deve_UsarMargemDoGrupoDaPlanilha_NoPrecoAutomatico", async () => {
     definirFontesFiscaisParaTeste({ leitor: planilhaFalsa({ ecf: [LINHA_ECF] }) });
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: payload({
+    const criado = await cadastrarProdutoNaLoja(
+      contexto.app,
+      cookieAdmin,
+      payload({
         descricao: "PAO MARGEM",
         nomeCatalogo: "PAO MARGEM",
         codigoBarras: null,
@@ -173,7 +180,7 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
         custo: 40,
         quantidadeCaixa: 10
       })
-    });
+    );
     expect(criado.statusCode, criado.body).toBe(201);
     const linha = await consultarUm<{ preco_venda: string }>("select preco_venda from produtos where id = $1", [
       json<RespostaId>(criado).data.id
@@ -213,26 +220,25 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
     });
     const criado = await contexto.app.inject({
       method: "POST",
-      url: "/api/produtos",
+      url: "/api/produtos/base",
       headers: { cookie: cookieAdmin },
       payload: payload({ descricao: "PAO SEM PLANILHA", nomeCatalogo: "PAO SEM PLANILHA", codigoBarras: null })
     });
     expect(criado.statusCode, criado.body).toBe(201);
-    expect((await fiscalDo(json<RespostaId>(criado).data.id))?.estado).toBe("fonte_indisponivel");
+    expect((await fiscalDaBase(json<RespostaId>(criado).data.id))?.estado_fiscal).toBe("fonte_indisponivel");
   });
 
   it("Deve_SoAdminAlterarFiscalManual_E_ReclassificarAoTrocarGrupo", async () => {
     definirFontesFiscaisParaTeste({ leitor: planilhaFalsa({ ecf: [LINHA_ECF] }) });
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: payload({
+    const criado = await cadastrarProdutoNaLoja(
+      contexto.app,
+      cookieAdmin,
+      payload({
         descricao: "PAO EDICAO FISCAL",
         nomeCatalogo: "PAO EDICAO FISCAL",
         codigoBarras: "7891000000024"
       })
-    });
+    );
     expect(criado.statusCode, criado.body).toBe(201);
     const id = json<RespostaId>(criado).data.id;
 
@@ -268,5 +274,6 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
 
   afterAll(async () => {
     await executarSql("delete from produtos where descricao like 'PAO %'");
+    await executarSql("delete from produtos_catalogo_base where nome like 'PAO %'");
   });
 });

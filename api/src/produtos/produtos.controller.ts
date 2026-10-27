@@ -3,8 +3,6 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   alterarStatusProdutosSchema,
-  exportarProdutoSchema as exportarPayloadSchema,
-  importarProdutosSchema as importarPayloadSchema,
   produtoParamsSchema as idParamsSchema,
   produtosListaQuerySchema,
   produtosOpcoesQuerySchema,
@@ -23,8 +21,6 @@ import {
   consultarPanoramaFiscalProdutos,
   detalharProduto,
   exportarCatalogoCsvProdutos,
-  exportarProduto,
-  importarProdutos,
   listarFiltrosDeProduto,
   listarHistoricoNomesProduto,
   listarOpcoesDeProduto,
@@ -359,35 +355,6 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         return reply.send(createReadStream(foto.caminhoAbsoluto));
       } catch (error) {
         return responderErroDeFoto(reply, error);
-      }
-    }
-  );
-
-  app.post(
-    "/api/produtos/importar",
-    { preHandler: exigirPermissao("cadastro_produtos_criar") },
-    async (request, reply) => {
-      try {
-        return ok(await importarProdutos(importarPayloadSchema.parse(request.body), request.perfilUsuario));
-      } catch (error) {
-        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
-      }
-    }
-  );
-
-  app.post(
-    "/api/produtos/:id/exportar",
-    { preHandler: exigirPermissao("cadastro_produtos_criar") },
-    async (request, reply) => {
-      const { id } = idParamsSchema.parse(request.params);
-      try {
-        return ok(await exportarProduto(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
-      } catch (error) {
-        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
   );

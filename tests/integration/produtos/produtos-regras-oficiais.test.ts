@@ -4,6 +4,7 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 
 type RespostaId = { data: { id: string } };
 
@@ -32,8 +33,9 @@ describe("produtos - regras de cadastro do app oficial", () => {
     ...extra
   });
 
-  function criar(payload: Record<string, unknown>, cookie = cookieAdmin) {
-    return contexto.app.inject({ method: "POST", url: "/api/produtos", headers: { cookie }, payload });
+  // Produto novo nasce na BASE e a loja importa (modelo BASE do oficial).
+  function criar(payload: Record<string, unknown> & { empresaId: string }) {
+    return cadastrarProdutoNaLoja(contexto.app, cookieAdmin, payload);
   }
 
   async function lerProduto(id: string) {
