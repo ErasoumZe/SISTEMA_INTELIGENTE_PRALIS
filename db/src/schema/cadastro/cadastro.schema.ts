@@ -63,6 +63,7 @@ export {
   produtosHistoricoNomes,
   produtosPromocoes,
   produtosTransformacao,
+  siaProdutoDepara,
   produtosPrecosBase,
   pedidosAgendas,
   comprasWhatsappEnvios,

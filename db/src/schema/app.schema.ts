@@ -69,6 +69,46 @@ export const produtosCatalogoBase = pgTable(
   ]
 );
 
+/**
+ * De-para do SIA por loja (tabela `sia_produto_depara` do app oficial de Produtos): o cadastro que JA
+ * existe no PDV da loja, casado pelo codigo de barras. E daqui que saem o fiscal de LI e HORA (aliquota
+ * ECF, reducao, grupo) e o `coditem` que o importador do CREARE usa como chave. Substituido inteiro a
+ * cada importacao da exportacao do SIA — dado real da loja, nunca versionado.
+ */
+export const siaProdutoDepara = pgTable(
+  "sia_produto_depara",
+  {
+    id: idUuid,
+    empresaId,
+    /** Como esta no SIA (14 posicoes com zeros); o casamento usa `chaveBarras`. */
+    codigoBarras: text("codigo_barras").notNull(),
+    /** O mesmo codigo sem pontuacao e sem zeros a esquerda. */
+    chaveBarras: text("chave_barras").notNull(),
+    /** Chave do importador do CREARE: sem ela, importar duplica em vez de atualizar. */
+    coditem: text("coditem").notNull(),
+    descricao: text("descricao").notNull().default(""),
+    codGrupo: text("cod_grupo").notNull().default(""),
+    /** Codigo de tributacao do ECF (03 tributado, 10 ST, 11 isento): vem do SIA, nunca recalculado. */
+    aliqSaidaEcf: text("aliq_saida_ecf").notNull().default(""),
+    reducao: numeric("reducao", { precision: 7, scale: 4 }),
+    aliquotaInterna: numeric("aliquota_interna", { precision: 7, scale: 4 }),
+    cstSaida: text("cst_saida").notNull().default(""),
+    csosn: text("csosn").notNull().default(""),
+    ncm: text("ncm").notNull().default(""),
+    ativo: text("ativo").notNull().default(""),
+    // Nulo = "nao veio da fonte"; ausencia nunca vira N/zero.
+    pesavel: text("pesavel"),
+    teclaBalanca: text("tecla_balanca"),
+    validadeBalanca: text("validade_balanca"),
+    importadoEm: timestamp("importado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    // Um codigo de barras e um coditem identificam UM produto no SIA da loja.
+    uniqueIndex("sia_produto_depara_barras_uidx").on(table.empresaId, table.chaveBarras),
+    uniqueIndex("sia_produto_depara_coditem_uidx").on(table.empresaId, table.coditem)
+  ]
+);
+
 // --- Descontos da discriminacao em 3 NIVEIS (PROJECT_BRAIN/17 §5) ---------------------------
 // Niveis 1 e 2 vivem no ITEM; o nivel 3 (geral) vive no CABECALHO do lancamento. Em todos,
 // tipo null = sem desconto naquele nivel; os niveis sao CUMULATIVOS.
