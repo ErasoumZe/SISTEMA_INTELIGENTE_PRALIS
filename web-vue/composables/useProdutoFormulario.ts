@@ -1,6 +1,8 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
 import {
   calcularPrecoVenda,
+  normalizarGrupoFiscal,
+  type RegraFiscalGrupo,
   montarComoSeCompra,
   montarValidacaoQtd,
   validarBalanca,
@@ -85,10 +87,19 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       : ""
   );
 
+  /** Regras fiscais por grupo da planilha oficial (com a margem padrao). Fora do ar = lista vazia. */
+  const regrasFiscais = ref<RegraFiscalGrupo[]>([]);
+  /** Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial. */
+  const margemDoGrupo = computed(() => {
+    const nome = grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.nome;
+    if (!nome) return 0;
+    const chave = normalizarGrupoFiscal(nome);
+    return regrasFiscais.value.find((regra) => normalizarGrupoFiscal(regra.grupo) === chave)?.margemPadrao ?? 0;
+  });
+
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
-   * numero antes de salvar. `margemGrupo: 0` porque `grupos_mercadorias.margem` ainda nao existe
-   * (migration bloqueada; ver PROJECT_BRAIN/30 §7).
+   * numero antes de salvar. Sem margem propria vale a margem do grupo da planilha (igual ao oficial).
    */
   const precoPreview = computed(() =>
     calcularPrecoVenda({
@@ -96,7 +107,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       custo: numero(form.value.custo) ?? 0,
       quantidadeCaixa: numero(form.value.quantidadeCaixa) ?? 1,
       margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
-      margemGrupo: 0,
+      margemGrupo: margemDoGrupo.value,
       precoManual: numero(form.value.precoVenda) ?? 0,
       temProduto: Boolean(form.value.nomeCatalogo.trim())
     })
@@ -162,6 +173,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     ]);
     unidades.value = listaUnidades;
     grupos.value = listaGrupos.gruposMercadorias;
+    // A planilha pode estar fora do ar: a tela segue, e a previa usa margem 0 ate ela voltar.
+    regrasFiscais.value = await apiGet<RegraFiscalGrupo[]>("/api/produtos/regras-fiscais").catch(() => []);
   }
 
   async function carregar() {
@@ -254,6 +267,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     comoSeCompraPreview,
     validacaoQtdPreview,
     precoPreview,
+    margemDoGrupo,
     carregar,
     salvar
   };

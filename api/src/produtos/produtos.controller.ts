@@ -47,6 +47,7 @@ import {
 } from "./produtos.service.js";
 import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
 import { FiscalSoAdministradorError } from "./produtos-fiscal-gravacao.js";
+import { FonteFiscalIndisponivelError, listarRegrasFiscaisPorGrupo } from "./produtos-fiscal.service.js";
 
 /**
  * Rastro do ator sem tabela nova: `produtos.criado_por` guarda quem CRIOU (imutavel na edicao) e o
@@ -142,6 +143,23 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
    * Listagem COMPLETA da tela de Produtos: busca, quatro filtros, seis ordenacoes e paginacao —
    * tudo no banco. Exige `cadastro_produtos_visualizar`; quem so opera mercadorias usa `/opcoes`.
    */
+  /**
+   * Regras fiscais por grupo, com a margem padrao — lidas da MESMA planilha do app oficial
+   * (`GET /apoio/grupos-fiscais` la). A tela usa para a previa do preco; fonte fora do ar = 503.
+   */
+  app.get(
+    "/api/produtos/regras-fiscais",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (_request, reply) => {
+      try {
+        return ok(await listarRegrasFiscaisPorGrupo());
+      } catch (error) {
+        if (error instanceof FonteFiscalIndisponivelError) return erro(reply, 503, error.message, error.code);
+        throw error;
+      }
+    }
+  );
+
   app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
     const query = produtosListaQuerySchema.parse(request.query);
     try {
