@@ -171,10 +171,10 @@ export interface ResultadoFiscal {
 }
 
 export interface EntradaFiscal {
-  nome?: string | null;
-  codigoBarras?: string | null;
-  grupo?: string | null;
-  loja?: string | null;
+  nome?: string | null | undefined;
+  codigoBarras?: string | null | undefined;
+  grupo?: string | null | undefined;
+  loja?: string | null | undefined;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -554,33 +554,33 @@ export function classificarFiscal(tabelas: TabelasFiscais | null, entrada: Entra
 
 /** O bloco fiscal do produto no ERP (mesmos campos do oficial; `categoria` aqui e `categoriaFiscal`). */
 export interface FiscalDoProduto {
-  ncm?: string | null;
-  cest?: string | null;
-  categoriaFiscal?: string | null;
-  cstPisCofins?: string | null;
-  aliquotaCheia?: number | null;
-  aliquotaFcp?: number | null;
-  aliquotaPis?: number | null;
-  aliquotaCofins?: number | null;
-  reducaoIcms?: number | null;
-  icms?: number | null;
-  tributacaoSimples?: string | null;
-  aliquotaSimples?: number | null;
-  icmsRe?: number | null;
-  baseFiscal?: string | null;
-  codigoFiscal?: string | null;
-  produtoFiscal?: string | null;
-  cstReforma?: string | null;
-  cClassTrib?: string | null;
-  aliquotaIbs?: number | null;
-  aliquotaCbs?: number | null;
-  origemFiscal?: string | null;
-  aliquotaEcf?: string | null;
-  aliquotaEcfId?: string | null;
-  estado?: string | null;
-  motivo?: string | null;
-  conferidoEm?: string | null;
-  pctNcm?: number | null;
+  ncm?: string | null | undefined;
+  cest?: string | null | undefined;
+  categoriaFiscal?: string | null | undefined;
+  cstPisCofins?: string | null | undefined;
+  aliquotaCheia?: number | null | undefined;
+  aliquotaFcp?: number | null | undefined;
+  aliquotaPis?: number | null | undefined;
+  aliquotaCofins?: number | null | undefined;
+  reducaoIcms?: number | null | undefined;
+  icms?: number | null | undefined;
+  tributacaoSimples?: string | null | undefined;
+  aliquotaSimples?: number | null | undefined;
+  icmsRe?: number | null | undefined;
+  baseFiscal?: string | null | undefined;
+  codigoFiscal?: string | null | undefined;
+  produtoFiscal?: string | null | undefined;
+  cstReforma?: string | null | undefined;
+  cClassTrib?: string | null | undefined;
+  aliquotaIbs?: number | null | undefined;
+  aliquotaCbs?: number | null | undefined;
+  origemFiscal?: string | null | undefined;
+  aliquotaEcf?: string | null | undefined;
+  aliquotaEcfId?: string | null | undefined;
+  estado?: string | null | undefined;
+  motivo?: string | null | undefined;
+  conferidoEm?: string | null | undefined;
+  pctNcm?: number | null | undefined;
 }
 
 /** Campos que uma PESSOA digita (so admin). Todo o resto e derivado. */

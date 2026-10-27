@@ -47,6 +47,12 @@ const envSchema = z.object({
   GOOGLE_REFRESH_TOKEN: envOpcionalNaoVazio,
   GOOGLE_DRIVE_FOLDER_ID: envOpcionalNaoVazio,
   GOOGLE_SPREADSHEET_ID: envOpcionalNaoVazio,
+  // Cadastro de Produtos (R-222): a MESMA planilha que o app oficial da loja le, so leitura. Sem o ID
+  // o fiscal fica "fonte_indisponivel" e o produto e salvo assim mesmo (igual ao oficial sem Sheets).
+  // As abas tem os mesmos padroes do oficial (stack/api/src/config/env.ts).
+  GOOGLE_PRODUTOS_SPREADSHEET_ID: envOpcionalNaoVazio,
+  GOOGLE_PRODUTOS_FISCAL_TAB: z.string().trim().min(1).default("(TNP) FISCAL - DE PARA PRODUTOS"),
+  GOOGLE_PRODUTOS_GRUPOS_TAB: z.string().trim().min(1).default("(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA"),
   // A sincronizacao da admissao so pode ser habilitada explicitamente depois de a migration de
   // controle Google ser aplicada e o destino real ser validado. O default seguro e desligado.
   GOOGLE_ADMISSAO_SYNC_ENABLED: z

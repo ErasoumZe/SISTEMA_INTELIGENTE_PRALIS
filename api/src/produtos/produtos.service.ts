@@ -24,7 +24,6 @@ import {
   buscarProdutoPorDescricaoRepository,
   carregarProdutoParaEscritaRepository,
   listarHistoricoNomesProdutoRepository,
-  margemPadraoDoGrupoRepository,
   registrarHistoricoNomeProdutoRepository,
   referenciasForaDaEmpresaRepository,
   salvarProdutoRepository,
@@ -50,6 +49,9 @@ import {
   type FiltroListaProdutos
 } from "./produtos-leitura.repository.js";
 import { detalheProdutoRepository } from "./produtos.repository.js";
+import { contextoFiscalRepository } from "./produtos-fiscal.repository.js";
+import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
+import { lojaFiscalDaEmpresa, margemPadraoDoGrupo, tabelasFiscais } from "./produtos-fiscal.service.js";
 
 /**
  * Nome/descricao repetidos na mesma loja. Recusa com confirmacao — o "cadastrar mesmo assim"
@@ -209,6 +211,8 @@ export interface AtorDaEscrita {
   usuarioId: string | null | undefined;
   nome?: string | null | undefined;
   empresasPermitidas: string[];
+  /** Administrador pode digitar os campos fiscais manuais (oficial: ONLY_ADMIN_FISCAL para os demais). */
+  administrador?: boolean;
 }
 
 /**
@@ -241,6 +245,9 @@ export async function salvarProduto(
   if (!ator.empresasPermitidas.includes(dados.empresaId)) throw new Error("Empresa nao permitida");
   validarCoerenciaDoProduto(dados);
   if (entradaDaPessoa) validarEstoqueDaEntrada(dados);
+  // Le as regras fiscais ANTES da trava do cadastro: dentro da transacao a classificacao usa o cache em
+  // memoria e o Google nunca segura a trava. Falha aqui nao derruba nada (vira "fonte_indisponivel").
+  await tabelasFiscais().catch(() => null);
 
   return executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
@@ -275,28 +282,53 @@ export async function salvarProduto(
       forcar: dados.forcar
     });
 
+    // Fiscal puxado pelo grupo, igual ao app da loja. A copia da BASE nao reclassifica: copia o fiscal.
+    const contextoFiscal = await contextoFiscalRepository(tx, {
+      empresaId: dados.empresaId,
+      grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
+      produtoId: alvo?.id ?? null
+    });
+    const fiscal = entradaDaPessoa
+      ? (
+          await resolverFiscalDaGravacao({
+            criacao: !alvo,
+            administrador: Boolean(ator.administrador),
+            fiscalDoPayload: dados.fiscal,
+            grupoNome: contextoFiscal.grupoNome,
+            grupoMudou:
+              Boolean(alvo) && (contextoFiscal.atual?.grupoMercadoriaId ?? null) !== (dados.grupoMercadoriaId ?? null),
+            codigoBarras,
+            codigoBarrasMudou: Boolean(alvo) && (contextoFiscal.atual?.codigoBarras ?? null) !== codigoBarras,
+            nome: dados.nomeCatalogo?.trim() || descricao,
+            loja: lojaFiscalDaEmpresa(contextoFiscal.matriculaPrefixo),
+            fiscalAtual: contextoFiscal.atual?.fiscal ?? null
+          })
+        ).fiscal
+      : (dados.fiscal ?? null);
+
+    // Margem padrao do grupo vem da MESMA planilha do oficial (aba de grupos), nao de cadastro local.
     const precoVenda = opcoes.preservarPrecoImportado
       ? (dados.precoVenda ?? null)
-      : precoDeVendaDoServidor(
-          dados,
-          await margemPadraoDoGrupoRepository(tx, dados.empresaId, dados.grupoMercadoriaId ?? null)
-        );
+      : precoDeVendaDoServidor(dados, await margemPadraoDoGrupo(contextoFiscal.grupoNome));
     const salvo = await salvarProdutoRepository(
       tx,
-      montarProdutoParaGravar(dados, {
-        id: alvo?.id,
-        descricao,
-        codigoBarras,
-        precoVenda,
-        nomeCatalogo:
-          dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
-        ...balanca,
-        grupoIdExterno: dados.grupoIdExterno === undefined ? (alvo?.grupoIdExterno ?? null) : dados.grupoIdExterno,
-        areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
-        produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
-        codigoInterno: opcoes.codigoInterno ?? null,
-        criadoPor: ator.usuarioId ?? null
-      })
+      montarProdutoParaGravar(
+        { ...dados, fiscal },
+        {
+          id: alvo?.id,
+          descricao,
+          codigoBarras,
+          precoVenda,
+          nomeCatalogo:
+            dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
+          ...balanca,
+          grupoIdExterno: dados.grupoIdExterno === undefined ? (alvo?.grupoIdExterno ?? null) : dados.grupoIdExterno,
+          areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
+          produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
+          codigoInterno: opcoes.codigoInterno ?? null,
+          criadoPor: ator.usuarioId ?? null
+        }
+      )
     );
     const nomeNovo = dados.nomeCatalogo === undefined ? alvo?.nomeCatalogo : dados.nomeCatalogo?.trim() || null;
     if (alvo && nomeNovo != null && nomeNovo !== (alvo.nomeCatalogo ?? alvo.descricao)) {
