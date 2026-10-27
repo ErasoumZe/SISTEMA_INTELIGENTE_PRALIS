@@ -162,6 +162,34 @@ export async function transferenciaPossuiLacreFechamentoPlanejadoRepository(
   return Boolean(lacre);
 }
 
+/**
+ * Malote Cofre -> PDV ainda sem caixa. O lacre PRINCIPAL dele so e usado pela ABERTURA do caixa (regra do
+ * Marco, 27/10/2026): nenhum outro ato (como a conferencia comum) pode marcar o malote como recebido. Vale para
+ * o malote com lacre de fechamento reservado e para o antigo que entrega numa conta de PDV.
+ */
+export async function transferenciaEhMaloteDeAberturaRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  // Suprimento direto durante o turno (R-190) nasce COM caixa e continua conferivel; so o malote sem caixa vale.
+  const [semCaixa] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(
+      and(eq(transferencias.id, transferenciaId), eq(transferencias.tipo, "suprimento"), isNull(transferencias.caixaId))
+    )
+    .limit(1);
+  if (!semCaixa) return false;
+  if (await transferenciaPossuiLacreFechamentoPlanejadoRepository(transferenciaId, db)) return true;
+  const [paraPdv] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .innerJoin(pdvs, eq(pdvs.contaId, transferencias.contaDestinoId))
+    .where(eq(transferencias.id, transferenciaId))
+    .limit(1);
+  return Boolean(paraPdv);
+}
+
 export async function buscarTransferenciaDetalheRepository(
   transferenciaId: string,
   db: ExecutorBanco = banco
