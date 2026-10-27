@@ -52,3 +52,28 @@ export type ResumoCargaCentral = {
   semFiscalTnp: number;
   semGrupo: number;
 };
+
+export type PreviaCatalogoBase = {
+  estado: "ok" | "sem_base";
+  total?: number;
+  novos?: number;
+  existentes?: number;
+  idsDuplicados?: number;
+  codigosInternosDuplicados?: number;
+  eansDuplicados?: number;
+  codigosInternosEmProdutos?: number;
+  eansEmProdutos?: number;
+  semNcm?: number;
+  semCst?: number;
+  amostra?: Array<{
+    idOrigem: string | null;
+    nome: string;
+    codigoInterno: string;
+    codigoBarras: string;
+    ncm: string | null;
+    cstPisCofins: string | null;
+    conflitoCodigoInterno: boolean;
+    conflitoEan: boolean;
+    acao: "incluir" | "atualizar";
+  }>;
+};

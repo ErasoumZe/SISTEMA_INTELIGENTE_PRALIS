@@ -589,6 +589,13 @@
       "when": 1793047446349,
       "tag": "0083_curly_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793060897397,
+      "tag": "0084_catalogo_base_separado",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import type { JsonValue } from "@padaria/shared/api";
 import type {
   AcaoHistoricoProcesso,
   AcaoHistoricoTeste,
@@ -43,6 +44,30 @@ const empresaId = uuid("empresa_id")
   .notNull()
   .references(() => empresas.id, { onDelete: "cascade" });
 const valorMonetario = (nome: string) => numeric(nome, { precision: 14, scale: 2 });
+
+/** Catálogo mestre BASE do app Pralis; não pertence a nenhuma empresa do ERP. */
+export const produtosCatalogoBase = pgTable(
+  "produtos_catalogo_base",
+  {
+    id: idUuid,
+    idOrigem: text("id_origem").notNull(),
+    codigoInterno: text("codigo_interno"),
+    codigoBarras: text("codigo_barras"),
+    nome: text("nome").notNull(),
+    status: text("status").notNull().default("ativo"),
+    grupoIdOrigem: text("grupo_id_origem"),
+    dadosOficiais: jsonb("dados_oficiais").$type<Record<string, JsonValue>>().notNull(),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    uniqueIndex("produtos_catalogo_base_id_origem_uidx").on(table.idOrigem),
+    check("produtos_catalogo_base_status_check", sql`${table.status} in ('ativo', 'inativo')`),
+    index("produtos_catalogo_base_codigo_interno_idx").on(table.codigoInterno),
+    index("produtos_catalogo_base_codigo_barras_idx").on(table.codigoBarras),
+    index("produtos_catalogo_base_nome_idx").on(table.nome)
+  ]
+);
 
 // --- Descontos da discriminacao em 3 NIVEIS (PROJECT_BRAIN/17 §5) ---------------------------
 // Niveis 1 e 2 vivem no ITEM; o nivel 3 (geral) vive no CABECALHO do lancamento. Em todos,
@@ -911,6 +936,7 @@ export const produtos = pgTable(
   {
     id: idUuid,
     empresaId,
+    produtoBaseId: uuid("produto_base_id").references(() => produtosCatalogoBase.id, { onDelete: "set null" }),
     grupoMercadoriaId: uuid("grupo_mercadoria_id"),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
@@ -968,6 +994,9 @@ export const produtos = pgTable(
     }).onDelete("restrict"),
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
     uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
+    uniqueIndex("produtos_empresa_produto_base_uidx")
+      .on(table.empresaId, table.produtoBaseId)
+      .where(sql`${table.produtoBaseId} is not null`),
     check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
     check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`),
     check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),

@@ -57,6 +57,7 @@ export {
   permissoesTabela,
   permissoesUsuarios,
   produtos,
+  produtosCatalogoBase,
   produtosConversoes,
   produtosFiscal,
   produtosHistoricoNomes,

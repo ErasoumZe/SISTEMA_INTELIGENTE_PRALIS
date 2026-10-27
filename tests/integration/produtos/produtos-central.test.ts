@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 describe("Central de produtos integration", () => {
   let contexto: ContextoApiTeste;
@@ -61,6 +61,15 @@ describe("Central de produtos integration", () => {
     });
     expect(repetida.statusCode).toBe(409);
 
+    await executarSql(
+      `insert into produtos_central_fontes
+         (carga_id, fonte, loja_fonte, chave_linha_fonte, id_sistema, codigo_interno, codigo_barras,
+          chave_barras, nome, nome_normalizado, ativo, dados_originais)
+       values ($1, 'pralis', 'BASE', 'pralis:base-1', 'base-1', '00131', '000789123',
+               '789123', 'CAFÉ', 'cafe', true, $2::jsonb)`,
+      [cargaId, JSON.stringify({ id: "base-1", nome: "CAFÉ", ncm: null, cst_pis_cofins: "" })]
+    );
+
     const validada = await contexto.app.inject({
       method: "POST",
       url: `/api/produtos/central/cargas/${cargaId}/validar`,
@@ -68,6 +77,28 @@ describe("Central de produtos integration", () => {
     });
     expect(validada.statusCode, validada.body).toBe(200);
     expect(json<{ data: { linhas: number; grupos: number } }>(validada).data).toMatchObject({ linhas: 2, grupos: 2 });
+
+    const previaComBase = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/central/cargas/${cargaId}/catalogo-base/previa`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(previaComBase.statusCode, previaComBase.body).toBe(200);
+    expect(
+      json<{
+        data: { total: number; novos: number; semNcm: number; semCst: number; amostra: Array<{ acao: string }> };
+      }>(previaComBase).data
+    ).toMatchObject({
+      total: 1,
+      novos: 1,
+      semNcm: 1,
+      semCst: 1,
+      amostra: [{ acao: "incluir" }]
+    });
+    const baseSemEscrita = await consultarUm<{ total: number }>(
+      "select count(*)::int as total from produtos_catalogo_base"
+    );
+    expect(baseSemEscrita?.total).toBe(0);
 
     const pagina = await contexto.app.inject({
       method: "GET",
@@ -121,5 +152,23 @@ describe("Central de produtos integration", () => {
       headers: { cookie: cookieCaixa }
     });
     expect(semPapelAdmin.statusCode).toBe(403);
+
+    const catalogoBase = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/catalogo-base?page=1&pageSize=10",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(catalogoBase.statusCode, catalogoBase.body).toBe(200);
+    expect(json<{ data: { itens: unknown[]; total: number } }>(catalogoBase).data).toMatchObject({
+      itens: [],
+      total: 0
+    });
+
+    const semPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/catalogo-base",
+      headers: { cookie: cookieCaixa }
+    });
+    expect(semPermissao.statusCode).toBe(403);
   });
 });

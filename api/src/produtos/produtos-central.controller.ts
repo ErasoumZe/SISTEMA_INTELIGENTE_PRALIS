@@ -16,6 +16,7 @@ import {
   listarCargasCentrais,
   listarGruposDaCarga,
   registrarDecisaoCentral,
+  simularImportacaoCatalogoBase,
   validarCargaCentral
 } from "./produtos-central.service.js";
 
@@ -109,6 +110,16 @@ export async function registrarRotasProdutosCentral(app: FastifyInstance): Promi
       const resumo = await validarCargaCentral(cargaId);
       request.log.info({ evento: "produtos.central.carga.validada", cargaId, ...resumo });
       return ok(resumo);
+    } catch (causa) {
+      return responderErroCentral(reply, causa);
+    }
+  });
+
+  app.get("/api/produtos/central/cargas/:cargaId/catalogo-base/previa", async (request, reply) => {
+    if (!(await exigirAdmin(request, reply))) return;
+    const { cargaId } = paramsCarga.parse(request.params);
+    try {
+      return ok(await simularImportacaoCatalogoBase(cargaId));
     } catch (causa) {
       return responderErroCentral(reply, causa);
     }

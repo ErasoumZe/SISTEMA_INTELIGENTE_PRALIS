@@ -28,13 +28,27 @@ export function sqlTravarCadastroDeProdutos() {
 
 /** Maior código numérico dentro da faixa de produtos, seguindo o app oficial. */
 export function sqlMaiorCodigoInternoGlobal() {
-  const codigo = sql.raw('"produtos"."codigo_interno"');
-  const numero = sql`NULLIF(regexp_replace(${codigo}, '\\D', '', 'g'), '')`;
-  return sql<number>`COALESCE(MAX(CASE
-    WHEN ${numero} ~ '^[0-9]+$' AND ${numero}::numeric < 700000
-    THEN ${numero}::numeric
-    ELSE NULL
-  END), 13129)::numeric`;
+  const codigoEmpresa = sql.raw('"produtos"."codigo_interno"');
+  const numeroEmpresa = sql`NULLIF(regexp_replace(${codigoEmpresa}, '\\D', '', 'g'), '')`;
+  const codigoBase = sql.raw('"produtos_catalogo_base"."codigo_interno"');
+  const numeroBase = sql`NULLIF(regexp_replace(${codigoBase}, '\\D', '', 'g'), '')`;
+  return sql<number>`(
+    SELECT COALESCE(MAX(codigo), 13129)::numeric
+    FROM (
+      SELECT CASE
+        WHEN ${numeroEmpresa} ~ '^[0-9]+$' AND ${numeroEmpresa}::numeric < 700000
+        THEN ${numeroEmpresa}::numeric
+        ELSE NULL
+      END AS codigo
+      FROM produtos
+      UNION ALL
+      SELECT CASE
+        WHEN ${numeroBase} ~ '^[0-9]+$' AND ${numeroBase}::numeric < 700000
+        THEN ${numeroBase}::numeric
+        ELSE NULL
+      END AS codigo
+      FROM produtos_catalogo_base
+    ) AS codigos_internos`;
 }
 
 /**

@@ -1,11 +1,14 @@
 import { and, arrayContains, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
 import type { JsonValue } from "@padaria/shared/api";
 import {
   produtosCentralCargas,
   produtosCentralDecisoes,
   produtosCentralFontes,
   produtosCentralGrupos,
-  produtosCentralGruposFontes
+  produtosCentralGruposFontes,
+  produtosCatalogoBase,
+  produtos
 } from "@padaria/db/schema/cadastro";
 import { banco, executarEmTransacao } from "../banco/conexao.js";
 
@@ -33,6 +36,117 @@ export async function obterCargaCentralRepository(cargaId: string) {
 
 export async function listarCargasCentraisRepository() {
   return banco.select().from(produtosCentralCargas).orderBy(desc(produtosCentralCargas.criadoEm)).limit(50);
+}
+
+/** Prévia somente leitura da carga oficial BASE; não cria nem atualiza registros do catálogo. */
+export async function simularImportacaoCatalogoBaseRepository(cargaId: string) {
+  const [carga] = await banco
+    .select({ estado: produtosCentralCargas.estado })
+    .from(produtosCentralCargas)
+    .where(eq(produtosCentralCargas.id, cargaId))
+    .limit(1);
+  if (!carga) return { estado: "nao_encontrada" as const };
+  if (!new Set(["validada", "ativa", "substituida"]).has(carga.estado)) {
+    return { estado: "nao_validada" as const };
+  }
+
+  const fontes = await banco
+    .select({
+      idSistema: produtosCentralFontes.idSistema,
+      codigoInterno: produtosCentralFontes.codigoInterno,
+      codigoBarras: produtosCentralFontes.codigoBarras,
+      nome: produtosCentralFontes.nome,
+      dadosOriginais: produtosCentralFontes.dadosOriginais
+    })
+    .from(produtosCentralFontes)
+    .where(
+      and(
+        eq(produtosCentralFontes.cargaId, cargaId),
+        eq(produtosCentralFontes.fonte, "pralis"),
+        eq(produtosCentralFontes.lojaFonte, "BASE")
+      )
+    );
+  if (!fontes.length) return { estado: "sem_base" as const };
+
+  const ids = fontes.map((fonte) => fonte.idSistema).filter((id): id is string => Boolean(id));
+  const existentes = await banco
+    .select({ id: produtosCatalogoBase.id, idOrigem: produtosCatalogoBase.idOrigem })
+    .from(produtosCatalogoBase)
+    .where(inArray(produtosCatalogoBase.idOrigem, ids));
+  const idsExistentes = new Set(existentes.map((item) => item.idOrigem));
+  const idBasePorOrigem = new Map(existentes.map((item) => [item.idOrigem, item.id]));
+  const contarDuplicados = (valores: string[]) => {
+    const frequencias = new Map<string, number>();
+    for (const valor of valores) if (valor) frequencias.set(valor, (frequencias.get(valor) ?? 0) + 1);
+    return [...frequencias.values()].filter((quantidade) => quantidade > 1).length;
+  };
+  const normalizarEan = (valor: string | null | undefined) => (valor ?? "").replace(/^0+/u, "");
+  const idsDuplicados = contarDuplicados(fontes.map((item) => item.idSistema ?? ""));
+  const codigosDuplicados = contarDuplicados(fontes.map((item) => item.codigoInterno.trim()));
+  const eansDuplicados = contarDuplicados(fontes.map((item) => normalizarEan(item.codigoBarras)));
+  const codigosFonte = [...new Set(fontes.map((item) => item.codigoInterno.trim()).filter(Boolean))];
+  const eansFonte = [...new Set(fontes.map((item) => normalizarEan(item.codigoBarras)).filter(Boolean))];
+  const [produtosComCodigo, produtosComEan] = await Promise.all([
+    codigosFonte.length
+      ? banco
+          .select({ codigoInterno: produtos.codigoInterno, produtoBaseId: produtos.produtoBaseId })
+          .from(produtos)
+          .where(inArray(produtos.codigoInterno, codigosFonte))
+      : Promise.resolve([]),
+    eansFonte.length
+      ? banco
+          .select({ codigoBarras: produtos.codigoBarras, produtoBaseId: produtos.produtoBaseId })
+          .from(produtos)
+          .where(
+            inArray(
+              codigoBarrasSemZerosIniciais(produtos.codigoBarras),
+              eansFonte.map((ean) => ean.replace(/^0+/u, ""))
+            )
+          )
+      : Promise.resolve([])
+  ]);
+  const codigoConflitanteNaEmpresa = (item: (typeof fontes)[number]) =>
+    produtosComCodigo.some(
+      (produto) =>
+        produto.codigoInterno === item.codigoInterno.trim() &&
+        produto.produtoBaseId !== (item.idSistema ? idBasePorOrigem.get(item.idSistema) : undefined)
+    );
+  const eanConflitanteNaEmpresa = (item: (typeof fontes)[number]) =>
+    produtosComEan.some(
+      (produto) =>
+        normalizarEan(produto.codigoBarras) === normalizarEan(item.codigoBarras) &&
+        produto.produtoBaseId !== (item.idSistema ? idBasePorOrigem.get(item.idSistema) : undefined)
+    );
+  const campos = (dados: Record<string, JsonValue>, nomes: string[]) => {
+    const chave = Object.keys(dados).find((item) => nomes.includes(item.toLowerCase()));
+    const valor = chave ? dados[chave] : null;
+    return typeof valor === "string" && valor.trim() ? valor.trim() : null;
+  };
+  const amostra = fontes.slice(0, 10).map((item) => ({
+    idOrigem: item.idSistema,
+    nome: item.nome,
+    codigoInterno: item.codigoInterno,
+    codigoBarras: item.codigoBarras,
+    ncm: campos(item.dadosOriginais, ["ncm"]),
+    cstPisCofins: campos(item.dadosOriginais, ["cst_pis_cofins"]),
+    conflitoCodigoInterno: codigoConflitanteNaEmpresa(item),
+    conflitoEan: eanConflitanteNaEmpresa(item),
+    acao: item.idSistema && idsExistentes.has(item.idSistema) ? "atualizar" : "incluir"
+  }));
+  return {
+    estado: "ok" as const,
+    total: fontes.length,
+    novos: fontes.filter((item) => !item.idSistema || !idsExistentes.has(item.idSistema)).length,
+    existentes: fontes.filter((item) => item.idSistema && idsExistentes.has(item.idSistema)).length,
+    idsDuplicados,
+    codigosInternosDuplicados: codigosDuplicados,
+    eansDuplicados,
+    codigosInternosEmProdutos: fontes.filter(codigoConflitanteNaEmpresa).length,
+    eansEmProdutos: fontes.filter(eanConflitanteNaEmpresa).length,
+    semNcm: fontes.filter((item) => !campos(item.dadosOriginais, ["ncm"])).length,
+    semCst: fontes.filter((item) => !campos(item.dadosOriginais, ["cst_pis_cofins"])).length,
+    amostra
+  };
 }
 
 export async function inserirFonteCentralRepository(

@@ -18,7 +18,8 @@ import {
   marcarCargaCentralFalhouRepository,
   obterCargaCentralRepository,
   registrarDecisaoCentralRepository,
-  substituirGruposDaCargaRepository
+  substituirGruposDaCargaRepository,
+  simularImportacaoCatalogoBaseRepository
 } from "./produtos-central.repository.js";
 import { lerBackupCompletoPralisXlsx } from "./produtos-central-pralis-xlsx.js";
 
@@ -35,6 +36,16 @@ export async function criarCargaCentral(ator: { id: string; nome: string }) {
 
 export async function listarCargasCentrais() {
   return listarCargasCentraisRepository();
+}
+
+export async function simularImportacaoCatalogoBase(cargaId: string) {
+  const resultado = await simularImportacaoCatalogoBaseRepository(cargaId);
+  if (resultado.estado === "nao_encontrada")
+    throw new CargaCentralNaoEncontradaError("Carga da Central não encontrada.");
+  if (resultado.estado === "nao_validada") {
+    throw new CargaCentralEstadoInvalidoError("Valide a carga antes de gerar a prévia de importação da BASE.");
+  }
+  return resultado;
 }
 
 export async function anexarFonteCentral(cargaId: string, fonte: FonteArquivoCentral, conteudo: string) {
