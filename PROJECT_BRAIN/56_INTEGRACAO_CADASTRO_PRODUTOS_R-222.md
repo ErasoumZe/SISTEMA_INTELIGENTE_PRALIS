@@ -563,3 +563,35 @@ Decisão de José: o fiscal do produto **não é digitado**; é puxado pelo grup
 
 Para portar: as abas precisam virar dados do ERP (tabelas novas, migration a mostrar a José com base nas colunas
 reais) carregados do XLSX da planilha inteira. **Bloqueado até José enviar o XLSX completo.**
+
+### Ensaio das planilhas enviadas por José (27/10/2026) — só leitura, nada gravado
+
+Arquivos: `CICLUZ GP - TNP_LI - CADASTRO PRODUTOS (MER).xlsx` (17 abas) e
+`CICLUZ GP - TNP - DISCRIMINAÇÃO_ESTOQUE (MER).xlsx` (14 abas). O XLSX remove `/` dos nomes de aba:
+`(TNPLI) CADASTRO PRODUTOS` é a `(TNP/LI) CADASTRO PRODUTOS` que o oficial usa na carga da BASE. Cabeçalho
+da linha 5 conferido coluna a coluna contra o oficial: sem divergência.
+
+- **Produtos (aba TNP/LI):** 7.407 linhas com nome, todas com o ID do app oficial (sem repetição); 2.379 ativas e
+  5.028 inativas; 1 sem código interno; nenhum código interno repetido; maior código < 700000 = 13189;
+  22 sem EAN; 246 nomes repetidos (normalizados); 1.190 sem grupo de revenda (1.188 têm grupo de
+  transformação); 48 grupos; medida base UN 6.493, KG 636, G 12, ML 6, LT 1, vazia 259.
+- **A faixa LI está vazia** (1 produto). A aba `(LI) CADASTRO PRODUTOS` também tem 1 linha.
+- **Fiscal por produto está ZERADO na planilha** (NCM `00000000` em 7.095 linhas, ECF `00`): é o
+  `FISCAL_ZERADO` que a carga oficial grava. O fiscal real só existe no banco do app e no espelho que ele
+  escreve na aba `(BASE) CADASTRO PRODUTOS`, **que não veio neste arquivo**; também faltou a aba
+  `(TNP) FISCAL - CADASTRO ECF`.
+- **Regras fiscais presentes** (aba `(TNP) FISCAL - DE PARA PRODUTOS`): 88 regras por grupo, 944 linhas de
+  de-para por produto, 17 de reforma por NCM, 4 de CST→Simples. Três grupos dos produtos não têm regra
+  (`MER INATIVOS`, `MER MATERIAL LIMPEZA - EMPRESA`, `MER PATRIMONIO NÃO VENDAS`), somando 4.633 produtos,
+  quase todos inativos — no oficial ficam `pendente_grupo_invalido`.
+- **Margem por grupo:** 79 grupos na aba de grupos, só 3 com margem (cigarros); 79 pares nome→ID do grupo.
+- **SIA (`BASE SIA FULL`):** 7.369 produtos, todos com NCM, 4.334 com alíquota de saída (ECF), 1.161 pesáveis;
+  todos casam com o código interno da planilha. É o equivalente do `sia_produto_depara` que o oficial usa.
+- **Custo e fornecedor (regra DB-05 do oficial: compra mais recente pelo nome × qt. embalagem):**
+  11.773 linhas de compra da TNP, 2.608 notas, 182 fornecedores, 1.338 produtos distintos comprados. Dos
+  2.379 ativos: 952 com compra (todos com fornecedor da última compra; 485 comprados de mais de um
+  fornecedor), 1.384 sem compra na base, 43 com nome ambíguo no cadastro (ficam sem custo, como no oficial);
+  741 teriam custo diferente do que está na planilha.
+
+Pendente de José: confirmar se existe a planilha onde o app escreve (com `(BASE) CADASTRO PRODUTOS` e
+`(TNP) FISCAL - CADASTRO ECF`) e decidir a fonte do ECF.
