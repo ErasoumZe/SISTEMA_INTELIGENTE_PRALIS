@@ -75,6 +75,15 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((valor) => valor === "true"),
+  // TXT do PDV CREARE (R-222): DESLIGADO ate a virada combinada — enquanto o app de Produtos estiver no
+  // ar, ele e quem publica o cadastro para o PDV. Mesmo JSON de configuracao do app (`CREARE_STORE_CONFIG_JSON`).
+  CREARE_EXPORT_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  CREARE_STORE_CONFIG_JSON: z.string().default(""),
+  // Download pelo robo da loja (Bearer). Menos de 32 caracteres = desligado, nunca enfraquecido.
+  CREARE_EXPORT_TOKEN: z.string().default(""),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde
   // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
   GEMINI_API_KEY: envOpcionalNaoVazio,

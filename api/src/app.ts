@@ -67,6 +67,7 @@ import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
 import { registrarRotasProdutosCentral } from "./produtos/produtos-central.controller.js";
 import { registrarRotasCatalogoBase } from "./produtos/produtos-catalogo-base.controller.js";
 import { registrarRotasDeParaSia } from "./produtos/produtos-sia-depara.controller.js";
+import { registrarRotasCreare } from "./produtos/produtos-creare.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
 import { registrarRotasMensagensAdmin } from "./mensagens-admin/mensagens-admin.controller.js";
@@ -117,7 +118,13 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/rodada/separacao",
   "/api/rodada/produtos",
   // Doc 58 §4: o fornecedor salva sem enviar (Cotado).
-  "/api/rodada/rascunho"
+  "/api/rodada/rascunho",
+  // R-222: o robo da loja baixa o TXT do PDV CREARE e registra a entrega com Bearer proprio (sem sessao);
+  // sem bearer, a rota exige a sessao ela mesma. Ver produtos-creare.controller.ts.
+  "/api/creare/produtos.txt",
+  "/api/creare/lotes/pendente",
+  "/api/creare/lotes/:id/entrega",
+  "/api/creare/lotes/:id/confirmar"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -326,6 +333,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasFuncoesOperacionais(app);
   await registrarRotasCatalogoBase(app);
   await registrarRotasDeParaSia(app);
+  await registrarRotasCreare(app);
   await registrarRotasProdutos(app);
   await registrarRotasProdutosCentral(app);
   await registrarRotasUsuarios(app);
