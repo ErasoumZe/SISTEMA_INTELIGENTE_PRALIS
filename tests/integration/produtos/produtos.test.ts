@@ -68,9 +68,10 @@ describe("produtos integration", () => {
     await expect(
       consultarUm<{ id: string; nome_catalogo: string; pesavel: boolean }>(
         "select id, nome_catalogo, pesavel from produtos where id = $1 and descricao = $2",
-        [produtoId, "Produto editado por integracao"]
+        // O cadastro grava nome e descricao em maiusculas (regra do app oficial).
+        [produtoId, "PRODUTO EDITADO POR INTEGRACAO"]
       )
-    ).resolves.toMatchObject({ nome_catalogo: "Produto CRUD renomeado", pesavel: false });
+    ).resolves.toMatchObject({ nome_catalogo: "PRODUTO CRUD RENOMEADO", pesavel: false });
 
     const exportacao = await contexto.app.inject({
       method: "GET",
@@ -81,7 +82,7 @@ describe("produtos integration", () => {
     expect(exportacao.headers["content-type"]).toContain("text/csv");
     expect(exportacao.headers["content-disposition"]).toContain("produtos-pralis.csv");
     expect(exportacao.body).toContain("codigo_interno");
-    expect(exportacao.body).toContain("Produto CRUD renomeado");
+    expect(exportacao.body).toContain("PRODUTO CRUD RENOMEADO");
 
     const exportacaoSemPermissao = await contexto.app.inject({
       method: "GET",
@@ -131,8 +132,8 @@ describe("produtos integration", () => {
       json<{ data: Array<{ nomeAnterior: string; nomeNovo: string; alteradoPor: string }> }>(historico).data
     ).toEqual([
       expect.objectContaining({
-        nomeAnterior: "Produto CRUD",
-        nomeNovo: "Produto CRUD renomeado",
+        nomeAnterior: "PRODUTO CRUD",
+        nomeNovo: "PRODUTO CRUD RENOMEADO",
         alteradoPor: "Admin Integracao"
       })
     ]);
@@ -167,6 +168,7 @@ describe("produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto comercial integracao",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
@@ -181,8 +183,9 @@ describe("produtos integration", () => {
         status: "ativo",
         tipo: "revenda",
         quantidadeEstoque: 12,
-        estoqueMin: 5,
-        estoqueMax: 50,
+        // Caixa de 30: minimo e maximo em embalagem fechada (regra do app oficial).
+        estoqueMin: 30,
+        estoqueMax: 60,
         setorEstoque: "LJ - CAIXAS",
         localVenda1: "PDV1",
         fotoUrl: "https://exemplo.test/foto.png",
@@ -239,7 +242,7 @@ describe("produtos integration", () => {
     });
     // O saldo informado por um cliente antigo/malicioso e ignorado. Somente movimentos auditados alteram estoque.
     expect(Number(linha?.quantidade_estoque)).toBe(0);
-    expect(Number(linha?.estoque_min)).toBe(5);
+    expect(Number(linha?.estoque_min)).toBe(30);
     expect(linha).toMatchObject({
       auto: true,
       status: "ativo",
@@ -274,6 +277,7 @@ describe("produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto comercial integracao",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
@@ -304,6 +308,7 @@ describe("produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Massa transformacao integracao",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
@@ -333,6 +338,7 @@ describe("produtos integration", () => {
     const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
     const base = {
       empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       descricao: "Produto Duplicado Teste",
       unidadeIndividualId: unidadeId,
       quantidadeIndividual: 1,
@@ -371,6 +377,7 @@ describe("produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaB,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
         descricao: "Produto proibido",
         unidadeIndividualId: idsTeste.unidade,
         quantidadeIndividual: 1

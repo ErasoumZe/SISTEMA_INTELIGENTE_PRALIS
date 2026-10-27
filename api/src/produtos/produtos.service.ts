@@ -2,7 +2,11 @@ import type { DadosExternos } from "@padaria/shared/api";
 import {
   calcularPrecoVenda,
   calcularPrecoVendaComPromocao,
+  normalizarTextosProduto,
   produtoPayloadSchema,
+  TECLA_BALANCA_FIXA,
+  validarBalanca,
+  validarEstoquePorEmbalagem,
   validarPromocoesDoProduto,
   type ExportarProdutoPayload as ExportarPayload,
   type ImportarProdutosPayload as ImportarPayload,
@@ -58,8 +62,8 @@ export class ProdutoDuplicadoError extends Error {
 }
 
 /**
- * Codigo de barras repetido na mesma loja. **Bloqueio absoluto**: nao existe "cadastrar mesmo
- * assim" para EAN — dois produtos com o mesmo codigo tornam a leitura no balcao ambigua.
+ * Codigo de barras repetido na mesma loja. Pede confirmacao, como no app oficial (decisao de Jose,
+ * 27/10/2026): o "cadastrar mesmo assim" (`forcar`) passa por cima.
  */
 export class CodigoBarrasDuplicadoError extends Error {
   constructor(mensagem: string) {
@@ -213,26 +217,47 @@ export interface AtorDaEscrita {
  * 2. na edicao, CARREGA E TRAVA o produto alvo e confere o escopo — **antes** de qualquer escrita
  *    ou `delete` de satelite;
  * 3. confere que grupo e unidades sao da mesma empresa do produto;
- * 4. aplica as duas regras de duplicidade (EAN absoluto, descricao com confirmacao);
+ * 4. aplica as duas regras de duplicidade (EAN e descricao, ambas com confirmacao);
  * 5. grava produto + satelites.
+ *
+ * As regras de ENTRADA do app oficial (maiusculas, balanca, estoque por embalagem, grupo obrigatorio)
+ * valem para o que a pessoa digita. A copia da BASE (`produtoBaseId`) e importacao de dado que ja
+ * existe: cadastro legado que viola a regra de entrada nao pode impedir a copia (mesma separacao do
+ * oficial entre `importProductSchema` e `createProductSchema`).
  */
 export async function salvarProduto(
   id: string | null,
   body: DadosExternos,
   ator: AtorDaEscrita,
-  opcoes: { produtoBaseId?: string; preservarPrecoImportado?: boolean } = {}
+  opcoes: { produtoBaseId?: string; preservarPrecoImportado?: boolean; codigoInterno?: string | null } = {}
 ) {
-  const dados = produtoPayloadSchema.parse(body);
+  const entradaDaPessoa = opcoes.produtoBaseId === undefined;
+  const lido = produtoPayloadSchema.parse(body);
+  const dados = entradaDaPessoa ? normalizarTextosProduto(lido) : lido;
   const descricao = dados.descricao.trim();
   const codigoBarras = apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null;
 
   if (!ator.empresasPermitidas.includes(dados.empresaId)) throw new Error("Empresa nao permitida");
   validarCoerenciaDoProduto(dados);
+  if (entradaDaPessoa) validarEstoqueDaEntrada(dados);
 
   return executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
 
     const alvo = id ? await carregarProdutoAlvoValidado(tx, id, dados.empresaId, ator.empresasPermitidas) : null;
+
+    // Oficial: produto novo sem grupo e recusado (e dele que sai a regra fiscal). Na edicao so
+    // recusa quem JA tinha grupo — produto legado sem grupo continua editavel.
+    if (entradaDaPessoa && !dados.grupoMercadoriaId && (!alvo || alvo.grupoMercadoriaId)) {
+      throw new Error("Selecione o grupo de mercadorias para aplicar os impostos.");
+    }
+    const balanca = entradaDaPessoa
+      ? balancaDaEntrada(dados, alvo)
+      : {
+          pesavel: dados.pesavel === undefined ? (alvo?.pesavel ?? false) : dados.pesavel,
+          teclaBalanca: dados.teclaBalanca === undefined ? (alvo?.teclaBalanca ?? null) : dados.teclaBalanca,
+          validadeBalanca: dados.validadeBalanca === undefined ? (alvo?.validadeBalanca ?? null) : dados.validadeBalanca
+        };
 
     const problemas = await referenciasForaDaEmpresaRepository(tx, dados.empresaId, {
       grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
@@ -259,12 +284,11 @@ export async function salvarProduto(
         precoVenda,
         nomeCatalogo:
           dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
-        pesavel: dados.pesavel === undefined ? (alvo?.pesavel ?? false) : dados.pesavel,
-        teclaBalanca: dados.teclaBalanca === undefined ? (alvo?.teclaBalanca ?? null) : dados.teclaBalanca,
-        validadeBalanca: dados.validadeBalanca === undefined ? (alvo?.validadeBalanca ?? null) : dados.validadeBalanca,
+        ...balanca,
         grupoIdExterno: dados.grupoIdExterno === undefined ? (alvo?.grupoIdExterno ?? null) : dados.grupoIdExterno,
         areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
         produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
+        codigoInterno: opcoes.codigoInterno ?? null,
         criadoPor: ator.usuarioId ?? null
       })
     );
@@ -291,6 +315,41 @@ export async function listarHistoricoNomesProduto(empresaId: string, produtoId: 
 }
 
 type DadosDoProduto = ReturnType<typeof produtoPayloadSchema.parse>;
+
+/** Estoque minimo/maximo em embalagem fechada (oficial). So para o que a pessoa digita. */
+function validarEstoqueDaEntrada(dados: DadosDoProduto): void {
+  const erros = validarEstoquePorEmbalagem({
+    quantidadeCaixa: dados.quantidadeCaixa,
+    estoqueMin: dados.estoqueMin,
+    estoqueMax: dados.estoqueMax
+  });
+  if (erros.length) throw new Error(erros.map((item) => item.mensagem).join(" "));
+}
+
+/**
+ * Balanca como no oficial: produto NOVO sem resposta comeca em "Nao"; quem vai para a balanca tem a
+ * tecla fixa 000 e a validade obrigatoria (0 a 999 dias); quem nao vai fica sem tecla e sem validade.
+ * Na edicao, `null` (ainda nao conferido) continua aceito: e o estado de cadastro legado.
+ */
+function balancaDaEntrada(
+  dados: DadosDoProduto,
+  alvo: { pesavel: boolean | null; teclaBalanca: number | null; validadeBalanca: number | null } | null
+) {
+  const informado = dados.pesavel === undefined ? (alvo ? alvo.pesavel : null) : dados.pesavel;
+  const pesavel = !alvo && informado == null ? false : informado;
+  const validade = dados.validadeBalanca === undefined ? (alvo?.validadeBalanca ?? null) : dados.validadeBalanca;
+  if (pesavel === true) {
+    const erros = validarBalanca({ pesavel, validadeBalanca: validade });
+    if (erros.length) throw new Error(erros.join(" "));
+    return { pesavel, teclaBalanca: TECLA_BALANCA_FIXA, validadeBalanca: validade };
+  }
+  if (pesavel === false) return { pesavel, teclaBalanca: null, validadeBalanca: null };
+  return {
+    pesavel,
+    teclaBalanca: dados.teclaBalanca === undefined ? (alvo?.teclaBalanca ?? null) : dados.teclaBalanca,
+    validadeBalanca: validade
+  };
+}
 
 /**
  * Coerencia do payload — o que o Zod nao consegue dizer sozinho porque depende de dois campos.
@@ -361,7 +420,8 @@ async function recusarDuplicados(
     forcar: boolean;
   }
 ) {
-  // EAN primeiro e SEM bypass: `forcar` nunca vale para codigo de barras.
+  // Oficial: nome e EAN repetidos pedem confirmacao; `forcar` ("cadastrar mesmo assim") vale para os dois.
+  if (entrada.forcar) return;
   if (entrada.codigoBarras) {
     const porBarras = await buscarProdutoPorCodigoBarrasRepository(
       tx,
@@ -373,7 +433,6 @@ async function recusarDuplicados(
       throw new CodigoBarrasDuplicadoError(mensagemDeDuplicado(porBarras, " com este codigo de barras"));
     }
   }
-  if (entrada.forcar) return;
   const porDescricao = await buscarProdutoPorDescricaoRepository(
     tx,
     entrada.empresaId,
@@ -422,6 +481,7 @@ function montarProdutoParaGravar(
     grupoIdExterno: string | null;
     areaVenda: string | null;
     produtoBaseId: string | null;
+    codigoInterno: string | null;
     criadoPor: string | null;
   }
 ): ProdutoParaGravar {
@@ -429,6 +489,7 @@ function montarProdutoParaGravar(
     ...(extra.id ? { id: extra.id } : {}),
     empresaId: dados.empresaId,
     produtoBaseId: extra.produtoBaseId,
+    ...(extra.codigoInterno ? { codigoInterno: extra.codigoInterno } : {}),
     codigo: dados.codigo?.trim() || null,
     criadoPor: extra.criadoPor,
     codigoBarras: extra.codigoBarras,

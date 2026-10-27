@@ -180,7 +180,7 @@ export async function listarCatalogoBaseRepository(input: {
 export async function carregarProdutoBaseParaLojaRepository(id: string, empresaId: string) {
   const [produto] = await banco.select().from(produtosCatalogoBase).where(eq(produtosCatalogoBase.id, id)).limit(1);
   if (!produto) return null;
-  const [grupos, unidades, importado] = await Promise.all([
+  const [grupos, unidades, importado, mesmoCodigo] = await Promise.all([
     banco
       .select({ id: gruposMercadorias.id, nome: gruposMercadorias.nome })
       .from(gruposMercadorias)
@@ -193,7 +193,21 @@ export async function carregarProdutoBaseParaLojaRepository(id: string, empresaI
       .select({ id: produtos.id })
       .from(produtos)
       .where(and(eq(produtos.empresaId, empresaId), eq(produtos.produtoBaseId, id)))
-      .limit(1)
+      .limit(1),
+    // A copia herda o codigo interno da BASE; outro produto da loja com o mesmo codigo impede a copia.
+    produto.codigoInterno
+      ? banco
+          .select({ descricao: produtos.descricao })
+          .from(produtos)
+          .where(and(eq(produtos.empresaId, empresaId), eq(produtos.codigoInterno, produto.codigoInterno)))
+          .limit(1)
+      : Promise.resolve([])
   ]);
-  return { produto, grupos, unidades, jaImportado: importado.length > 0 };
+  return {
+    produto,
+    grupos,
+    unidades,
+    jaImportado: importado.length > 0,
+    codigoOcupadoPor: mesmoCodigo[0]?.descricao ?? null
+  };
 }

@@ -4,12 +4,23 @@ import type { ProdutoResumo } from "@padaria/shared/produtos";
 defineProps<{
   produto: ProdutoResumo;
   podeEditar: boolean;
+  alterandoStatus?: boolean;
+  selecionavel?: boolean;
+  selecionado?: boolean;
 }>();
+defineEmits<{ "alternar-status": []; selecionar: [] }>();
 </script>
 
 <template>
   <article class="produto-linha" role="listitem">
     <div class="produto-linha__identidade">
+      <v-checkbox-btn
+        v-if="selecionavel"
+        :model-value="selecionado"
+        density="compact"
+        :aria-label="`Selecionar ${produto.nomeCatalogo || produto.descricao}`"
+        @update:model-value="$emit('selecionar')"
+      />
       <div class="produto-linha__avatar" aria-hidden="true">
         {{ (produto.nomeCatalogo || produto.descricao).trim().charAt(0).toLocaleUpperCase("pt-BR") || "•" }}
       </div>
@@ -21,7 +32,18 @@ defineProps<{
     <div class="produto-linha__detalhes">
       <span>{{ produto.marca || "Sem marca" }}</span>
       <span>{{ produto.quantidadeIndividual }} {{ produto.unidadeIndividualSigla || "" }}</span>
-      <span class="produto-linha__status" :class="produto.status === 'ativo' ? 'is-ativo' : 'is-inativo'">
+      <button
+        v-if="podeEditar"
+        type="button"
+        class="produto-linha__status produto-linha__status--acao"
+        :class="produto.status === 'ativo' ? 'is-ativo' : 'is-inativo'"
+        :disabled="alterandoStatus"
+        :aria-label="`${produto.status === 'ativo' ? 'Inativar' : 'Ativar'} ${produto.nomeCatalogo || produto.descricao}`"
+        @click="$emit('alternar-status')"
+      >
+        {{ alterandoStatus ? "..." : produto.status === "ativo" ? "Ativo" : "Inativo" }}
+      </button>
+      <span v-else class="produto-linha__status" :class="produto.status === 'ativo' ? 'is-ativo' : 'is-inativo'">
         {{ produto.status === "ativo" ? "Ativo" : "Inativo" }}
       </span>
     </div>
@@ -109,6 +131,23 @@ defineProps<{
 }
 .produto-linha__status.is-inativo {
   color: var(--cx-ink-soft);
+}
+.produto-linha__status--acao {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--cx-dur-1) var(--cx-ease);
+}
+.produto-linha__status--acao:hover:not(:disabled) {
+  border-color: currentColor;
+}
+.produto-linha__status--acao:focus-visible {
+  outline: 2px solid var(--cx-brand);
+  outline-offset: 2px;
+}
+.produto-linha__status--acao:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 .produto-linha__acao {
   justify-content: flex-end;

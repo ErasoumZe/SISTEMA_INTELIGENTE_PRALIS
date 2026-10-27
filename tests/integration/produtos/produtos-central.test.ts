@@ -56,6 +56,7 @@ describe("Central de produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         codigo: "PROD-CENTRAL-EAN",
         codigoBarras: "789123",
         descricao: "Colisão de EAN com zero à esquerda",
@@ -223,7 +224,9 @@ describe("Central de produtos integration", () => {
       quantidade_individual: "500.000",
       produto_base_id: baseId!.id
     });
-    expect(produtoCopiado?.codigo_interno).not.toBe("00131");
+    // Oficial (origin/main 1ba6774, product.service.ts importFromBase + teste de governanca): a copia da
+    // loja herda o MESMO codigo interno da BASE — o codigo e igual entre lojas.
+    expect(produtoCopiado?.codigo_interno).toBe("00131");
     const fiscalCopiado = await consultarUm<{ ncm: string; aliquota_pis: string; cst_pis_cofins: string }>(
       "select ncm, aliquota_pis, cst_pis_cofins from produtos_fiscal where produto_id = (select id from produtos where produto_base_id = $1 and empresa_id = $2)",
       [baseId!.id, idsTeste.empresaB]

@@ -125,15 +125,18 @@ function maiusculo(texto: string | null | undefined): string {
     .toUpperCase();
 }
 
-/** Descricao automatica: NOME + QUANTIDADE (ate 3 casas) + MEDIDA. */
+/**
+ * Descricao automatica: NOME + QUANTIDADE (ate 3 casas) + MEDIDA. Gramatura 0 (produto sem peso por
+ * unidade) NAO aparece — como no app oficial; antes saia "BOLO 0 UN".
+ */
 export function montarDescricao(nome: string, quantidade: number | string, medida: string): string {
   const nomeUp = maiusculo(nome);
   const medidaUp = maiusculo(medida);
   const quantidadeNumero = Number.parseFloat(String(quantidade).replace(",", ".")) || 0;
-  const mostrarQuantidade = nomeUp !== "" || medidaUp !== "" || quantidadeNumero > 0;
-  const quantidadeFmt = mostrarQuantidade
-    ? quantidadeNumero.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })
-    : "";
+  const quantidadeFmt =
+    quantidadeNumero > 0
+      ? quantidadeNumero.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })
+      : "";
   return [nomeUp, quantidadeFmt, medidaUp].filter(Boolean).join(" ");
 }
 

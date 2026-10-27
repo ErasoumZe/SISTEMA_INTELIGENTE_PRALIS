@@ -159,4 +159,21 @@ describe("produto-formulario-mapa", () => {
       pesavel: null
     });
   });
+
+  it("balanca como no oficial: tecla fixa 000 para quem vai, nada para quem nao vai; gramatura vazia vira 0", () => {
+    const vai = {
+      ...formularioVazio("e1"),
+      pesavel: true,
+      teclaBalanca: "123",
+      validadeBalanca: "5",
+      quantidadeIndividual: ""
+    };
+    expect(payloadDoFormulario(vai, "e1", false)).toMatchObject({
+      teclaBalanca: 0,
+      validadeBalanca: 5,
+      quantidadeIndividual: 0
+    });
+    const naoVai = { ...formularioVazio("e1"), pesavel: false, teclaBalanca: "123", validadeBalanca: "5" };
+    expect(payloadDoFormulario(naoVai, "e1", false)).toMatchObject({ teclaBalanca: null, validadeBalanca: null });
+  });
 });

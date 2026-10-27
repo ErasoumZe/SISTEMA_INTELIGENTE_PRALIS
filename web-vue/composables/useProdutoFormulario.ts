@@ -1,5 +1,12 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
-import { calcularPrecoVenda, montarComoSeCompra, montarValidacaoQtd, validarPromocoesDoProduto } from "@padaria/shared";
+import {
+  calcularPrecoVenda,
+  montarComoSeCompra,
+  montarValidacaoQtd,
+  validarBalanca,
+  validarEstoquePorEmbalagem,
+  validarPromocoesDoProduto
+} from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import {
   formularioDoDetalhe,
@@ -29,6 +36,9 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   const alterado = ref(false);
   /** Foto escolhida antes de o produto existir: sobe logo depois do POST. */
   const fotoPendente = ref<File | null>(null);
+  /** Grupo com que o produto chegou: quem ja tinha grupo nao pode ficar sem (oficial). */
+  const grupoOriginal = ref<string | null>(null);
+  const grupoObrigatorio = computed(() => !produtoId.value || Boolean(grupoOriginal.value));
 
   let estadoOriginal = JSON.stringify(form.value);
   watch(
@@ -98,11 +108,27 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     if (!form.value.nomeCatalogo.trim()) lista["nomeCatalogo"] = "Informe o nome do produto.";
     if (!form.value.unidadeIndividualId) lista["unidadeIndividualId"] = "Escolha a unidade individual.";
     const quantidade = numero(form.value.quantidadeIndividual);
-    if (quantidade == null || quantidade <= 0) lista["quantidadeIndividual"] = "A quantidade precisa ser maior que 0.";
+    if (quantidade == null || quantidade < 0) lista["quantidadeIndividual"] = "Informe a quantidade (0 ou mais).";
+    if (grupoObrigatorio.value && !form.value.grupoMercadoriaId) {
+      lista["grupoMercadoriaId"] = "Selecione o grupo de mercadorias para aplicar os impostos.";
+    }
+    if (form.value.pesavel === null) lista["pesavel"] = "Escolha Sim ou Não para o campo Vai para balança.";
+    const [erroDeBalanca] = validarBalanca({
+      pesavel: form.value.pesavel,
+      validadeBalanca: form.value.validadeBalanca === "" ? null : numero(form.value.validadeBalanca)
+    });
+    if (erroDeBalanca) lista["validadeBalanca"] = erroDeBalanca;
     const minimo = numero(form.value.estoqueMin);
     const maximo = numero(form.value.estoqueMax);
     if (minimo != null && maximo != null && maximo < minimo) {
       lista["estoqueMax"] = "O máximo não pode ser menor que o mínimo.";
+    }
+    for (const item of validarEstoquePorEmbalagem({
+      quantidadeCaixa: numero(form.value.quantidadeCaixa),
+      estoqueMin: form.value.estoqueMin === "" ? null : minimo,
+      estoqueMax: form.value.estoqueMax === "" ? null : maximo
+    })) {
+      lista[item.campo] ??= item.mensagem;
     }
     const unidadesDasConversoes = form.value.conversoes.map((item) => item.unidadeMedidaId).filter(Boolean);
     if (new Set(unidadesDasConversoes).size !== unidadesDasConversoes.length) {
@@ -146,6 +172,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       if (produtoId.value) {
         form.value = formularioDoDetalhe(await apiGet<ProdutoDetalhe>(`/api/produtos/${produtoId.value}`));
       }
+      grupoOriginal.value = form.value.grupoMercadoriaId || null;
       estadoOriginal = JSON.stringify(form.value);
       alterado.value = false;
     } catch (falha) {
@@ -184,8 +211,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       return id;
     } catch (falha) {
       const mensagem = mensagemErro(falha);
-      // "Cadastrar mesmo assim" vale para descricao repetida; EAN repetido e bloqueio absoluto.
-      if (mensagem.includes("Ja existe o produto") && !mensagem.includes("codigo de barras")) {
+      // "Cadastrar mesmo assim" vale para nome e para codigo de barras repetidos (oficial).
+      if (mensagem.includes("Ja existe o produto")) {
         duplicado.value = mensagem;
       } else {
         erro.value = mensagem;
@@ -221,6 +248,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     erros,
     errosDePromocao,
     valido,
+    grupoObrigatorio,
     siglaDaUnidade,
     descricaoPreview,
     comoSeCompraPreview,

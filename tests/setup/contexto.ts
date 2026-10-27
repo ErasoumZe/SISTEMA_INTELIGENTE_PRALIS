@@ -64,6 +64,8 @@ export const idsTeste = {
   grupoDespesaOperacional: "11111111-1111-4111-8111-111111111711",
   grupoDespesaQuebra: "11111111-1111-4111-8111-111111111712",
   grupoMercadoriaInsumos: "11111111-1111-4111-8111-111111111713",
+  // Produto novo exige grupo (regra do app oficial, R-222): a empresa B precisa de um para cadastrar.
+  grupoMercadoriaB: "33333333-3333-4333-8333-333333331713",
   grupoRetiradaSangria: "11111111-1111-4111-8111-111111111714",
   grupoVendaBalcao: "11111111-1111-4111-8111-111111111715",
   unidade: "11111111-1111-4111-8111-111111111716",

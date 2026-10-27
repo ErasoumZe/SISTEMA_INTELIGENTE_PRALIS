@@ -8,8 +8,14 @@
  */
 import type { ProdutoResumo } from "@padaria/shared";
 
-const props = defineProps<{ produto: ProdutoResumo; podeEditar: boolean }>();
-defineEmits<{ editar: [id: string] }>();
+const props = defineProps<{
+  produto: ProdutoResumo;
+  podeEditar: boolean;
+  alterandoStatus?: boolean;
+  selecionavel?: boolean;
+  selecionado?: boolean;
+}>();
+defineEmits<{ "alternar-status": []; selecionar: [] }>();
 
 const { apiUrl } = useApi();
 
@@ -62,9 +68,31 @@ const preco = computed(() =>
           <p class="cx-num">{{ produto.codigoInterno || "sem código" }}</p>
         </div>
       </div>
-      <span class="produto-card__status" :class="ativo ? 'is-ativo' : 'is-inativo'">
-        {{ ativo ? "Ativo" : "Inativo" }}
-      </span>
+      <div class="produto-card__marcas">
+        <v-checkbox-btn
+          v-if="selecionavel"
+          :model-value="selecionado"
+          density="compact"
+          :aria-label="`Selecionar ${produto.nomeCatalogo || produto.descricao}`"
+          @update:model-value="$emit('selecionar')"
+        />
+        <!-- Oficial: ativa/inativa no proprio card. Nao existe excluir. -->
+        <button
+          v-if="podeEditar"
+          type="button"
+          class="produto-card__status produto-card__status--acao"
+          :class="ativo ? 'is-ativo' : 'is-inativo'"
+          :disabled="alterandoStatus"
+          :aria-label="`${ativo ? 'Inativar' : 'Ativar'} ${produto.nomeCatalogo || produto.descricao}`"
+          :title="ativo ? 'Clique para inativar' : 'Clique para ativar'"
+          @click="$emit('alternar-status')"
+        >
+          {{ alterandoStatus ? "..." : ativo ? "Ativo" : "Inativo" }}
+        </button>
+        <span v-else class="produto-card__status" :class="ativo ? 'is-ativo' : 'is-inativo'">
+          {{ ativo ? "Ativo" : "Inativo" }}
+        </span>
+      </div>
     </header>
 
     <dl class="produto-card__dados">
@@ -202,6 +230,30 @@ const preco = computed(() =>
 .produto-card__status.is-inativo {
   background: var(--cx-hover);
   color: var(--cx-ink-soft);
+}
+.produto-card__status--acao {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--cx-dur-1) var(--cx-ease);
+}
+.produto-card__status--acao:hover:not(:disabled) {
+  border-color: currentColor;
+}
+.produto-card__status--acao:focus-visible {
+  outline: 2px solid var(--cx-brand);
+  outline-offset: 2px;
+}
+.produto-card__status--acao:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.produto-card__marcas {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--cx-sp-1);
 }
 
 .produto-card__dados {

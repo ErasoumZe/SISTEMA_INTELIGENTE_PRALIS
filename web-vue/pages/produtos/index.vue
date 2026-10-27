@@ -9,10 +9,13 @@ import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoCard from "~/components/produtos/ProdutoCard.vue";
+import ProdutosCabecalho from "~/components/produtos/ProdutosCabecalho.vue";
 import ProdutoFiltros from "~/components/produtos/ProdutoFiltros.vue";
+import ProdutoInativarLote from "~/components/produtos/ProdutoInativarLote.vue";
 import ProdutoListaLinha from "~/components/produtos/ProdutoListaLinha.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useListagemProdutos } from "~/composables/useListagemProdutos";
+import { useStatusDeProdutos } from "~/composables/useStatusDeProdutos";
 import { mensagemErro } from "~/utils/domain";
 
 const router = useRouter();
@@ -55,6 +58,12 @@ const podeCriar = computed(() => temPermissao("cadastro_produtos_criar"));
 const podeEditar = computed(() => temPermissao("cadastro_produtos_editar"));
 
 const lista = useListagemProdutos(empresaId);
+const ehAdmin = computed(() => sessao.value?.perfil?.role === "usuario_admin");
+const statusDeProdutos = useStatusDeProdutos(empresaId, () => lista.carregar());
+const loteInativar = ref<InstanceType<typeof ProdutoInativarLote> | null>(null);
+async function confirmarLote(confirmacao: string) {
+  if (await statusDeProdutos.inativarSelecionados(confirmacao)) loteInativar.value?.fechar();
+}
 const soAtivos = computed({
   get: () => lista.status.value === "ativo",
   set: (marcado: boolean) => {
@@ -110,36 +119,7 @@ onMounted(async () => {
     <v-alert v-if="erroDeAcesso" type="error" variant="tonal">{{ erroDeAcesso }}</v-alert>
 
     <div v-else class="produtos-tela">
-      <header class="produtos-tela__cabecalho">
-        <div>
-          <h1>Produtos</h1>
-          <p>{{ lista.paginacao.total }} produto(s) nesta loja</p>
-        </div>
-        <div class="produtos-tela__acoes">
-          <v-btn
-            v-if="sessao.perfil?.role === 'usuario_admin'"
-            variant="outlined"
-            prepend-icon="mdi-wrench-outline"
-            to="/produtos/manutencao"
-            >Manutenção</v-btn
-          >
-          <v-btn
-            v-if="sessao.perfil?.role === 'usuario_admin'"
-            variant="outlined"
-            prepend-icon="mdi-database-outline"
-            to="/produtos/base"
-            >Catálogo BASE</v-btn
-          >
-          <v-btn
-            v-if="sessao.perfil?.role === 'usuario_admin'"
-            variant="outlined"
-            prepend-icon="mdi-merge"
-            to="/produtos/central"
-            >Central de produtos</v-btn
-          >
-          <v-btn v-if="podeCriar" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
-        </div>
-      </header>
+      <ProdutosCabecalho :total="lista.paginacao.total" :eh-admin="ehAdmin" :pode-criar="podeCriar" />
 
       <div class="produtos-tela__barra">
         <v-text-field
@@ -215,6 +195,26 @@ onMounted(async () => {
         </div>
       </v-expand-transition>
 
+      <v-alert
+        v-if="statusDeProdutos.mensagem.value"
+        :type="statusDeProdutos.mensagem.value.tipo"
+        variant="tonal"
+        closable
+        @click:close="statusDeProdutos.mensagem.value = null"
+      >
+        {{ statusDeProdutos.mensagem.value.texto }}
+      </v-alert>
+
+      <ProdutoInativarLote
+        v-if="ehAdmin"
+        ref="loteInativar"
+        :quantidade="statusDeProdutos.selecionados.value.length"
+        :frase="statusDeProdutos.fraseDoLote.value"
+        :processando="statusDeProdutos.inativandoLote.value"
+        @confirmar="confirmarLote"
+        @limpar="statusDeProdutos.selecionados.value = []"
+      />
+
       <v-progress-linear v-if="lista.carregando.value" indeterminate color="primary" />
 
       <v-alert v-if="lista.erro.value" type="error" variant="tonal">
@@ -230,6 +230,11 @@ onMounted(async () => {
           :key="produto.id"
           :produto="produto"
           :pode-editar="podeEditar"
+          :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
+          :selecionavel="ehAdmin"
+          :selecionado="statusDeProdutos.selecionados.value.includes(produto.id)"
+          @alternar-status="statusDeProdutos.alternar(produto)"
+          @selecionar="statusDeProdutos.alternarSelecao(produto.id)"
         />
       </div>
 
@@ -239,6 +244,11 @@ onMounted(async () => {
           :key="produto.id"
           :produto="produto"
           :pode-editar="podeEditar"
+          :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
+          :selecionavel="ehAdmin"
+          :selecionado="statusDeProdutos.selecionados.value.includes(produto.id)"
+          @alternar-status="statusDeProdutos.alternar(produto)"
+          @selecionar="statusDeProdutos.alternarSelecao(produto.id)"
         />
       </div>
 
@@ -275,31 +285,6 @@ onMounted(async () => {
   gap: var(--cx-sp-4);
   min-width: 0;
   max-width: 100%;
-}
-
-.produtos-tela__cabecalho {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cx-sp-3);
-}
-
-.produtos-tela__acoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.produtos-tela__cabecalho h1 {
-  font-size: var(--cx-fs-h2);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-tight);
-  color: var(--cx-ink);
-}
-.produtos-tela__cabecalho p {
-  margin: 0;
-  font-size: var(--cx-fs-caption);
-  color: var(--cx-ink-soft);
 }
 
 .produtos-tela__barra {

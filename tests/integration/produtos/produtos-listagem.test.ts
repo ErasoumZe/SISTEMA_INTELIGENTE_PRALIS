@@ -146,7 +146,8 @@ describe("produtos - listagem paginada no banco", () => {
   it("Deve_BuscarPorDescricaoCodigoInternoEMarca", async () => {
     const porDescricao = await listar({ busca: "Listagem P04 item 03", pageSize: 50 });
     expect(porDescricao.data).toHaveLength(1);
-    expect(porDescricao.data[0]?.descricao).toBe("Listagem P04 item 03");
+    // O cadastro grava a descricao em maiusculas (oficial); a busca continua sem diferenciar caixa.
+    expect(porDescricao.data[0]?.descricao).toBe("LISTAGEM P04 ITEM 03");
 
     const codigo = porDescricao.data[0]?.codigoInterno ?? "";
     expect(codigo).toMatch(/^\d{5}$/);
@@ -189,8 +190,8 @@ describe("produtos - listagem paginada no banco", () => {
   it("Deve_AplicarAsSeisOrdenacoes", async () => {
     const az = await listar({ ordenar: "az", pageSize: 50 });
     const za = await listar({ ordenar: "za", pageSize: 50 });
-    expect(az.data[0]?.descricao).toBe("Listagem P04 item 00");
-    expect(za.data[0]?.descricao).toBe(`Listagem P04 item ${String(TOTAL - 1).padStart(2, "0")}`);
+    expect(az.data[0]?.descricao).toBe("LISTAGEM P04 ITEM 00");
+    expect(za.data[0]?.descricao).toBe(`LISTAGEM P04 ITEM ${String(TOTAL - 1).padStart(2, "0")}`);
 
     const codigoAsc = await listar({ ordenar: "codigo_asc", pageSize: 50 });
     const codigoDesc = await listar({ ordenar: "codigo_desc", pageSize: 50 });
@@ -293,6 +294,7 @@ describe("produtos - listagem e isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaB,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
         descricao: "SO DA EMPRESA B P04",
         unidadeIndividualId: json<RespostaId>(unidadeB).data.id,
         quantidadeIndividual: 1,

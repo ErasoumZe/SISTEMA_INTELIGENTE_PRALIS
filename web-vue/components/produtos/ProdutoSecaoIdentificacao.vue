@@ -10,6 +10,7 @@ const props = defineProps<{
   unidades: Array<{ id: string; sigla: string; nome: string }>;
   grupos: Array<{ id: string; nome: string }>;
   erros: Record<string, string>;
+  grupoObrigatorio: boolean;
   descricaoPreview: string;
   comoSeCompraPreview: string;
   somenteLeitura: boolean;
@@ -109,7 +110,9 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
             { title: 'Não', value: false },
             { title: 'Sim', value: true }
           ]"
-          label="Vai para balança?"
+          label="Vai para balança? *"
+          data-campo="pesavel"
+          :error-messages="erros['pesavel']"
           :hint="
             form.pesavel === null
               ? 'Para produtos existentes, confira o cadastro SIA. KG não define este campo.'
@@ -119,20 +122,27 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           class="secao__campo-largo"
         />
 
-        <v-text-field
-          v-model="form.teclaBalanca"
-          type="number"
-          min="0"
-          label="Tecla da balança"
-          :disabled="somenteLeitura"
-        />
-        <v-text-field
-          v-model="form.validadeBalanca"
-          type="number"
-          min="0"
-          label="Validade na balança (dias)"
-          :disabled="somenteLeitura"
-        />
+        <template v-if="form.pesavel === true">
+          <!-- Oficial: a tecla e fixa (000, confirmada para a TNP); o servidor grava o valor fixo. -->
+          <v-text-field
+            model-value="000"
+            label="Tecla da balança"
+            readonly
+            persistent-hint
+            hint="Valor fixo 000 confirmado para a TNP."
+          />
+          <v-text-field
+            v-model="form.validadeBalanca"
+            type="number"
+            min="0"
+            max="999"
+            label="Validade na balança (dias) *"
+            data-campo="validadeBalanca"
+            :error-messages="erros['validadeBalanca']"
+            :disabled="somenteLeitura"
+            @wheel.prevent
+          />
+        </template>
         <v-text-field v-model="form.grupoIdExterno" label="Grupo oficial (ID externo)" :disabled="somenteLeitura" />
         <v-select
           v-model="form.areaVenda"
@@ -164,8 +174,10 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :items="grupos"
           item-title="nome"
           item-value="id"
-          label="Grupo de mercadoria"
-          clearable
+          :label="grupoObrigatorio ? 'Grupo de mercadoria *' : 'Grupo de mercadoria'"
+          :clearable="!grupoObrigatorio"
+          data-campo="grupoMercadoriaId"
+          :error-messages="erros['grupoMercadoriaId']"
           :hint="dica('grupoMercadoria')"
           :disabled="somenteLeitura"
         />

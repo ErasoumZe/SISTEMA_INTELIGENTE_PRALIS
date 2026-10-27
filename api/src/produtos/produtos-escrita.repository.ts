@@ -1,5 +1,6 @@
 import { and, desc, eq, ilike, inArray, ne } from "drizzle-orm";
 import { sqlConsultaMaiorCodigoInterno, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
+import { codigoBarrasNaCriacao } from "@padaria/shared/produtos";
 import {
   gruposMercadorias,
   perfisUsuarios,
@@ -72,6 +73,7 @@ export async function carregarProdutoParaEscritaRepository(
   validadeBalanca: number | null;
   grupoIdExterno: string | null;
   areaVenda: string | null;
+  grupoMercadoriaId: string | null;
 } | null> {
   const [linha] = await tx
     .select({
@@ -85,7 +87,8 @@ export async function carregarProdutoParaEscritaRepository(
       teclaBalanca: produtos.teclaBalanca,
       validadeBalanca: produtos.validadeBalanca,
       grupoIdExterno: produtos.grupoIdExterno,
-      areaVenda: produtos.areaVenda
+      areaVenda: produtos.areaVenda,
+      grupoMercadoriaId: produtos.grupoMercadoriaId
     })
     .from(produtos)
     .where(eq(produtos.id, id))
@@ -168,7 +171,7 @@ export async function referenciasForaDaEmpresaRepository(
   return problemas;
 }
 
-/** Codigo de barras repetido na MESMA empresa. Bloqueio absoluto — nao existe "cadastrar mesmo assim". */
+/** Codigo de barras repetido na MESMA empresa. Pede confirmacao ("cadastrar mesmo assim"), como no app oficial. */
 export async function buscarProdutoPorCodigoBarrasRepository(
   tx: ExecutorBanco,
   empresaId: string,
@@ -387,6 +390,8 @@ export async function salvarProdutoRepository(
         ...valores,
         codigo,
         codigoInterno,
+        // Oficial: EAN vazio na criacao recebe o proprio codigo interno.
+        codigoBarras: codigoBarrasNaCriacao(valores.codigoBarras, codigoInterno),
         criadoPor: input.criadoPor ?? null,
         quantidadeEstoque: "0"
       })

@@ -41,6 +41,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaB,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
         descricao: "Produto vitima da empresa B",
         unidadeIndividualId: unidadeB,
         quantidadeIndividual: 1,
@@ -94,6 +95,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieAdminA },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Sequestrado pela empresa A",
         unidadeIndividualId: unidadeA,
         quantidadeIndividual: 1,
@@ -106,7 +108,8 @@ describe("produtos - isolamento entre empresas", () => {
     await expect(
       consultarUm("select id from produtos where id = $1 and descricao = $2", [
         produtoDaEmpresaB,
-        "Produto vitima da empresa B"
+        // O cadastro grava a descricao em maiusculas (regra do app oficial).
+        "PRODUTO VITIMA DA EMPRESA B"
       ])
     ).resolves.toBeTruthy();
   });
@@ -118,6 +121,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto que nao muda de loja",
         unidadeIndividualId: unidadeA,
         quantidadeIndividual: 1,
@@ -133,6 +137,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaB,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
         descricao: "Produto que nao muda de loja",
         unidadeIndividualId: unidadeB,
         quantidadeIndividual: 1,
@@ -171,6 +176,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto com unidade alheia",
         unidadeIndividualId: unidadeB,
         quantidadeIndividual: 1,
@@ -191,6 +197,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto com conversao alheia",
         unidadeIndividualId: unidadeA,
         quantidadeIndividual: 1,
@@ -202,17 +209,24 @@ describe("produtos - isolamento entre empresas", () => {
   });
 
   it("Deve_GerarCodigosInternosGlobaisUnicos_EmCadastrosConcorrentesDeLojasDiferentes", async () => {
-    const criar = (empresaId: string, unidadeIndividualId: string, descricao: string) =>
+    const criar = (empresaId: string, grupoMercadoriaId: string, unidadeIndividualId: string, descricao: string) =>
       contexto.app.inject({
         method: "POST",
         url: "/api/produtos",
         headers: { cookie: cookieMultiempresa },
-        payload: { empresaId, descricao, unidadeIndividualId, quantidadeIndividual: 1, conversoes: [] }
+        payload: {
+          empresaId,
+          grupoMercadoriaId,
+          descricao,
+          unidadeIndividualId,
+          quantidadeIndividual: 1,
+          conversoes: []
+        }
       });
 
     const [respostaA, respostaB] = await Promise.all([
-      criar(idsTeste.empresaA, unidadeA, "Código global concorrente loja A"),
-      criar(idsTeste.empresaB, unidadeB, "Código global concorrente loja B")
+      criar(idsTeste.empresaA, idsTeste.grupoMercadoriaInsumos, unidadeA, "Código global concorrente loja A"),
+      criar(idsTeste.empresaB, idsTeste.grupoMercadoriaB, unidadeB, "Código global concorrente loja B")
     ]);
     expect(respostaA.statusCode).toBe(201);
     expect(respostaB.statusCode).toBe(201);
@@ -302,9 +316,10 @@ describe("produtos - duplicidade e concorrencia", () => {
     await contexto.fechar();
   });
 
-  it("Deve_BloquearCodigoBarrasRepetido_MesmoComForcar", async () => {
+  it("Deve_PedirConfirmacaoDeCodigoBarrasRepetido_E_AceitarComForcar", async () => {
     const base = {
       empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       unidadeIndividualId: unidade,
       quantidadeIndividual: 1,
       codigoBarras: "7891234567895",
@@ -319,20 +334,29 @@ describe("produtos - duplicidade e concorrencia", () => {
     });
     expect(primeiro.statusCode).toBe(201);
 
-    // Descricao diferente, EAN igual, e com o "cadastrar mesmo assim" ligado: continua bloqueado.
-    const segundo = await contexto.app.inject({
+    // Oficial (decisao de Jose, 27/10/2026): EAN repetido pede confirmacao; sem ela, 409 com o motivo.
+    const semForcar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: { ...base, descricao: "EAN unico segundo" }
+    });
+    assertProblem(semForcar, 409, "DUPLICATE_BARCODE");
+
+    // Com o "cadastrar mesmo assim", grava.
+    const comForcar = await contexto.app.inject({
       method: "POST",
       url: "/api/produtos",
       headers: { cookie: cookieAdmin },
       payload: { ...base, descricao: "EAN unico segundo", forcar: true }
     });
-
-    assertProblem(segundo, 409, "DUPLICATE_BARCODE");
+    expect(comForcar.statusCode, comForcar.body).toBe(201);
   });
 
   it("Deve_PermitirDescricaoRepetida_Quando_Forcar", async () => {
     const base = {
       empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       unidadeIndividualId: unidade,
       quantidadeIndividual: 1,
       descricao: "Descricao repetida com confirmacao",
@@ -378,6 +402,7 @@ describe("produtos - duplicidade e concorrencia", () => {
           headers: { cookie: cookieAdmin },
           payload: {
             empresaId: idsTeste.empresaA,
+            grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
             descricao: `Produto simultaneo ${indice}`,
             unidadeIndividualId: unidade,
             quantidadeIndividual: 1,
@@ -418,6 +443,7 @@ describe("produtos - duplicidade e concorrencia", () => {
         headers: { cookie: cookieAdmin },
         payload: {
           empresaId: idsTeste.empresaA,
+          grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
           descricao: "Produto depois da BASE",
           unidadeIndividualId: unidade,
           quantidadeIndividual: 1,
@@ -440,6 +466,7 @@ describe("produtos - duplicidade e concorrencia", () => {
   it("Deve_DeixarPassarUmSo_Quando_DuplicadosSimultaneos", async () => {
     const payload = {
       empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       descricao: "Corrida de duplicidade",
       unidadeIndividualId: unidade,
       quantidadeIndividual: 1,

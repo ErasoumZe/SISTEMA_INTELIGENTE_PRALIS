@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
+  alterarStatusProdutosSchema,
   exportarProdutoSchema as exportarPayloadSchema,
   importarProdutosSchema as importarPayloadSchema,
   produtoParamsSchema as idParamsSchema,
@@ -44,6 +45,7 @@ import {
   salvarFotoDeProdutoNoEscopo,
   salvarProduto
 } from "./produtos.service.js";
+import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
 
 /**
  * Rastro do ator sem tabela nova: `produtos.criado_por` guarda quem CRIOU (imutavel na edicao) e o
@@ -52,7 +54,7 @@ import {
  */
 function registrarEscrita(
   request: FastifyRequest,
-  acao: "criar" | "editar",
+  acao: "criar" | "editar" | "status",
   dados: { produtoId: string; empresaId?: string }
 ) {
   request.log.info(
@@ -265,6 +267,30 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return responderErroDeEscrita(reply, error);
     }
   });
+
+  /** Ativar/inativar (um produto) e inativar em lote (so administrador). Nao existe excluir. */
+  app.patch(
+    "/api/produtos/status",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const corpo = alterarStatusProdutosSchema.parse(request.body);
+      const perfil = request.perfilUsuario;
+      try {
+        const resultado = await alterarStatusDeProdutos(corpo, {
+          administrador: perfil?.role === "usuario_admin",
+          empresasPermitidas: perfil ? empresasPermitidas(perfil) : []
+        });
+        for (const produtoId of resultado.alterados) {
+          registrarEscrita(request, "status", { produtoId, empresaId: corpo.empresaId });
+        }
+        return ok(resultado);
+      } catch (error) {
+        if (error instanceof StatusEmLoteNaoPermitidoError) return erro(reply, 403, error.message, "FORBIDDEN_BATCH");
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
 
   app.put("/api/produtos/:id", { preHandler: exigirPermissao("cadastro_produtos_editar") }, async (request, reply) => {
     const { id } = idParamsSchema.parse(request.params);

@@ -124,7 +124,8 @@ export const produtoPayloadSchema = z
       .optional(),
     marca: z.string().optional().nullable(),
     unidadeIndividualId: uuidSchema,
-    quantidadeIndividual: z.coerce.number().positive(),
+    // Gramatura 0 e valida (produto sem peso por unidade), como no app oficial.
+    quantidadeIndividual: z.coerce.number().min(0),
     grupoMercadoriaId: uuidSchema.optional().nullable(),
     conversoes: z.array(produtoConversaoPayloadSchema).default([]),
     // Como se compra (porte do Pralis): embalagem + preposicao + unidades por caixa + medida de compra.
@@ -180,6 +181,23 @@ export const produtoPayloadSchema = z
       });
     }
   });
+
+/**
+ * Ativar/inativar sem reenviar o produto inteiro. Excluir nao existe (decisao de Jose, 27/10/2026):
+ * o produto sai de uso pelo status. Mais de um produto por vez e so do administrador, so para
+ * inativar e com a frase de confirmacao — o mesmo cuidado do "excluir em lote" do app oficial.
+ */
+export const alterarStatusProdutosSchema = z.object({
+  empresaId: uuidSchema,
+  ids: z.array(uuidSchema).min(1).max(100),
+  status: statusProdutoSchema,
+  confirmacao: z.string().trim().max(60).optional()
+});
+export type AlterarStatusProdutosPayload = z.infer<typeof alterarStatusProdutosSchema>;
+
+export function fraseDeInativacaoEmLote(quantidade: number): string {
+  return `INATIVAR ${quantidade} PRODUTOS`;
+}
 
 // As SEIS ordenacoes da listagem. Sao contrato: o banco ordena, nao o navegador.
 export const ordenacaoProdutosSchema = z
@@ -400,6 +418,7 @@ export type ImportarProdutosPayload = ImportarEmpresaPayload;
 export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
 export * from "./regras.js";
+export * from "./regras-cadastro.js";
 export * from "./central-reconciliacao.js";
 export * from "./central-fontes.js";
 export * from "./central-ingestao.js";

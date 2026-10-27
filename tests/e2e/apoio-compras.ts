@@ -62,10 +62,17 @@ export async function criarProdutoDeEstoque(contexto: ContextoCompras, produto: 
   expect(unidades.status(), await unidades.text()).toBe(200);
   const unidadeId = ((await unidades.json()) as { data: Array<{ id: string }> }).data[0]?.id;
   expect(unidadeId, "nenhuma unidade de medida no seed").toBeTruthy();
+  // Produto novo exige grupo de mercadoria (regra do app oficial, R-222).
+  const grupos = await api.get(`/api/grupos?empresaId=${empresaId}&pageSize=1`);
+  expect(grupos.status(), await grupos.text()).toBe(200);
+  const grupoId = ((await grupos.json()) as { data: { gruposMercadorias: Array<{ id: string }> } }).data
+    .gruposMercadorias[0]?.id;
+  expect(grupoId, "nenhum grupo de mercadoria no seed").toBeTruthy();
 
   const resposta = await api.post("/api/produtos", {
     data: {
       empresaId,
+      grupoMercadoriaId: grupoId,
       descricao: produto.descricao,
       unidadeIndividualId: unidadeId,
       quantidadeIndividual: 1,

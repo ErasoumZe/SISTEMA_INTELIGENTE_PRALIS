@@ -496,3 +496,38 @@ web 844/844; `lint`, `check` (avisos conhecidos do Nuxt) e `check:migrations` (8
 4. **Margem padrão por grupo:** implementar como no oficial (produto sem margem própria usa a do grupo), com
    migration aditiva — SQL mostrado antes e aplicado só no banco local.
 5. **App oficial não é alterado** (está estável em uso); dados vêm da planilha do Google Sheets baixada por José.
+
+### Correção de registro: a cópia BASE→loja HERDA o código interno (27/10/2026)
+
+A nota "Campos oficiais de balança" acima afirmou que a importação da BASE gera um código interno novo. **Está
+errada.** No `origin/main` oficial (1ba6774), `importFromBase` passa `codigoInterno: base.codigoInterno`
+("herda o mesmo código interno da base (igual entre lojas)", `product.service.ts`) e o repositório só gera
+código quando o contexto vem `undefined`; o teste oficial `product.governance.integration.test.ts` confere
+`copia.codigoInterno === base.codigoInterno`. O ERP passou a herdar o código; se a loja já tiver outro produto
+com aquele código, a cópia é bloqueada com o motivo (o índice único é por empresa).
+
+### V1 — regras de cadastro do oficial portadas (27/10/2026)
+
+Implementado e coberto por teste (unitário `tests/unit/produtos-regras-cadastro.test.ts` e integração
+`tests/integration/produtos/produtos-regras-oficiais.test.ts`):
+
+- regras puras em `shared/src/produtos/regras-cadastro.ts` (tela e API usam as mesmas): estoque por embalagem
+  (mínimo ≥ embalagem e múltiplo; máximo múltiplo e maior que o mínimo), balança (validade 0–999 obrigatória
+  quando vai para a balança; tecla fixa 000; quem não vai fica sem tecla e validade), EAN vazio recebe o código
+  interno na criação, maiúsculas nos textos descritivos (nome, descrição, marca, setores, locais, produto do
+  receituário, categoria fiscal);
+- gramatura 0 aceita e a descrição automática não mostra "0";
+- produto novo exige grupo; na edição só exige de quem já tinha grupo (legado sem grupo continua editável);
+- produto novo sem resposta de balança nasce "Não"; edição de legado com balança "não conferida" continua aceita
+  pela API, mas a tela exige Sim/Não como no oficial;
+- EAN repetido pede confirmação e aceita "Cadastrar mesmo assim" (decisão 2);
+- as regras valem para o que a pessoa digita; a cópia da BASE é importação e não é barrada por cadastro legado
+  que viole regra de entrada (mesma separação do oficial).
+
+### V3 — status na listagem (27/10/2026)
+
+- `PATCH /api/produtos/status`: ativa/inativa um produto (quem edita produto); vários só o administrador, só
+  para inativar e com a frase `INATIVAR N PRODUTOS` (decisão 3 — não existe excluir). Ids de outra loja são
+  ignorados sem distinguir de inexistentes.
+- Listagem: status clicável em card e linha; seleção e "Inativar selecionados" para o administrador; botão
+  "Importar da base" para quem cria produto (antes só o admin via "Catálogo BASE").

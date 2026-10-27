@@ -49,6 +49,8 @@ describe("produtos - foto", () => {
       headers: { cookie },
       payload: {
         empresaId,
+        grupoMercadoriaId:
+          empresaId === idsTeste.empresaB ? idsTeste.grupoMercadoriaB : idsTeste.grupoMercadoriaInsumos,
         descricao,
         unidadeIndividualId: json<RespostaId>(unidade).data.id,
         quantidadeIndividual: 1,

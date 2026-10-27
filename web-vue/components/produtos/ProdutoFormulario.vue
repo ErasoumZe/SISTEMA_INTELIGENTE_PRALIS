@@ -170,6 +170,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :unidades="formulario.unidades.value"
           :grupos="formulario.grupos.value"
           :erros="formulario.erros.value"
+          :grupo-obrigatorio="formulario.grupoObrigatorio.value"
           :descricao-preview="formulario.descricaoPreview.value"
           :como-se-compra-preview="formulario.comoSeCompraPreview.value"
           :somente-leitura="somenteLeitura"

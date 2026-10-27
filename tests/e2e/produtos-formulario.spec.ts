@@ -20,11 +20,12 @@ import {
 
 const nomeUnico = () => `${PREFIXO} ${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-/** Preenche o minimo obrigatorio: descricao, quantidade e unidade. */
+/** Preenche o minimo obrigatorio: nome, quantidade, unidade e grupo (oficial: produto novo exige grupo). */
 async function preencherObrigatorios(page: Page, descricao: string, quantidade = "25") {
-  await page.locator('[data-campo="descricao"] input').fill(descricao);
+  await page.locator('[data-campo="nomeCatalogo"] input').fill(descricao);
   await page.locator('[data-campo="quantidadeIndividual"] input').fill(quantidade);
   await escolherPrimeiraOpcao(page, '[data-campo="unidadeIndividualId"]');
+  await escolherPrimeiraOpcao(page, '[data-campo="grupoMercadoriaId"]');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -128,6 +129,32 @@ test("estoque maximo menor que o minimo bloqueia o salvar com mensagem no campo"
 
   await page.locator('[data-campo="estoqueMax"] input').fill("200");
   await expect(page.getByRole("button", { name: "Salvar produto" })).toBeEnabled();
+});
+
+test("vai para balanca: tecla fixa 000 e validade obrigatoria de 0 a 999", async ({ page }) => {
+  await page.goto("/produtos/novo");
+  await preencherObrigatorios(page, nomeUnico());
+  const salvar = page.getByRole("button", { name: "Salvar produto" });
+
+  await escolherNoSelect(page, "Vai para balança? *", "Sim");
+  await expect(page.getByLabel("Tecla da balança")).toHaveValue("000");
+  await expect(mensagemDoCampo(page, "validadeBalanca")).toContainText("validade da balança");
+  await expect(salvar).toBeDisabled();
+
+  await page.locator('[data-campo="validadeBalanca"] input').fill("1000");
+  await expect(salvar).toBeDisabled();
+  await page.locator('[data-campo="validadeBalanca"] input').fill("5");
+  await expect(salvar).toBeEnabled();
+});
+
+test("estoque minimo fora do multiplo da embalagem bloqueia o salvar", async ({ page }) => {
+  await page.goto("/produtos/novo");
+  await preencherObrigatorios(page, nomeUnico());
+  await page.getByLabel("Qtd. por embalagem").fill("10");
+  await page.getByLabel("Estoque mínimo").fill("15");
+
+  await expect(mensagemDoCampo(page, "estoqueMin")).toContainText("múltiplo da Qt. embalagem (10)");
+  await expect(page.getByRole("button", { name: "Salvar produto" })).toBeDisabled();
 });
 
 test("promocao so existe para revenda e some no tipo transformacao", async ({ page }) => {

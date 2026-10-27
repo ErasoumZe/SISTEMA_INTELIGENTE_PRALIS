@@ -96,7 +96,9 @@ function montarPayloadBase(
   }
   const medidaBase = texto(dados, "medida_base");
   const quantidade = numero(dados, "quantidade");
-  if (!medidaBase || !quantidade || quantidade <= 0) return { erro: "Produto sem quantidade ou medida base válidas." };
+  // Gramatura 0 e valida no oficial (produto sem peso por unidade); so ausente ou negativa bloqueia.
+  if (!medidaBase || quantidade == null || quantidade < 0)
+    return { erro: "Produto sem quantidade ou medida base válidas." };
   const unidade = resolverUnidade(medidaBase, unidades);
   if (!unidade) return { erro: `A loja não tem uma unidade única equivalente a ${medidaBase}.` };
 
@@ -293,11 +295,19 @@ export async function copiarProdutoBaseParaLoja(input: {
   const contexto = await carregarProdutoBaseParaLojaRepository(input.produtoBaseId, input.empresaId);
   if (!contexto) return { estado: "nao_encontrado" as const };
   if (contexto.jaImportado) return { estado: "ja_importado" as const };
+  if (contexto.codigoOcupadoPor) {
+    return {
+      estado: "bloqueado" as const,
+      motivo: `A loja já tem o código interno ${contexto.produto.codigoInterno} em "${contexto.codigoOcupadoPor}".`
+    };
+  }
   const convertido = montarPayloadBase(contexto.produto, contexto.unidades, contexto.grupos, input.empresaId);
   if (convertido.erro) return { estado: "bloqueado" as const, motivo: convertido.erro };
   const salvo = await salvarProduto(null, convertido.payload, input.ator, {
     produtoBaseId: input.produtoBaseId,
-    preservarPrecoImportado: true
+    preservarPrecoImportado: true,
+    // Oficial: a copia da loja herda o MESMO codigo interno da BASE (igual entre lojas).
+    codigoInterno: contexto.produto.codigoInterno
   });
   return { estado: "importado" as const, produtoId: salvo.id };
 }

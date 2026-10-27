@@ -109,6 +109,8 @@ watch(
         type="number"
         min="0"
         label="Estoque mínimo"
+        data-campo="estoqueMin"
+        :error-messages="erros['estoqueMin']"
         :hint="dica('estoqueMin')"
         :disabled="somenteLeitura"
       />
