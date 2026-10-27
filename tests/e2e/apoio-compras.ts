@@ -56,35 +56,84 @@ export type ProdutoDeEstoque = {
   curvaAbc?: "A" | "B" | "C";
 };
 
-export async function criarProdutoDeEstoque(contexto: ContextoCompras, produto: ProdutoDeEstoque): Promise<string> {
-  const { api, empresaId } = contexto;
+/** Primeira unidade e o grupo de mercadoria da loja (o pedido pelo nome, ou o primeiro do seed). */
+async function referenciasDaLoja({ api, empresaId }: ContextoCompras, grupoNome?: string) {
   const unidades = await api.get(`/api/unidades_medida?empresaId=${empresaId}&pageSize=1`);
   expect(unidades.status(), await unidades.text()).toBe(200);
   const unidadeId = ((await unidades.json()) as { data: Array<{ id: string }> }).data[0]?.id;
   expect(unidadeId, "nenhuma unidade de medida no seed").toBeTruthy();
   // Produto novo exige grupo de mercadoria (regra do app oficial, R-222).
-  const grupos = await api.get(`/api/grupos?empresaId=${empresaId}&pageSize=1`);
+  const grupos = await api.get(`/api/grupos?empresaId=${empresaId}&pageSize=100`);
   expect(grupos.status(), await grupos.text()).toBe(200);
-  const grupoId = ((await grupos.json()) as { data: { gruposMercadorias: Array<{ id: string }> } }).data
-    .gruposMercadorias[0]?.id;
+  const lista = ((await grupos.json()) as { data: { gruposMercadorias: Array<{ id: string; nome: string }> } }).data
+    .gruposMercadorias;
+  const grupoId = (grupoNome ? lista.find((grupo) => grupo.nome === grupoNome) : lista[0])?.id;
   expect(grupoId, "nenhum grupo de mercadoria no seed").toBeTruthy();
+  return { unidadeId: unidadeId!, grupoId: grupoId! };
+}
 
-  const resposta = await api.post("/api/produtos", {
-    data: {
+/**
+ * Produto de LOJA pelo caminho do app oficial (R-222): o administrador cria na BASE e a loja importa
+ * a copia. `daLoja` completa o que so existe na loja (area, curva...) com um PUT na copia.
+ */
+export async function criarProdutoPelaBase(
+  dados: { descricao: string; grupoNome?: string; [campo: string]: unknown },
+  daLoja: Record<string, unknown> = {},
+  /** Loja que recebe a copia; sem ela, a loja ativa do administrador. */
+  lojaId?: string
+): Promise<{ baseId: string; produtoId: string }> {
+  const admin = await abrirContextoCompras(USUARIOS.admin);
+  try {
+    const { api } = admin;
+    const empresaId = lojaId ?? admin.empresaId;
+    const { grupoNome, ...campos } = dados;
+    const { unidadeId, grupoId } = await referenciasDaLoja({ api, empresaId }, grupoNome);
+    const payload = {
       empresaId,
       grupoMercadoriaId: grupoId,
-      descricao: produto.descricao,
       unidadeIndividualId: unidadeId,
       quantidadeIndividual: 1,
+      nomeCatalogo: campos.descricao,
+      ...campos
+    };
+    const base = await api.post("/api/produtos/base", { data: payload });
+    expect(base.status(), await base.text()).toBe(201);
+    const baseId = ((await base.json()) as { data: { id: string } }).data.id;
+
+    const importacao = await api.post(`/api/produtos/catalogo-base/${baseId}/importar`, { data: { empresaId } });
+    expect(importacao.status(), await importacao.text()).toBe(200);
+    const copia = ((await importacao.json()) as { data: { estado: string; produtoId?: string } }).data;
+    expect(copia.estado, JSON.stringify(copia)).toBe("importado");
+    const produtoId = copia.produtoId!;
+
+    if (Object.keys(daLoja).length) {
+      // A tela devolve o produto inteiro: os codigos voltam como vieram, o resto e o que a loja completa.
+      const detalhe = await api.get(`/api/produtos/${produtoId}`);
+      const { codigo, codigoBarras } = ((await detalhe.json()) as { data: { codigo: string; codigoBarras: string } })
+        .data;
+      const loja = await api.put(`/api/produtos/${produtoId}`, {
+        data: { ...payload, codigo, codigoBarras, ...daLoja }
+      });
+      expect(loja.status(), await loja.text()).toBe(204);
+    }
+    return { baseId, produtoId };
+  } finally {
+    await admin.api.dispose();
+  }
+}
+
+export async function criarProdutoDeEstoque(contexto: ContextoCompras, produto: ProdutoDeEstoque): Promise<string> {
+  const { produtoId } = await criarProdutoPelaBase(
+    {
+      descricao: produto.descricao,
       estoqueMin: produto.estoqueMin,
       estoqueMax: produto.estoqueMax,
-      setorEstoque: produto.setorEstoque,
-      areaEstoque: produto.areaEstoque ?? null,
-      curvaAbc: produto.curvaAbc ?? null
-    }
-  });
-  expect(resposta.status(), await resposta.text()).toBe(201);
-  return ((await resposta.json()) as { data: { id: string } }).data.id;
+      setorEstoque: produto.setorEstoque
+    },
+    { areaEstoque: produto.areaEstoque ?? null, curvaAbc: produto.curvaAbc ?? null },
+    contexto.empresaId
+  );
+  return produtoId;
 }
 
 /** Saldo que a propria tela de Estoque le — a unica fonte que conta para a prova. */

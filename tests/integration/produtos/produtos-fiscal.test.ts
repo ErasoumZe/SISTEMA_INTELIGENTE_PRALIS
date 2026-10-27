@@ -225,7 +225,7 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
       payload: payload({ descricao: "PAO SEM PLANILHA", nomeCatalogo: "PAO SEM PLANILHA", codigoBarras: null })
     });
     expect(criado.statusCode, criado.body).toBe(201);
-    expect((await fiscalDaBase(json<RespostaId>(criado).data.id))?.estado_fiscal).toBe("fonte_indisponivel");
+    expect((await fiscalDaBase(json<RespostaId>(criado).data.id))?.["estado_fiscal"]).toBe("fonte_indisponivel");
   });
 
   it("Deve_SoAdminAlterarFiscalManual_E_ReclassificarAoTrocarGrupo", async () => {
