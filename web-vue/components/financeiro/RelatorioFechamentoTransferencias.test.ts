@@ -123,4 +123,31 @@ describe("RelatorioFechamentoTransferencias", () => {
       expect(wrapper.get('[data-transferencia-id="t-2"]').text()).toContain("Lacre de fechamento F-1001");
     });
   });
+
+  it("avisa quando ha mais transferencias do que as mostradas, para nao subcontar sangrias", async () => {
+    apiGetPaginado.mockResolvedValue({ itens, total: 51 });
+    const wrapper = montar(false);
+    await flushPromises();
+    expect(wrapper.get('[data-teste="aviso-truncada"]').text()).toContain("2 de 51");
+  });
+
+  it("resposta antiga nao sobrescreve a do caixa atual", async () => {
+    let liberarAntiga: (valor: unknown) => void = () => undefined;
+    apiGetPaginado.mockReturnValueOnce(new Promise((resolve) => (liberarAntiga = resolve)));
+    const wrapper = montar(true);
+    apiGetPaginado.mockResolvedValueOnce({ itens: [itens[1]], total: 1 });
+    await wrapper.setProps({ caixaId: "cx-2" });
+    await flushPromises();
+    liberarAntiga({ itens, total: 2 });
+    await flushPromises();
+    expect(
+      wrapper.findAll("[data-transferencia-id]").map((linha) => linha.attributes("data-transferencia-id"))
+    ).toEqual(["t-1"]);
+  });
+
+  it("o botao Conferir diz qual transferencia vai conferir", async () => {
+    const wrapper = montar(true);
+    await flushPromises();
+    expect(wrapper.get('[data-teste="botao-conferir-transferencia"]').attributes("aria-label")).toContain("180,00");
+  });
 });

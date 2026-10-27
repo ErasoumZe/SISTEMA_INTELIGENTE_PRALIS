@@ -78,20 +78,31 @@ function podeConferirItem(item: OperacaoResumo) {
   return Boolean(props.podeConferir && item.status === "pendente" && !item.possuiPlanejamentoRetorno);
 }
 
+// Cada busca ganha um numero; so a ULTIMA grava o resultado. Sem isto, trocar de caixa depressa deixava a
+// resposta antiga sobrescrever a nova e a conferencia abria a transferencia do caixa errado.
+let buscaAtual = 0;
+const total = ref(0);
+const truncada = computed(() => total.value > itens.value.length);
+
 async function carregar() {
   if (!props.caixaId || !props.empresaId) return;
+  const minhaBusca = ++buscaAtual;
   carregando.value = true;
   erro.value = "";
   try {
     const params = new URLSearchParams({ empresaId: props.empresaId, caixaId: props.caixaId, pageSize: "50" });
     const resultado = await apiGetPaginado<OperacaoResumo>(`/api/transferencias?${params.toString()}`);
+    if (minhaBusca !== buscaAtual) return;
+    total.value = resultado.total;
     // Cronologico: abertura, sangrias e retorno final na ordem em que aconteceram.
     itens.value = [...resultado.itens].sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)));
   } catch (error) {
+    if (minhaBusca !== buscaAtual) return;
     erro.value = mensagemErro(error);
     itens.value = [];
+    total.value = 0;
   } finally {
-    carregando.value = false;
+    if (minhaBusca === buscaAtual) carregando.value = false;
   }
 }
 
@@ -118,6 +129,14 @@ watch(() => props.caixaId, carregar, { immediate: true });
         {{ pendentes.length }} para conferir
       </v-chip>
     </div>
+
+    <v-alert v-if="aviso" :type="aviso.tipo" variant="tonal" density="compact" closable @click:close="aviso = null">{{
+      aviso.texto
+    }}</v-alert>
+    <v-alert v-if="truncada" type="warning" variant="tonal" density="compact" data-teste="aviso-truncada">
+      Mostrando {{ itens.length }} de {{ total }} transferências deste caixa: sangrias e bolsas abaixo podem estar
+      incompletas.
+    </v-alert>
 
     <dl v-if="!carregando && !erro && itens.length" class="rft__fatos" data-teste="fatos-do-caixa">
       <div>
@@ -164,23 +183,13 @@ watch(() => props.caixaId, carregar, { immediate: true });
           size="small"
           variant="tonal"
           class="rft__acao"
+          :aria-label="`Conferir ${nomeDaLinha(item).toLowerCase()} de ${dinheiro(Number(item.valorOriginal))}`"
           data-teste="botao-conferir-transferencia"
           @click="emConferencia = item"
           >Conferir</v-btn
         >
       </li>
     </ul>
-
-    <v-alert
-      v-if="aviso"
-      :type="aviso.tipo"
-      variant="tonal"
-      density="compact"
-      closable
-      class="mt-2"
-      @click:close="aviso = null"
-      >{{ aviso.texto }}</v-alert
-    >
 
     <TransferenciaConferenciaDialog
       :operacao="emConferencia"

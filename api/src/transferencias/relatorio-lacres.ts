@@ -104,7 +104,9 @@ export function montarLacresDaLinha(
     } else if (linha.lacreFechamentoDoCaixa) {
       resultado.push({
         tipo: "fechamento",
-        numero: linha.lacreFechamentoDoCaixa,
+        // Sem registro em `lacres` nao ha como saber se o selo ja foi rompido (a conferencia vem depois do
+        // fechamento): so quem pode ver numeros lacrados o le.
+        numero: mostrarNumeros ? linha.lacreFechamentoDoCaixa : null,
         situacao: "usado",
         usadoEmTransferenciaId: null
       });

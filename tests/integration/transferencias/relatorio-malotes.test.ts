@@ -292,6 +292,12 @@ describe("transferencias - relatorio de malotes", () => {
       (item) => item.tipoMovimento === "abertura"
     );
     expect(daTesouraria?.lacres.find((item) => item.tipo === "fechamento")?.numero).toBe(`FCH-F-${sufixo}`);
+
+    // O filtro por lacre nao pode ser usado para DESCOBRIR o numero escondido: quem nao ve o numero
+    // nao acha a linha pelo selo de fechamento nem pela bolsa ainda lacrados; a Tesouraria acha.
+    expect((await listar(cookieCaixa, { lacre: `FCH-F-${sufixo}` })).data).toHaveLength(0);
+    expect((await listar(cookieCaixa, { lacre: `BOL-F-${sufixo}` })).data).toHaveLength(0);
+    expect((await listar(cookieTesouraria, { lacre: `FCH-F-${sufixo}` })).data.length).toBeGreaterThan(0);
   });
 
   it("paginacao e feita no banco: total correto, pagina 2 e ordem do mais recente para o mais antigo", async () => {

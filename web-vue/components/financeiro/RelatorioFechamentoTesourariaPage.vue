@@ -13,6 +13,8 @@ const props = defineProps<{
   turnos: Opcao[];
   podeConferir: boolean;
   podeConferirTransferencia?: boolean;
+  // O bloco consome GET /api/transferencias: sem `transferencias_visualizar` ele daria 403.
+  podeVerTransferencias?: boolean;
 }>();
 
 type Situacao =
@@ -179,20 +181,22 @@ async function abrirDossie(linha: LinhaRelatorio) {
   await carregarDossie(linha.id);
 }
 
-async function carregarDossie(caixaId: string) {
-  carregandoDossie.value = true;
+// `silencioso`: recarrega os dados SEM trocar o dossie pelo spinner. Depois de conferir uma
+// transferencia o bloco precisa continuar montado (senao o aviso de sucesso some e o scroll volta ao topo).
+async function carregarDossie(caixaId: string, silencioso = false) {
+  if (!silencioso) carregandoDossie.value = true;
   erroDossie.value = "";
   try {
     dossie.value = await apiGet<Dossie>(`/api/relatorios/fechamentos/${caixaId}`);
   } catch (error) {
     erroDossie.value = mensagemErro(error);
   } finally {
-    carregandoDossie.value = false;
+    if (!silencioso) carregandoDossie.value = false;
   }
 }
 
 async function aoAlterarTransferencias() {
-  if (caixaSelecionado.value) await carregarDossie(caixaSelecionado.value.id);
+  if (caixaSelecionado.value) await carregarDossie(caixaSelecionado.value.id, true);
   await buscar();
 }
 
@@ -502,7 +506,7 @@ watch(
             >
           </div>
           <RelatorioFechamentoTransferencias
-            v-if="caixaSelecionado"
+            v-if="caixaSelecionado && props.podeVerTransferencias"
             :empresa-id="props.empresaId"
             :caixa-id="caixaSelecionado.id"
             :pode-conferir="props.podeConferirTransferencia === true"

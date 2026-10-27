@@ -146,12 +146,19 @@ describe("relatorio de transferencias - lacres", () => {
       [lacre({ numero: "A-100", origem: "saida", transferenciaId: MALOTE, rompido: true })],
       false
     );
+    // Sem permissao para ver numeros lacrados, o selo antigo tambem fica oculto.
     expect(lacres.find((item) => item.tipo === "fechamento")).toEqual({
       tipo: "fechamento",
-      numero: "FECH-OLD",
+      numero: null,
       situacao: "usado",
       usadoEmTransferenciaId: null
     });
+    const comPermissao = montarLacresDaLinha(
+      malote({ tipo: "abertura", status: "recebido", caixaId: "cx-1", lacreFechamentoDoCaixa: "FECH-OLD" }),
+      [lacre({ numero: "A-100", origem: "saida", transferenciaId: MALOTE, rompido: true })],
+      true
+    );
+    expect(comPermissao.find((item) => item.tipo === "fechamento")?.numero).toBe("FECH-OLD");
   });
 
   it("transferencia antiga sem nenhum lacre devolve lista vazia (a tela mostra 'Sem lacre')", () => {

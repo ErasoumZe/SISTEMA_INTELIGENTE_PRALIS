@@ -40,7 +40,7 @@ export async function listarTransferenciasRepository(
   if (query.status) filtros.push(eq(transferencias.status, query.status));
   if (query.dataInicio) filtros.push(gte(transferencias.dataReferencia, query.dataInicio));
   if (query.dataFim) filtros.push(lte(transferencias.dataReferencia, query.dataFim));
-  if (query.usuario) filtros.push(ilike(criador.nome, `%${query.usuario}%`));
+  if (query.usuario) filtros.push(ilike(criador.nome, `%${escaparCuringasLike(query.usuario)}%`));
   if (query.contaOrigemId) filtros.push(eq(transferencias.contaOrigemId, query.contaOrigemId));
   if (query.contaDestinoId) filtros.push(eq(transferencias.contaDestinoId, query.contaDestinoId));
 
@@ -87,6 +87,9 @@ export async function listarTransferenciasRepository(
               and(
                 eq(lacres.empresaId, transferencias.empresaId),
                 ilike(lacres.numero, padrao),
+                // Quem nao ve o numero (fechamento e bolsas ainda lacrados) tambem nao pode DESCOBRI-LO
+                // pelo filtro: sem isto, `?lacre=1`, `?lacre=12`... revelava o numero oculto por tentativa.
+                ...(opcoes.mostrarNumerosLacre ? [] : [eq(lacres.rompido, true)]),
                 or(
                   eq(lacres.transferenciaId, transferencias.id),
                   eq(lacres.transferenciaDistribuicaoId, transferencias.id)
