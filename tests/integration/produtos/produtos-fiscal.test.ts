@@ -217,6 +217,56 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
     });
   });
 
+  it("Deve_ConferirSemGravar_E_CompletarACargaFiscalEmLote_SoAdmin", async () => {
+    // Produto de loja que nasceu com a planilha fora do ar: fica "fonte_indisponivel".
+    definirFontesFiscaisParaTeste({
+      leitor: {
+        async lerFaixasEmLote() {
+          throw new Error("fora do ar");
+        }
+      }
+    });
+    const criado = await cadastrarProdutoNaLoja(
+      contexto.app,
+      cookieAdmin,
+      // Mesmo EAN do de-para da planilha falsa (ja usado na BASE por outro caso): "cadastrar mesmo assim".
+      payload({
+        descricao: "PAO FISCAL TESTE",
+        nomeCatalogo: "PAO FISCAL TESTE",
+        codigoBarras: "7891000000017",
+        forcar: true
+      })
+    );
+    expect(criado.statusCode, criado.body).toBe(201);
+    const id = json<RespostaId>(criado).data.id;
+    expect((await fiscalDo(id))?.estado).toBe("fonte_indisponivel");
+
+    definirFontesFiscaisParaTeste({ leitor: planilhaFalsa({ ecf: [LINHA_ECF] }) });
+    const backfill = (corpo: Record<string, unknown>, cookie = cookieAdmin) =>
+      contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos/fiscal/backfill",
+        headers: { cookie },
+        payload: { produtoId: id, ...corpo }
+      });
+    assertProblem(await backfill({}, cookieGerente), 403, "FORBIDDEN");
+
+    const conferido = await backfill({});
+    expect(conferido.statusCode, conferido.body).toBe(200);
+    expect(
+      json<{ data: { aplicou: boolean; alterados: Array<{ id: string; para: string }> } }>(conferido).data
+    ).toMatchObject({
+      aplicou: false,
+      alterados: [{ id, para: "completo" }]
+    });
+    // Conferir nao grava.
+    expect((await fiscalDo(id))?.estado).toBe("fonte_indisponivel");
+
+    const aplicado = await backfill({ aplicar: true });
+    expect(aplicado.statusCode, aplicado.body).toBe(200);
+    expect(await fiscalDo(id)).toMatchObject({ estado: "completo", ncm: "19059090", aliquota_ecf_id: "03" });
+  });
+
   it("Deve_MarcarFonteIndisponivel_SemDerrubarOCadastro", async () => {
     definirFontesFiscaisParaTeste({
       leitor: {

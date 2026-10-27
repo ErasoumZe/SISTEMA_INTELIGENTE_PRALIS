@@ -55,7 +55,7 @@ onMounted(async () => {
         <div>
           <h1 class="text-h5">Manutenção do catálogo</h1>
           <p class="text-body-2 text-medium-emphasis">
-            Backups e consultas administrativas. Esta tela não altera produtos.
+            Backups, de-para do SIA e carga fiscal. Só grava quando você confirma cada ação.
           </p>
         </div>
         <v-btn variant="outlined" prepend-icon="mdi-arrow-left" to="/produtos">Voltar aos produtos</v-btn>

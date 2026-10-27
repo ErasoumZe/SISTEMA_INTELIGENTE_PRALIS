@@ -37,6 +37,16 @@ import {
 import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
 import { FiscalSoAdministradorError } from "./produtos-fiscal-gravacao.js";
 import { herancaDaCopia } from "./produtos-base.service.js";
+import { BackfillSoAdministradorError, executarBackfillFiscal } from "./produtos-fiscal-backfill.service.js";
+import { z } from "zod";
+
+const corpoBackfill = z.object({
+  aplicar: z.boolean().default(false),
+  limite: z.coerce.number().int().min(1).max(500).optional(),
+  cursor: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
+  produtoId: z.string().uuid().optional()
+});
 import { FonteFiscalIndisponivelError, listarRegrasFiscaisPorGrupo } from "./produtos-fiscal.service.js";
 
 /**
@@ -92,6 +102,38 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         );
       }
       return ok(await consultarPanoramaFiscalProdutos(request.perfilUsuario));
+    }
+  );
+
+  /**
+   * Backfill da carga fiscal (oficial `/admin/fiscal/backfill`): por padrao so CONFERE; grava so com
+   * `aplicar: true`. Retomada por cursor, ate 500 por rodada. So administrador.
+   */
+  app.post(
+    "/api/produtos/fiscal/backfill",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const corpo = corpoBackfill.parse(request.body ?? {});
+      const perfil = request.perfilUsuario;
+      try {
+        const resultado = await executarBackfillFiscal(corpo, {
+          administrador: perfil?.role === "usuario_admin",
+          empresasPermitidas: perfil ? empresasPermitidas(perfil) : []
+        });
+        if (resultado.aplicou) {
+          request.log.info({
+            evento: "produtos.fiscal.backfill",
+            usuarioId: request.usuarioId,
+            analisados: resultado.analisados,
+            alterados: resultado.alterados.length
+          });
+        }
+        return ok(resultado);
+      } catch (error) {
+        if (error instanceof BackfillSoAdministradorError) return erro(reply, 403, error.message, error.code);
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
     }
   );
 

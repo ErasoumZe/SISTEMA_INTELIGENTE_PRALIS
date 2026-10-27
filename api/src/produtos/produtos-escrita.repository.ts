@@ -404,6 +404,50 @@ export async function salvarProdutoRepository(
   return { id: produtoId, empresaId: input.empresaId };
 }
 
+/**
+ * Regrava a linha fiscal do produto (apaga e reinsere). Um caminho so: o cadastro e o backfill fiscal
+ * gravam o fiscal exatamente do mesmo jeito.
+ */
+export async function regravarFiscalDoProdutoRepository(
+  tx: TransacaoBanco,
+  produtoId: string,
+  fiscal: ProdutoParaGravar["fiscal"]
+): Promise<void> {
+  await tx.delete(produtosFiscal).where(eq(produtosFiscal.produtoId, produtoId));
+  if (fiscal) {
+    await tx.insert(produtosFiscal).values({
+      produtoId,
+      ncm: fiscal.ncm,
+      cest: fiscal.cest,
+      categoriaFiscal: fiscal.categoriaFiscal,
+      cstPisCofins: fiscal.cstPisCofins,
+      aliquotaCheia: fiscal.aliquotaCheia != null ? String(fiscal.aliquotaCheia) : null,
+      aliquotaFcp: fiscal.aliquotaFcp != null ? String(fiscal.aliquotaFcp) : null,
+      aliquotaPis: fiscal.aliquotaPis != null ? String(fiscal.aliquotaPis) : null,
+      aliquotaCofins: fiscal.aliquotaCofins != null ? String(fiscal.aliquotaCofins) : null,
+      reducaoIcms: fiscal.reducaoIcms != null ? String(fiscal.reducaoIcms) : null,
+      icms: fiscal.icms != null ? String(fiscal.icms) : null,
+      tributacaoSimples: fiscal.tributacaoSimples,
+      aliquotaSimples: fiscal.aliquotaSimples != null ? String(fiscal.aliquotaSimples) : null,
+      icmsRe: fiscal.icmsRe != null ? String(fiscal.icmsRe) : null,
+      baseFiscal: fiscal.baseFiscal,
+      codigoFiscal: fiscal.codigoFiscal,
+      produtoFiscal: fiscal.produtoFiscal,
+      cstReforma: fiscal.cstReforma,
+      cClassTrib: fiscal.cClassTrib,
+      aliquotaIbs: fiscal.aliquotaIbs != null ? String(fiscal.aliquotaIbs) : null,
+      aliquotaCbs: fiscal.aliquotaCbs != null ? String(fiscal.aliquotaCbs) : null,
+      origemFiscal: fiscal.origemFiscal,
+      aliquotaEcf: fiscal.aliquotaEcf,
+      aliquotaEcfId: fiscal.aliquotaEcfId,
+      estado: fiscal.estado,
+      motivo: fiscal.motivo,
+      conferidoEm: fiscal.conferidoEm ? new Date(fiscal.conferidoEm) : null,
+      pctNcm: fiscal.pctNcm != null ? String(fiscal.pctNcm) : null
+    });
+  }
+}
+
 /** As quatro satelites sao regravadas por completo (apaga e reinsere) — sempre na mesma transacao. */
 async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: ProdutoParaGravar): Promise<void> {
   await tx.delete(produtosConversoes).where(eq(produtosConversoes.produtoId, produtoId));
@@ -418,39 +462,7 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
     );
   }
 
-  await tx.delete(produtosFiscal).where(eq(produtosFiscal.produtoId, produtoId));
-  if (input.fiscal) {
-    await tx.insert(produtosFiscal).values({
-      produtoId,
-      ncm: input.fiscal.ncm,
-      cest: input.fiscal.cest,
-      categoriaFiscal: input.fiscal.categoriaFiscal,
-      cstPisCofins: input.fiscal.cstPisCofins,
-      aliquotaCheia: input.fiscal.aliquotaCheia != null ? String(input.fiscal.aliquotaCheia) : null,
-      aliquotaFcp: input.fiscal.aliquotaFcp != null ? String(input.fiscal.aliquotaFcp) : null,
-      aliquotaPis: input.fiscal.aliquotaPis != null ? String(input.fiscal.aliquotaPis) : null,
-      aliquotaCofins: input.fiscal.aliquotaCofins != null ? String(input.fiscal.aliquotaCofins) : null,
-      reducaoIcms: input.fiscal.reducaoIcms != null ? String(input.fiscal.reducaoIcms) : null,
-      icms: input.fiscal.icms != null ? String(input.fiscal.icms) : null,
-      tributacaoSimples: input.fiscal.tributacaoSimples,
-      aliquotaSimples: input.fiscal.aliquotaSimples != null ? String(input.fiscal.aliquotaSimples) : null,
-      icmsRe: input.fiscal.icmsRe != null ? String(input.fiscal.icmsRe) : null,
-      baseFiscal: input.fiscal.baseFiscal,
-      codigoFiscal: input.fiscal.codigoFiscal,
-      produtoFiscal: input.fiscal.produtoFiscal,
-      cstReforma: input.fiscal.cstReforma,
-      cClassTrib: input.fiscal.cClassTrib,
-      aliquotaIbs: input.fiscal.aliquotaIbs != null ? String(input.fiscal.aliquotaIbs) : null,
-      aliquotaCbs: input.fiscal.aliquotaCbs != null ? String(input.fiscal.aliquotaCbs) : null,
-      origemFiscal: input.fiscal.origemFiscal,
-      aliquotaEcf: input.fiscal.aliquotaEcf,
-      aliquotaEcfId: input.fiscal.aliquotaEcfId,
-      estado: input.fiscal.estado,
-      motivo: input.fiscal.motivo,
-      conferidoEm: input.fiscal.conferidoEm ? new Date(input.fiscal.conferidoEm) : null,
-      pctNcm: input.fiscal.pctNcm != null ? String(input.fiscal.pctNcm) : null
-    });
-  }
+  await regravarFiscalDoProdutoRepository(tx, produtoId, input.fiscal);
 
   await tx.delete(produtosTransformacao).where(eq(produtosTransformacao.produtoId, produtoId));
   if (input.transformacao) {
