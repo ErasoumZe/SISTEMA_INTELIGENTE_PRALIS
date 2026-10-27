@@ -1,9 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import type { FiscalDoProduto } from "@padaria/shared/produtos";
 import { empresas, gruposMercadorias, produtos, produtosFiscal } from "@padaria/db/schema/cadastro";
-import type { ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 const numero = (valor: string | null) => (valor == null ? null : Number(valor));
+
+/** Prefixo de matricula da empresa (TNP/LI/HORA): e ele que diz de qual loja e o fiscal. */
+export async function contextoDaEmpresaFiscalRepository(empresaId: string) {
+  const [empresa] = await banco
+    .select({ matriculaPrefixo: empresas.matriculaPrefixo })
+    .from(empresas)
+    .where(eq(empresas.id, empresaId))
+    .limit(1);
+  return empresa ?? null;
+}
 
 /**
  * O que a classificacao fiscal precisa saber na gravacao: o NOME do grupo (a regra e por nome, como no

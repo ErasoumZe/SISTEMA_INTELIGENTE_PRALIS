@@ -423,3 +423,4 @@ export * from "./fiscal-motor.js";
 export * from "./central-reconciliacao.js";
 export * from "./central-fontes.js";
 export * from "./central-ingestao.js";
+export * from "./sia-depara.js";

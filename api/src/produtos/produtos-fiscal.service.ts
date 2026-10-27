@@ -15,6 +15,7 @@ import {
 } from "@padaria/shared/produtos";
 import { env } from "../env.js";
 import { GoogleSheetsService } from "../google/google-sheets.service.js";
+import { deParaDeTodasAsLojasRepository } from "./produtos-sia-depara.repository.js";
 
 /**
  * Leitura das regras fiscais — IGUAL ao `TaxRuleService` do app oficial (R-222): as mesmas abas e faixas da
@@ -64,6 +65,30 @@ export function definirFontesFiscaisParaTeste(fontes: {
   cache = null;
 }
 
+/** Depois de importar o de-para do SIA: a proxima classificacao rele tudo (sem esperar os 5 minutos). */
+export function invalidarTabelasFiscais(): void {
+  cache = null;
+}
+
+/** De-para do SIA por loja (`sia_produto_depara`), indexado pela chave de barras — fonte do ECF de LI/HORA. */
+async function siaPorLoja(): Promise<Map<string, Map<string, SiaDePara>>> {
+  const porLoja = new Map<string, Map<string, SiaDePara>>();
+  for (const linha of await deParaDeTodasAsLojasRepository()) {
+    const loja = lojaFiscalDaEmpresa(linha.matriculaPrefixo);
+    const daLoja = porLoja.get(loja) ?? new Map<string, SiaDePara>();
+    daLoja.set(linha.chaveBarras, {
+      chaveBarras: linha.chaveBarras,
+      aliqSaidaEcf: linha.aliqSaidaEcf,
+      reducao: linha.reducao,
+      aliquotaInterna: linha.aliquotaInterna,
+      codGrupo: linha.codGrupo,
+      ncm: linha.ncm
+    });
+    porLoja.set(loja, daLoja);
+  }
+  return porLoja;
+}
+
 async function margensPorGrupo(fonte: LeitorDeFaixas): Promise<Map<string, number>> {
   try {
     const [faixa] = await fonte.lerFaixasEmLote([a1(env.GOOGLE_PRODUTOS_GRUPOS_TAB, FAIXAS_FISCAIS.margens)]);
@@ -107,9 +132,9 @@ export async function tabelasFiscais(): Promise<TabelasFiscais> {
   }
   const ecf = new Map<string, FonteEcf>();
   for (const abaEcf of new Set(Object.values(FONTES_ECF))) ecf.set(abaEcf, await fonteEcf(fonte, abaEcf));
-  // O de-para do SIA por loja (sia_produto_depara do oficial) ainda nao existe no ERP: sem ele, LI e HORA
-  // ficam `pendente_fonte_da_loja`, exatamente como no oficial antes de o export da loja ser importado.
-  const sia = siaInjetado ? await siaInjetado() : new Map<string, Map<string, SiaDePara>>();
+  // De-para do SIA por loja: sem a exportacao importada, LI e HORA ficam `pendente_fonte_da_loja`,
+  // exatamente como no oficial antes de o export da loja ser importado.
+  const sia = siaInjetado ? await siaInjetado() : await siaPorLoja();
   const tabelas: TabelasFiscais = { ...base, ecf, sia };
   cache = { expiraEm: Date.now() + CACHE_MS, tabelas };
   return tabelas;
