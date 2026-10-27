@@ -684,3 +684,22 @@ atrasado (`colaboradores.pdv_padrao_id` ausente, fora de Produtos); E2E de Compr
 front sem erro em Produtos; numa instalação limpa do lock atual o `nuxt typecheck` não acha
 `vue-router/volar` (igual na `main`) e acusa 2 erros de `$vuetify` em Compras — problema de ambiente, não
 desta entrega.
+
+### De-para do SIA por loja (27/10/2026) — migration 0087 aprovada por José
+
+Como o app faz (`creare/sia-depara.parser.ts`, `depara-upload.service.ts`, tela `produtos/depara-sia`): o
+admin envia a exportação do SIA Supervisor de uma loja; a prévia confere sem gravar; gravar **substitui o
+de-para da loja inteiro** com a frase "SUBSTITUIR O DE-PARA DESTA LOJA". Recusa barras apontando para dois
+produtos, `coditem` repetido, arquivo só de entrega e pesável sem Pesável/Validade; pesável sem tecla recebe
+`000`; linhas de entrega (código ≥ 700000) ficam de fora. O de-para é a fonte do fiscal de LI e HORA
+(alíquota ECF, redução, grupo) e do `coditem` que o importador do CREARE usa como chave.
+
+No ERP: tabela `sia_produto_depara` (0087, mesmas colunas do app com `empresa_id` no lugar do texto da loja;
+aplicada só no banco local); leitor portado em `shared/src/produtos/sia-depara.ts` com os casos do teste do
+app; `POST /api/produtos/sia-depara/previa` e `POST /api/produtos/sia-depara` (só admin); tela
+`/produtos/depara-sia`, a partir da Manutenção. As tabelas fiscais leem o de-para por loja (prefixo de
+matrícula da empresa) e são invalidadas ao importar.
+
+Diferença consciente: o ERP aceita **.xlsx e .csv**; o `.xls` antigo exige biblioteca (o app usa o pacote
+`xlsx` do npm, que tem falhas de segurança conhecidas para arquivo malicioso). Até decidir, salvar o `.xls`
+como `.xlsx` no Excel.

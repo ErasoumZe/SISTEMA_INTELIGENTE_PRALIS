@@ -101,6 +101,19 @@ onMounted(async () => {
               </v-card-actions>
             </v-card>
           </v-col>
+          <v-col cols="12" md="6">
+            <v-card variant="outlined" height="100%">
+              <v-card-title class="text-subtitle-1">De-para do SIA</v-card-title>
+              <v-card-text>
+                Importa a exportação do SIA de cada loja: a régua do código no PDV e o fiscal de LI e HORA.
+              </v-card-text>
+              <v-card-actions>
+                <v-btn variant="tonal" prepend-icon="mdi-swap-horizontal" to="/produtos/depara-sia"
+                  >Abrir de-para</v-btn
+                >
+              </v-card-actions>
+            </v-card>
+          </v-col>
         </v-row>
 
         <ProdutoPanoramaFiscal />
