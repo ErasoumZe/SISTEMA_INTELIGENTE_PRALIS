@@ -60,13 +60,16 @@ export type ProdutoDeEstoque = {
 async function referenciasDaLoja({ api, empresaId }: ContextoCompras, grupoNome?: string) {
   const unidades = await api.get(`/api/unidades_medida?empresaId=${empresaId}&pageSize=1`);
   expect(unidades.status(), await unidades.text()).toBe(200);
-  const unidadeId = ((await unidades.json()) as { data: Array<{ id: string }> }).data[0]?.id;
+  // Rotas antigas devolvem o corpo cru; as novas, embrulhado em `data`: aceita os dois.
+  const corpoUnidades = (await unidades.json()) as { data?: Array<{ id: string }> } | Array<{ id: string }>;
+  const unidadeId = (Array.isArray(corpoUnidades) ? corpoUnidades : (corpoUnidades.data ?? []))[0]?.id;
   expect(unidadeId, "nenhuma unidade de medida no seed").toBeTruthy();
   // Produto novo exige grupo de mercadoria (regra do app oficial, R-222).
   const grupos = await api.get(`/api/grupos?empresaId=${empresaId}&pageSize=100`);
   expect(grupos.status(), await grupos.text()).toBe(200);
-  const lista = ((await grupos.json()) as { data: { gruposMercadorias: Array<{ id: string; nome: string }> } }).data
-    .gruposMercadorias;
+  type ListaDeGrupos = { gruposMercadorias: Array<{ id: string; nome: string }> };
+  const corpoGrupos = (await grupos.json()) as ListaDeGrupos & { data?: ListaDeGrupos };
+  const lista = (corpoGrupos.data ?? corpoGrupos).gruposMercadorias;
   const grupoId = (grupoNome ? lista.find((grupo) => grupo.nome === grupoNome) : lista[0])?.id;
   expect(grupoId, "nenhum grupo de mercadoria no seed").toBeTruthy();
   return { unidadeId: unidadeId!, grupoId: grupoId! };

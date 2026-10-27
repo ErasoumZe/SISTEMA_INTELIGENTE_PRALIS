@@ -138,18 +138,18 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
    * Regras fiscais por grupo, com a margem padrao — lidas da MESMA planilha do app oficial
    * (`GET /apoio/grupos-fiscais` la). A tela usa para a previa do preco; fonte fora do ar = 503.
    */
-  app.get(
-    "/api/produtos/regras-fiscais",
-    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
-    async (_request, reply) => {
-      try {
-        return ok(await listarRegrasFiscaisPorGrupo());
-      } catch (error) {
-        if (error instanceof FonteFiscalIndisponivelError) return erro(reply, 503, error.message, error.code);
-        throw error;
+  app.get("/api/produtos/regras-fiscais", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async () => {
+    // Planilha fora do ar e um estado conhecido do cadastro (o produto salva e fica "fonte
+    // indisponivel"): responde 200 com o aviso, para a tela explicar em vez de registrar erro.
+    try {
+      return ok({ disponivel: true, regras: await listarRegrasFiscaisPorGrupo() });
+    } catch (error) {
+      if (error instanceof FonteFiscalIndisponivelError) {
+        return ok({ disponivel: false, motivo: error.message, regras: [] });
       }
+      throw error;
     }
-  );
+  });
 
   app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
     const query = produtosListaQuerySchema.parse(request.query);

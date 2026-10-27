@@ -189,7 +189,7 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
     expect(Number(linha?.preco_venda)).toBe(5);
   });
 
-  it("Deve_ListarRegrasPorGrupoComMargemDaPlanilha_E_Responder503SemFonte", async () => {
+  it("Deve_ListarRegrasPorGrupoComMargemDaPlanilha_E_AvisarSemFonte", async () => {
     definirFontesFiscaisParaTeste({ leitor: planilhaFalsa() });
     const lista = await contexto.app.inject({
       method: "GET",
@@ -197,9 +197,12 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
       headers: { cookie: cookieAdmin }
     });
     expect(lista.statusCode, lista.body).toBe(200);
-    expect(json<{ data: Array<{ grupo: string; margemPadrao: number | null }> }>(lista).data).toEqual(
-      expect.arrayContaining([expect.objectContaining({ grupo: "MER FISCAL TESTE", margemPadrao: 0.25 })])
-    );
+    expect(
+      json<{ data: { disponivel: boolean; regras: Array<{ grupo: string; margemPadrao: number | null }> } }>(lista).data
+    ).toEqual({
+      disponivel: true,
+      regras: expect.arrayContaining([expect.objectContaining({ grupo: "MER FISCAL TESTE", margemPadrao: 0.25 })])
+    });
 
     definirFontesFiscaisParaTeste({});
     const semFonte = await contexto.app.inject({
@@ -207,7 +210,11 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
       url: "/api/produtos/regras-fiscais",
       headers: { cookie: cookieAdmin }
     });
-    assertProblem(semFonte, 503, "TAX_RULES_UNAVAILABLE");
+    expect(semFonte.statusCode).toBe(200);
+    expect(json<{ data: { disponivel: boolean; regras: [] } }>(semFonte).data).toMatchObject({
+      disponivel: false,
+      regras: []
+    });
   });
 
   it("Deve_MarcarFonteIndisponivel_SemDerrubarOCadastro", async () => {

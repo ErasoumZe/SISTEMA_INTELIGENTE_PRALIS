@@ -49,7 +49,7 @@ test("a previa da descricao automatica e NOME + QUANTIDADE + UNIDADE", async ({ 
   const descricao = nomeUnico();
   await preencherObrigatorios(page, descricao, "25");
 
-  const previa = page.getByLabel("Descrição automática (prévia)");
+  const previa = page.getByLabel("Descrição (automática)");
   // A unidade do seed de desenvolvimento e "un"; a regra sobe tudo para maiuscula.
   await expect(previa).toHaveValue(new RegExp(`^${descricao.toUpperCase()} 25 [A-Z]+$`));
 });
@@ -61,8 +61,8 @@ test('a previa "como se compra" usa o formato oficial', async ({ page }) => {
   await escolherPrimeiraOpcao(page, ".secao__grade-compra .v-select");
   await page.getByLabel("Qtd. por embalagem").fill("25");
 
-  // "<Rotulo> de 25 <MEDIDA> — <DESCRICAO>" — uma implementacao so, a do shared.
-  await expect(page.getByLabel("Como se compra (prévia)")).toHaveValue(/\sde\s25\b.*—/);
+  // Formato oficial "<DESCRICAO> - <EMBALAGEM> DE <DESCRICAO> 25<MEDIDA>" — uma implementacao so, a do shared.
+  await expect(page.getByLabel("Como se compra (prévia)")).toHaveValue(/ - [A-Z]+ (DE|COM) .+ 25[A-Z]*$/);
 });
 
 test("cria o produto NA BASE, volta ao catalogo BASE e recebe codigo interno sequencial", async ({ page }) => {
@@ -75,7 +75,7 @@ test("cria o produto NA BASE, volta ao catalogo BASE e recebe codigo interno seq
   await page.getByRole("button", { name: "Salvar produto" }).click();
 
   await page.waitForURL("**/produtos/base");
-  await page.getByLabel("Buscar por nome, código interno ou EAN").fill(descricao);
+  await page.getByRole("textbox", { name: "Buscar por nome, código interno ou EAN" }).fill(descricao);
   const linha = page.locator(".catalogo-base__linha").filter({ hasText: descricao });
   await expect(linha).toBeVisible();
   // Codigo interno de 5 digitos, atribuido pelo SERVIDOR (o campo e somente leitura na tela).

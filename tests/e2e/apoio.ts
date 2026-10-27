@@ -171,11 +171,11 @@ export async function semRolagemHorizontal(page: Page) {
 /** Espera a listagem terminar de carregar (o total no cabecalho e a ultima coisa a estabilizar). */
 export async function esperarListagem(page: Page) {
   await expect(page.getByRole("heading", { name: "Produtos", exact: true })).toBeVisible();
-  await expect(page.locator(".produtos-tela__cabecalho p")).toContainText("produto(s)");
+  await expect(page.locator(".produtos-cabecalho p")).toContainText("produto(s)");
 }
 
 /** Quantos produtos a API diz existir no recorte atual — lido do proprio cabecalho da tela. */
 export async function totalDaListagem(page: Page): Promise<number> {
-  const texto = (await page.locator(".produtos-tela__cabecalho p").textContent()) ?? "";
+  const texto = (await page.locator(".produtos-cabecalho p").textContent()) ?? "";
   return Number.parseInt(texto.replace(/\D/g, ""), 10);
 }

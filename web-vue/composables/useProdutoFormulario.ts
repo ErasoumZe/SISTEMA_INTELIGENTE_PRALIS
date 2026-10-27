@@ -103,6 +103,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
 
   /** Regras fiscais por grupo da planilha oficial (com a margem padrao). Fora do ar = lista vazia. */
   const regrasFiscais = ref<RegraFiscalGrupo[]>([]);
+  /** Planilha fiscal fora do ar: a previa do preco fica sem a margem do grupo (o servidor recalcula). */
+  const planilhaFiscalForaDoAr = ref(false);
   /** Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial. */
   const margemDoGrupo = computed(() => {
     const nome = grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.nome;
@@ -188,7 +190,11 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     unidades.value = listaUnidades;
     grupos.value = listaGrupos.gruposMercadorias;
     // A planilha pode estar fora do ar: a tela segue, e a previa usa margem 0 ate ela voltar.
-    regrasFiscais.value = await apiGet<RegraFiscalGrupo[]>("/api/produtos/regras-fiscais").catch(() => []);
+    const fonte = await apiGet<{ disponivel: boolean; regras: RegraFiscalGrupo[] }>(
+      "/api/produtos/regras-fiscais"
+    ).catch(() => ({ disponivel: false, regras: [] }));
+    regrasFiscais.value = fonte.regras;
+    planilhaFiscalForaDoAr.value = !fonte.disponivel;
   }
 
   async function carregar() {
@@ -301,6 +307,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     validacaoQtdPreview,
     precoPreview,
     margemDoGrupo,
+    planilhaFiscalForaDoAr,
     produtoBaseId,
     loja,
     heranca,

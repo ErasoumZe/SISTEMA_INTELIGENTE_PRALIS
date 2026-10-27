@@ -92,11 +92,11 @@ test("busca no servidor reduz o resultado e limpar devolve o total", async ({ pa
   expect(alvo).not.toBe("");
 
   await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(alvo);
-  await expect(page.locator(".produtos-tela__cabecalho p")).not.toContainText(`${total} produto(s)`);
+  await expect(page.locator(".produtos-cabecalho p")).not.toContainText(`${total} produto(s)`);
   await expect(page.locator(".produto-card h3").first()).toHaveText(alvo);
 
   await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill("");
-  await expect(page.locator(".produtos-tela__cabecalho p")).toContainText(`${total} produto(s)`);
+  await expect(page.locator(".produtos-cabecalho p")).toContainText(`${total} produto(s)`);
 });
 
 test("busca sem resultado mostra o estado vazio com acao de limpar", async ({ page }) => {

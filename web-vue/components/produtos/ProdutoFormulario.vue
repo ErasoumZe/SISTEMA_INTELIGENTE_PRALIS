@@ -184,6 +184,16 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
         </div>
       </v-alert>
 
+      <v-alert
+        v-if="!formulario.carregando.value && formulario.planilhaFiscalForaDoAr.value"
+        type="warning"
+        variant="tonal"
+        density="compact"
+      >
+        A planilha fiscal está fora do ar: o produto salva normalmente e fica marcado "fonte indisponível". A prévia do
+        preço sai sem a margem do grupo.
+      </v-alert>
+
       <v-progress-linear v-if="formulario.carregando.value" indeterminate color="primary" />
 
       <template v-else>
