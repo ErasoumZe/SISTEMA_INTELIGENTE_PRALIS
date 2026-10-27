@@ -39,16 +39,16 @@ não contagem atual do banco; dry-run deverá recalculá-los. Código fiscal aus
 
 ## Inventário preliminar de paridade
 
-| Área                                    | Já existe no ERP                                                             | Origem oficial / trabalho de integração                                                                                                                                                     |
-| --------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cadastro e consulta                     | CRUD, listagem/busca, foto, scanner, código de barras, conversões e unidades | comparar campos, validação e regras de nome/código; fechar diferenças sem duplicar telas/rotas                                                                                              |
-| Fiscal e promoções                      | seção fiscal/promoções e tabelas `produtos_fiscal`, `produtos_promocoes`     | comparar schema e regras de ida/volta; preservar conteúdo fiscal sem transformação                                                                                                          |
-| Comercial e estoque                     | custo, margem, preço, mínimo/máximo, áreas/setores e saldo                   | mapear campos que são catálogo versus saldo operacional; saldo da loja fonte não pode virar movimento do ERP                                                                                |
-| Transformação                           | tipo e receita/transformação                                                 | comparar unidades, precisão, quantidades e relações; adaptar sem cruzar tenant                                                                                                              |
-| Código interno                          | sequência antiga de cinco dígitos por empresa                                | origem usa sequência global, piso 13129 e faixa >=700000 reservada; gerador foi atualizado com trava global, sem renumerar registros; conferir catálogo antes de habilitar via merge/deploy |
-| Central e reconciliação                 | não identificado equivalente completo no ERP                                 | portar classificação de grupo, conciliação, divergências, duplicidades e histórico, sem perda de evidência                                                                                  |
-| SIA / planilhas / importação-exportação | existem importações distintas do ERP                                         | inventariar contratos e arquivos oficiais, idempotência, permissões e relatórios; remover o seed antigo como fonte concorrente quando a substituição vertical estiver pronta                |
-| Histórico e governança                  | auditoria básica no cadastro                                                 | portar trilha reversível de alterações relevantes, autorização e relatórios de operação                                                                                                     |
+| Área                                    | Já existe no ERP                                                             | Origem oficial / trabalho de integração                                                                                                                                                                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cadastro e consulta                     | CRUD, listagem/busca, foto, scanner, código de barras, conversões e unidades | comparar campos, validação e regras de nome/código; fechar diferenças sem duplicar telas/rotas                                                                                                                                                        |
+| Fiscal e promoções                      | seção fiscal/promoções e tabelas `produtos_fiscal`, `produtos_promocoes`     | comparar schema e regras de ida/volta; preservar conteúdo fiscal sem transformação                                                                                                                                                                    |
+| Comercial e estoque                     | custo, margem, preço, mínimo/máximo, áreas/setores e saldo                   | mapear campos que são catálogo versus saldo operacional; saldo da loja fonte não pode virar movimento do ERP                                                                                                                                          |
+| Transformação                           | tipo e receita/transformação                                                 | comparar unidades, precisão, quantidades e relações; adaptar sem cruzar tenant                                                                                                                                                                        |
+| Código interno                          | sequência antiga de cinco dígitos por empresa                                | `origin/main` consultada em 1ba6774 usa sequência global e piso 13129; checkout local em 7ea8bd9 usa faixas por loja (BASE/TNP 1325, LI 4396, HORA 0). SHA implantado ainda não confirmado; identificar a versão do Coolify antes de afirmar paridade |
+| Central e reconciliação                 | não identificado equivalente completo no ERP                                 | portar classificação de grupo, conciliação, divergências, duplicidades e histórico, sem perda de evidência                                                                                                                                            |
+| SIA / planilhas / importação-exportação | existem importações distintas do ERP                                         | inventariar contratos e arquivos oficiais, idempotência, permissões e relatórios; remover o seed antigo como fonte concorrente quando a substituição vertical estiver pronta                                                                          |
+| Histórico e governança                  | auditoria básica no cadastro                                                 | portar trilha reversível de alterações relevantes, autorização e relatórios de operação                                                                                                                                                               |
 
 ### Diferenças de schema confirmadas no código
 
@@ -326,3 +326,160 @@ código interno, carga-base, cadastro de código, import/export, reconciliação
   rodaram porque o Docker Engine local recusou conexão. Revisão visual desta tela não foi concluída.
 - Nenhuma carga real foi feita; ainda faltam as verticais de cadastro oficial, importação segura,
   histórico, relatórios e permissões para considerar a paridade concluída.
+
+### Campos oficiais de balança (27/10/2026)
+
+- A revisão do `main` oficial confirmou que a importação da BASE gera um novo código interno pela
+  sequência global do catálogo; não copia o código interno da BASE. O repositório oficial calcula o
+  máximo sem filtrar loja, apesar de um comentário local mencionar sequência da loja. O código
+  original permanece disponível no catálogo mestre como referência.
+- O contrato do ERP foi ampliado para transportar `teclaBalanca`, `validadeBalanca`, `grupoIdExterno`
+  e `areaVenda` na tela, leitura e gravação, preservando os valores existentes em edições de clientes
+  antigos. A validação de TypeScript de `shared`, `db`, `api` e Nuxt passou; o teste unitário de
+  mapeamento passou (5 testes).
+- A migration aditiva `0085_produtos_campos_oficiais.sql` e sua entrada de journal estão preparadas,
+  mas não aplicadas. O snapshot Drizzle não foi gerado porque `drizzle-kit generate` falhou com
+  `uv_os_get_passwd returned ENOMEM`; `check:migrations` permanece bloqueado por esse snapshot ausente.
+- A operação de persistência da carga BASE usa Drizzle parametrizado, exige carga validada, faz upsert
+  idempotente por ID de origem e não toca produtos de loja nem saldos. A cópia BASE→loja agora mapeia
+  dados fiscais e bloqueia unidades/grupos sem equivalência única; foi acrescentada cópia em lote com
+  resultado por item. Nenhum produto oficial foi carregado; nenhuma migration foi aplicada em banco
+  compartilhado.
+- A leitura do exportador XLSX no `main` oficial revelou campos presentes no modelo mas ausentes no
+  backup: `pesavel`, `teclaBalanca`, `validadeBalanca`, `grupoId` e `areaVenda`. O XLSX sozinho não
+  prova paridade desses atributos. A carga para loja deve bloquear ou receber um export/API completo
+  antes de afirmar migração integral; não preencher valores ausentes por inferência.
+
+### Divergência entre branches da fonte oficial (27/10/2026)
+
+- O checkout local `C:\Users\José\Desktop\Cicluz\CADASTRO DE PRODUTOS\pralis` está na branch
+  `fix/creare-planilha-confiavel`, SHA `7ea8bd99`, rastreando `origin/fix/creare-planilha-confiavel`.
+  O `origin/main` local está em `1ba6774`; a branch local `main` está em `f9f781a`.
+- O `origin/main` de `1ba6774` usa sequência global, conforme registrado acima. O checkout `7ea8bd99`
+  contém o commit `b89dfb5` (`feat(produtos): reconciliar codigos internos por loja`), ausente de
+  `origin/main`, e gera código em sequência por catálogo: BASE 1325, TNP 1325, LI 4396 e HORA 0,
+  com trava advisory dentro da transação.
+- O SHA/branch implantado no app usado nas lojas ainda não foi confirmado. O ERP continua na regra global
+  da referência `origin/main`; não afirmar paridade do código interno nem alterar códigos/dados até
+  identificar a versão do Coolify.
+- Nenhum dos pisos autoriza renumerar produtos existentes. A carga real exige dry-run atual, backup
+  verificável e autorização operacional específica.
+
+### Execução local autorizada (27/10/2026)
+
+- Marco/José autorizaram aplicar a migration `0084_catalogo_base_separado.sql` somente no Postgres
+  local de desenvolvimento e confirmaram a regra de cópia BASE→loja: mapear unidade/embalagem/grupo
+  por equivalência única, bloquear falta ou ambiguidade e nunca copiar saldo.
+- A 0084 foi aplicada em `localhost:5543/padaria`. Antes/depois: 54 produtos locais; a contagem não
+  mudou. Verificados a tabela `produtos_catalogo_base`, o vínculo `produtos.produto_base_id` e os
+  cinco índices esperados. Nenhuma linha do catálogo foi criada ou atualizada por essa migration.
+- A 0085 continua pendente de autorização específica. O Docker daemon não está acessível nesta sessão;
+  a operação local aprovada foi feita por conexão PostgreSQL direta após validar host/porta/database.
+- A paridade integral e a identificação do SHA implantado no app oficial continuam pendentes; não
+  importar catálogo real nem afirmar equivalência dos códigos internos até resolver esses pontos.
+
+### Inventário funcional confirmado no checkout da fonte (27/10/2026)
+
+- `stack/api/src/modules/product/product.routes.ts` na branch `fix/creare-planilha-confiavel` registra
+  CRUD/listagem BASE, importação para loja, export CSV global, backup XLSX global, prévia/execução de
+  zeragem do catálogo e prévia/aplicação de reconciliação de códigos.
+- A tela oficial `stack/pwa/app/pages/produtos/manutencao.vue` também agrega panorama e backfill fiscal,
+  além de reenvio de sincronização pendente. A tela declara a zeragem como operação destrutiva e exige
+  backup, frase de confirmação e total esperado; isso não é equivalente a uma sincronização de catálogo.
+- No ERP, existem CRUD e cópia BASE→loja, importação da Central e operações por produto; não foram
+  encontrados endpoints equivalentes ao export global CSV/XLSX nem à manutenção global fiscal/zeragem/
+  reconciliação no módulo `api/src/produtos`. Esses itens permanecem gaps de paridade para decisão e
+  implementação. A zeragem exige avaliação separada de dependências e proteções antes de portá-la.
+- O `foto_url` do backup é apenas uma referência do storage de origem. A cópia BASE→loja agora bloqueia
+  produtos com foto até haver transferência binária para o storage do ERP; reutilizar o path da origem
+  produziria imagem quebrada. O cenário foi acrescentado ao teste de integração da Central.
+- Foi portada a exportação CSV de reconciliação da fonte para `GET /api/produtos/export.csv`, limitada
+  às empresas permitidas ao administrador, com os cabeçalhos oficiais, dados fiscais presentes no ERP,
+  preservação de zeros em códigos e proteção contra fórmulas em texto. A ação ficou na página
+  administrativa Manutenção, separada da listagem. O teste unitário do formato passou; o teste de autorização/rota foi adicionado, mas
+  depende do runtime de integração com PostgreSQL/Testcontainers.
+- A página administrativa Manutenção oferece `GET /api/produtos/backup.xlsx`, com abas Resumo, Produtos, Promoções e
+  Conversões, filtrado pelo mesmo escopo. O gerador cria células como texto para preservar códigos e
+  valores; inclui os campos de produto/fiscal atualmente persistidos. Teste unitário confirmou o ZIP e
+  nomes/cabeçalhos das abas. A rota/autorização aguarda integração com Testcontainers; os quatro campos
+  que dependem da 0085 ainda não podem constar do backup executável até a migration estar autorizada e aplicada.
+- O backup XLSX foi complementado com `pesavel`, que já existe no schema vigente e no catálogo oficial;
+  o dado acompanha cada produto na aba Produtos. Os campos `teclaBalanca`, `validadeBalanca`,
+  `grupoIdExterno` e `areaVenda` continuam vinculados à 0085, ainda não aplicada. O snapshot 0085 foi
+  gerado pelo Drizzle em uma cópia isolada até 0084; o SQL gerado coincide com os quatro `ALTER TABLE`
+  existentes, `prevId` aponta para 0084 e `check:migrations` passou com 86 SQL/journal/snapshots.
+- A página administrativa Manutenção exibe o panorama fiscal somente de leitura, servido por
+  `GET /api/produtos/fiscal/panorama`, com contagem por estado e escopo de empresas permitido ao admin.
+  A listagem tem um único acesso a essa página; produtos sem linha fiscal entram como `sem_registro` e o painel não executa backfill nem altera valores.
+- A busca local por uma fonte de carga encontrou apenas: o seed `pralis/stack/api/src/db/base-products.json`
+  com 149 itens; a planilha `tabela/Cópia de CENTRAL PRODUTOS (BASE) - CICLUZ GESTÃO PROFISSIONAL .xlsx`,
+  alterada em 17/06/2026 e com uma aba de 9.930 linhas; e `outputs/backup-local-validacao.xlsx`,
+  alterado em 23/09/2026, com 300 linhas de produtos. O seed declara produtos transformados sem fiscal,
+  a planilha antiga não tem as três abas do backup oficial e o arquivo de validação é massa local.
+  Nenhum deles foi importado. Não há no workspace uma exportação autenticada atual do catálogo em uso.
+- Este inventário descreve o checkout disponível, não prova que tais fluxos/rotas correspondem ao SHA
+  atualmente implantado. Não executar zeragem, backfill fiscal ou reconciliação sem prévia, escopo,
+  contagem/amostra e autorização operacional própria.
+
+### Atualização após autorização local (27/10/2026)
+
+- A migration `0085_produtos_campos_oficiais.sql` foi autorizada por José e aplicada em uma transação
+  somente ao Postgres local `localhost:5543/padaria`. Foram criadas as colunas `tecla_balanca`,
+  `validade_balanca`, `grupo_id_externo` e `area_venda`; a contagem permaneceu em 54 produtos. O histórico
+  `drizzle.__drizzle_migrations` está vazio porque esse banco local foi preparado fora do migrator; por
+  isso não se executou `drizzle-kit migrate`, que tentaria reaplicar a sequência histórica inteira.
+- A inspeção autenticada do app em uso confirmou a página de manutenção com reconciliação de códigos,
+  carga fiscal com prévia/aplicação, fila de reenvio e zeragem protegida por backup e confirmação. A tela
+  de produtos indicou 2.366 itens na aba `Geral (Base)`; a manutenção reportou 14.598 produtos no total.
+  Esses números são observações do app em 27/10/2026, não dados importados no ERP.
+- O ERP atual já tem export CSV/XLSX e panorama fiscal somente de leitura. Permanecem sem paridade
+  funcional as rotinas de reconciliação de códigos da fonte, prévia/aplicação fiscal, fila de reenvio e
+  manutenção/zeragem protegida. A execução de alterações em produção continua fora do escopo.
+- Foi acionado uma vez o botão oficial de backup completo. O app abriu/navegou para outra rota sem
+  entregar arquivo observável; não há XLSX recente de produtos na pasta Downloads. O backup oficial
+  autenticado e atual continua necessário para validar e importar os dados reais. Nenhum arquivo antigo
+  local foi promovido a fonte, e nenhum produto local foi importado.
+- O SHA implantado no app oficial ainda não foi exposto pela interface. O checkout de origem inspecionado
+  permanece na branch `fix/creare-planilha-confiavel`, HEAD `7ea8bd9`; isso não prova que seja o mesmo
+  código da instalação em produção.
+
+### Retomada com evidências (27/10/2026, Claude Desktop)
+
+**Versão em produção do app oficial — resolvido por evidência.** `GET https://api-produtos.cicluzieai.com.br/health`
+(leitura pública, sem segredo) respondeu `buildTime: 2026-10-13T17:36:57Z`, `commit: null`. O merge `1ba6774`
+(PR #156) na `main` do `ErasoumZe/SISTEMA_PRALIS` é de 13/10 14:36:39 -03:00, 18 s antes do build: o deploy
+automático da `main`. O commit dos pisos por loja (`b89dfb5`, 18/09) **não está na `main`** (só em
+`origin/fix/creare-planilha-confiavel`), e `7ea8bd9` (14:42 -03:00) é posterior ao build. Conclusão: produção
+usa a **sequência global com piso 13129**, a mesma regra do ERP. Prova por horário; o painel do Coolify
+confirmaria em definitivo.
+
+**Backup XLSX oficial falha em produção (500) — causa no código, sem correção no app.** `listAllForBackup()`
+dispara `findById` para os 14.598 produtos ao mesmo tempo (4 consultas cada, ~58 mil), com pool de 10 conexões
+e timeout de conexão de 5 s (`PG_POOL_MAX`/`PG_CONN_TIMEOUT_MS` padrão): a fila estoura e a rota responde 500.
+O export CSV usa o mesmo padrão de leitura. **Risco operacional:** na Manutenção oficial, "Backup XLSX baixado" é
+marcado no clique (o próprio código diz que não é prova); com o backup falhando, a zeragem fica liberada sem
+cópia. **José decidiu não alterar o app oficial** (está estável em uso). A fonte dos dados passa a ser a
+**planilha do Google Sheets** que o app espelha — abas `(BASE) CADASTRO PRODUTOS`, `(TNP) CADASTRO PRODUTOS`,
+`(LI) CADASTRO PRODUTOS`, cabeçalho na linha 5 e dados a partir da 11 —, baixada por José como XLSX; e, se
+preciso, a base geral do SIA/CREARE.
+
+**Correções no ERP nesta retomada (commit `0d2e11e1`):**
+
+- **Código interno quebrado:** a consulta do maior código abria um parêntese sem fechar — todo cadastro de
+  produto respondia 500 (na integração e no localhost). E, selecionada `from produtos`, devolvia zero linhas com
+  a tabela vazia, ignorando a BASE. Virou consulta completa que sempre devolve uma linha
+  (`sqlConsultaMaiorCodigoInterno`), com teste de regressão (próximo código acima da BASE).
+- **BASE guarda o código e o EAN da fonte** pelas colunas normalizadas da carga (antes só do JSON bruto).
+- **Migration 0086** (aditiva): as chaves `(id, carga_id)` de `produtos_central_fontes`/`grupos` passam de índice
+  único a restrição única via `UNIQUE USING INDEX` (sem recriar nada; as FKs compostas dependem delas). O
+  `db:push` dos testes não conseguia criar as FKs. Cadeia 0000–0086 validada num Postgres limpo; aplicada **só**
+  no Postgres local (`localhost:5543/padaria`), em transação, 54 produtos intactos. Decisão técnica delegada por
+  José ("faz o que uma equipe sênior faria").
+- Testes da Central corrigidos para o próprio fixture (empresaB pelo usuário multiempresa; fiscal literal;
+  contagens com a linha do Pralis; total de produtos +1 pela cópia explícita BASE→loja).
+
+**Gates desta retomada:** integração de Produtos com Testcontainers **49/49** (antes 0 rodavam); unitários 728/728;
+web 844/844; `lint`, `check` (avisos conhecidos do Nuxt) e `check:migrations` (87) verdes.
+
+**Ainda pendente:** importação da planilha oficial (aguarda o XLSX), paridade de listagem/formulário/telas
+(inventário em andamento), rotinas de manutenção, E2E e 4 larguras, PR.
