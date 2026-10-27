@@ -1,10 +1,35 @@
-import type { FastifyInstance } from "fastify";
-import { erro, ok } from "@padaria/shared/api";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { criadoId, erro, ok, type DadosExternos, type ReplyHttp } from "@padaria/shared/api";
+import { produtoParamsSchema, produtosQuerySchema } from "@padaria/shared/produtos";
 import { z } from "zod";
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas } from "../auth/empresa.js";
 import { CodigoBarrasDuplicadoError, ProdutoDuplicadoError } from "./produtos.service.js";
 import { copiarProdutoBaseParaLoja, listarCatalogoBase } from "./produtos-catalogo-base.service.js";
+import {
+  BaseSemCorrespondenciaError,
+  criarProdutoBase,
+  detalharProdutoBase,
+  editarProdutoBase,
+  SoAdministradorNaBaseError
+} from "./produtos-base.service.js";
+import { responderErroDeEscrita } from "./produtos.controller.js";
+
+function atorDaRequisicao(request: FastifyRequest) {
+  const perfil = request.perfilUsuario;
+  return {
+    usuarioId: request.usuarioId,
+    nome: perfil?.nome,
+    empresasPermitidas: perfil ? empresasPermitidas(perfil) : [],
+    administrador: perfil?.role === "usuario_admin"
+  };
+}
+
+function responderErroDaBase(reply: ReplyHttp, error: DadosExternos) {
+  if (error instanceof SoAdministradorNaBaseError) return erro(reply, 403, error.message, error.code);
+  if (error instanceof BaseSemCorrespondenciaError) return erro(reply, 422, error.message, error.code);
+  return responderErroDeEscrita(reply, error);
+}
 
 const queryCatalogoBase = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -20,6 +45,65 @@ const corpoCopiaLote = z.object({
 });
 
 export async function registrarRotasCatalogoBase(app: FastifyInstance): Promise<void> {
+  /**
+   * Modelo BASE (oficial): produto NOVO so o administrador cria, sempre na base geral; as lojas
+   * recebem por importacao. Unidade e grupo sao escolhidos no cadastro da empresa de referencia
+   * (`empresaId` do corpo) e a BASE guarda sigla e nome.
+   */
+  app.post("/api/produtos/base", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
+    try {
+      const criado = await criarProdutoBase(request.body, atorDaRequisicao(request));
+      request.log.info({
+        evento: "produto_base.escrita",
+        acao: "criar",
+        usuarioId: request.usuarioId,
+        produtoBaseId: criado.id
+      });
+      return criadoId(reply, criado.id);
+    } catch (error) {
+      return responderErroDaBase(reply, error);
+    }
+  });
+
+  /** O produto da BASE no formato do formulario, resolvido para a empresa de referencia. */
+  app.get(
+    "/api/produtos/base/:id",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      const { id } = produtoParamsSchema.parse(request.params);
+      const query = produtosQuerySchema.parse(request.query);
+      const ator = atorDaRequisicao(request);
+      const empresaId = query.empresaId ?? request.perfilUsuario?.empresaId;
+      if (!empresaId) return erro(reply, 400, "Informe a empresa de referencia", "INVALID_COMPANY");
+      try {
+        return ok(await detalharProdutoBase(id, empresaId, ator.empresasPermitidas));
+      } catch (error) {
+        return responderErroDaBase(reply, error);
+      }
+    }
+  );
+
+  /** Editar a BASE (so administrador): a mudanca desce para as lojas que ainda seguem cada campo. */
+  app.put(
+    "/api/produtos/base/:id",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const { id } = produtoParamsSchema.parse(request.params);
+      try {
+        const salvo = await editarProdutoBase(id, request.body, atorDaRequisicao(request));
+        request.log.info({
+          evento: "produto_base.escrita",
+          acao: "editar",
+          usuarioId: request.usuarioId,
+          produtoBaseId: id
+        });
+        return ok(salvo);
+      } catch (error) {
+        return responderErroDaBase(reply, error);
+      }
+    }
+  );
+
   app.get(
     "/api/produtos/catalogo-base",
     { preHandler: exigirPermissao("cadastro_produtos_visualizar") },

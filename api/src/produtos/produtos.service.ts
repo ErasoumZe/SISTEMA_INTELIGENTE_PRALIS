@@ -86,6 +86,15 @@ export class ProdutoNaoEncontradoError extends Error {
   }
 }
 
+/** Oficial: area de venda so existe no cadastro da TNP (AREA_STORE_MISMATCH). */
+export class AreaDeVendaForaDaTnpError extends Error {
+  readonly code = "AREA_STORE_MISMATCH";
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "AreaDeVendaForaDaTnpError";
+  }
+}
+
 /** Grupo/unidade apontando para o cadastro de outra empresa. */
 export class ReferenciaDeOutraEmpresaError extends Error {
   constructor(mensagem: string) {
@@ -160,9 +169,15 @@ export async function listarProdutos(filtro: FiltroListaProdutos) {
 
 /** Detalhe completo para o formulario. `null` = inexistente OU fora do escopo (404 nos dois). */
 export async function detalharProduto(id: string, escopoDados: string[]) {
-  const produto = await detalheProdutoRepository(id, escopoDados);
-  if (!produto) throw new ProdutoNaoEncontradoError();
-  return { ...produto, precoVendaAtual: precoVigente(produto.precoVenda, produto.promocoes, new Date()) };
+  const detalhe = await detalheProdutoRepository(id, escopoDados);
+  if (!detalhe) throw new ProdutoNaoEncontradoError();
+  const { matriculaPrefixo, ...produto } = detalhe;
+  return {
+    ...produto,
+    // Loja do produto (TNP/LI/HORA): area de venda so existe na TNP (oficial).
+    loja: lojaFiscalDaEmpresa(matriculaPrefixo),
+    precoVendaAtual: precoVigente(produto.precoVenda, produto.promocoes, new Date())
+  };
 }
 
 /**
@@ -288,6 +303,10 @@ export async function salvarProduto(
       grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
       produtoId: alvo?.id ?? null
     });
+    // Oficial: area de venda so pode ser definida em produto da TNP.
+    if (entradaDaPessoa && dados.areaVenda != null && lojaFiscalDaEmpresa(contextoFiscal.matriculaPrefixo) !== "TNP") {
+      throw new AreaDeVendaForaDaTnpError("Área de venda desta planta só pode ser definida em produto da TNP.");
+    }
     const fiscal = entradaDaPessoa
       ? (
           await resolverFiscalDaGravacao({
@@ -355,7 +374,7 @@ export async function listarHistoricoNomesProduto(empresaId: string, produtoId: 
 type DadosDoProduto = ReturnType<typeof produtoPayloadSchema.parse>;
 
 /** Estoque minimo/maximo em embalagem fechada (oficial). So para o que a pessoa digita. */
-function validarEstoqueDaEntrada(dados: DadosDoProduto): void {
+export function validarEstoqueDaEntrada(dados: DadosDoProduto): void {
   const erros = validarEstoquePorEmbalagem({
     quantidadeCaixa: dados.quantidadeCaixa,
     estoqueMin: dados.estoqueMin,
@@ -369,7 +388,7 @@ function validarEstoqueDaEntrada(dados: DadosDoProduto): void {
  * tecla fixa 000 e a validade obrigatoria (0 a 999 dias); quem nao vai fica sem tecla e sem validade.
  * Na edicao, `null` (ainda nao conferido) continua aceito: e o estado de cadastro legado.
  */
-function balancaDaEntrada(
+export function balancaDaEntrada(
   dados: DadosDoProduto,
   alvo: { pesavel: boolean | null; teclaBalanca: number | null; validadeBalanca: number | null } | null
 ) {
@@ -396,7 +415,7 @@ function balancaDaEntrada(
  * e promocao em produto de transformacao entrariam no banco e ficariam invisiveis na tela,
  * ressuscitando na proxima edicao.
  */
-function validarCoerenciaDoProduto(dados: DadosDoProduto): void {
+export function validarCoerenciaDoProduto(dados: DadosDoProduto): void {
   const problemas: string[] = [];
 
   if (dados.tipo === "revenda" && dados.transformacao) {
@@ -485,7 +504,7 @@ async function recusarDuplicados(
  * IGNORADO e recalculado pela regra oficial do shared; manual (`auto=false`) aceita o digitado.
  * Mesma formula que o front usa no preview.
  */
-function precoDeVendaDoServidor(
+export function precoDeVendaDoServidor(
   dados: {
     auto: boolean;
     custo?: number | null | undefined;

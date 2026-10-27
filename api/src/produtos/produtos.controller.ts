@@ -10,15 +10,7 @@ import {
   produtosOpcoesQuerySchema,
   produtosQuerySchema as empresaQuerySchema
 } from "@padaria/shared/produtos";
-import {
-  criadoId,
-  erro,
-  ok,
-  paginadoDeResultado,
-  semConteudo,
-  type DadosExternos,
-  type ReplyHttp
-} from "@padaria/shared/api";
+import { erro, ok, paginadoDeResultado, semConteudo, type DadosExternos, type ReplyHttp } from "@padaria/shared/api";
 import { exigirAlgumaPermissao, exigirAutenticacao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
@@ -38,6 +30,7 @@ import {
   listarOpcoesDeProduto,
   listarProdutos,
   obterFotoDeProdutoNoEscopo,
+  AreaDeVendaForaDaTnpError,
   ProdutoDuplicadoError,
   ProdutoNaoEncontradoError,
   ReferenciaDeOutraEmpresaError,
@@ -47,6 +40,7 @@ import {
 } from "./produtos.service.js";
 import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
 import { FiscalSoAdministradorError } from "./produtos-fiscal-gravacao.js";
+import { herancaDaCopia } from "./produtos-base.service.js";
 import { FonteFiscalIndisponivelError, listarRegrasFiscaisPorGrupo } from "./produtos-fiscal.service.js";
 
 /**
@@ -77,12 +71,13 @@ function responderErroDeFoto(reply: ReplyHttp, error: DadosExternos) {
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
 
-function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
+export function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
   if (error instanceof CodigoBarrasDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_BARCODE");
   if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
   if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
   if (error instanceof ReferenciaDeOutraEmpresaError) return erro(reply, 403, error.message, "FORBIDDEN_COMPANY");
   if (error instanceof FiscalSoAdministradorError) return erro(reply, 403, error.message, "ONLY_ADMIN_FISCAL");
+  if (error instanceof AreaDeVendaForaDaTnpError) return erro(reply, 422, error.message, error.code);
   const mensagem = mensagemDominioOuRelancar(error);
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
@@ -234,7 +229,8 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       const { id } = idParamsSchema.parse(request.params);
       try {
         const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-        return ok(await detalharProduto(id, escopo));
+        const produto = await detalharProduto(id, escopo);
+        return ok({ ...produto, heranca: await herancaDaCopia(produto) });
       } catch (error) {
         if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
         const mensagem = mensagemDominioOuRelancar(error);
@@ -269,25 +265,6 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       }
     }
   );
-
-  app.post("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
-    const body = request.body as { empresaId?: string };
-    if (body.empresaId && request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
-      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
-    }
-    try {
-      const salvo = await salvarProduto(null, request.body, {
-        usuarioId: request.usuarioId,
-        nome: request.perfilUsuario?.nome,
-        empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
-        administrador: request.perfilUsuario?.role === "usuario_admin"
-      });
-      registrarEscrita(request, "criar", { produtoId: salvo.id, empresaId: salvo.empresaId });
-      return criadoId(reply, salvo?.id ?? "produtos");
-    } catch (error) {
-      return responderErroDeEscrita(reply, error);
-    }
-  });
 
   /** Ativar/inativar (um produto) e inativar em lote (so administrador). Nao existe excluir. */
   app.patch(

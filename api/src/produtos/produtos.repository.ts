@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  empresas,
   gruposMercadorias,
   perfisUsuarios,
   produtos,
@@ -24,6 +25,8 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
     .select({
       id: produtos.id,
       empresaId: produtos.empresaId,
+      produtoBaseId: produtos.produtoBaseId,
+      matriculaPrefixo: empresas.matriculaPrefixo,
       grupoMercadoriaId: produtos.grupoMercadoriaId,
       grupoNome: gruposMercadorias.nome,
       unidadeMedidaId: produtos.unidadeMedidaId,
@@ -70,6 +73,7 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       criadoPorNome: perfisUsuarios.nome
     })
     .from(produtos)
+    .innerJoin(empresas, eq(produtos.empresaId, empresas.id))
     .leftJoin(gruposMercadorias, eq(produtos.grupoMercadoriaId, gruposMercadorias.id))
     .leftJoin(unidadesMedida, eq(produtos.unidadeIndividualId, unidadesMedida.id))
     .leftJoin(perfisUsuarios, eq(produtos.criadoPor, perfisUsuarios.usuarioId))

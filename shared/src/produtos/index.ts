@@ -7,6 +7,7 @@ import {
   type ExportarEmpresaPayload,
   type ImportarEmpresaPayload
 } from "../api/index.js";
+import type { ValoresHerdados } from "./heranca-base.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -308,6 +309,15 @@ export interface FiltrosDeProduto {
 export interface ProdutoDetalhe {
   id: string;
   empresaId: string;
+  /** Loja do produto (TNP/LI/HORA, pelo prefixo de matricula da empresa). Na BASE: "BASE". */
+  loja: string;
+  /** Copia de um produto da BASE (catalogo mestre). `null` = produto proprio da loja. */
+  produtoBaseId: string | null;
+  /**
+   * Heranca da BASE (so em copia): os rotulos dos campos em que esta loja tem valor proprio e os
+   * valores atuais da BASE, ja resolvidos para esta loja (para "voltar a herdar").
+   */
+  heranca: { naoSeguem: string[]; base: ValoresHerdados } | null;
   grupoMercadoriaId: string | null;
   grupoNome: string | null;
   unidadeMedidaId: string | null;
@@ -419,6 +429,7 @@ export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
 export * from "./regras.js";
 export * from "./regras-cadastro.js";
+export * from "./heranca-base.js";
 export * from "./fiscal-motor.js";
 export * from "./central-reconciliacao.js";
 export * from "./central-fontes.js";

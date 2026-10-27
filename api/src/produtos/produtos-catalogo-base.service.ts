@@ -1,5 +1,5 @@
 import type { JsonValue } from "@padaria/shared/api";
-import type { ProdutoPayload } from "@padaria/shared/produtos";
+import { montarDescricao, type ProdutoPayload } from "@padaria/shared/produtos";
 import {
   carregarProdutoBaseParaLojaRepository,
   importarCatalogoBaseRepository,
@@ -80,18 +80,23 @@ function resolverUnidade(sigla: string, unidades: Array<{ id: string; sigla: str
   return correspondentes.length === 1 ? correspondentes[0] : null;
 }
 
-function montarPayloadBase(
-  produto: NonNullable<Awaited<ReturnType<typeof carregarProdutoBaseParaLojaRepository>>>["produto"],
+/**
+ * O produto da BASE resolvido para uma loja (unidade e grupo pelo id DAQUELA loja). E o leitor unico
+ * de `dados_oficiais`: a copia, a edicao da BASE e a heranca usam esta mesma traducao.
+ */
+export function montarPayloadBase(
+  produto: { codigoBarras: string | null; nome: string; dadosOficiais: Record<string, JsonValue> },
   unidades: Array<{ id: string; sigla: string }>,
   grupos: Array<{ id: string; nome: string }>,
-  empresaId: string
+  empresaId: string,
+  opcoes: { ignorarFoto?: boolean } = {}
 ): { payload: ProdutoPayload; erro?: never } | { erro: string; payload?: never } {
   const dados = mapaDados(produto.dadosOficiais);
   // Caminhos de foto pertencem ao storage da aplicação de origem. Persisti-los
   // como se fossem paths deste ERP criaria produtos com imagens quebradas.
   // Até existir transferência binária autenticada, pare a cópia para não perder
-  // silenciosamente um atributo oficial.
-  if (texto(dados, "foto_url")) {
+  // silenciosamente um atributo oficial. Ler para editar ou comparar a herança não grava foto.
+  if (!opcoes.ignorarFoto && texto(dados, "foto_url")) {
     return { erro: "Este produto tem foto na origem; transfira o arquivo para o storage do ERP antes de copiá-lo." };
   }
   const medidaBase = texto(dados, "medida_base");
@@ -192,7 +197,8 @@ function montarPayloadBase(
       empresaId,
       codigo: null,
       codigoBarras: produto.codigoBarras,
-      descricao: produto.nome,
+      // Oficial: `nome` e o nome do catalogo; a descricao e nome + quantidade + medida.
+      descricao: montarDescricao(produto.nome, quantidade, unidade.sigla),
       nomeCatalogo: produto.nome,
       marca: texto(dados, "marca"),
       pesavel: booleano(dados, "pesavel"),
