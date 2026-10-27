@@ -676,3 +676,11 @@ Diferenças conscientes, a confirmar:
 Efeito em produção ao publicar (precisa de decisão de quem opera): quem hoje cadastra produto no ERP sem ser
 administrador (ex.: perfil de Compras, que tem "criar" e não "editar") passa a **importar da base**; para
 completar estoque e locais na cópia da loja precisa da permissão "editar".
+
+Verificação da V5 (27/10/2026, local): integração completa 1228 ok / 8 pulados / 0 falhas; front 845/845;
+lint, arquitetura e migrations (87) ok; E2E de Produtos no navegador 55 de 58 na rodada inteira — as 3
+falhas foram resolvidas e reconferidas isoladamente, restando só o 500 de `/api/caixa/status` do banco de dev
+atrasado (`colaboradores.pdv_padrao_id` ausente, fora de Produtos); E2E de Compras afetados 2/2. Typecheck do
+front sem erro em Produtos; numa instalação limpa do lock atual o `nuxt typecheck` não acha
+`vue-router/volar` (igual na `main`) e acusa 2 erros de `$vuetify` em Compras — problema de ambiente, não
+desta entrega.
