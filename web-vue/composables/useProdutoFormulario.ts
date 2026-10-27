@@ -242,7 +242,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       }
       // Foto escolhida antes de o produto existir sobe agora. Se ELA falhar, o produto ja esta
       // salvo — o erro aparece, mas ninguem recadastra o produto por causa disso.
-      if (id && modo.value === "loja" && fotoPendente.value) {
+      if (id && fotoPendente.value) {
         await enviarFotoPendente(id);
         fotoPendente.value = null;
       }
@@ -272,7 +272,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   async function enviarFotoPendente(id: string) {
     const corpo = new FormData();
     corpo.append("arquivo", fotoPendente.value as File);
-    const resposta = await fetch(`${apiUrl}/api/produtos/${id}/foto`, {
+    const rota = modo.value === "base" ? "/api/produtos/base" : "/api/produtos";
+    const resposta = await fetch(`${apiUrl}${rota}/${id}/foto`, {
       method: "POST",
       credentials: "include",
       body: corpo

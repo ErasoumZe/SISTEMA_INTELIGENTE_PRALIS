@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { MultipartFile } from "@fastify/multipart";
 import type { DadosExternos } from "@padaria/shared/api";
 import {
   camposQueNaoSeguemABase,
@@ -31,6 +32,13 @@ import {
   travarCadastroDeProdutos
 } from "./produtos-escrita.repository.js";
 import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
+import {
+  caminhoAbsolutoDaFoto,
+  ehFotoDaBaseNoErp,
+  FotoInvalidaError,
+  mimeDaFoto,
+  salvarFotoDeProduto
+} from "./produtos-foto.js";
 import { margemPadraoDoGrupo, tabelasFiscais } from "./produtos-fiscal.service.js";
 import {
   AreaDeVendaForaDaTnpError,
@@ -272,10 +280,10 @@ async function propagarParaLojas(tx: TransacaoBanco, antes: LinhaBase, depois: L
     const daLoja = { empresaId: copia.empresaId, ...referencia };
     const resolver = (linha: LinhaBase) => {
       try {
-        return valoresHerdadosDoPayload(payloadNaLoja(linha, daLoja), {
+        const payload = payloadNaLoja(linha, daLoja);
+        return valoresHerdadosDoPayload(payload, {
           codigoInterno: linha.codigoInterno,
-          // Foto nao atravessa entre os storages: fica fora da comparacao.
-          fotoUrl: copia.valores.fotoUrl
+          fotoUrl: fotoParaComparar(linha, payload, copia.valores.fotoUrl)
         });
       } catch (erro) {
         if (erro instanceof BaseSemCorrespondenciaError) return null;
@@ -291,6 +299,72 @@ async function propagarParaLojas(tx: TransacaoBanco, antes: LinhaBase, depois: L
     atualizadas += 1;
   }
   return atualizadas;
+}
+
+/**
+ * Foto da BASE na comparacao da heranca. Foto gravada pelo ERP (ou nenhuma) participa normalmente;
+ * foto do storage do app de origem ainda nao existe aqui, entao fica NEUTRA (igual a da copia) para
+ * nao apagar nem acusar diferenca que ninguem fez.
+ */
+function fotoParaComparar(
+  linha: Pick<LinhaBase, "dadosOficiais">,
+  payload: ProdutoPayload,
+  fotoDaCopia: string | null
+) {
+  const bruta = linha.dadosOficiais["foto_url"];
+  if (typeof bruta === "string" && bruta.trim() && !ehFotoDaBaseNoErp(bruta.trim())) return fotoDaCopia;
+  return payload.fotoUrl ?? null;
+}
+
+/** Foto da BASE (so administrador). O arquivo vai antes; o banco e a heranca, numa transacao so. */
+export async function salvarFotoDaBase(
+  id: string,
+  arquivo: MultipartFile | undefined,
+  ator: AtorDaEscrita
+): Promise<{ fotoUrl: string; lojasAtualizadas: number }> {
+  if (!ator.administrador) {
+    throw new SoAdministradorNaBaseError("Apenas o administrador altera o produto da base geral.", "FORBIDDEN");
+  }
+  if (!(await buscarProdutoBaseRepository(id))) throw new ProdutoNaoEncontradoError();
+  if (!arquivo) throw new FotoInvalidaError("Envie um arquivo de imagem.");
+  const { caminhoRelativo } = await salvarFotoDeProduto(id, arquivo, "base");
+  const lojasAtualizadas = await trocarFotoDaBase(id, caminhoRelativo);
+  return { fotoUrl: caminhoRelativo, lojasAtualizadas };
+}
+
+/** Tira a foto da BASE; as lojas que seguiam a foto ficam sem ela tambem. O arquivo fica (backup). */
+export async function removerFotoDaBase(id: string, ator: AtorDaEscrita): Promise<void> {
+  if (!ator.administrador) {
+    throw new SoAdministradorNaBaseError("Apenas o administrador altera o produto da base geral.", "FORBIDDEN");
+  }
+  await trocarFotoDaBase(id, null);
+}
+
+async function trocarFotoDaBase(id: string, fotoUrl: string | null): Promise<number> {
+  return executarEmTransacao(async (tx) => {
+    const alvo = await carregarProdutoBaseRepository(tx, id);
+    if (!alvo) throw new ProdutoNaoEncontradoError();
+    const depois = { ...alvo, dadosOficiais: { ...alvo.dadosOficiais, foto_url: fotoUrl } };
+    await atualizarProdutoBaseRepository(tx, id, {
+      codigoInterno: alvo.codigoInterno,
+      codigoBarras: alvo.codigoBarras,
+      nome: alvo.nome,
+      status: alvo.status === "inativo" ? "inativo" : "ativo",
+      grupoIdOrigem: alvo.grupoIdOrigem,
+      dadosOficiais: depois.dadosOficiais
+    });
+    return propagarParaLojas(tx, alvo, depois);
+  });
+}
+
+/** Arquivo da foto da BASE para servir. Foto do app de origem ainda nao foi transferida para ca. */
+export async function obterFotoDaBase(id: string): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const linha = await buscarProdutoBaseRepository(id);
+  if (!linha) throw new ProdutoNaoEncontradoError();
+  const foto = linha.dadosOficiais["foto_url"];
+  if (typeof foto !== "string" || !foto) throw new FotoInvalidaError("Produto sem foto.");
+  if (!ehFotoDaBaseNoErp(foto)) throw new FotoInvalidaError("A foto deste produto ainda está no app de origem.");
+  return { caminhoAbsoluto: caminhoAbsolutoDaFoto(foto), mimeType: mimeDaFoto(foto) };
 }
 
 const texto = (valor: number | null | undefined) => (valor == null ? null : String(valor));
@@ -360,7 +434,7 @@ export async function detalharProdutoBase(
     localVenda2: payload.localVenda2 ?? null,
     setorVenda1: payload.setorVenda1 ?? null,
     setorVenda2: payload.setorVenda2 ?? null,
-    fotoUrl: null,
+    fotoUrl: payload.fotoUrl ?? null,
     criadoPorNome: null,
     conversoes: [],
     fiscal: fiscal && {
@@ -422,7 +496,7 @@ export async function herancaDaCopia(
   const valoresCopia = valoresHerdadosDaCopia(copia);
   const base = valoresHerdadosDoPayload(convertido.payload, {
     codigoInterno: linha.codigoInterno,
-    fotoUrl: valoresCopia.fotoUrl
+    fotoUrl: fotoParaComparar(linha, convertido.payload, valoresCopia.fotoUrl)
   });
   return { naoSeguem: camposQueNaoSeguemABase(valoresCopia, base), base };
 }

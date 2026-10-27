@@ -263,4 +263,50 @@ describe("produtos - modelo BASE (igual ao app oficial)", () => {
       marca: "MARCA A"
     });
   });
+  it("Deve_GuardarAFotoNaBase_E_ACopiaQueSegueRecebeAMesma", async () => {
+    const limite = "----limitefotobase";
+    const png = Buffer.from("89504e470d0a1a0a0000000049454e44ae426082", "hex");
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; filename="foto.png"\r\nContent-Type: image/png\r\n\r\n`,
+        "utf8"
+      ),
+      png,
+      Buffer.from(`\r\n--${limite}--\r\n`, "utf8")
+    ]);
+    const enviar = (baseId: string, cookie: string) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/produtos/base/${baseId}/foto`,
+        headers: { cookie, "content-type": `multipart/form-data; boundary=${limite}` },
+        payload: corpo
+      });
+
+    const baseId = await criarNaBase({ nomeCatalogo: "BOLO FOTO BASE", descricao: "BOLO FOTO BASE" });
+    const copia = await importar(baseId, idsTeste.empresaA);
+
+    assertProblem(await enviar(baseId, cookieGerente), 403, "FORBIDDEN");
+
+    const enviada = await enviar(baseId, cookieAdmin);
+    expect(enviada.statusCode, enviada.body).toBe(201);
+    const { fotoUrl, lojasAtualizadas } = json<{ data: { fotoUrl: string; lojasAtualizadas: number } }>(enviada).data;
+    // Pasta da BASE no storage do ERP: e o caminho que a loja herda.
+    expect(fotoUrl).toMatch(new RegExp(`^produtos-base/${baseId}/[0-9a-f-]{36}\\.png$`));
+    expect(lojasAtualizadas).toBe(1);
+    const linha = await consultarUm<{ foto_url: string }>("select foto_url from produtos where id = $1", [copia]);
+    expect(linha?.foto_url).toBe(fotoUrl);
+
+    const daBase = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/base/${baseId}/foto`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(daBase.statusCode).toBe(200);
+    const daLoja = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${copia}/foto`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(daLoja.statusCode).toBe(200);
+  });
 });

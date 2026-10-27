@@ -6,6 +6,7 @@ import {
   listarCatalogoBaseRepository
 } from "./produtos-catalogo-base.repository.js";
 import { salvarProduto, type AtorDaEscrita } from "./produtos.service.js";
+import { ehFotoDaBaseNoErp } from "./produtos-foto.js";
 
 export class ImportacaoCatalogoBaseInvalidaError extends Error {}
 
@@ -96,7 +97,10 @@ export function montarPayloadBase(
   // como se fossem paths deste ERP criaria produtos com imagens quebradas.
   // Até existir transferência binária autenticada, pare a cópia para não perder
   // silenciosamente um atributo oficial. Ler para editar ou comparar a herança não grava foto.
-  if (!opcoes.ignorarFoto && texto(dados, "foto_url")) {
+  // Foto gravada pelo ERP na BASE vive no storage daqui: a loja herda o mesmo caminho.
+  const fotoOrigem = texto(dados, "foto_url");
+  const fotoDoErp = fotoOrigem && ehFotoDaBaseNoErp(fotoOrigem) ? fotoOrigem : null;
+  if (!opcoes.ignorarFoto && fotoOrigem && !fotoDoErp) {
     return { erro: "Este produto tem foto na origem; transfira o arquivo para o storage do ERP antes de copiá-lo." };
   }
   const medidaBase = texto(dados, "medida_base");
@@ -230,7 +234,7 @@ export function montarPayloadBase(
       localVenda1: texto(dados, "local_venda_1"),
       localVenda2: texto(dados, "local_venda_2"),
       habilitarAjuda: booleano(dados, "habilitar_ajuda") ?? false,
-      fotoUrl: null,
+      fotoUrl: fotoDoErp,
       fiscal: {
         ncm: texto(dados, "ncm"),
         cest: texto(dados, "cest"),

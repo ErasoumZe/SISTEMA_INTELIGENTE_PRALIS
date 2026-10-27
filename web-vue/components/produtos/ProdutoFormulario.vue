@@ -205,7 +205,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :como-se-compra-preview="formulario.comoSeCompraPreview.value"
           :somente-leitura="somenteLeitura"
           :herdado-travado="formulario.herdadoTravado.value"
-          :mostrar-foto="modo === 'loja'"
+          :rota-foto="modo === 'base' ? '/api/produtos/base' : '/api/produtos'"
           :mostrar-area-venda="formulario.loja.value === 'TNP'"
           :dica="dicaDoProduto"
           @foto-escolhida="formulario.fotoPendente.value = $event"

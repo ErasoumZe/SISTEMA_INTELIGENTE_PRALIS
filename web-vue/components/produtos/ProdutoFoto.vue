@@ -11,7 +11,10 @@ const props = defineProps<{
   produtoId: string | null;
   fotoUrl: string | null;
   somenteLeitura?: boolean;
+  /** "/api/produtos" (loja, padrao) ou "/api/produtos/base" (base geral). */
+  rota?: string;
 }>();
+const rotaDaFoto = computed(() => props.rota ?? "/api/produtos");
 const emit = defineEmits<{ "arquivo-escolhido": [arquivo: File | null]; alterada: [fotoUrl: string | null] }>();
 
 const { apiUrl } = useApi();
@@ -30,7 +33,7 @@ const { endereco, carregar: carregarFoto, mostrarArquivoLocal, revogar: revogarP
 
 watch(
   () => [props.produtoId, props.fotoUrl],
-  () => void carregarFoto(apiUrl, props.produtoId, Boolean(props.fotoUrl)),
+  () => void carregarFoto(apiUrl, props.produtoId, Boolean(props.fotoUrl), rotaDaFoto.value),
   { immediate: true }
 );
 
@@ -60,7 +63,7 @@ async function enviar(arquivo: File) {
   try {
     const corpo = new FormData();
     corpo.append("arquivo", arquivo);
-    const resposta = await fetch(`${apiUrl}/api/produtos/${props.produtoId}/foto`, {
+    const resposta = await fetch(`${apiUrl}${rotaDaFoto.value}/${props.produtoId}/foto`, {
       method: "POST",
       credentials: "include",
       body: corpo
@@ -88,7 +91,7 @@ async function remover() {
   enviando.value = true;
   erro.value = "";
   try {
-    const resposta = await fetch(`${apiUrl}/api/produtos/${props.produtoId}/foto`, {
+    const resposta = await fetch(`${apiUrl}${rotaDaFoto.value}/${props.produtoId}/foto`, {
       method: "DELETE",
       credentials: "include"
     });

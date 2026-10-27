@@ -1,16 +1,21 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { criadoId, erro, ok, type DadosExternos, type ReplyHttp } from "@padaria/shared/api";
 import { produtoParamsSchema, produtosQuerySchema } from "@padaria/shared/produtos";
+import { createReadStream } from "node:fs";
+import { FotoInvalidaError, TAMANHO_MAXIMO_DA_FOTO } from "./produtos-foto.js";
 import { z } from "zod";
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas } from "../auth/empresa.js";
-import { CodigoBarrasDuplicadoError, ProdutoDuplicadoError } from "./produtos.service.js";
+import { CodigoBarrasDuplicadoError, ProdutoDuplicadoError, ProdutoNaoEncontradoError } from "./produtos.service.js";
 import { copiarProdutoBaseParaLoja, listarCatalogoBase } from "./produtos-catalogo-base.service.js";
 import {
   BaseSemCorrespondenciaError,
   criarProdutoBase,
   detalharProdutoBase,
   editarProdutoBase,
+  obterFotoDaBase,
+  removerFotoDaBase,
+  salvarFotoDaBase,
   SoAdministradorNaBaseError
 } from "./produtos-base.service.js";
 import { responderErroDeEscrita } from "./produtos.controller.js";
@@ -28,6 +33,8 @@ function atorDaRequisicao(request: FastifyRequest) {
 function responderErroDaBase(reply: ReplyHttp, error: DadosExternos) {
   if (error instanceof SoAdministradorNaBaseError) return erro(reply, 403, error.message, error.code);
   if (error instanceof BaseSemCorrespondenciaError) return erro(reply, 422, error.message, error.code);
+  if (error instanceof FotoInvalidaError) return erro(reply, 400, error.message, "INVALID_PHOTO");
+  if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
   return responderErroDeEscrita(reply, error);
 }
 
@@ -77,6 +84,51 @@ export async function registrarRotasCatalogoBase(app: FastifyInstance): Promise<
       if (!empresaId) return erro(reply, 400, "Informe a empresa de referencia", "INVALID_COMPANY");
       try {
         return ok(await detalharProdutoBase(id, empresaId, ator.empresasPermitidas));
+      } catch (error) {
+        return responderErroDaBase(reply, error);
+      }
+    }
+  );
+
+  /** Foto da BASE (oficial: campo herdado). Trocar desce para as lojas que seguem a foto. */
+  app.post(
+    "/api/produtos/base/:id/foto",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const { id } = produtoParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: TAMANHO_MAXIMO_DA_FOTO, files: 1 } });
+        return reply.status(201).send(ok(await salvarFotoDaBase(id, arquivo, atorDaRequisicao(request))));
+      } catch (error) {
+        return responderErroDaBase(reply, error);
+      }
+    }
+  );
+
+  app.delete(
+    "/api/produtos/base/:id/foto",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const { id } = produtoParamsSchema.parse(request.params);
+      try {
+        await removerFotoDaBase(id, atorDaRequisicao(request));
+        return reply.status(204).send();
+      } catch (error) {
+        return responderErroDaBase(reply, error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/produtos/base/:id/foto",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      const { id } = produtoParamsSchema.parse(request.params);
+      try {
+        const foto = await obterFotoDaBase(id);
+        reply.header("Content-Type", foto.mimeType);
+        reply.header("Cache-Control", "private, max-age=300");
+        return reply.send(createReadStream(foto.caminhoAbsoluto));
       } catch (error) {
         return responderErroDaBase(reply, error);
       }

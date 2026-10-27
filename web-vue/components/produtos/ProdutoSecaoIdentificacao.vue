@@ -16,8 +16,8 @@ const props = defineProps<{
   somenteLeitura: boolean;
   /** Copia da loja: o que veio da BASE so o administrador altera, la na BASE (oficial). */
   herdadoTravado: boolean;
-  /** Foto so existe no produto da loja (a BASE ainda nao guarda arquivo no ERP). */
-  mostrarFoto: boolean;
+  /** Onde a foto vive: "/api/produtos" (loja) ou "/api/produtos/base" (base geral). */
+  rotaFoto: string;
   /** Area de venda so existe no cadastro da TNP (oficial). */
   mostrarAreaVenda: boolean;
   dica: (campo: string) => string | undefined;
@@ -49,7 +49,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :disabled="somenteLeitura"
         />
         <ProdutoFoto
-          v-if="mostrarFoto"
+          :rota="rotaFoto"
           :produto-id="produtoId"
           :foto-url="form.fotoUrl"
           :somente-leitura="travado"
