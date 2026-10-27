@@ -703,3 +703,19 @@ matrícula da empresa) e são invalidadas ao importar.
 Diferença consciente: o ERP aceita **.xlsx e .csv**; o `.xls` antigo exige biblioteca (o app usa o pacote
 `xlsx` do npm, que tem falhas de segurança conhecidas para arquivo malicioso). Até decidir, salvar o `.xls`
 como `.xlsx` no Excel.
+
+### Backfill fiscal e revisão independente (27/10/2026)
+
+- **Backfill da carga fiscal** (oficial `BackfillFiscalService`): `POST /api/produtos/fiscal/backfill`, só
+  admin; confere por padrão e grava só com `aplicar`; cursor por id, até 500 por rodada; entra quem não tem
+  fiscal ou está `nao_classificado`/`parcial`/`fonte_indisponivel`; grava pelo MESMO caminho do cadastro.
+  Na Manutenção, o cartão "Carga fiscal" tem Conferir e Completar. Não escreve na planilha.
+- **Revisão independente** (agente só de leitura) sobre BASE e de-para. Corrigido: unidade/grupo sem par na
+  loja agora fica de fora só naquele campo (antes a loja inteira deixava de herdar); troca de nome vinda da
+  BASE grava histórico; edição da BASE não trava pela unidade atual; de-para com trava por empresa, admin
+  conferido antes de ler o arquivo e empresa sem loja recusada. O achado "a loja também herda fiscal,
+  custo e estoque" veio de outra branch do app — no `origin/main` a lista de campos herdados é a que o ERP
+  usa.
+- **Regra até a virada (dois escritores):** enquanto o app estiver no ar, **produto novo continua sendo
+  cadastrado no app**. Se o ERP também criar na BASE, os dois sistemas podem gerar o mesmo código interno, e a
+  importação da Central sobrescreve a BASE do ERP sem repassar às lojas.
