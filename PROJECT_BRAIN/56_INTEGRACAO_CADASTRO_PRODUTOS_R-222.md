@@ -631,3 +631,48 @@ app faz bem mais que o cadastro. Situação de cada parte no ERP:
 
 Risco central: enquanto o app estiver no ar ele é quem escreve a planilha e publica o TXT do PDV. O ERP não
 pode escrever nos mesmos lugares ao mesmo tempo (dois escritores). A troca precisa de um corte planejado.
+
+Decisão de José (27/10/2026): seguir construindo tudo igual ao app **sem o ERP escrever na planilha nem
+publicar o TXT do PDV** até um dia de virada combinado.
+
+### V5 — modelo BASE igual ao app da loja (27/10/2026)
+
+Como o app faz (`ProductService` do `origin/main`): produto **novo só o admin cria, sempre na BASE**; a loja
+recebe por importação; editar a BASE é do admin e a mudança **desce campo a campo** para cada cópia que ainda
+tinha o valor antigo da BASE (onde a loja tem valor próprio, ele fica). Na tela da loja, o que veio da BASE
+fica em leitura, com o selo "segue a base" / "campos que não seguem mais" e "Voltar a herdar da base". Fiscal
+e promoção são da loja (a BASE não tem esses cartões). Área de venda só na TNP.
+
+No ERP (sem migration):
+
+- a BASE é o `produtos_catalogo_base` que já existia, gravado com as **mesmas chaves do banco do app**
+  (`dados_oficiais`). Um produto criado pelo ERP fica igual a um vindo do app: a cópia para a loja usa um só
+  leitor (`montarPayloadBase`);
+- `POST /api/produtos/base` (admin; `ONLY_ADMIN_CREATE` para os demais) cria com fiscal pelo grupo, código
+  interno da sequência global e EAN = código quando vazio; `PUT /api/produtos/base/:id` (admin) repassa a
+  edição às cópias na mesma transação; `GET` devolve o produto no formato do formulário. Unidade e grupo são
+  escolhidos no cadastro da empresa de referência de quem cadastra e a BASE guarda **sigla e nome** — cada
+  loja resolve para o seu id;
+- foto na BASE (`/api/produtos/base/:id/foto`), no storage do ERP em `produtos-base/`; a cópia herda o mesmo
+  arquivo. Foto que está no storage do app de origem continua bloqueando a cópia (ainda não transferida);
+- o cadastro direto na loja (`POST /api/produtos`) **foi removido**, e também a cópia loja → loja
+  (`/api/produtos/importar`, `/:id/exportar`): no app a loja só recebe pela BASE;
+- a cópia monta a descrição como o app: nome + quantidade + medida (antes copiava só o nome);
+- telas: `/produtos/novo` e `/produtos/base/:id` (base, só admin); `/produtos/:id` (loja) com os campos
+  herdados travados e o selo de herança; a seção Fiscal mostra o estado em selo + motivo e só o admin digita
+  os campos manuais.
+
+Diferenças conscientes, a confirmar:
+
+1. **Só a cópia da BASE fica travada.** O app trava todo produto de loja; no ERP os produtos de loja que já
+   existem não têm BASE (ninguém poderia mais editar o nome deles). Depois da carga que liga cada produto à
+   sua BASE, os dois comportamentos ficam iguais.
+2. **Duplicado na BASE** usa o código único do app (`DUPLICATE_PRODUCT`) para nome **ou** EAN; o EAN repetido
+   continua pedindo confirmação ("Cadastrar mesmo assim").
+3. Enquanto o app estiver no ar, a BASE do ERP é alimentada pela Central (importação da carga do app). Uma
+   edição feita no ERP num produto que veio do app é **sobrescrita** na próxima importação — o app ainda é o
+   dono da BASE até a virada.
+
+Efeito em produção ao publicar (precisa de decisão de quem opera): quem hoje cadastra produto no ERP sem ser
+administrador (ex.: perfil de Compras, que tem "criar" e não "editar") passa a **importar da base**; para
+completar estoque e locais na cópia da loja precisa da permissão "editar".
