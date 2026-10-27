@@ -1,7 +1,5 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
-import { contas, contasUsuarios, empresas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
-import { fechamentosCaixa } from "@padaria/db/schema/caixa";
+import { and, count, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
 import {
   lacres,
   transferencias,
@@ -13,113 +11,13 @@ import {
   type ConfirmarTransferenciaPayload,
   type TempoConfirmacao,
   type TransferenciaDetalheDto,
-  type TransferenciaDto,
-  type TransferenciaPayload,
-  type TransferenciasQuery
+  type TransferenciaPayload
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ehRetornoDoCaixa } from "./entrega-cofre.repository.js";
-import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
+import { numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
-
-export async function listarTransferenciasRepository(
-  query: TransferenciasQuery,
-  empresasPermitidasIds: string[] | null
-): Promise<TransferenciaDto[]> {
-  const origem = alias(contas, "conta_origem");
-  const destino = alias(contas, "conta_destino");
-  const criador = alias(perfisUsuarios, "perfil_criador_transferencia");
-  const filtros = filtrosEmpresa(transferencias, query, empresasPermitidasIds);
-  if (query.caixaId) filtros.push(eq(transferencias.caixaId, query.caixaId));
-  if (query.status) filtros.push(eq(transferencias.status, query.status));
-  if (query.dataInicio) filtros.push(gte(transferencias.dataReferencia, query.dataInicio));
-  if (query.dataFim) filtros.push(lte(transferencias.dataReferencia, query.dataFim));
-  if (query.pdvId) filtros.push(eq(fechamentosCaixa.pdvId, query.pdvId));
-  if (query.usuario) filtros.push(ilike(criador.nome, `%${query.usuario}%`));
-  if (query.contaOrigemId) filtros.push(eq(transferencias.contaOrigemId, query.contaOrigemId));
-  if (query.contaDestinoId) filtros.push(eq(transferencias.contaDestinoId, query.contaDestinoId));
-  if (query.lacre) filtros.push(ilike(transferencias.nLacreDoc, `%${query.lacre}%`));
-  const linhas = await banco
-    .select({
-      id: transferencias.id,
-      empresaId: transferencias.empresaId,
-      dataReferencia: transferencias.dataReferencia,
-      descricao: textoDoMovimento(transferencias),
-      valorOriginal: transferencias.valorOriginal,
-      valorRecebido: transferencias.valorRecebido,
-      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
-      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
-      computar: transferencias.computar,
-      status: transferencias.status,
-      contaOrigemId: transferencias.contaOrigemId,
-      contaDestinoId: transferencias.contaDestinoId,
-      contaOrigemNome: origem.nome,
-      contaDestinoNome: destino.nome,
-      nLacreDoc: transferencias.nLacreDoc,
-      prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
-      dataRecebimento: transferencias.dataRecebimento,
-      confirmadoPor: transferencias.confirmadoPor,
-      criadoPor: transferencias.criadoPor,
-      criadoPorNome: criador.nome,
-      criadoEm: transferencias.criadoEm,
-      observacao: transferencias.observacao,
-      // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
-      // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
-      caixaId: transferencias.caixaId,
-      pdvId: fechamentosCaixa.pdvId,
-      pdvNome: pdvs.nome,
-      planejamentoOrigemTransferenciaId: transferencias.planejamentoOrigemTransferenciaId,
-      tipo: transferencias.tipo
-    })
-    .from(transferencias)
-    .innerJoin(origem, eq(origem.id, transferencias.contaOrigemId))
-    .innerJoin(destino, eq(destino.id, transferencias.contaDestinoId))
-    .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
-    .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, transferencias.caixaId))
-    .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
-    .leftJoin(criador, eq(criador.usuarioId, transferencias.criadoPor))
-    .where(filtros.length ? and(...filtros) : undefined)
-    // O `desc nulls last` escrito a mao era a UNICA violacao de SQL cru (tagged template) em api/src
-    // (scripts/verificar-arquitetura.mjs) e derrubava `npm run check` no 3o dos 9 passos, escondendo
-    // os seis seguintes. O predicado `is null` como primeira chave reproduz o mesmo plano sem SQL
-    // cru: em Postgres `false < true`, entao a linha JA recebida (is null = false) vem primeiro e a
-    // pendente fica no fim — que e exatamente o que `nulls last` fazia. A ordenacao continua no
-    // banco, e nao virou sort em memoria.
-    .orderBy(
-      asc(isNull(transferencias.dataRecebimento)),
-      desc(transferencias.dataRecebimento),
-      desc(transferencias.criadoEm)
-    );
-  const paisComPlanejamento = linhas.length
-    ? await banco
-        .select({ id: transferencias.planejamentoOrigemTransferenciaId })
-        .from(transferencias)
-        .where(
-          inArray(
-            transferencias.planejamentoOrigemTransferenciaId,
-            linhas.map((linha) => linha.id)
-          )
-        )
-    : [];
-  const idsPaisComPlanejamento = new Set(paisComPlanejamento.map((linha) => linha.id).filter(Boolean));
-  return linhas.map(({ tipo, planejamentoOrigemTransferenciaId, ...linha }) => ({
-    ...linha,
-    status: linha.status as TransferenciaDto["status"],
-    valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
-    valorEspecieDeclarado: linha.valorEspecieDeclarado === null ? null : numeroDecimal(linha.valorEspecieDeclarado),
-    valorMoedasDeclarado: linha.valorMoedasDeclarado === null ? null : numeroDecimal(linha.valorMoedasDeclarado),
-    prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
-    dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
-    criadoEm: linha.criadoEm.toISOString(),
-    ehCaixaParaCofre: ehRetornoDoCaixa({
-      caixaId: linha.caixaId,
-      tipo
-    }),
-    ehPlanejamentoRetorno: planejamentoOrigemTransferenciaId !== null,
-    possuiPlanejamentoRetorno: idsPaisComPlanejamento.has(linha.id)
-  }));
-}
 
 export async function criarTransferenciaRepository(
   dados: TransferenciaPayload,

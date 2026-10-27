@@ -69,9 +69,12 @@ import {
   listarTravamentosTransferenciaDoUsuarioRepository,
   transferenciaAdmitePrazoRepository,
   listarTransferenciasVencidasRepository,
-  listarTransferenciasRepository,
   registrarRecusaConferenciaRepository
 } from "./transferencias.repository.js";
+import {
+  listarTransferenciasRepository,
+  type OpcoesListagemTransferencias
+} from "./transferencias-relatorio.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contaOrigemId === dados.contaDestinoId) throw new Error("Conta de destino deve ser diferente da origem");
@@ -133,10 +136,11 @@ function ehTesouraria(perfil: PerfilUsuario): boolean {
 
 export async function listarTransferencias(
   query: TransferenciasQuery,
-  empresasPermitidasIds: string[] | null
-): Promise<TransferenciaDto[]> {
-  if (empresasPermitidasIds?.length === 0) return [];
-  return listarTransferenciasRepository(query, empresasPermitidasIds);
+  empresasPermitidasIds: string[] | null,
+  opcoes: OpcoesListagemTransferencias
+): Promise<{ itens: TransferenciaDto[]; total: number }> {
+  if (empresasPermitidasIds?.length === 0) return { itens: [], total: 0 };
+  return listarTransferenciasRepository(query, empresasPermitidasIds, opcoes);
 }
 
 // P1/#101 · a entrega ao cofre tem UM caminho, e nao e a transferencia comum.
