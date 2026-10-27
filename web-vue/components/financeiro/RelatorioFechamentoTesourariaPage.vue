@@ -506,6 +506,9 @@ watch(
             :empresa-id="props.empresaId"
             :caixa-id="caixaSelecionado.id"
             :pode-conferir="props.podeConferirTransferencia === true"
+            :lacre-fechamento-informado="
+              typeof dossie.resumo?.lacreFechamento === 'string' ? dossie.resumo.lacreFechamento : null
+            "
             @alterado="aoAlterarTransferencias"
           />
           <v-card class="conferencia-tesouraria mb-3" variant="outlined">

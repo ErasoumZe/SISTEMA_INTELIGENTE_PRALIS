@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import type { OperacaoResumo } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import { rotuloMovimento } from "~/utils/transferencias-relatorio";
+import { resumirSangrias, textoSangrias } from "~/utils/transferencias-relatorio";
 import SituacaoMalote from "./SituacaoMalote.vue";
 import TransferenciaConferenciaDialog from "./TransferenciaConferenciaDialog.vue";
 
@@ -11,7 +11,13 @@ import TransferenciaConferenciaDialog from "./TransferenciaConferenciaDialog.vue
 // e aqui que a Tesouraria confere o que o caixa devolveu. A tela de Transferencias e so
 // acompanhamento. As regras de quem pode conferir sao as de antes (pendente, sem planejamento de
 // retorno, permissao `transferencias_conferir`); o servidor continua sendo quem decide.
-const props = defineProps<{ empresaId: string; caixaId: string; podeConferir: boolean }>();
+const props = defineProps<{
+  empresaId: string;
+  caixaId: string;
+  podeConferir: boolean;
+  // Lacre de fechamento que o operador DIGITOU ao fechar (vem do resumo do fechamento).
+  lacreFechamentoInformado?: string | null;
+}>();
 const emit = defineEmits<{ (event: "alterado"): void }>();
 
 const { apiGetPaginado } = useApi();
@@ -22,6 +28,51 @@ const aviso = ref<{ texto: string; tipo: "success" | "warning" } | null>(null);
 const emConferencia = ref<OperacaoResumo | null>(null);
 
 const pendentes = computed(() => itens.value.filter((item) => item.status === "pendente"));
+
+// Fatos do turno, todos derivados do que a API ja devolve (nada recalcula dinheiro): quantas sangrias,
+// qual o estado das bolsas do malote e se o lacre usado no fechamento e o que a Tesouraria reservou.
+const abertura = computed(() => itens.value.find((item) => item.tipoMovimento === "abertura") ?? null);
+const lacresDoMalote = computed(() => abertura.value?.lacres ?? []);
+const sangrias = computed(() =>
+  itens.value.filter((item) => item.tipoMovimento !== "abertura" && Boolean(item.nLacreDoc?.trim()))
+);
+const totalSangriasCentavos = computed(() =>
+  sangrias.value.reduce((total, item) => total + Math.round(Number(item.valorOriginal) * 100), 0)
+);
+const textoBolsas = computed(() => textoSangrias(resumirSangrias(lacresDoMalote.value)));
+const lacreAbertura = computed(() => lacresDoMalote.value.find((lacre) => lacre.tipo === "abertura") ?? null);
+const lacreReservado = computed(() => lacresDoMalote.value.find((lacre) => lacre.tipo === "fechamento") ?? null);
+const fechamentoInformado = computed(() => props.lacreFechamentoInformado?.trim() || null);
+// "bateu" so quando os dois numeros existem e sao iguais; qualquer outro caso aparece com palavra propria.
+const conferenciaFechamento = computed(() => {
+  const reservado = lacreReservado.value?.numero ?? null;
+  if (!fechamentoInformado.value)
+    return { chave: "aberto", texto: "Ainda não informado (caixa aberto)", icone: "mdi-clock-outline" };
+  if (!lacreReservado.value)
+    return { chave: "sem_reserva", texto: "Sem lacre reservado para comparar", icone: "mdi-help-circle-outline" };
+  if (reservado === null)
+    return { chave: "oculto", texto: "Número reservado oculto para o seu perfil", icone: "mdi-eye-off-outline" };
+  return reservado === fechamentoInformado.value
+    ? { chave: "confere", texto: "Confere com o reservado pela Tesouraria", icone: "mdi-check-circle-outline" }
+    : { chave: "diferente", texto: `Diferente do reservado (${reservado})`, icone: "mdi-alert-circle-outline" };
+});
+
+// O retorno FINAL nasce no fechamento sem lacre proprio; ele sai lacrado com o lacre de fechamento.
+function ehRetornoFinal(item: OperacaoResumo) {
+  return item.tipoMovimento !== "abertura" && !item.nLacreDoc?.trim() && Boolean(fechamentoInformado.value);
+}
+function lacreDaLinha(item: OperacaoResumo) {
+  if (item.nLacreDoc?.trim()) return `Lacre ${item.nLacreDoc}`;
+  return ehRetornoFinal(item) ? `Lacre de fechamento ${fechamentoInformado.value}` : "Sem lacre";
+}
+function nomeDaLinha(item: OperacaoResumo) {
+  if (item.tipoMovimento === "abertura") return "Malote (abertura)";
+  return ehRetornoFinal(item) ? "Retorno final" : "Sangria";
+}
+
+function cabecalhoLacre(numero: string | null | undefined) {
+  return numero ? `Lacre ${numero}` : "Número oculto";
+}
 
 function podeConferirItem(item: OperacaoResumo) {
   return Boolean(props.podeConferir && item.status === "pendente" && !item.possuiPlanejamentoRetorno);
@@ -61,12 +112,34 @@ watch(() => props.caixaId, carregar, { immediate: true });
     <div class="rft__topo">
       <div>
         <div class="text-overline">TRANSFERÊNCIAS DO CAIXA</div>
-        <h3 id="rft-titulo" class="rft__titulo">Abertura, sangrias e retorno final</h3>
+        <h3 id="rft-titulo" class="rft__titulo">Lacres, sangrias e conferência</h3>
       </div>
       <v-chip v-if="pendentes.length" color="warning" variant="tonal" size="small" prepend-icon="mdi-clock-outline">
         {{ pendentes.length }} para conferir
       </v-chip>
     </div>
+
+    <dl v-if="!carregando && !erro && itens.length" class="rft__fatos" data-teste="fatos-do-caixa">
+      <div>
+        <dt>Sangrias</dt>
+        <dd data-teste="fato-sangrias">{{ sangrias.length }} · {{ dinheiro(totalSangriasCentavos / 100) }}</dd>
+      </div>
+      <div>
+        <dt>Bolsas do malote</dt>
+        <dd data-teste="fato-bolsas">{{ textoBolsas }}</dd>
+      </div>
+      <div>
+        <dt>Lacre de abertura</dt>
+        <dd>{{ lacreAbertura ? cabecalhoLacre(lacreAbertura.numero) : "Sem malote identificado" }}</dd>
+      </div>
+      <div>
+        <dt>Lacre de fechamento</dt>
+        <dd data-teste="fato-fechamento" :data-estado="conferenciaFechamento.chave">
+          <v-icon :icon="conferenciaFechamento.icone" size="16" aria-hidden="true" />
+          {{ fechamentoInformado ? `Lacre ${fechamentoInformado}` : "—" }} · {{ conferenciaFechamento.texto }}
+        </dd>
+      </div>
+    </dl>
 
     <v-progress-linear v-if="carregando" indeterminate aria-label="Carregando transferências do caixa" />
     <v-alert v-else-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
@@ -74,7 +147,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
     <ul v-else class="rft__lista">
       <li v-for="item in itens" :key="item.id" class="rft__item" :data-transferencia-id="item.id">
         <div class="rft__quando">
-          <strong>{{ rotuloMovimento(item) }}</strong>
+          <strong>{{ nomeDaLinha(item) }}</strong>
           <small>{{ item.criadoEm ? formatarDataHora(item.criadoEm) : "-" }}</small>
         </div>
         <div class="rft__valor cx-num">
@@ -84,7 +157,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
             {{ dinheiro(Number(item.valorMoedasDeclarado)) }}
           </small>
         </div>
-        <div class="rft__lacre">{{ item.nLacreDoc ? `Lacre ${item.nLacreDoc}` : "Sem lacre" }}</div>
+        <div class="rft__lacre">{{ lacreDaLinha(item) }}</div>
         <SituacaoMalote :operacao="item" />
         <v-btn
           v-if="podeConferirItem(item)"
@@ -140,6 +213,27 @@ watch(() => props.caixaId, carregar, { immediate: true });
   margin: 0;
   font-size: var(--cx-fs-lead);
   font-weight: 800;
+}
+.rft__fatos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--cx-sp-2) var(--cx-sp-4);
+  margin: 0;
+  padding: var(--cx-sp-3);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface-sunken);
+}
+.rft__fatos dt {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.rft__fatos dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+.rft__fatos dd[data-estado="diferente"] {
+  color: var(--cx-negative);
 }
 .rft__vazio {
   margin: 0;

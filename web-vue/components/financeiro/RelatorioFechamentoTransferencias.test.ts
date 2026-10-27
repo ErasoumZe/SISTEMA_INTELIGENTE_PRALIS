@@ -34,9 +34,9 @@ beforeEach(() => {
   vi.stubGlobal("useApi", () => ({ apiGetPaginado }));
 });
 
-function montar(podeConferir: boolean) {
+function montar(podeConferir: boolean, lacreFechamentoInformado: string | null = null) {
   return shallowMount(RelatorioFechamentoTransferencias, {
-    props: { empresaId: "e-1", caixaId: "cx-1", podeConferir },
+    props: { empresaId: "e-1", caixaId: "cx-1", podeConferir, lacreFechamentoInformado },
     global: {
       stubs: {
         SituacaoMalote: true,
@@ -76,5 +76,51 @@ describe("RelatorioFechamentoTransferencias", () => {
     await flushPromises();
     await wrapper.get('[data-teste="botao-conferir-transferencia"]').trigger("click");
     expect(wrapper.get("[data-op]").attributes("data-op")).toBe("t-2");
+  });
+
+  describe("fatos do caixa", () => {
+    const comLacres = [
+      {
+        ...itens[1],
+        lacres: [
+          { tipo: "abertura", numero: "A-1001", situacao: "usado", usadoEmTransferenciaId: null },
+          { tipo: "fechamento", numero: "F-1001", situacao: "usado", usadoEmTransferenciaId: null },
+          { tipo: "sangria", numero: "S-1", situacao: "conferida", usadoEmTransferenciaId: "t-3" },
+          { tipo: "sangria", numero: "S-2", situacao: "disponivel", usadoEmTransferenciaId: null }
+        ]
+      },
+      { ...itens[0], id: "t-3", valorOriginal: "120.00", nLacreDoc: "S-1", criadoEm: "2026-10-27T15:00:00.000Z" },
+      itens[0]
+    ];
+
+    it("conta as sangrias, soma o valor e resume as bolsas do malote", async () => {
+      apiGetPaginado.mockResolvedValue({ itens: comLacres, total: 3 });
+      const wrapper = montar(false, "F-1001");
+      await flushPromises();
+      expect(wrapper.get('[data-teste="fato-sangrias"]').text()).toContain("1");
+      expect(wrapper.get('[data-teste="fato-sangrias"]').text()).toContain("120,00");
+      expect(wrapper.get('[data-teste="fato-bolsas"]').text()).toContain("2 bolsas");
+    });
+
+    it("o lacre de fechamento confere com o reservado, ou aparece como diferente", async () => {
+      apiGetPaginado.mockResolvedValue({ itens: comLacres, total: 3 });
+      const confere = montar(false, "F-1001");
+      await flushPromises();
+      expect(confere.get('[data-teste="fato-fechamento"]').attributes("data-estado")).toBe("confere");
+
+      const diferente = montar(false, "F-9999");
+      await flushPromises();
+      expect(diferente.get('[data-teste="fato-fechamento"]').attributes("data-estado")).toBe("diferente");
+      expect(diferente.get('[data-teste="fato-fechamento"]').text()).toContain("F-1001");
+    });
+
+    it("o retorno final aparece lacrado com o lacre de fechamento, e a sangria com o proprio lacre", async () => {
+      apiGetPaginado.mockResolvedValue({ itens: comLacres, total: 3 });
+      const wrapper = montar(false, "F-1001");
+      await flushPromises();
+      expect(wrapper.get('[data-transferencia-id="t-3"]').text()).toContain("Sangria");
+      expect(wrapper.get('[data-transferencia-id="t-2"]').text()).toContain("Retorno final");
+      expect(wrapper.get('[data-transferencia-id="t-2"]').text()).toContain("Lacre de fechamento F-1001");
+    });
   });
 });
