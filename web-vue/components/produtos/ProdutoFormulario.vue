@@ -184,7 +184,6 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :setores="setores"
           :erros="formulario.erros.value"
           :preco-preview="formulario.precoPreview.value"
-          :margem-do-grupo="formulario.margemDoGrupoPercentual.value"
           :validacao-qtd-preview="formulario.validacaoQtdPreview.value"
           :somente-leitura="somenteLeitura"
           :dica="dicaDoProduto"

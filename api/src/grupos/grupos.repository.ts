@@ -11,14 +11,7 @@ import {
 
 type GrupoTipo = "despesa" | "mercadoria" | "retirada" | "vendas";
 type TabelaGrupo = typeof gruposDespesas | typeof gruposMercadorias | typeof gruposRetiradas | typeof gruposVendas;
-type GrupoLinhaBase = {
-  id: string;
-  empresaId: string;
-  nome: string;
-  grupoPaiId: string | null;
-  ativo: boolean;
-  margemPadrao?: string | null;
-};
+type GrupoLinhaBase = { id: string; empresaId: string; nome: string; grupoPaiId: string | null; ativo: boolean };
 
 function tabelaGrupo(tipo: GrupoTipo): TabelaGrupo {
   if (tipo === "despesa") return gruposDespesas;
@@ -62,8 +55,7 @@ export async function listarGruposRepository() {
         empresaId: gruposMercadorias.empresaId,
         nome: gruposMercadorias.nome,
         grupoPaiId: gruposMercadorias.grupoPaiId,
-        ativo: gruposMercadorias.ativa,
-        margemPadrao: gruposMercadorias.margemPadrao
+        ativo: gruposMercadorias.ativa
       })
       .from(gruposMercadorias),
     banco
@@ -101,24 +93,17 @@ export async function salvarGrupoRepository(
     nome: string;
     grupoPaiId: string | null;
     ativa: boolean;
-    margemPadrao?: number | null;
   },
   db: ExecutorBanco = banco
 ) {
   const tabela = tabelaGrupo(input.tipoGrupo);
-  // `margem_padrao` so existe em grupos_mercadorias; ausente (undefined) preserva o valor gravado.
-  const margem =
-    input.tipoGrupo === "mercadoria" && input.margemPadrao !== undefined
-      ? { margemPadrao: input.margemPadrao === null ? null : String(input.margemPadrao) }
-      : {};
   if (input.id) {
     await db
       .update(tabela)
       .set({
         nome: input.nome,
         grupoPaiId: input.grupoPaiId,
-        ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {}),
-        ...margem
+        ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {})
       })
       .where(and(eq(tabela.id, input.id), eq(tabela.empresaId, input.empresaId)));
     return input;
@@ -129,8 +114,7 @@ export async function salvarGrupoRepository(
       empresaId: input.empresaId,
       nome: input.nome,
       grupoPaiId: input.grupoPaiId,
-      ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {}),
-      ...margem
+      ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {})
     })
     .returning({ id: tabela.id });
   return criado;

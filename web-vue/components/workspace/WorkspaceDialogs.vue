@@ -114,19 +114,6 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
           <v-col v-if="cadastroTela === 'grupos'" cols="12">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo nos lançamentos" />
           </v-col>
-          <!-- Oficial: produto com preco automatico e sem margem propria usa a margem do grupo. -->
-          <v-col v-if="cadastroTela === 'grupos' && formCadastro.tipoGrupo === 'mercadoria'" cols="12">
-            <v-text-field
-              v-model="formCadastro.margemPadraoPercentual"
-              type="number"
-              min="0"
-              suffix="%"
-              label="Margem padrão do grupo"
-              hint="Usada no preço automático dos produtos sem margem própria. Vazio = sem margem."
-              persistent-hint
-              @wheel.prevent
-            />
-          </v-col>
           <v-col v-if="cadastroTela === 'areas_setores'" cols="12">
             <v-select
               v-model="formCadastro.tipoAreaSetor"

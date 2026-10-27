@@ -483,7 +483,7 @@ async function recusarDuplicados(
 /**
  * ADR-002: preco de venda e decisao do servidor. Com `auto=true` o valor enviado pelo cliente e
  * IGNORADO e recalculado pela regra oficial do shared; manual (`auto=false`) aceita o digitado.
- * Mesma formula que o front usa no preview. Sem margem propria vale a margem padrao do grupo.
+ * Mesma formula que o front usa no preview.
  */
 function precoDeVendaDoServidor(
   dados: {
@@ -502,6 +502,7 @@ function precoDeVendaDoServidor(
     custo: dados.custo,
     quantidadeCaixa: dados.quantidadeCaixa ?? 1,
     margem: dados.margem ?? null,
+    // Margem padrao do grupo pela aba de grupos da planilha oficial (sem margem propria).
     margemGrupo,
     precoManual: 0
   });

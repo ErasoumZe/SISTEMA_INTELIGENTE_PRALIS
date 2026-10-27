@@ -1,7 +1,6 @@
 import {
   acentuarMensagemExibida,
   diaNegocio,
-  fracaoParaMargemPercentual,
   TELA_TEMA_RESUMO_CAIXA,
   permissoes as permissoesCompartilhadas,
   rolesUsuario,
@@ -836,7 +835,6 @@ export function formCadastroVazio(): CadastroForm {
     ativo: true,
     tipoGrupo: "despesa",
     grupoPaiId: "",
-    margemPadraoPercentual: "",
     tipoAreaSetor: "area",
     tipoPatrimonio: "item",
     sig: "",
@@ -1020,7 +1018,6 @@ export function formCadastroDeLinha(
     ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
     grupoPaiId: linha.grupoPaiId ?? "",
-    margemPadraoPercentual: fracaoParaMargemPercentual(linha.margemPadrao),
     tipoAreaSetor:
       (linha.tipoAreaSetor as CadastroForm["tipoAreaSetor"]) || (linha.areaId || linha.setorPaiId ? "setor" : "area"),
     tipoPatrimonio: (linha.tipoPatrimonio as CadastroForm["tipoPatrimonio"]) || "item",

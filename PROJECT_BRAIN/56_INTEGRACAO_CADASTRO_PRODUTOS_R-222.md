@@ -595,3 +595,18 @@ da linha 5 conferido coluna a coluna contra o oficial: sem divergência.
 
 Pendente de José: confirmar se existe a planilha onde o app escreve (com `(BASE) CADASTRO PRODUTOS` e
 `(TNP) FISCAL - CADASTRO ECF`) e decidir a fonte do ECF.
+
+### V2 desfeita — margem e fiscal vêm da planilha, como no app da loja (27/10/2026)
+
+José: "só preciso que seja IGUAL ao cadastro de produtos que funciona na loja". No oficial a margem padrão
+**não é editável**: vem da aba `(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA` (`M5:N130`), lida junto com as
+regras fiscais. A V2 (coluna `margem_padrao` + campo na tela de grupos) foi **revertida**: a migration 0087
+saiu do repositório antes de chegar a qualquer ambiente (só existiu no Postgres local, de onde a coluna foi
+removida). O preço automático usa a margem da regra do grupo lida da planilha.
+
+Fiscal pelo grupo **portado e ligado** (commits `c978a2f9` e `5e42e426`): o ERP lê as mesmas abas/faixas da
+mesma planilha do oficial (configuração `GOOGLE_PRODUTOS_SPREADSHEET_ID`, abas com os padrões do oficial),
+cache de 5 min, e classifica na criação, na troca de grupo/EAN e para completar quem está sem carga; só o
+admin altera o fiscal manual. Pendências: a conta Google do ERP precisa ter acesso a essa planilha; a loja de
+cada empresa é lida do `matricula_prefixo` (TNP/LI/HORA) — **confirmar em produção**; o de-para do SIA por
+loja (LI/HORA) depende da tabela `sia_produto_depara` (migration a aprovar).

@@ -4,7 +4,6 @@
 // unico com autoridade sobre valores derivados (ex.: preco de venda e recalculado la).
 import type { DadosExternos } from "../api/index.js";
 import type { RoleUsuario } from "../autenticacao/index.js";
-import { margemPercentualParaFracao } from "../produtos/regras.js";
 
 /**
  * PRODUTO SAIU DAQUI (P-04, 12/08/2026). O cadastro de produto tem pagina propria
@@ -60,8 +59,6 @@ export type CadastroForm = {
   ativo: boolean;
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId: string;
-  /** Grupo de mercadoria: margem padrao em PERCENTUAL digitado ("30" = 30%); vazio = sem margem. */
-  margemPadraoPercentual?: string;
   tipoAreaSetor: "area" | "setor";
   // Patrimonio (D2): a tela tem duas entidades (grupo/item), como areas/setores.
   tipoPatrimonio: "grupo" | "item";
@@ -175,10 +172,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       tipoGrupo: form.tipoGrupo,
       grupoPaiId: form.grupoPaiId || null,
-      ativa: form.ativo,
-      ...(form.tipoGrupo === "mercadoria"
-        ? { margemPadrao: margemPercentualParaFracao(form.margemPadraoPercentual ?? "") }
-        : {})
+      ativa: form.ativo
     };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
   if (tela === "turnos")

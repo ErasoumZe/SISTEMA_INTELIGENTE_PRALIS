@@ -203,20 +203,6 @@ export function montarComoSeCompra(entrada: ComoSeCompraEntrada): string {
   return [descricao, "-", rotulo, preposicao, descricao, quantidadeTexto].filter(Boolean).join(" ");
 }
 
-/** "30" ou "30,5" (percentual digitado) -> 0.3 / 0.305. Vazio ou invalido -> null (sem margem). */
-export function margemPercentualParaFracao(texto: string | number | null | undefined): number | null {
-  if (texto == null || String(texto).trim() === "") return null;
-  const numero = Number(String(texto).replace(",", "."));
-  return Number.isFinite(numero) ? arredondar(numero / 100, 4) : null;
-}
-
-/** 0.3 -> "30". Nulo -> "" (campo vazio). */
-export function fracaoParaMargemPercentual(fracao: string | number | null | undefined): string {
-  if (fracao == null || String(fracao).trim() === "") return "";
-  const numero = Number(fracao);
-  return Number.isFinite(numero) ? String(arredondar(numero * 100, 2)) : "";
-}
-
 /** Retorna a margem (fracao) do grupo de mercadoria pelo nome, ou 0 se nao encontrado. */
 export function resolverMargemGrupo(nomeGrupo: string, grupos: readonly { nome: string; margem: number }[]): number {
   const grupo = grupos.find((item) => item.nome === nomeGrupo);

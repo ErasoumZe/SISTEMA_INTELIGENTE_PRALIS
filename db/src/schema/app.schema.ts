@@ -752,16 +752,12 @@ export const gruposMercadorias = pgTable(
     nome: text("nome").notNull(),
     grupoPaiId: uuid("grupo_pai_id"),
     ativa: boolean("ativa").notNull().default(true),
-    // Margem padrao do grupo, em FRACAO (0.30 = 30%), como `margem_padrao` do app oficial. Produto com
-    // preco automatico e sem margem propria usa esta. Nula = grupo sem margem padrao (preco usa 0).
-    margemPadrao: numeric("margem_padrao", { precision: 6, scale: 4 }),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
   },
   (table) => [
     unique("grupos_mercadorias_id_empresa_unica").on(table.id, table.empresaId),
-    check("grupos_mercadorias_margem_padrao_check", sql`${table.margemPadrao} is null or ${table.margemPadrao} >= 0`),
     foreignKey({
       name: "grupos_mercadorias_pai_mesma_empresa_fk",
       columns: [table.grupoPaiId, table.empresaId],
