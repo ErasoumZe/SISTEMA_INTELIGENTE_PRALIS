@@ -1,21 +1,21 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { OperacaoResumo } from "~/types/padaria";
-import { dinheiro } from "~/utils/domain";
-import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
+import TransferenciasRelatorioLinha from "./TransferenciasRelatorioLinha.vue";
 
-const props = withDefaults(
-  defineProps<{
-    operacoes: OperacaoResumo[];
-    totalOperacoes: number;
-    pagina: number;
-    totalPaginas: number;
-    podeEditar?: boolean;
-    podeConferir?: boolean;
-    podeCancelarPlanejamento?: boolean;
-    salvando?: boolean;
-  }>(),
-  { podeEditar: false, podeConferir: false, podeCancelarPlanejamento: false, salvando: false }
-);
+// Relatorio de Transferencias: cabecalho de colunas + uma linha por transferencia + paginacao. Cada linha
+// e `TransferenciasRelatorioLinha`; aqui so ficam o estado de quais linhas estao abertas, o vazio e a
+// paginacao. Props e eventos sao os mesmos da lista anterior: o cockpit nao muda.
+defineProps<{
+  operacoes: OperacaoResumo[];
+  totalOperacoes: number;
+  pagina: number;
+  totalPaginas: number;
+  podeEditar?: boolean;
+  podeConferir?: boolean;
+  podeCancelarPlanejamento?: boolean;
+  salvando?: boolean;
+}>();
 
 const emit = defineEmits<{
   (event: "editar", operacao: OperacaoResumo): void;
@@ -24,167 +24,138 @@ const emit = defineEmits<{
   (event: "update:pagina", pagina: number): void;
 }>();
 
-const rotulosStatus: Record<string, string> = {
-  pendente: "Pendente",
-  recebido: "Recebido",
-  agendada: "Agendada",
-  cancelada: "Cancelada",
-  divergente: "Divergente"
-};
+const abertas = ref<Set<string>>(new Set());
 
-function rotuloStatus(status: string): string {
-  return rotulosStatus[status] ?? status;
-}
-
-function iconeStatus(status: string): string {
-  if (status === "recebido") return "mdi-check-circle-outline";
-  if (status === "divergente") return "mdi-alert-circle-outline";
-  if (status === "cancelada") return "mdi-close-circle-outline";
-  if (status === "agendada") return "mdi-calendar-clock-outline";
-  return "mdi-clock-outline";
-}
-
-function permiteEditar(op: OperacaoResumo): boolean {
-  return Boolean(
-    props.podeEditar &&
-      op.status !== "recebido" &&
-      !op.possuiPlanejamentoRetorno &&
-      !op.ehPlanejamentoRetorno
-  );
-}
-
-function permiteConferir(op: OperacaoResumo): boolean {
-  return Boolean(op.status === "pendente" && props.podeConferir && !op.possuiPlanejamentoRetorno);
-}
-
-function permiteCancelar(op: OperacaoResumo): boolean {
-  return Boolean(props.podeCancelarPlanejamento && op.ehPlanejamentoRetorno && op.status === "agendada");
+function alternar(id: string) {
+  const proximas = new Set(abertas.value);
+  if (proximas.has(id)) proximas.delete(id);
+  else proximas.add(id);
+  abertas.value = proximas;
 }
 </script>
 
 <template>
-  <section class="lista-transferencias" aria-label="Transferências">
-    <div class="lista-transferencias__cabecalho" role="row">
-      <span>Status</span><span>Data</span><span>Origem → destino</span><span>Responsável</span><span>Lacre</span><span>Valor</span><span>Ações</span>
+  <section class="lista-transferencias" role="table" aria-label="Transferências">
+    <div role="rowgroup" class="lista-transferencias__topo">
+      <div class="lista-transferencias__cabecalho" role="row">
+        <span role="columnheader">Lançamento</span>
+        <span role="columnheader">Movimento / rota</span>
+        <span role="columnheader">Valor total</span>
+        <span role="columnheader">Lacres</span>
+        <span role="columnheader">Situação</span>
+        <span role="columnheader"><span class="lista-transferencias__so-leitor">Ações</span></span>
+      </div>
     </div>
 
-    <article v-for="op in operacoes" :key="op.id" class="lista-transferencias__linha" :data-operacao-id="op.id">
-      <div class="lista-transferencias__status" data-col="Status">
-        <span class="lista-transferencias__chip" :data-status="op.status">
-          <v-icon :icon="iconeStatus(op.status)" size="14" />{{ rotuloStatus(op.status) }}
-        </span>
-        <small v-if="op.dataRecebimento">Recebida em {{ formatarDataHora(op.dataRecebimento) }}</small>
-      </div>
-      <time :datetime="op.dataReferencia" class="lista-transferencias__data" data-col="Data">{{ formatarDataSomenteDia(op.dataReferencia) }}</time>
-      <div class="lista-transferencias__rota" data-col="Origem → destino">
-        <span><v-icon icon="mdi-swap-horizontal" size="17" />{{ op.contaOrigemNome || '—' }} → {{ op.contaDestinoNome || '—' }}</span>
-        <small>{{ op.descricao || 'Transferência' }}<template v-if="op.pdvNome"> · {{ op.pdvNome }}</template></small>
-      </div>
-      <span class="lista-transferencias__responsavel" data-col="Responsável">{{ op.criadoPorNome || '—' }}</span>
-      <span class="lista-transferencias__lacre" data-col="Lacre">{{ op.nLacreDoc || '—' }}</span>
-      <strong class="lista-transferencias__valor" data-col="Valor">{{ dinheiro(op.valorOriginal) }}</strong>
-      <div class="lista-transferencias__acoes" data-col="Ações">
-        <v-btn
-          v-if="permiteEditar(op)"
-          size="small"
-          variant="text"
-          icon="mdi-pencil"
-          aria-label="Editar transferência"
-          data-teste="botao-editar"
-          @click="emit('editar', op)"
-        />
-        <v-btn
-          v-if="permiteConferir(op)"
-          size="small"
-          variant="tonal"
-          data-teste="botao-conferir"
-          @click="emit('conferir', op)"
-        >
-          Conferir
-        </v-btn>
-        <v-btn
-          v-if="permiteCancelar(op)"
-          size="small"
-          variant="text"
-          color="error"
-          :disabled="salvando"
-          data-teste="cancelar-planejamento-retorno"
-          @click="emit('cancelar-planejamento', op)"
-        >
-          Cancelar
-        </v-btn>
-      </div>
-    </article>
+    <TransferenciasRelatorioLinha
+      v-for="op in operacoes"
+      :key="op.id"
+      :operacao="op"
+      :aberta="abertas.has(op.id)"
+      :pode-editar="podeEditar"
+      :pode-conferir="podeConferir"
+      :pode-cancelar-planejamento="podeCancelarPlanejamento"
+      :salvando="salvando"
+      @editar="emit('editar', $event)"
+      @conferir="emit('conferir', $event)"
+      @cancelar-planejamento="emit('cancelar-planejamento', $event)"
+      @alternar="alternar"
+    />
 
-    <div v-if="!operacoes.length" class="lista-transferencias__vazio">
-      <v-icon icon="mdi-swap-horizontal-variant" size="34" />
+    <div v-if="!operacoes.length" class="lista-transferencias__vazio" role="row">
+      <v-icon icon="mdi-swap-horizontal-variant" size="34" aria-hidden="true" />
       <strong>Nenhuma transferência encontrada</strong>
       <span>Altere os filtros ou registre uma transferência pelo botão + Novo.</span>
     </div>
 
     <footer v-if="totalOperacoes > 10" class="lista-transferencias__paginacao">
       <span>Página {{ pagina }} de {{ totalPaginas }}</span>
-      <v-btn size="small" variant="text" :disabled="pagina === 1" @click="emit('update:pagina', Math.max(1, pagina - 1))">Anterior</v-btn>
-      <v-btn size="small" variant="text" :disabled="pagina === totalPaginas" @click="emit('update:pagina', Math.min(totalPaginas, pagina + 1))">Próxima</v-btn>
+      <v-btn
+        size="small"
+        variant="text"
+        :disabled="pagina === 1"
+        @click="emit('update:pagina', Math.max(1, pagina - 1))"
+        >Anterior</v-btn
+      >
+      <v-btn
+        size="small"
+        variant="text"
+        :disabled="pagina === totalPaginas"
+        @click="emit('update:pagina', Math.min(totalPaginas, pagina + 1))"
+        >Próxima</v-btn
+      >
     </footer>
   </section>
 </template>
 
 <style scoped>
-.lista-transferencias { display: grid; background: var(--cx-surface-raised); color: var(--cx-ink); }
-.lista-transferencias__cabecalho,
-.lista-transferencias__linha {
+.lista-transferencias {
+  container: lista / inline-size;
   display: grid;
-  grid-template-columns: 122px 94px minmax(190px, 1.5fr) minmax(100px, .8fr) 76px 112px minmax(72px, auto);
-  gap: 12px;
-  align-items: center;
-  padding: 12px 16px;
+  background: var(--cx-surface-raised);
+  color: var(--cx-ink);
 }
 .lista-transferencias__cabecalho {
+  display: grid;
+  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(210px, 1.7fr) minmax(150px, 1.1fr) auto;
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) calc(var(--cx-sp-4) + 3px);
   border-bottom: 1px solid var(--cx-line);
   background: var(--cx-surface-sunken);
   color: var(--cx-ink-soft);
-  font-size: 11px;
+  font-size: var(--cx-fs-micro);
   font-weight: 800;
-  letter-spacing: .05em;
+  letter-spacing: var(--cx-tracking-wide);
   text-transform: uppercase;
 }
-.lista-transferencias__linha { min-width: 0; border-bottom: 1px solid var(--cx-line); }
-.lista-transferencias__linha:last-of-type { border-bottom: 0; }
-.lista-transferencias__chip { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border-radius: 999px; color: #172033; background: #e2e8f0; font-size: 12px; font-weight: 700; }
-.lista-transferencias__chip[data-status="pendente"] { background: #fde68a; }
-.lista-transferencias__chip[data-status="recebido"] { background: #bbf7d0; }
-.lista-transferencias__chip[data-status="agendada"] { background: #bfdbfe; }
-.lista-transferencias__chip[data-status="cancelada"] { background: #fecaca; }
-.lista-transferencias__chip[data-status="divergente"] { background: #fdba74; }
-.lista-transferencias__status small,
-.lista-transferencias__rota small { display: block; margin-top: 4px; color: var(--cx-ink-soft); font-size: 11px; }
-.lista-transferencias__data,
-.lista-transferencias__responsavel,
-.lista-transferencias__lacre { color: var(--cx-ink-soft); font-size: 13px; font-weight: 600; }
-.lista-transferencias__rota { min-width: 0; }
-.lista-transferencias__rota > span { display: flex; gap: 7px; align-items: center; overflow: hidden; color: var(--cx-ink); font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.lista-transferencias__rota :deep(.v-icon) { color: var(--cat-transferencias-tinta); flex: 0 0 auto; }
-.lista-transferencias__valor { justify-self: end; color: var(--cx-ink); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lista-transferencias__acoes { display: flex; justify-content: flex-end; gap: 4px; }
-.lista-transferencias__vazio { display: grid; justify-items: center; gap: 8px; padding: 52px 16px; color: var(--cx-ink-soft); text-align: center; }
-.lista-transferencias__vazio strong { color: var(--cx-ink); }
-.lista-transferencias__paginacao { display: flex; justify-content: flex-end; align-items: center; gap: 5px; padding: 10px 16px; border-top: 1px solid var(--cx-line); color: var(--cx-ink-soft); font-size: 12px; }
-@media (width <= 1024px) {
-  .lista-transferencias__cabecalho,
-  .lista-transferencias__linha { grid-template-columns: 122px 94px minmax(180px, 1fr) 92px 105px minmax(72px, auto); }
-  .lista-transferencias__cabecalho > :nth-child(5), .lista-transferencias__linha > [data-col="Lacre"] { display: none; }
+.lista-transferencias__cabecalho > :nth-child(3) {
+  text-align: right;
+}
+.lista-transferencias__cabecalho > :nth-child(6) {
+  min-width: 44px;
+}
+.lista-transferencias__so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.lista-transferencias__vazio {
+  display: grid;
+  justify-items: center;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-8) var(--cx-sp-4);
+  color: var(--cx-ink-soft);
+  text-align: center;
+}
+.lista-transferencias__vazio strong {
+  color: var(--cx-ink);
+}
+.lista-transferencias__paginacao {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--cx-sp-1);
+  padding: var(--cx-sp-3) var(--cx-sp-4);
+  border-top: 1px solid var(--cx-line);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+@container lista (width <= 1160px) {
+  .lista-transferencias__cabecalho {
+    display: none;
+  }
 }
 @media (width <= 768px) {
-  .lista-transferencias { gap: 8px; padding: 8px; background: transparent; }
-  .lista-transferencias__cabecalho { display: none; }
-  .lista-transferencias__linha { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "rota valor" "status acoes"; gap: 8px 12px; padding: 14px; border: 1px solid var(--cx-line); border-radius: 12px; background: var(--cx-surface-raised); }
-  .lista-transferencias__rota { grid-area: rota; }
-  .lista-transferencias__valor { grid-area: valor; align-self: start; }
-  .lista-transferencias__status { grid-area: status; }
-  .lista-transferencias__acoes { grid-area: acoes; align-self: end; }
-  .lista-transferencias__data, .lista-transferencias__responsavel, .lista-transferencias__lacre { display: none; }
-  .lista-transferencias__paginacao { justify-content: center; flex-wrap: wrap; border: 0; }
+  .lista-transferencias {
+    background: transparent;
+  }
+  .lista-transferencias__paginacao {
+    flex-wrap: wrap;
+    justify-content: center;
+    border: 0;
+  }
 }
-@media (width <= 390px) { .lista-transferencias__linha { padding: 12px; } .lista-transferencias__acoes :deep(.v-btn) { min-width: 34px; padding-inline: 7px; } }
 </style>
