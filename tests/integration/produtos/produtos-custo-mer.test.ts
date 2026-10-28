@@ -21,6 +21,7 @@ const ABA: string[][] = [
   ["01/02/26", "X", "MER TESTE REFRI 600ML", "12", "3,90"],
   ["15/03/26", "X", "MER TESTE REFRI 600ML", "12", "4,10"],
   ["10/03/26", "X", "MER TESTE BISCOITO", "1", "2,50"],
+  ["11/03/26", "X", "MER TESTE CHICLETE", "1", "0,004"],
   ["", "", "SUBTOTAL", "", ""]
 ];
 const coluna = (indice: number) => ABA.slice(3).map((linha) => [linha[indice] ?? ""]);
@@ -58,6 +59,7 @@ describe("produtos - custo pela discriminacao (so TNP)", () => {
     await executarSql("update empresas set matricula_prefixo = 'LI' where id = $1", [idsTeste.empresaB]);
     ids["refri"] = await inserir(idsTeste.empresaA, "MER TESTE REFRI 600ML", 12);
     ids["biscoito"] = await inserir(idsTeste.empresaA, "MER TESTE BISCOITO", 1);
+    ids["chiclete"] = await inserir(idsTeste.empresaA, "MER TESTE CHICLETE", 1);
     ids["daLi"] = await inserir(idsTeste.empresaB, "MER TESTE REFRI 600ML", 12);
     definirLeitorDaDiscriminacaoParaTeste(async (_planilha, faixas) =>
       faixas.length === 1 ? [ABA.slice(0, 30)] : [coluna(2), coluna(4), coluna(0)]
@@ -86,7 +88,7 @@ describe("produtos - custo pela discriminacao (so TNP)", () => {
         method: "POST",
         url: "/api/produtos/custo-discriminacao",
         headers: { cookie },
-        payload: { confirmacao: FRASE }
+        payload: { confirmacao: FRASE, hashPlano: "0".repeat(64) }
       }),
       503,
       "MER_INDISPONIVEL"
@@ -103,9 +105,14 @@ describe("produtos - custo pela discriminacao (so TNP)", () => {
         linhaCabecalho: number;
         lancamentos: number;
         amostra: Array<{ productId: string; custoNovo: number }>;
+        semCusto: Record<string, number>;
+        hashPlano: string;
       };
     }>(resposta).data;
-    expect(dados).toMatchObject({ estado: "ok", linhaCabecalho: 3, lancamentos: 3 });
+    expect(dados).toMatchObject({ estado: "ok", linhaCabecalho: 3, lancamentos: 4 });
+    // 0,004 arredonda para zero: nao vira custo (preco automatico zero no PDV), conta como ilegivel.
+    expect(dados.semCusto["custo-ilegivel"]).toBe(1);
+    expect(dados.amostra.some((p) => p.productId === ids["chiclete"])).toBe(false);
     // Mais recente (15/03) e por embalagem: 4,10 x 12 = 49,20. A LI nao entra na previa.
     expect(dados.amostra.find((p) => p.productId === ids["refri"])?.custoNovo).toBe(49.2);
     expect(dados.amostra.some((p) => p.productId === ids["daLi"])).toBe(false);
@@ -116,20 +123,33 @@ describe("produtos - custo pela discriminacao (so TNP)", () => {
         method: "POST",
         url: "/api/produtos/custo-discriminacao",
         headers: { cookie },
-        payload: { confirmacao: "SIM" }
+        payload: { confirmacao: "SIM", hashPlano: dados.hashPlano }
       }),
       400,
       "CONFIRMACAO_INVALIDA"
     );
+    // Gravar sobre outra previa: recusado, nada gravado.
+    assertProblem(
+      await contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos/custo-discriminacao",
+        headers: { cookie },
+        payload: { confirmacao: FRASE, hashPlano: "f".repeat(64) }
+      }),
+      409,
+      "PREVIA_DESATUALIZADA"
+    );
+    expect(await custo(ids["refri"]!)).toBeNull();
     const aplicado = await contexto.app.inject({
       method: "POST",
       url: "/api/produtos/custo-discriminacao",
       headers: { cookie },
-      payload: { confirmacao: FRASE }
+      payload: { confirmacao: FRASE, hashPlano: dados.hashPlano }
     });
     expect(aplicado.statusCode, aplicado.body).toBe(200);
     expect(await custo(ids["refri"]!)).toBe("49.20");
     expect(await custo(ids["biscoito"]!)).toBe("2.50");
     expect(await custo(ids["daLi"]!)).toBeNull();
+    expect(await custo(ids["chiclete"]!)).toBeNull();
   });
 });

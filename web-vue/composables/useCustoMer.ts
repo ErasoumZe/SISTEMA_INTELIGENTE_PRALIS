@@ -25,6 +25,8 @@ export interface PreviaCustoMer {
   comCusto: number;
   semCusto: Record<MotivoSemCusto, number>;
   amostra: PropostaCusto[];
+  /** O que a previa mostrou: gravar sobre outra coisa e recusado (409). */
+  hashPlano: string | null;
   confirmacao: string;
   loteMaximo: number;
 }
@@ -84,7 +86,7 @@ export function useCustoMer() {
     try {
       const r = await pedir<{ aplicados: number; conflitos: number; restantes: number }>(
         "/api/produtos/custo-discriminacao",
-        { confirmacao: confirmacao.value }
+        { confirmacao: confirmacao.value, hashPlano: dados.value?.hashPlano }
       );
       const extras = [
         r.conflitos ? `${r.conflitos} foram editados no meio do caminho e ficaram como estavam` : "",

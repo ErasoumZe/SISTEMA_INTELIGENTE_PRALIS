@@ -858,12 +858,40 @@ só no banco local.
   lojas, inclusive as que o administrador não tem no escopo. A BASE é da rede inteira. Os órfãos (produto de loja
   sem BASE) aparecem só para as empresas permitidas.
 
-**Ainda aguardam decisão:**
+**Custo pela discriminação (DB-05): portado em 28/10/2026, só na TNP.** Decisão de José (28/10/2026): gravar
+**só nos produtos da TNP**, porque a aba é "TNP - DISCRIMINAÇÃO MERCADORIAS". Usa a fórmula do app, sem mudança.
 
-- **Custo pela discriminação (DB-05):**
-  - **fórmula de dinheiro**: custo = custo unitário da nota mais recente × `qtCad`, arredondado;
-  - no ERP o custo é por empresa e a BASE não tem custo; é preciso decidir onde gravar;
-  - a fonte é outra planilha (MER), que precisa de configuração própria.
+- **Fórmula:** custo = `VALOR CUSTO UN` da compra **mais recente** (`DATA REF`) × quantidade da embalagem,
+  arredondado a centavos.
+- **Motor:** copiado literalmente, com os 22 testes oficiais.
+- **Tela:** `/produtos/custo-discriminacao`, com link na Manutenção, só para administrador.
+- **Como grava:**
+  - lotes de 300, com a frase `ATUALIZAR CUSTO DA DISCRIMINACAO`;
+  - só grava se o custo ainda é o da prévia: quem editou no meio não perde o que digitou;
+  - grava custo, não preço; o app também não recalcula o preço.
+- **Leitura da planilha:** só leitura. O cabeçalho (`PRODUTOS`, `VALOR CUSTO UN`, `DATA REF`) é procurado nas
+  30 primeiras linhas.
+- **Configuração:** `GOOGLE_PRODUTOS_MER_SPREADSHEET_ID` (sem ela a tela diz "sem destino" e nada é gravado),
+  `GOOGLE_PRODUTOS_MER_TAB` e `GOOGLE_PRODUTOS_MER_LINHA_FINAL` (padrão 20000). A planilha precisa estar
+  compartilhada com a conta Google do ERP.
+- **Diferenças em relação ao app:**
+  - no app o custo ia na BASE e descia por herança; no ERP vai direto no produto da TNP, ativo ou inativo.
+    `custo` não é campo herdado da BASE, então gravar na cópia não a desliga da BASE;
+  - o plano é feito por empresa da TNP: o mesmo nome em duas empresas não conta como cadastro ambíguo;
+  - custo que arredonda para menos de 1 centavo não é gravado e conta como "custo ilegível". No app ele virava
+    0, e o PDV recebia preço automático 0;
+  - aplicar exige o hash da prévia (409 se algo mudou). No app a guarda comparava com o que estava no banco na
+    hora do clique, não com o que a tela mostrou.
+- **Pendente de decisão (dinheiro):** no app o preço automático é calculado na hora a partir do custo, então
+  gravar só o custo basta. No ERP o `preco_venda` é guardado quando o produto é salvo, e esta ferramenta grava só
+  o custo. Nos produtos com cálculo automático, o preço guardado fica desatualizado até o próximo salvamento.
+  - Exemplo: margem de 30% e embalagem de 12; o custo vai de 49,20 para 49,26; a tela mostra 5,33 e o TXT do PDV,
+    que recalcula pelo custo, manda 5,34.
+  - A correção seria recalcular o preço com a mesma regra do salvamento, na mesma transação.
+  - Aguarda o OK de José, Marco ou Rodrigo.
+
+**Ainda aguarda decisão:**
+
 - **Duplicados históricos** (aposentar os códigos 00001–00428 que duplicam o SIA 10000–13126):
   - precisa do status `unificado` e de uma tabela de merges, ou seja, migration;
   - muda listagens, TXT e planilha;

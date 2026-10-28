@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { planejarCusto, type MotivoSemCusto, type PropostaCusto } from "@padaria/shared/produtos";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { lerDiscriminacao } from "./produtos-custo-mer.planilha.js";
@@ -24,7 +25,7 @@ export const LOTE_CUSTO = 300;
 export class CustoMerError extends Error {
   constructor(
     mensagem: string,
-    readonly status: 400 | 403 | 503,
+    readonly status: 400 | 403 | 409 | 503,
     readonly code: string
   ) {
     super(mensagem);
@@ -47,28 +48,51 @@ async function empresasDaTnp(ator: Ator): Promise<string[]> {
     .map((e) => e.id);
 }
 
-async function planejar(ator: Ator) {
-  const leitura = await lerDiscriminacao();
-  if (leitura.estado !== "ok") return { leitura, plano: null };
-  const linhas = await produtosParaCustearRepository(await empresasDaTnp(ator));
-  const plano = planejarCusto(
-    linhas.map((p) => ({
-      id: p.id,
-      nome: p.nomeCatalogo ?? p.descricao,
-      custo: p.custo,
-      qtCad: p.quantidadeCaixa
-    })),
-    leitura.lancamentos
-  );
-  return { leitura, plano };
-}
-
 const motivosZerados = (): Record<MotivoSemCusto, number> => ({
   "sem-lancamento": 0,
   "nome-ambiguo-no-cadastro": 0,
   "custo-ilegivel": 0,
   "ja-esta-certo": 0
 });
+
+/**
+ * O plano, uma empresa da TNP de cada vez: o mesmo nome em duas empresas nao e cadastro ambiguo (o motor
+ * do app recebia um catalogo so). Custo que arredonda para menos de 1 centavo nao e gravado: zero viraria
+ * preco automatico zero no PDV — conta como "custo ilegivel".
+ */
+async function planejar(ator: Ator) {
+  const leitura = await lerDiscriminacao();
+  if (leitura.estado !== "ok") return { leitura, plano: null };
+  const linhas = await produtosParaCustearRepository(await empresasDaTnp(ator));
+  const porEmpresa = new Map<string, typeof linhas>();
+  for (const linha of linhas) porEmpresa.set(linha.empresaId, [...(porEmpresa.get(linha.empresaId) ?? []), linha]);
+  const semCusto = motivosZerados();
+  const propostas: PropostaCusto[] = [];
+  for (const daEmpresa of porEmpresa.values()) {
+    const parcial = planejarCusto(
+      daEmpresa.map((p) => ({
+        id: p.id,
+        nome: p.nomeCatalogo ?? p.descricao,
+        custo: p.custo,
+        qtCad: p.quantidadeCaixa
+      })),
+      leitura.lancamentos
+    );
+    for (const motivo of Object.keys(semCusto) as MotivoSemCusto[]) semCusto[motivo] += parcial.semCusto[motivo];
+    for (const proposta of parcial.propostas) {
+      if (proposta.custoNovo !== null && proposta.custoNovo < 0.01) {
+        semCusto["custo-ilegivel"] += 1;
+        propostas.push({ ...proposta, custoNovo: null, motivo: "custo-ilegivel" });
+      } else propostas.push(proposta);
+    }
+  }
+  const alvos = propostas.filter((p) => p.custoNovo !== null);
+  // O hash do que a previa mostrou: aplicar sobre outra coisa e 409, nada e gravado.
+  const hashPlano = createHash("sha256")
+    .update(JSON.stringify(alvos.map((p) => [p.productId, p.custoAtual, p.custoNovo])))
+    .digest("hex");
+  return { leitura, plano: { semCusto, propostas, alvos, comCusto: alvos.length, hashPlano } };
+}
 
 export async function previaCustoMer(ator: Ator) {
   exigirAdministrador(ator);
@@ -83,13 +107,14 @@ export async function previaCustoMer(ator: Ator) {
     lancamentosDescartados: leitura.descartados,
     comCusto: plano?.comCusto ?? 0,
     semCusto: plano?.semCusto ?? motivosZerados(),
-    amostra: (plano?.propostas ?? []).filter((p: PropostaCusto) => p.custoNovo !== null).slice(0, 25),
+    amostra: (plano?.alvos ?? []).slice(0, 25),
+    hashPlano: plano?.hashPlano ?? null,
     confirmacao: CONFIRMACAO_CUSTO_MER,
     loteMaximo: LOTE_CUSTO
   };
 }
 
-export async function aplicarCustoMer(ator: Ator, confirmacao: string) {
+export async function aplicarCustoMer(ator: Ator, confirmacao: string, hashPlano: string) {
   exigirAdministrador(ator);
   if (confirmacao.trim().toUpperCase() !== CONFIRMACAO_CUSTO_MER) {
     throw new CustoMerError(
@@ -106,7 +131,14 @@ export async function aplicarCustoMer(ator: Ator, confirmacao: string) {
       "MER_INDISPONIVEL"
     );
   }
-  const alvos = plano.propostas.filter((p) => p.custoNovo !== null).slice(0, LOTE_CUSTO);
+  if (hashPlano !== plano.hashPlano) {
+    throw new CustoMerError(
+      "A planilha ou os cadastros mudaram desde a prévia. Confira de novo; nada foi gravado.",
+      409,
+      "PREVIA_DESATUALIZADA"
+    );
+  }
+  const alvos = plano.alvos.slice(0, LOTE_CUSTO);
   let aplicados = 0;
   let conflitos = 0;
   for (const proposta of alvos) {

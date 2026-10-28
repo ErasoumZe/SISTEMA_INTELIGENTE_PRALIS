@@ -7,7 +7,10 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
 import { aplicarCustoMer, CustoMerError, previaCustoMer } from "./produtos-custo-mer.service.js";
 
-const corpo = z.object({ confirmacao: z.string().min(1).max(80) });
+const corpo = z.object({
+  confirmacao: z.string().min(1).max(80),
+  hashPlano: z.string().regex(/^[a-f0-9]{64}$/u)
+});
 
 function ator(request: FastifyRequest) {
   const perfil = request.perfilUsuario;
@@ -40,8 +43,8 @@ export async function registrarRotasCustoMer(app: FastifyInstance): Promise<void
 
   app.post("/api/produtos/custo-discriminacao", guarda, async (request, reply) => {
     try {
-      const { confirmacao } = corpo.parse(request.body);
-      const resultado = await aplicarCustoMer(ator(request), confirmacao);
+      const { confirmacao, hashPlano } = corpo.parse(request.body);
+      const resultado = await aplicarCustoMer(ator(request), confirmacao, hashPlano);
       request.log.info({ evento: "produtos.custo_mer.aplicado", usuarioId: request.usuarioId, ...resultado });
       return ok(resultado);
     } catch (error) {

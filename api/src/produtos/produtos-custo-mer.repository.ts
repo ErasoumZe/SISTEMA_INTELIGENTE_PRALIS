@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { empresas, produtos } from "@padaria/db/schema/cadastro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
@@ -40,7 +40,12 @@ export async function gravarCustoRepository(
     .update(produtos)
     .set({ custo: custoNovo.toFixed(2), atualizadoEm: new Date() })
     .where(
-      and(eq(produtos.id, id), custoAtual === null ? isNull(produtos.custo) : eq(produtos.custo, custoAtual.toFixed(2)))
+      and(
+        eq(produtos.id, id), // O motor le custo zero ou negativo como "sem custo" (null): a guarda casa os dois.
+        custoAtual === null
+          ? or(isNull(produtos.custo), lte(produtos.custo, "0"))
+          : eq(produtos.custo, custoAtual.toFixed(2))
+      )
     )
     .returning({ empresaId: produtos.empresaId });
   return atingido?.empresaId ?? null;
