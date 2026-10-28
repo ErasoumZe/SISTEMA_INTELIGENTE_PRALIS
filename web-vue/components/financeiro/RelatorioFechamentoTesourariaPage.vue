@@ -82,6 +82,8 @@ const dossie = ref<Dossie | null>(null);
 const blocoTransferencias = ref<InstanceType<typeof RelatorioFechamentoTransferencias> | null>(null);
 const transferenciasPendentes = ref(0);
 const lacreFechamentoDiferente = ref(false);
+const erroTransferencias = ref(false);
+const retornosPendentes = ref<EstadoTransferencias["retornos"]>([]);
 const enviandoFechouCerto = ref(false);
 const erroFechouCerto = ref("");
 const confirmarAcao = inject<ConfirmarAcao>(CONFIRMAR_ACAO_KEY, async () => false);
@@ -90,7 +92,6 @@ const carregandoDossie = ref(false);
 const erroDossie = ref("");
 const dialogoAberto = ref(false);
 const dialogoConferencia = ref(false);
-const dialogoAcaoFutura = ref(false);
 const resultadoConferencia = ref<"conferido" | "divergente">("conferido");
 // Revisao = a Tesouraria muda uma decisao que ja tinha tomado; o motivo e obrigatorio nos dois sentidos.
 const revisandoConferencia = ref(false);
@@ -222,10 +223,15 @@ function abrirConferencia(resultado: "conferido" | "divergente", revisao = false
 async function fecharCerto() {
   const caixa = caixaSelecionado.value;
   if (!caixa || enviandoFechouCerto.value) return;
+  const retornos = retornosPendentes.value;
+  const total = retornos.reduce((soma, item) => soma + item.valor, 0);
+  const lista = retornos.map((item) => `${item.nome} ${dinheiro(item.valor)} (${item.lacre})`).join("; ");
   const confirmou = await confirmarAcao(
-    "O retorno do caixa entra como o caixa declarou (valor, lacre e conta) e o fechamento fica registrado como conferido pela Tesouraria.",
-    "Fechou certo?",
-    "Fechou certo"
+    retornos.length
+      ? `Vai receber ${retornos.length} retorno(s) do caixa como ele declarou: ${lista}. Total ${dinheiro(total)}. Depois marca o caixa como Conferido pela Tesouraria.`
+      : "O retorno do caixa já foi recebido. Isto marca o caixa como Conferido pela Tesouraria.",
+    "O caixa fechou certo?",
+    "Sim, fechou certo"
   );
   if (!confirmou) return;
   enviandoFechouCerto.value = true;
@@ -251,13 +257,17 @@ async function fecharCerto() {
   }
 }
 
-function aoMudarEstadoTransferencias(estado: { pendentes: number; lacreDiferente: boolean }) {
+type EstadoTransferencias = {
+  pendentes: number;
+  lacreDiferente: boolean;
+  erro: boolean;
+  retornos: Array<{ nome: string; valor: number; lacre: string }>;
+};
+function aoMudarEstadoTransferencias(estado: EstadoTransferencias) {
   transferenciasPendentes.value = estado.pendentes;
   lacreFechamentoDiferente.value = estado.lacreDiferente;
-}
-
-function abrirAcaoFutura() {
-  dialogoAcaoFutura.value = true;
+  erroTransferencias.value = estado.erro;
+  retornosPendentes.value = estado.retornos;
 }
 
 async function registrarConferencia() {
@@ -509,18 +519,23 @@ watch(
   >
     <v-card class="dialogo-dossie__card">
       <v-toolbar color="primary" density="compact"
-        ><v-toolbar-title>Fechamento · {{ caixaSelecionado?.pdvNome }}</v-toolbar-title
-        ><v-btn icon="mdi-close" aria-label="Fechar folha digital" title="Fechar" @click.stop="fecharDossie"
+        ><v-toolbar-title
+          >Fechamento · {{ caixaSelecionado?.pdvNome
+          }}<template v-if="caixaSelecionado?.dataMovimento">
+            · {{ formatarDataSomenteDia(caixaSelecionado.dataMovimento) }}</template
+          ></v-toolbar-title
+        ><v-btn
+          icon="mdi-close"
+          size="large"
+          aria-label="Fechar o fechamento"
+          title="Fechar"
+          @click.stop="fecharDossie"
       /></v-toolbar>
       <v-card-text class="pa-4">
-        <div v-if="carregandoDossie" class="py-10">
-          <v-progress-circular indeterminate color="primary" /><span class="ml-3">Carregando dossiê auditável…</span>
+        <div v-if="carregandoDossie" class="py-10" role="status" aria-live="polite">
+          <v-progress-circular indeterminate color="primary" /><span class="ml-3">Carregando o fechamento…</span>
         </div>
         <template v-else-if="dossie">
-          <v-alert :color="corSituacaoSeguro(dossie.situacaoTesouraria)" variant="tonal" density="compact" class="mb-3"
-            ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
-            Tesouraria não recalcula valores nem altera lacres.</v-alert
-          >
           <RelatorioFechamentoQuemFechou
             class="mb-3"
             :caixa="dossie.caixa"
@@ -534,6 +549,7 @@ watch(
             :pode-conferir-transferencia="props.podeConferirTransferencia === true"
             :pode-conferir-final="props.podeConferir"
             :retorno-visivel="props.podeVerTransferencias === true"
+            :retorno-com-erro="erroTransferencias"
             :pendentes="transferenciasPendentes"
             :lacre-diferente="lacreFechamentoDiferente"
             :ultima="ultimaConferenciaTesouraria"
@@ -544,11 +560,6 @@ watch(
             @registrar-divergencia="abrirConferencia('divergente')"
             @revisar-final="abrirConferencia($event, true)"
           />
-          <div class="dossie-acoes-futuras mb-3" aria-label="Ações futuras do fechamento">
-            <v-btn variant="outlined" color="primary" prepend-icon="mdi-file-excel-outline" @click="abrirAcaoFutura()"
-              >Exportar para planilha</v-btn
-            >
-          </div>
           <RelatorioFechamentoTransferencias
             v-if="caixaSelecionado && props.podeVerTransferencias"
             ref="blocoTransferencias"
@@ -565,7 +576,6 @@ watch(
             :caixa="dossie.caixa"
             :resumo="dossie.resumo"
             :maquininha="conferenciaMaquininha"
-            :transferencias="dossie.transferencias"
             :relatorio-vendas="dossie.relatorioVendas"
             :ajuste="dossie.ajuste"
             :vendas-canceladas="dossie.vendasCanceladas"
@@ -586,7 +596,7 @@ watch(
             :texto="texto"
           />
         </template>
-        <v-alert v-else-if="erroDossie" type="error" variant="tonal">
+        <v-alert v-else-if="erroDossie" type="error" variant="tonal" role="alert">
           {{ erroDossie }}
           <template #append>
             <v-btn size="small" variant="text" @click="caixaSelecionado && carregarDossie(caixaSelecionado.id)">
@@ -599,7 +609,7 @@ watch(
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="dialogoConferencia" max-width="520">
+  <v-dialog v-model="dialogoConferencia" max-width="520" scrollable>
     <v-card>
       <v-card-title>{{
         revisandoConferencia
@@ -611,7 +621,9 @@ watch(
       <v-card-text>
         <template v-if="revisandoConferencia"
           ><p>
-            O status passa para
+            O status passa de
+            <strong>{{ resultadoConferencia === "conferido" ? "Quebra / divergência" : "Conferido" }}</strong>
+            para
             <strong>{{ resultadoConferencia === "conferido" ? "Conferido" : "Quebra / divergência" }}</strong
             >. A decisão anterior continua no histórico e os valores financeiros não mudam.
           </p>
@@ -664,21 +676,6 @@ watch(
       >
     </v-card>
   </v-dialog>
-
-  <v-dialog v-model="dialogoAcaoFutura" max-width="480">
-    <v-card>
-      <v-card-title>Exportar para planilha</v-card-title>
-      <v-card-text>
-        <p>A exportação será disponibilizada em uma próxima entrega.</p>
-        <v-alert type="info" variant="tonal">Nenhum arquivo foi gerado e nenhum dado foi alterado.</v-alert>
-      </v-card-text>
-      <v-card-actions class="pa-4 pt-0"
-        ><v-spacer /><v-btn color="primary" variant="flat" @click="dialogoAcaoFutura = false"
-          >Entendi</v-btn
-        ></v-card-actions
-      >
-    </v-card>
-  </v-dialog>
 </template>
 
 <style scoped>
@@ -703,17 +700,6 @@ watch(
 .dialogo-dossie__card > .v-card-text {
   overflow-y: auto;
 }
-.dossie-acoes-futuras {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.dossie-grid {
-  display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1.2fr);
-  gap: 9px 16px;
-}
 @media (max-width: 599px) {
   .dialogo-dossie :deep(.v-overlay__content) {
     width: calc(100vw - 16px) !important;
@@ -728,12 +714,6 @@ watch(
   .dialogo-dossie__card > .v-card-text {
     padding: 12px !important;
   }
-  .dossie-acoes-futuras {
-    justify-content: stretch;
-  }
-  .dossie-acoes-futuras :deep(.v-btn) {
-    flex: 1 1 100%;
-  }
   .dialogo-dossie :deep(.v-toolbar-title) {
     min-width: 0;
     font-size: 0.92rem;
@@ -743,44 +723,6 @@ watch(
   }
   .cartao-caixa :deep(.v-card-text > .d-flex:first-child) {
     flex-wrap: wrap;
-  }
-  .dossie-grid {
-    grid-template-columns: 1fr;
-    gap: 3px;
-  }
-  .dossie-grid strong {
-    margin-bottom: 8px;
-  }
-  .v-table :deep(thead) {
-    display: none;
-  }
-  .v-table :deep(tbody),
-  .v-table :deep(tr),
-  .v-table :deep(td) {
-    display: block;
-    width: 100%;
-  }
-  .v-table :deep(tr) {
-    padding: 10px 0;
-    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  }
-  .v-table :deep(td) {
-    min-height: 0;
-    padding: 4px 0;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .v-table :deep(td[data-rotulo]) {
-    display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-    gap: 12px;
-    text-align: right;
-  }
-  .v-table :deep(td[data-rotulo]::before) {
-    content: attr(data-rotulo);
-    color: var(--cx-ink-soft);
-    text-align: left;
-    font-weight: 500;
   }
 }
 </style>

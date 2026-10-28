@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { formatarDataHora } from "~/utils/formatacao";
 
 type Registro = Record<string, unknown>;
@@ -26,6 +25,21 @@ const props = defineProps<{
   texto: (valor: unknown) => string;
 }>();
 
+const ETAPAS: Record<string, string> = {
+  abertura: "Abertura",
+  fechamento: "Fechamento",
+  sangria: "Sangria",
+  retorno: "Retorno final"
+};
+const RESULTADOS: Record<string, string> = {
+  convergente: "Bateu",
+  divergente: "Não bateu",
+  conferido: "Conferido"
+};
+function rotulo(mapa: Record<string, string>, valor: unknown) {
+  const chave = String(valor ?? "");
+  return mapa[chave] ?? props.texto(valor);
+}
 function quando(valor: unknown) {
   return valor ? formatarDataHora(String(valor)) : "--";
 }
@@ -42,12 +56,12 @@ function rotuloAnexo(tipo: string) {
 
 <template>
   <div class="det" data-teste="detalhes-fechamento">
-    <section class="det__secao" style="--sec: var(--cat-quebra, #e5484d)" aria-labelledby="det-fisico">
+    <section class="det__secao det__secao--fisico" aria-labelledby="det-fisico">
       <h3 id="det-fisico">Conferências físicas e quebras</h3>
       <ul v-if="conferencias.length" class="det__lista">
         <li v-for="item in conferencias" :key="String(item.id)" class="det__linha">
-          <strong>{{ texto(item.etapa) }}</strong>
-          <span class="det__chip">{{ texto(item.resultado) }}</span>
+          <strong>{{ rotulo(ETAPAS, item.etapa) }}</strong>
+          <span class="det__chip">{{ rotulo(RESULTADOS, item.resultado) }}</span>
           <span>Declarado {{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}</span>
           <span>Contado {{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}</span>
           <small>{{ quando(item.conferidoEm) }}</small>
@@ -59,7 +73,7 @@ function rotuloAnexo(tipo: string) {
       </v-alert>
     </section>
 
-    <section class="det__secao" style="--sec: #22a35a" aria-labelledby="det-decisoes">
+    <section class="det__secao det__secao--decisoes" aria-labelledby="det-decisoes">
       <h3 id="det-decisoes">Decisões da Tesouraria</h3>
       <ul v-if="decisoes.length" class="det__lista">
         <li v-for="item in decisoes" :key="item.id" class="det__linha">
@@ -72,18 +86,33 @@ function rotuloAnexo(tipo: string) {
       <p v-else class="det__vazio">Nenhuma decisão final registrada.</p>
     </section>
 
-    <section class="det__secao" style="--sec: #8a8f98" aria-labelledby="det-anexos">
+    <section class="det__secao det__secao--anexos" aria-labelledby="det-anexos">
       <h3 id="det-anexos">Folhas e comprovantes anexados</h3>
       <div v-if="anexos.length" class="det__anexos">
         <v-card v-for="anexo in anexos" :key="anexo.id" variant="outlined">
-          <v-img v-if="anexo.mimeType.startsWith('image/')" :src="anexoUrl(anexo)" height="120" cover />
-          <v-sheet v-else class="pa-6 text-center"><v-icon icon="mdi-file-pdf-box" size="42" color="error" /></v-sheet>
+          <v-img
+            v-if="anexo.mimeType.startsWith('image/')"
+            :src="anexoUrl(anexo)"
+            :alt="`${rotuloAnexo(anexo.tipo)}: ${anexo.nomeOriginal}`"
+            height="120"
+            cover
+          />
+          <v-sheet v-else class="pa-6 text-center"
+            ><v-icon icon="mdi-file-pdf-box" size="42" color="secondary"
+          /></v-sheet>
           <v-card-text>
             <strong>{{ rotuloAnexo(anexo.tipo) }}</strong>
-            <div class="text-caption text-truncate">{{ anexo.nomeOriginal }}</div>
+            <div class="text-caption text-truncate" :title="anexo.nomeOriginal">{{ anexo.nomeOriginal }}</div>
           </v-card-text>
           <v-card-actions>
-            <v-btn :href="anexoUrl(anexo)" target="_blank" size="small" prepend-icon="mdi-download">Abrir</v-btn>
+            <v-btn
+              :href="anexoUrl(anexo)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="det__abrir"
+              prepend-icon="mdi-download"
+              >Abrir</v-btn
+            >
           </v-card-actions>
         </v-card>
       </div>
@@ -108,6 +137,15 @@ function rotuloAnexo(tipo: string) {
   background: var(--cx-surface-raised);
   color: var(--cx-ink);
 }
+.det__secao--fisico {
+  --sec: #e5484d;
+}
+.det__secao--decisoes {
+  --sec: #14a3a3;
+}
+.det__secao--anexos {
+  --sec: #6b7280;
+}
 .det__secao h3 {
   display: flex;
   flex-wrap: wrap;
@@ -117,42 +155,8 @@ function rotuloAnexo(tipo: string) {
   font-size: var(--cx-fs-lead);
   font-weight: 800;
 }
-.det__secao h4 {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cx-sp-2);
-  margin: 0 0 var(--cx-sp-1);
-  font-size: var(--cx-fs-body);
-  font-weight: 700;
-}
-.det__contagem {
-  padding: 0 var(--cx-sp-2);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sec) 18%, transparent);
-  color: var(--sec);
-  font-size: var(--cx-fs-caption);
-  font-weight: 800;
-}
-.det__total {
-  margin-left: auto;
-  color: var(--cx-ink-soft);
-  font-weight: 600;
-}
 .det__vazio,
-.det__nota {
-  margin: 0;
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-caption);
-}
 .det__lista,
-.det__itens {
-  display: grid;
-  gap: var(--cx-sp-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 .det__linha {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -163,9 +167,7 @@ function rotuloAnexo(tipo: string) {
   background: var(--cx-surface-sunken);
   overflow-wrap: anywhere;
 }
-.det__linha small,
-.det__venda small,
-.det__itens small {
+.det__linha small {
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
 }
@@ -176,6 +178,9 @@ function rotuloAnexo(tipo: string) {
   background: color-mix(in srgb, var(--sec) 18%, transparent);
   font-size: var(--cx-fs-caption);
   font-weight: 700;
+}
+.det__abrir {
+  min-height: 44px;
 }
 .det__anexos {
   display: grid;

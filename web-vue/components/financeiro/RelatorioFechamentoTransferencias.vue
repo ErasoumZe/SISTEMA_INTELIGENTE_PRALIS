@@ -20,7 +20,15 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (event: "alterado"): void;
-  (event: "estado", valor: { pendentes: number; lacreDiferente: boolean }): void;
+  (
+    event: "estado",
+    valor: {
+      pendentes: number;
+      lacreDiferente: boolean;
+      erro: boolean;
+      retornos: Array<{ nome: string; valor: number; lacre: string }>;
+    }
+  ): void;
 }>();
 
 const { apiGetPaginado, apiPost } = useApi();
@@ -80,11 +88,17 @@ function podeConferirItem(item: OperacaoResumo) {
 // a permissao `transferencias_conferir`).
 const conferiveis = computed(() => itens.value.filter(podeConferirItem));
 watch(
-  [conferiveis, conferenciaFechamento],
+  [conferiveis, conferenciaFechamento, erro],
   () =>
     emit("estado", {
       pendentes: conferiveis.value.length,
-      lacreDiferente: conferenciaFechamento.value.chave === "diferente"
+      lacreDiferente: conferenciaFechamento.value.chave === "diferente",
+      erro: Boolean(erro.value),
+      retornos: conferiveis.value.map((item) => ({
+        nome: nomeDaLinha(item),
+        valor: Number(item.valorOriginal),
+        lacre: lacreDaLinha(item)
+      }))
     }),
   { immediate: true }
 );
@@ -156,7 +170,6 @@ watch(() => props.caixaId, carregar, { immediate: true });
   <section class="rft" aria-labelledby="rft-titulo" data-teste="transferencias-do-caixa">
     <div class="rft__topo">
       <div>
-        <div class="text-overline">LACRES E SANGRIAS</div>
         <h3 id="rft-titulo" class="rft__titulo">Movimentos do caixa</h3>
       </div>
     </div>
@@ -189,7 +202,12 @@ watch(() => props.caixaId, carregar, { immediate: true });
     </dl>
 
     <v-progress-linear v-if="carregando" indeterminate aria-label="Carregando transferências do caixa" />
-    <v-alert v-else-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
+    <v-alert v-else-if="erro" type="error" variant="tonal" density="compact" role="alert"
+      >{{ erro }}
+      <template #append
+        ><v-btn size="small" variant="text" @click="carregar">Tentar novamente</v-btn></template
+      ></v-alert
+    >
     <p v-else-if="!itens.length" class="rft__vazio">Este caixa não tem transferências registradas.</p>
     <ul v-else class="rft__lista">
       <li v-for="item in itens" :key="item.id" class="rft__item" :data-transferencia-id="item.id">
@@ -218,7 +236,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
   margin-bottom: var(--cx-sp-3);
   padding: var(--cx-sp-4);
   border: 1px solid var(--cx-line);
-  border-left: 4px solid var(--cx-warning);
+  border-left: 4px solid #d99b00;
   border-radius: var(--cx-r-lg);
   background: var(--cx-surface-raised);
   color: var(--cx-ink);
@@ -275,6 +293,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
   padding: var(--cx-sp-2) var(--cx-sp-3);
   border: 1px solid var(--cx-line);
   border-radius: var(--cx-r-md);
+  overflow-wrap: anywhere;
 }
 .rft__quando,
 .rft__valor {
@@ -287,7 +306,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
 }
-@media (width <= 760px) {
+@media (width <= 900px) {
   .rft__item {
     grid-template-columns: minmax(0, 1fr) auto;
   }

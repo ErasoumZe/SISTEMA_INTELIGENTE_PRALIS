@@ -25,6 +25,7 @@ const duracao = computed(() => {
   const fim = Date.parse(String(fechadoEm.value ?? ""));
   if (Number.isNaN(inicio) || Number.isNaN(fim) || fim < inicio) return "";
   const minutos = Math.round((fim - inicio) / 60_000);
+  if (minutos < 1) return "";
   return `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, "0")}`;
 });
 const fechadoPor = computed(() => nome(props.resumo?.fechadoPorNome));
@@ -40,27 +41,26 @@ const abertura = computed(() => {
   <section class="qf" aria-labelledby="qf-titulo" data-teste="quem-fechou">
     <header class="qf__topo">
       <div>
-        <div class="text-overline">FECHAMENTO</div>
         <h3 id="qf-titulo" class="qf__titulo">{{ texto(caixa.pdvNome) }} · {{ texto(caixa.turnoNome) }}</h3>
       </div>
       <p v-if="duracao" class="qf__duracao">Turno de {{ duracao }}</p>
     </header>
 
     <div class="qf__grade">
-      <section class="qf__bloco" aria-label="Fechamento">
-        <h4>Quem fechou</h4>
+      <section class="qf__bloco" aria-labelledby="qf-fechou">
+        <h4 id="qf-fechou">Quem fechou</h4>
         <dl>
           <div>
             <dt>Operador</dt>
-            <dd data-teste="qf-operador">{{ responsavel || "—" }}</dd>
+            <dd data-teste="qf-operador">{{ responsavel || "Não informado" }}</dd>
           </div>
           <div>
             <dt>Supervisor</dt>
-            <dd>{{ nome(resumo?.supervisorResponsavelNomeFechamento) || "—" }}</dd>
+            <dd>{{ nome(resumo?.supervisorResponsavelNomeFechamento) || "Não informado" }}</dd>
           </div>
           <div>
             <dt>Fechado em</dt>
-            <dd>{{ fechadoEm ? dataHora(fechadoEm) : "—" }}</dd>
+            <dd>{{ fechadoEm ? dataHora(fechadoEm) : "Caixa ainda não fechado" }}</dd>
           </div>
           <div v-if="fechadoPor && fechadoPor !== responsavel">
             <dt>Registrado por</dt>
@@ -69,16 +69,16 @@ const abertura = computed(() => {
         </dl>
       </section>
 
-      <section class="qf__bloco" aria-label="Abertura">
-        <h4>Abertura</h4>
+      <section class="qf__bloco" aria-labelledby="qf-abriu">
+        <h4 id="qf-abriu">Quem abriu</h4>
         <dl>
           <div>
             <dt>Operador</dt>
-            <dd>{{ abertura || "—" }}</dd>
+            <dd>{{ abertura || "Não informado" }}</dd>
           </div>
           <div>
             <dt>Aberto em</dt>
-            <dd>{{ caixa.dataHoraAbertura ? dataHora(caixa.dataHoraAbertura) : "—" }}</dd>
+            <dd>{{ caixa.dataHoraAbertura ? dataHora(caixa.dataHoraAbertura) : "Não informado" }}</dd>
           </div>
           <div v-if="nome(caixa.usuarioCaixaNome)">
             <dt>Conta do posto</dt>
@@ -121,7 +121,7 @@ const abertura = computed(() => {
 }
 .qf__grade {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: var(--cx-sp-3);
 }
 .qf__bloco {

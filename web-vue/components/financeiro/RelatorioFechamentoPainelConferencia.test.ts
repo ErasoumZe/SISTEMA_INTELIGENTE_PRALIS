@@ -15,6 +15,7 @@ const base = {
   podeConferirTransferencia: true,
   podeConferirFinal: true,
   retornoVisivel: true,
+  retornoComErro: false,
   pendentes: 0,
   lacreDiferente: false,
   ultima: null,
@@ -46,7 +47,7 @@ describe("RelatorioFechamentoPainelConferencia", () => {
 
   it("com retorno pendente o Fechou certo explica que o retorno entra como declarado", () => {
     const wrapper = montar({ situacao: "aguardando_tesouraria", pendentes: 1 });
-    expect(wrapper.text()).toContain("entra como declarado");
+    expect(wrapper.text()).toContain("entra como ele declarou");
     expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(true);
   });
 
@@ -71,6 +72,12 @@ describe("RelatorioFechamentoPainelConferencia", () => {
     const wrapper = montar({ situacao: "com_quebra" });
     expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
     expect(wrapper.find('[data-teste="botao-teve-quebra"]').exists()).toBe(true);
+  });
+
+  it("erro ao ler as transferencias bloqueia o Fechou certo e avisa", () => {
+    const wrapper = montar({ retornoComErro: true });
+    expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("Não foi possível ler as transferências");
   });
 
   it("lacre diferente tira o Fechou certo mas deixa Teve quebra", () => {

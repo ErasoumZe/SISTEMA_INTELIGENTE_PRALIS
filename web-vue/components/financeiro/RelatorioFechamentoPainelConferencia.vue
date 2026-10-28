@@ -19,6 +19,8 @@ const props = defineProps<{
   podeConferirFinal: boolean;
   // Sem permissao para ler transferencias o painel nao sabe se ha retorno pendente: nao finge que esta tudo certo.
   retornoVisivel: boolean;
+  // A lista de transferencias do caixa falhou ao carregar: nao da pra afirmar que o retorno foi recebido.
+  retornoComErro: boolean;
   pendentes: number;
   lacreDiferente: boolean;
   ultima: UltimaConferencia | null;
@@ -45,6 +47,7 @@ const comDiferenca = computed(() => props.situacao === "com_quebra");
 const podeFecharCerto = computed(
   () =>
     props.retornoVisivel &&
+    !props.retornoComErro &&
     props.podeConferirFinal &&
     fechado.value &&
     !props.lacreDiferente &&
@@ -57,23 +60,23 @@ const podeApontarQuebra = computed(
 const mensagem = computed(() => {
   if (props.ultima) return textoUltima.value;
   if (!props.retornoVisivel) return "Sem permissão para ver as transferências deste caixa.";
+  if (props.retornoComErro) return "Não foi possível ler as transferências deste caixa. Tente novamente abaixo.";
   if (!props.podeConferirFinal) return "Você não tem permissão para conferir o fechamento.";
   if (comDiferenca.value) return "O caixa fechou com diferença registrada. Descreva o motivo para registrar a quebra.";
   if (!fechado.value) return "Este caixa ainda não foi fechado.";
   if (props.lacreDiferente)
     return "O lacre de fechamento não bate com o reservado pela Tesouraria. Resolva antes de confirmar.";
-  if (props.pendentes > 0) return "Confirma que o retorno do caixa entra como declarado (valor, lacre e conta).";
-  return "Retorno já recebido. Confirme que fechou certo, ou avise se teve quebra mesmo que o caixa tenha fechado sem diferença.";
+  if (props.pendentes > 0) return "O retorno do caixa entra como ele declarou (valor, lacre e conta).";
+  return "Retorno já recebido. Escolha uma opção.";
 });
 </script>
 
 <template>
   <section class="pc" aria-labelledby="pc-titulo" data-teste="painel-conferencia">
     <div class="pc__texto">
-      <div class="text-overline">TESOURARIA</div>
       <h3 id="pc-titulo" class="pc__titulo">Conferência do fechamento</h3>
       <p class="pc__mensagem">{{ mensagem }}</p>
-      <v-alert v-if="erro" type="error" variant="tonal" density="compact" data-teste="erro-fechou-certo">{{
+      <v-alert v-if="erro" type="error" variant="tonal" density="compact" role="alert" data-teste="erro-fechou-certo">{{
         erro
       }}</v-alert>
     </div>
@@ -86,11 +89,13 @@ const mensagem = computed(() => {
         <v-btn
           v-if="podeConferirFinal && (ultima.resultado === 'conferido' || pendentes === 0)"
           variant="outlined"
+          color="primary"
+          :disabled="enviando"
           class="pc__acao"
           prepend-icon="mdi-swap-horizontal"
           data-teste="botao-alterar-status"
           @click="emit('revisar-final', ultima.resultado === 'conferido' ? 'divergente' : 'conferido')"
-          >Alterar status</v-btn
+          >Alterar status da conferência</v-btn
         >
       </template>
       <template v-else>
@@ -109,6 +114,7 @@ const mensagem = computed(() => {
           v-if="podeApontarQuebra"
           color="deep-orange"
           :variant="comDiferenca ? 'flat' : 'outlined'"
+          :disabled="enviando"
           class="pc__acao"
           prepend-icon="mdi-alert-outline"
           data-teste="botao-teve-quebra"
@@ -162,7 +168,11 @@ const mensagem = computed(() => {
   min-height: 44px;
 }
 @media (width <= 560px) {
-  .pc__acoes,
+  .pc__acoes {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
   .pc__acao {
     width: 100%;
   }

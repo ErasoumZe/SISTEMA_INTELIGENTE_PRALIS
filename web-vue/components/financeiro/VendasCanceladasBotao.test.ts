@@ -46,7 +46,7 @@ describe("VendasCanceladasBotao", () => {
 
   it("o popup lista cada venda com justificativa, motivo, produtos e pagamento", () => {
     const conteudo = montar([venda]).text();
-    expect(conteudo).toContain("Justificativa: Troco errado");
+    expect(conteudo).toContain("Justificativa:Troco errado");
     expect(conteudo).toContain("motivo: Cliente desistiu");
     expect(conteudo).toContain("Pao frances");
     expect(conteudo).toContain("Dinheiro");

@@ -39,7 +39,7 @@ describe("RelatorioFechamentoQuemFechou", () => {
 
   it("caixa ainda sem fechamento nao inventa dados", () => {
     const wrapper = montar({ pdvNome: "PDV", turnoNome: "TARDE" }, null);
-    expect(wrapper.get('[data-teste="qf-operador"]').text()).toBe("—");
+    expect(wrapper.get('[data-teste="qf-operador"]').text()).toBe("Não informado");
     expect(wrapper.text()).not.toContain("Turno de");
   });
 });

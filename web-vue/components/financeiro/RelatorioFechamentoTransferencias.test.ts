@@ -59,7 +59,7 @@ describe("RelatorioFechamentoTransferencias", () => {
     expect(apiGetPaginado).toHaveBeenCalledWith(expect.stringContaining("caixaId=cx-1"));
     const ids = wrapper.findAll("[data-transferencia-id]").map((linha) => linha.attributes("data-transferencia-id"));
     expect(ids).toEqual(["t-1", "t-2"]);
-    expect(wrapper.emitted("estado")?.at(-1)).toEqual([{ pendentes: 1, lacreDiferente: false }]);
+    expect(wrapper.emitted("estado")?.at(-1)?.[0]).toMatchObject({ pendentes: 1, lacreDiferente: false });
   });
 
   it("nao tem botao Conferir na linha: a acao fica no painel unico", async () => {
@@ -71,7 +71,7 @@ describe("RelatorioFechamentoTransferencias", () => {
   it("so conta como pendente para conferir quem tem a permissao", async () => {
     const sem = montar(false);
     await flushPromises();
-    expect(sem.emitted("estado")?.at(-1)).toEqual([{ pendentes: 0, lacreDiferente: false }]);
+    expect(sem.emitted("estado")?.at(-1)?.[0]).toMatchObject({ pendentes: 0, lacreDiferente: false });
   });
 
   it("receberComoDeclarado confirma cada pendente com os valores e o lacre do proprio registro", async () => {
@@ -117,7 +117,7 @@ describe("RelatorioFechamentoTransferencias", () => {
     });
     const wrapper = montar(false, "F-9999");
     await flushPromises();
-    expect(wrapper.emitted("estado")?.at(-1)).toEqual([{ pendentes: 0, lacreDiferente: true }]);
+    expect(wrapper.emitted("estado")?.at(-1)?.[0]).toMatchObject({ pendentes: 0, lacreDiferente: true });
   });
 
   describe("fatos do caixa", () => {

@@ -29,7 +29,7 @@ function quando(valor: unknown) {
     <v-btn
       block
       variant="tonal"
-      color="deep-purple-lighten-2"
+      color="pink-lighten-1"
       class="vc__botao"
       prepend-icon="mdi-receipt-text-remove-outline"
       data-teste="botao-vendas-canceladas"
@@ -42,9 +42,9 @@ function quando(valor: unknown) {
 
     <v-dialog v-model="aberto" max-width="720" scrollable>
       <v-card class="vc__card">
-        <v-toolbar color="deep-purple-darken-2" density="compact">
+        <v-toolbar color="pink-darken-3" density="compact">
           <v-toolbar-title>Vendas canceladas · {{ vendas.length }}</v-toolbar-title>
-          <v-btn icon="mdi-close" aria-label="Fechar vendas canceladas" @click="aberto = false" />
+          <v-btn icon="mdi-close" size="large" aria-label="Fechar vendas canceladas" @click="aberto = false" />
         </v-toolbar>
         <v-card-text class="vc__corpo">
           <p v-if="vendas.length" class="vc__nota">
@@ -61,7 +61,11 @@ function quando(valor: unknown) {
               <template v-if="venda.identificadorExterno"> · venda {{ texto(venda.identificadorExterno) }}</template>
             </small>
             <p class="vc__motivo">
-              <b>Justificativa:</b> {{ texto(venda.cancelamentoJustificativa || venda.cancelamentoMotivo) }}
+              <b>Justificativa:</b>
+              <template v-if="venda.cancelamentoJustificativa || venda.cancelamentoMotivo">{{
+                texto(venda.cancelamentoJustificativa || venda.cancelamentoMotivo)
+              }}</template>
+              <em v-else>Sem justificativa registrada</em>
               <template v-if="venda.cancelamentoJustificativa && venda.cancelamentoMotivo">
                 · motivo: {{ texto(venda.cancelamentoMotivo) }}</template
               >
@@ -69,14 +73,16 @@ function quando(valor: unknown) {
                 · autorizado por {{ texto(venda.cancelamentoAutorizadoPorAutomacao) }}</template
               >
             </p>
+            <h4 v-if="lista(venda.produtos).length" class="vc__sub">Produtos</h4>
             <ul v-if="lista(venda.produtos).length" class="vc__itens" aria-label="Produtos da venda">
-              <li v-for="produto in lista(venda.produtos)" :key="String(produto.id)">
-                <span>{{ texto(produto.quantidade) }} × {{ texto(produto.descricao) }}</span>
+              <li v-for="produto in lista(venda.produtos)" :key="String(produto.id ?? produto.descricao)">
+                <span>{{ produto.quantidade ?? "?" }} × {{ texto(produto.descricao) }}</span>
                 <span class="cx-num">{{ dinheiro(numero(produto.valorTotal)) }}</span>
               </li>
             </ul>
+            <h4 v-if="lista(venda.pagamentos).length" class="vc__sub">Pagamento</h4>
             <ul v-if="lista(venda.pagamentos).length" class="vc__itens vc__itens--pag" aria-label="Pagamentos da venda">
-              <li v-for="pagamento in lista(venda.pagamentos)" :key="String(pagamento.id)">
+              <li v-for="pagamento in lista(venda.pagamentos)" :key="String(pagamento.id ?? pagamento.formaPagamento)">
                 <span>{{ texto(pagamento.formaPagamento || pagamento.tipoPagamentoAutomacao) }}</span>
                 <span class="cx-num">{{ dinheiro(numero(pagamento.valor)) }}</span>
               </li>
@@ -90,7 +96,7 @@ function quando(valor: unknown) {
 
 <style scoped>
 .vc {
-  --sec: #8b5cf6;
+  --sec: #db2777;
   display: grid;
   gap: var(--cx-sp-1);
 }
@@ -114,6 +120,12 @@ function quando(valor: unknown) {
   margin-left: auto;
   font-weight: 700;
 }
+@media (width <= 480px) {
+  .vc__valor {
+    width: 100%;
+    margin-left: 0;
+  }
+}
 .vc__vazio {
   margin: 0;
   color: var(--cx-ink-soft);
@@ -128,8 +140,15 @@ function quando(valor: unknown) {
 }
 .vc__nota {
   margin: 0;
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+}
+.vc__sub {
+  margin: var(--cx-sp-1) 0 0;
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
+  font-weight: 700;
+  text-transform: uppercase;
 }
 .vc__venda {
   display: grid;
