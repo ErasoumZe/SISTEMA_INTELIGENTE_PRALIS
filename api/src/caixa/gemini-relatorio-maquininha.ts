@@ -77,20 +77,10 @@ const schemaResposta = {
   ]
 } as const;
 
-// Rotulos do "RELATORIO RESUMIDO" da PagBank usado nos PDVs (ex.: TOTAL EFETIVADO 2.552,61 = credito 947,05 +
-// debito 779,72 + voucher 224,16 + Pix 601,68).
-const prompt = `Leia UMA foto ou PDF de relatorio resumido de maquininha brasileiro (ex.: PagBank "RELATORIO RESUMIDO").
+const prompt = `Leia UMA foto ou PDF de relatorio resumido de maquininha brasileiro.
 Extraia somente dados explicitamente visiveis: numero ou serie, data, acumulador, credito, debito, Pix e voucher.
-Mapeamento obrigatorio:
-- numeroMaquininha: "NUMERO DE SERIE". dataEmissao: "DATA DE EMISSAO" (como impresso).
-- acumulador: "TOTAL EFETIVADO" (valor em R$, nunca a quantidade de transacoes).
-- credito: o "TOTAL" da secao "CREDITO A VISTA". Se houver tambem "CREDITO PARCELADO" ou outra secao de credito, use null em credito e liste "credito" em camposDuvidosos.
-- debito: o "TOTAL" da secao "DEBITO". "QR CODE DEBITO" NAO e debito.
-- pix: o "TOTAL" da secao "QR CODE DEBITO" (linha "PIX") ou da secao "PIX".
-- voucher: o "TOTAL" da secao "VOUCHER".
-Em cada linha, o numero de 4 digitos (ex.: 0057) e a quantidade de transacoes, nunca valor.
-Para cada forma, devolva as linhas discriminadas visiveis em detalhes (ex.: VISA, ELO, MASTER, TICKET FLEX), com nome e valor. Se nao houver linha discriminada, devolva lista vazia.
-Nao some, nao estime, nao complete numeros cortados e nao compare fotos diferentes. Valores em reais como numero JSON com PONTO decimal e os centavos: R$ 947,05 vira 947.05; R$ 2.552,61 vira 2552.61. Nunca descarte os centavos nem devolva 94705. Use null quando nao estiver visivel.
+Para cada forma, devolva as linhas discriminadas visiveis em detalhes, com nome e valor. Se nao houver linha discriminada, devolva lista vazia.
+Nao some, nao estime, nao complete numeros cortados e nao compare fotos diferentes. Valores usam numero puro, sem R$, ponto de milhar ou virgula; use null quando nao estiver visivel.
 O numero da maquininha e a hora do turno sao conferidos pelo sistema, nunca inventados pela IA. Se o documento nao for legivel, use documentoLegivel=false, valores null, listas vazias e explique em observacoes.
 Liste em camposDuvidosos todo campo ambiguo. Responda somente o JSON solicitado.`;
 

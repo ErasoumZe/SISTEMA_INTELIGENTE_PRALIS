@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import type { CaixaOperacional } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
 
@@ -8,9 +7,7 @@ type Fechamento = {
   supervisorResponsavelNome: string;
 };
 
-const props = defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPendentes: boolean }>();
-// R-226: travado com quem abriu. So fica livre em caixa antigo, sem nome registrado na abertura.
-const responsavelTravado = computed(() => Boolean(props.caixa.caixaResponsavelNomeAbertura?.trim()));
+defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPendentes: boolean }>();
 </script>
 
 <template>
@@ -34,14 +31,6 @@ const responsavelTravado = computed(() => Boolean(props.caixa.caixaResponsavelNo
             data-teste="responsavel-fechamento-wizard"
             label="Responsável pelo caixa"
             prepend-inner-icon="mdi-account-cash-outline"
-            :append-inner-icon="responsavelTravado ? 'mdi-lock-outline' : undefined"
-            :readonly="responsavelTravado"
-            :hint="
-              responsavelTravado
-                ? 'Quem abriu o caixa. Não muda no fechamento.'
-                : 'Este caixa não registrou quem abriu: informe o responsável.'
-            "
-            persistent-hint
           />
         </v-col>
         <v-col cols="12" md="6">
@@ -50,17 +39,11 @@ const responsavelTravado = computed(() => Boolean(props.caixa.caixaResponsavelNo
             data-teste="supervisor-fechamento-wizard"
             label="Supervisor responsável"
             prepend-inner-icon="mdi-account-supervisor-outline"
-            hint="O gerente que fecha o malote."
-            persistent-hint
           />
         </v-col>
       </v-row>
       <p v-if="responsaveisPendentes" class="fechamento-resumo__ajuda mb-0">
-        {{
-          responsavelTravado
-            ? "Informe o supervisor responsável para continuar."
-            : "Preencha os dois responsáveis para continuar."
-        }}
+        Preencha os dois responsáveis para continuar.
       </p>
     </section>
 
