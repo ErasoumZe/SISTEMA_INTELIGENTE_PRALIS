@@ -28,7 +28,8 @@ export function leituraRelatorioMaquininhaSimulada(
       voucher: [{ nome: manha ? "Saldo inicial simulado" : "Voucher simulado do turno", valor: valores.voucher }]
     },
     camposDuvidosos: [],
-    observacoes: ["SIMULAÇÃO LOCAL: valores artificiais; não são uma leitura de documento."]
+    observacoes: ["SIMULAÇÃO LOCAL: valores artificiais; não são uma leitura de documento."],
+    correcaoManual: null
   };
 }
 
