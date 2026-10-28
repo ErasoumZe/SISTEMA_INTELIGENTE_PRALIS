@@ -719,3 +719,36 @@ como `.xlsx` no Excel.
 - **Regra até a virada (dois escritores):** enquanto o app estiver no ar, **produto novo continua sendo
   cadastrado no app**. Se o ERP também criar na BASE, os dois sistemas podem gerar o mesmo código interno, e a
   importação da Central sobrescreve a BASE do ERP sem repassar às lojas.
+
+### TXT do PDV (CREARE) e espelho na planilha — migration 0088 aprovada por José (27/10/2026)
+
+José aprovou a 0088 como proposta (fila da planilha com `empresa_id` anulável para a BASE,
+`proxima_tentativa_em`, cascade nos cursores, itens do lote em jsonb) e pediu para **não ligar escrita até a
+virada**. Aplicada só no banco local; a FK da BASE na fila ganhou nome curto (o gerado passava de 63 bytes).
+
+- **Gerador do TXT** (363 posições): layout e gerador do app copiados literalmente para o shared, com os 51
+  testes oficiais passando.
+- **Exportação** (porte de `creare.service`/`creare-export.repository`):
+  - `GET /api/creare/produtos.txt` traz o catálogo completo; com `modo=pendentes` gera o lote incremental.
+  - `GET /api/creare/lotes/pendente`, mais `POST .../entrega` e `POST .../confirmar` (os dois por hash).
+  - O robô autentica por `Bearer CREARE_EXPORT_TOKEN` e informa `?loja=`; sem token, vale a sessão.
+  - `GET /api/produtos/creare/saude` dá o diagnóstico (só admin).
+  - A trava por loja é a linha da empresa, e não `pg_advisory` (o ERP proíbe SQL cru).
+  - `CREARE_EXPORT_ENABLED=false` por padrão. A publicação no Drive **não foi portada**: é escrita e só
+    entra na virada.
+- **Espelho na planilha:**
+  - O mapa das colunas e a grafia numérica do Creare foram copiados literalmente, com os 44 testes oficiais.
+  - A fila `produtos_planilha_sincronizacoes` recebe toda gravação na mesma transação: loja, BASE, foto,
+    herança, status e backfill.
+  - Na falha, a espera dobra (1, 2, 4… até 60 min), com teto de 8 tentativas. O sucesso **zera o contador**:
+    no app ele contava a vida inteira do produto, e um produto muito editado desistia na primeira falha.
+  - Rotas `GET /api/produtos/planilha/fila` e `POST /api/produtos/planilha/reenvio`, só admin.
+  - `GOOGLE_PRODUTOS_ESPELHO_ENABLED=false` por padrão: desligado, nada entra na fila.
+  - **O escritor real na planilha ainda não existe** (reserva de linha pelo ID, fórmulas da linha-modelo,
+    abas de loja). Ele precisa ser validado contra a planilha de verdade e entra na virada.
+- **Para a virada:**
+  1. Configurar `CREARE_STORE_CONFIG_JSON` (o mesmo JSON do Coolify do app) e o token do robô.
+  2. Portar o escritor da planilha e a publicação no Drive.
+  3. Ligar as duas flags.
+  4. Apontar o robô da loja para o ERP.
+  5. Só então desligar o app.
