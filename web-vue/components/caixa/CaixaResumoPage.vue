@@ -434,11 +434,10 @@ watch(
   (caixaId) => {
     if (!caixaId) return;
 
-    // A abertura identifica o operador de origem; o fechamento pode ser feito por outra pessoa.
-    // Só sugere o nome se o operador ainda não preencheu um valor próprio.
-    if (!fechamento.caixaResponsavelNome.trim()) {
-      fechamento.caixaResponsavelNome = caixaAberto.value?.caixaResponsavelNomeAbertura ?? "";
-    }
+    // R-226: o responsável pelo caixa no fechamento é sempre quem abriu (não muda); só o supervisor
+    // (o gerente que fecha o malote) é informado no encerramento.
+    fechamento.caixaResponsavelNome =
+      caixaAberto.value?.caixaResponsavelNomeAbertura ?? caixaAberto.value?.usuarioCaixaNome ?? "";
     if (!fechamento.supervisorResponsavelNome.trim()) {
       fechamento.supervisorResponsavelNome = caixaAberto.value?.supervisorResponsavelNomeAbertura ?? "";
     }
