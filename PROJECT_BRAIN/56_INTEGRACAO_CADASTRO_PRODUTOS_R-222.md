@@ -887,8 +887,8 @@ só no banco local.
   o custo. Nos produtos com cálculo automático, o preço guardado fica desatualizado até o próximo salvamento.
   - Exemplo: margem de 30% e embalagem de 12; o custo vai de 49,20 para 49,26; a tela mostra 5,33 e o TXT do PDV,
     que recalcula pelo custo, manda 5,34.
-  - A correção seria recalcular o preço com a mesma regra do salvamento, na mesma transação.
-  - Aguarda o OK de José, Marco ou Rodrigo.
+  - **Decisão de José (28/10/2026): grava só o custo, como no app.** O preço guardado se ajusta no próximo
+    salvamento do produto. Até lá, o TXT do PDV recalcula pelo custo e pode divergir do preço que a tela mostra.
 
 **Ainda aguarda decisão:**
 
