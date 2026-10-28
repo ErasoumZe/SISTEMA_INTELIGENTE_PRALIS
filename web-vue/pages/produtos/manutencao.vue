@@ -126,6 +126,17 @@ onMounted(async () => {
               </v-card-actions>
             </v-card>
           </v-col>
+          <v-col cols="12" md="6">
+            <v-card variant="outlined" height="100%">
+              <v-card-title class="text-subtitle-1">Código de cadastro</v-card-title>
+              <v-card-text>
+                Alinha o código interno de cada produto ao código do PDV no SIA: adota o que casa e decide o resto.
+              </v-card-text>
+              <v-card-actions>
+                <v-btn variant="tonal" prepend-icon="mdi-numeric" to="/produtos/codigo-cadastro">Abrir código</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-col>
         </v-row>
 
         <ProdutoPanoramaFiscal />
