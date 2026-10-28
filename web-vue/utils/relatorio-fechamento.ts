@@ -117,19 +117,30 @@ export function registro(valor: unknown): Registro {
   return valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Registro) : {};
 }
 
-// Leitura de cada forma da maquininha (inicial x final do turno); `liquido` so existe quando os dois lados existem.
+// Leitura de cada forma da maquininha. O LIQUIDO do turno e o que o servidor gravou (`dadosRevisados.liquidos`):
+// manha = acumulado desde zero; tarde = acumulado do dia MENOS a leitura da manha. Sem o valor gravado (relatorio
+// antigo), calcula final - inicial, tratando a ausencia de `inicial` como zero (e o caso da manha: antes ela
+// aparecia como "Nao informado" mesmo com a leitura salva).
 export function conferenciaMaquininhaDoRelatorio(relatorioMaquininha: unknown): LinhaMaquininha[] {
   const relatorio = registro(relatorioMaquininha);
+  const liquidosGravados = registro(registro(relatorio.dadosRevisados).liquidos);
   return ["credito", "debito", "pix", "voucher"].map((forma) => {
     const inicial = valorOpcional(relatorio[`${forma}Inicial`]);
     const acumulado = valorOpcional(relatorio[`${forma}Final`]);
+    const gravado = valorOpcional(liquidosGravados[forma]);
     return {
       forma: forma === "pix" ? "Pix" : `${forma.slice(0, 1).toUpperCase()}${forma.slice(1)}`,
       inicial,
       acumulado,
-      liquido: inicial === null || acumulado === null ? null : acumulado - inicial
+      liquido: gravado ?? (acumulado === null ? null : acumulado - (inicial ?? 0))
     };
   });
+}
+
+// Em qual turno do dia este relatorio foi feito (o servidor decide pela existencia de uma manha ja fechada).
+export function etapaDoRelatorioMaquininha(relatorioMaquininha: unknown): "manha" | "tarde" | null {
+  const etapa = registro(registro(relatorioMaquininha).dadosRevisados).etapaDia;
+  return etapa === "manha" || etapa === "tarde" ? etapa : null;
 }
 
 // A fila da Tesouraria: o que ainda precisa de conferencia, o que ja foi decidido e o que ainda esta em operacao.

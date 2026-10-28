@@ -5,6 +5,7 @@ import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
 import {
   conferenciaMaquininhaDoRelatorio,
+  etapaDoRelatorioMaquininha,
   dataHoraOuTraco,
   numero,
   texto,
@@ -61,6 +62,7 @@ const enviandoQuebra = ref(false);
 const erroQuebra = ref("");
 
 const maquininha = computed(() => conferenciaMaquininhaDoRelatorio(dossie.value?.relatorioMaquininha));
+const etapaMaquininha = computed(() => etapaDoRelatorioMaquininha(dossie.value?.relatorioMaquininha));
 const ultimaConferencia = computed(() => dossie.value?.conferenciasTesouraria.at(-1) ?? null);
 const lacreFechamentoInformado = computed(() => {
   const lacre = dossie.value?.resumo?.lacreFechamento;
@@ -235,6 +237,7 @@ function anexoUrl(anexo: { id: string }) {
             :caixa="dossie.caixa"
             :resumo="dossie.resumo"
             :maquininha="maquininha"
+            :etapa-maquininha="etapaMaquininha"
             :relatorio-vendas="dossie.relatorioVendas"
             :ajuste="dossie.ajuste"
             :vendas-canceladas="dossie.vendasCanceladas"
