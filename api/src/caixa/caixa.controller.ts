@@ -12,6 +12,7 @@ import {
   fecharCaixaPayloadSchema,
   gerarRelatorioVendasFechamentoSchema,
   iniciarFechamentoCaixaPayloadSchema,
+  ajustarInicioVendasCaixaPayloadSchema,
   registrarIndisponibilidadeCaixaPayloadSchema,
   historicoCaixaQuerySchema,
   salvarRelatorioMaquininhaFechamentoSchema,
@@ -22,6 +23,7 @@ import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
 import {
   abrirCaixa,
+  ajustarInicioVendasCaixa,
   criarTransferenciaCofreCaixa,
   cancelarPlanejamentoRetorno,
   consultarMaloteParaAbertura,
@@ -129,6 +131,22 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       iniciarFechamentoCaixaPayloadSchema.parse(request.body);
       try {
         return ok(await iniciarFechamentoCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  // R-224 · recuar o inicio das vendas do caixa (com motivo; a abertura oficial nao muda).
+  app.post(
+    "/api/caixa/:caixaId/inicio-vendas",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const body = ajustarInicioVendasCaixaPayloadSchema.parse(request.body);
+      try {
+        return ok(await ajustarInicioVendasCaixa(caixaId, body, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

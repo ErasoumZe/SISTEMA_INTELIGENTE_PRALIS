@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import {
   candidatosDeCodigo,
+  chaveDeGrupo,
   CreareValidationError,
+  grupoIdDoNome,
+  grupoIdPreenchido,
   formatCreareNumber,
   generateCreareFile,
   generateCreareRecord,
@@ -26,6 +29,7 @@ import {
 } from "./produtos-creare.repository.js";
 import { contextoDaEmpresaFiscalRepository } from "./produtos-fiscal.repository.js";
 import { lojaFiscalDaEmpresa } from "./produtos-fiscal.service.js";
+import { idsDeGrupoOficiais } from "./produtos-grupo-id.js";
 
 /**
  * Exportacao do cadastro para o PDV CREARE — porte de `creare.service.ts` do app oficial (R-222): casa
@@ -62,7 +66,7 @@ export interface ForaDoArquivo {
 }
 
 /** O produto do ERP com os nomes de campo do app oficial (o gerador e o do app, literal). */
-function paraCreare(linha: LinhaProduto, grupoIdAprendido: string | null): ProdutoCreare {
+function paraCreare(linha: LinhaProduto, grupoIdDoNomeDoGrupo: string | null): ProdutoCreare {
   return {
     codigo: linha.codigo ?? linha.codigoInterno,
     nome: linha.nomeCatalogo?.trim() || linha.descricao,
@@ -76,7 +80,8 @@ function paraCreare(linha: LinhaProduto, grupoIdAprendido: string | null): Produ
     qtCad: linha.quantidadeCaixa,
     codigoInterno: linha.codigoInterno,
     grupo: linha.grupoNome,
-    grupoId: linha.grupoIdExterno?.trim() || grupoIdAprendido,
+    // "000" e marcador de vazio no layout, nao ID (oficial `grupoIdPreenchido`).
+    grupoId: grupoIdPreenchido(linha.grupoIdExterno) ? linha.grupoIdExterno!.trim() : grupoIdDoNomeDoGrupo,
     tipo: linha.tipo === "transformacao" ? "transformacao" : "revenda",
     status: linha.status,
     estoqueMin: numero(linha.estoqueMin),
@@ -131,24 +136,30 @@ const resumo = (produto: ProdutoCreare, motivo: string): ForaDoArquivo => ({
 });
 
 async function montarLote(empresaId: string, config: CreareStoreConfig): Promise<Lote> {
-  const [linhas, dePara] = await Promise.all([
+  const [linhas, dePara, oficiais] = await Promise.all([
     produtosParaCreareRepository(empresaId),
-    deParaParaCreareRepository(empresaId)
+    deParaParaCreareRepository(empresaId),
+    idsDeGrupoOficiais()
   ]);
   const siaPorBarras = new Map(dePara.map((linha) => [linha.chaveBarras, linha]));
   const siaPorCoditem = new Map(dePara.map((linha) => [semZerosAEsquerda(linha.coditem), linha]));
-  // Oficial `grupoIdPorNome`: o id do grupo no PDV pode ser aprendido de outro produto do mesmo grupo.
-  const grupoIdPorNome = new Map<string, string>();
+  // Oficial `grupoIdPorNome`: o id do grupo vem da aba oficial (AC/AD) pelo NOME; se ela nao tiver, pode
+  // ser aprendido de outro produto do mesmo grupo. A chave ignora acento, espaco e o U+2060 da planilha.
+  const aprendidos = new Map<string, string>();
   for (const linha of linhas) {
-    if (linha.grupoNome && linha.grupoIdExterno?.trim()) grupoIdPorNome.set(linha.grupoNome, linha.grupoIdExterno);
+    if (linha.grupoNome && grupoIdPreenchido(linha.grupoIdExterno)) {
+      aprendidos.set(chaveDeGrupo(linha.grupoNome), linha.grupoIdExterno!.trim());
+    }
   }
+  const grupoIdPeloNome = (nome: string | null): string | null =>
+    nome ? (grupoIdDoNome(oficiais, nome) ?? aprendidos.get(chaveDeGrupo(nome)) ?? null) : null;
 
   const casados: Lote["casados"] = [];
   const naoCasados: ForaDoArquivo[] = [];
   const invalidos: ForaDoArquivo[] = [];
   const porCoditem = new Map<string, string[]>();
   for (const linha of linhas) {
-    const produto = paraCreare(linha, linha.grupoNome ? (grupoIdPorNome.get(linha.grupoNome) ?? null) : null);
+    const produto = paraCreare(linha, grupoIdPeloNome(linha.grupoNome));
     const codigoInterno = semZerosAEsquerda(produto.codigoInterno);
     const porBarras = candidatosDeCodigo(produto.codigoBarras)
       .map((chave) => siaPorBarras.get(chave))

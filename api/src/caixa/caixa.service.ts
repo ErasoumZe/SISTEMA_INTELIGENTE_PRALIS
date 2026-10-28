@@ -6,6 +6,7 @@ import { basename } from "node:path";
 import { readFile, unlink } from "node:fs/promises";
 import type {
   AbrirCaixaPayload,
+  AjustarInicioVendasCaixaPayload,
   CancelarPlanejamentoRetornoPayload,
   CaixaOperacional,
   CaixaStatus,
@@ -62,6 +63,9 @@ import {
   salvarRelatorioVendasFechamentoRepository,
   invalidarRelatorioMaquininhaFechamentoRepository,
   invalidarRelatorioVendasFechamentoRepository,
+  atualizarInicioVendasCaixaRepository,
+  buscarFimDoCaixaAnteriorNoPdvRepository,
+  registrarEdicaoCaixaRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
@@ -786,7 +790,12 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
 
     // O CREARE pode importar uma venda depois da abertura. O refresh de um minuto
     // precisa anexar essas vendas ao caixa antes de calcular os cards de pagamento.
-    await revincularVendasAoCaixa(caixa, tx);
+    // Trava compartilhada antes de ler o inicio: o ajuste do inicio (R-224) muda esse horario sob trava
+    // exclusiva, e revincular com uma leitura antiga desanexaria as vendas que ele acabou de anexar.
+    if (!(await travarCaixaCompartilhadoRepository(caixa.id, tx))) throw new Error("Caixa aberto nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!travado) throw new Error("Caixa aberto nao encontrado");
+    await revincularVendasAoCaixa(travado, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
     return { ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador };
@@ -837,6 +846,100 @@ export async function registrarRetornoIndisponibilidadeCaixa(caixaId: string, pe
     );
     if (!retorno) throw new Error("Nenhuma indisponibilidade em andamento neste caixa");
     return { id: retorno.id, retornadoEm: retorno.retornadoEm?.toISOString() ?? new Date().toISOString() };
+  });
+}
+
+// R-224 · o operador recua o inicio das vendas do caixa (abriu no sistema depois de ja estar vendendo).
+// Limites: no maximo 60 min antes da abertura OFICIAL (`abertoEm`, que nunca muda), no mesmo dia de negocio,
+// nunca antes do fim do caixa anterior do mesmo PDV, e so com motivo. As vendas sem caixa desse intervalo passam
+// a ser deste caixa (as que ja sao de outro caixa nunca sao tiradas de la). Se o fechamento ja comecou, o
+// relatorio de vendas gerado fica invalido e precisa ser gerado de novo com o periodo novo.
+const RECUO_MAXIMO_INICIO_VENDAS_MS = 60 * 60_000;
+export async function ajustarInicioVendasCaixa(
+  caixaId: string,
+  dados: AjustarInicioVendasCaixaPayload,
+  perfil: PerfilUsuario
+) {
+  return executarEmTransacao(async (tx) => {
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (!(await travarCaixaRepository(caixa.id, tx))) throw new Error("Caixa nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!travado || !["aberto", "em_fechamento"].includes(travado.status)) {
+      throw new ErroDominio(
+        "O inicio das vendas so pode ser ajustado com o caixa aberto ou em fechamento.",
+        409,
+        "CAIXA_NAO_AJUSTAVEL"
+      );
+    }
+    if (!travado.abertoEm || !travado.pdvId || !travado.dataHoraAbertura)
+      throw new Error("Caixa sem abertura registrada");
+    const oficial = new Date(travado.abertoEm);
+    const inicio = new Date(dados.inicio);
+    if (inicio.getTime() > oficial.getTime()) {
+      throw new ErroDominio("O inicio so pode ser antes da abertura oficial.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
+    }
+    if (oficial.getTime() - inicio.getTime() > RECUO_MAXIMO_INICIO_VENDAS_MS) {
+      throw new ErroDominio(
+        "O inicio pode recuar no maximo 60 minutos da abertura oficial.",
+        422,
+        "INICIO_VENDAS_FORA_DA_JANELA"
+      );
+    }
+    if (diaNegocio(inicio) !== diaNegocio(oficial)) {
+      throw new ErroDominio("O inicio precisa ser no mesmo dia da abertura.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
+    }
+    const fimAnterior = await buscarFimDoCaixaAnteriorNoPdvRepository(
+      { empresaId: travado.empresaId, pdvId: travado.pdvId, caixaId: travado.id, abertoAte: oficial },
+      tx
+    );
+    if (fimAnterior && inicio.getTime() <= fimAnterior.getTime()) {
+      throw new ErroDominio(
+        "O inicio nao pode ser antes do fechamento do caixa anterior deste PDV.",
+        422,
+        "INICIO_VENDAS_ANTES_DO_CAIXA_ANTERIOR"
+      );
+    }
+
+    await atualizarInicioVendasCaixaRepository(travado.id, inicio, tx);
+    const atualizado = await buscarCaixaPorIdRepository(travado.id, tx);
+    if (!atualizado) throw new Error("Caixa nao encontrado");
+    // Dentro da janela o operador tambem pode corrigir para mais tarde: as vendas que ficam antes do novo
+    // inicio voltam a ficar sem caixa, e a contagem vai para o log e para a resposta.
+    const { anexadas, desanexadas } = await revincularVendasAoCaixa(atualizado, tx);
+    // `dataHoraAbertura` e a chave que o historico do caixa ja mostra; a abertura oficial vai junto.
+    // Sem autorizador: e o proprio operador (ou o gerente) que ajusta, nao ha segunda pessoa.
+    await registrarEdicaoCaixaRepository(
+      {
+        caixaId: travado.id,
+        tokenUsado: null,
+        autorizadorId: null,
+        observacao: dados.motivo.trim(),
+        editadoPor: perfil.usuarioId,
+        valoresAntigos: {
+          dataHoraAbertura: new Date(travado.dataHoraAbertura).toISOString(),
+          aberturaOficial: oficial.toISOString()
+        },
+        valoresNovos: {
+          dataHoraAbertura: inicio.toISOString(),
+          aberturaOficial: oficial.toISOString(),
+          vendasAnexadas: anexadas,
+          vendasDesanexadas: desanexadas
+        }
+      },
+      tx
+    );
+    if (travado.status === "em_fechamento") {
+      await invalidarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
+    }
+    return {
+      inicioVendas: inicio.toISOString(),
+      aberturaOficial: oficial.toISOString(),
+      vendasAnexadas: anexadas,
+      vendasDesanexadas: desanexadas,
+      relatorioVendasInvalidado: travado.status === "em_fechamento"
+    };
   });
 }
 
@@ -2149,6 +2252,17 @@ export async function gerarRelatorioVendasFechamento(
       );
     }
     if (!travado.dataHoraAbertura) throw new Error("Caixa sem horario de abertura");
+    const instante = (valor: Date | string | null) => (valor ? new Date(valor).getTime() : null);
+    if (
+      instante(travado.dataHoraAbertura) !== instante(caixa.dataHoraAbertura) ||
+      instante(travado.dataHoraFechamento) !== instante(caixa.dataHoraFechamento)
+    ) {
+      throw new ErroDominio(
+        "O periodo do caixa mudou enquanto o relatorio era gerado. Gere de novo.",
+        409,
+        "RELATORIO_PERIODO_MUDOU"
+      );
+    }
     const anexo = await buscarAnexoFechamentoCaixaRepository(travado.id, leituraCreare.anexoId, travado.empresaId, tx);
     if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
       throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");

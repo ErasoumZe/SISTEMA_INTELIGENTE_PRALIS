@@ -1,0 +1,39 @@
+import { lerGrupoIds } from "@padaria/shared/produtos";
+import { env } from "../env.js";
+import { GoogleSheetsService } from "../google/google-sheets.service.js";
+import { a1, type LeitorDeFaixas } from "./produtos-fiscal.service.js";
+
+/**
+ * IDs oficiais dos grupos no PDV (aba de IDs de grupo, faixa AC5:AD) — o `GrupoIdPlanilha` do paralelo
+ * (F7, doc 56). So leitura, cache de 5 minutos. Quem grava produto le ANTES da trava do cadastro, como
+ * as regras fiscais: o Google nunca segura a trava. Falha de leitura vira `null` (indisponivel) e nao e
+ * guardada em cache, para a proxima gravacao tentar de novo.
+ */
+const CACHE_MS = 5 * 60 * 1000;
+const FAIXA = "AC5:AD";
+let cache: { expiraEm: number; ids: Map<string, string | null> | null } | null = null;
+let leitorInjetado: LeitorDeFaixas | null = null;
+
+/** So para testes: troca a planilha por um leitor falso e limpa o cache. */
+export function definirLeitorDeGrupoIdsParaTeste(leitor: LeitorDeFaixas | null): void {
+  leitorInjetado = leitor;
+  cache = null;
+}
+
+export async function idsDeGrupoOficiais(): Promise<Map<string, string | null> | null> {
+  if (cache && cache.expiraEm > Date.now()) return cache.ids;
+  const leitor =
+    leitorInjetado ??
+    (env.GOOGLE_PRODUTOS_SPREADSHEET_ID
+      ? new GoogleSheetsService({ spreadsheetId: env.GOOGLE_PRODUTOS_SPREADSHEET_ID })
+      : null);
+  if (!leitor) return null;
+  try {
+    const [faixa] = await leitor.lerFaixasEmLote([a1(env.GOOGLE_PRODUTOS_GRUPO_IDS_TAB, FAIXA)]);
+    const ids = lerGrupoIds(faixa ?? []);
+    cache = { expiraEm: Date.now() + CACHE_MS, ids };
+    return ids;
+  } catch {
+    return null;
+  }
+}

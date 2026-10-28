@@ -13,6 +13,7 @@ import {
   isNull,
   lt,
   lte,
+  max,
   ne,
   or,
   sum
@@ -1398,6 +1399,31 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
       // Cronologico: a "aba" numera 1a/2a/3a por ordem de acontecimento (abertura sem ordem entra 1a).
       .orderBy(asc(transferencias.criadoEm))
   );
+}
+
+// R-224 · inicio das vendas do caixa. Muda SO `data_hora_abertura` (o periodo das vendas); `aberto_em` continua
+// sendo o carimbo oficial da abertura e o log fica em `edicoes_caixa`.
+export async function atualizarInicioVendasCaixaRepository(caixaId: string, inicio: Date, db: ExecutorBanco = banco) {
+  await db.update(fechamentosCaixa).set({ dataHoraAbertura: inicio }).where(eq(fechamentosCaixa.id, caixaId));
+}
+
+// Fim do ultimo caixa do MESMO PDV aberto antes deste: o inicio retroativo nunca entra no periodo dele.
+export async function buscarFimDoCaixaAnteriorNoPdvRepository(
+  input: { empresaId: string; pdvId: string; caixaId: string; abertoAte: Date },
+  db: ExecutorBanco = banco
+): Promise<Date | null> {
+  const [linha] = await db
+    .select({ fim: max(fechamentosCaixa.dataHoraFechamento) })
+    .from(fechamentosCaixa)
+    .where(
+      and(
+        eq(fechamentosCaixa.empresaId, input.empresaId),
+        eq(fechamentosCaixa.pdvId, input.pdvId),
+        ne(fechamentosCaixa.id, input.caixaId),
+        lte(fechamentosCaixa.abertoEm, input.abertoAte)
+      )
+    );
+  return linha?.fim ? new Date(linha.fim) : null;
 }
 
 export async function registrarEdicaoCaixaRepository(

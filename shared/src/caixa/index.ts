@@ -71,6 +71,14 @@ export const caixaParamsSchema = z.object({
 });
 export const iniciarFechamentoCaixaPayloadSchema = z.object({});
 
+// R-224: o operador pode RECUAR o inicio das vendas do caixa (ex.: abriu no sistema 13:18, mas ja vendia desde
+// 13:00). O servidor limita a janela (60 min, mesmo dia, depois do caixa anterior do PDV) e grava o log; a
+// abertura oficial (`abertoEm`) nunca muda.
+export const ajustarInicioVendasCaixaPayloadSchema = z.object({
+  inicio: z.string().datetime({ offset: true }),
+  motivo: z.string().trim().min(3, "Informe o motivo").max(500)
+});
+
 export const motivoIndisponibilidadeCaixaSchema = z.enum([
   "falta_energia",
   "oscilacao_eletrica",
@@ -556,6 +564,7 @@ export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
 export type IniciarFechamentoCaixaPayload = z.infer<typeof iniciarFechamentoCaixaPayloadSchema>;
+export type AjustarInicioVendasCaixaPayload = z.infer<typeof ajustarInicioVendasCaixaPayloadSchema>;
 export type RegistrarIndisponibilidadeCaixaPayload = z.infer<typeof registrarIndisponibilidadeCaixaPayloadSchema>;
 export type VendasDoCaixaQuery = z.infer<typeof vendasDoCaixaQuerySchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;

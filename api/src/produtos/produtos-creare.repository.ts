@@ -299,10 +299,10 @@ export async function registrarEntregaRepository(empresaId: string, id: string, 
   return executarEmTransacao(async (tx) => {
     await travarLoja(tx, empresaId);
     const lote = await loteParaFechar(tx, empresaId, id, sha256);
-    if (lote.entregueEm) return { registros: lote.itens.length, jaEntregue: true };
+    if (lote.entregueEm) return { count: lote.itens.length, alreadyDelivered: true };
     await gravarCursor(tx, creareExportacaoEntregas, lote);
     await tx.update(creareExportacaoLotes).set({ entregueEm: new Date() }).where(eq(creareExportacaoLotes.id, id));
-    return { registros: lote.itens.length, jaEntregue: false };
+    return { count: lote.itens.length, alreadyDelivered: false };
   });
 }
 
@@ -311,7 +311,7 @@ export async function confirmarLoteRepository(empresaId: string, id: string, sha
   return executarEmTransacao(async (tx) => {
     await travarLoja(tx, empresaId);
     const lote = await loteParaFechar(tx, empresaId, id, sha256);
-    if (lote.confirmadoEm) return { registros: lote.itens.length, jaConfirmado: true };
+    if (lote.confirmadoEm) return { count: lote.itens.length, alreadyConfirmed: true };
     if (!lote.entregueEm) await gravarCursor(tx, creareExportacaoEntregas, lote);
     await gravarCursor(tx, creareExportacaoConfirmacoes, lote);
     const agora = new Date();
@@ -319,6 +319,6 @@ export async function confirmarLoteRepository(empresaId: string, id: string, sha
       .update(creareExportacaoLotes)
       .set({ confirmadoEm: agora, entregueEm: lote.entregueEm ?? agora })
       .where(eq(creareExportacaoLotes.id, id));
-    return { registros: lote.itens.length, jaConfirmado: false };
+    return { count: lote.itens.length, alreadyConfirmed: false };
   });
 }

@@ -2,6 +2,8 @@ import type { DadosExternos } from "@padaria/shared/api";
 import {
   calcularPrecoVenda,
   calcularPrecoVendaComPromocao,
+  grupoIdDaEntrada,
+  grupoIdDoNome,
   normalizarTextosProduto,
   produtoPayloadSchema,
   TECLA_BALANCA_FIXA,
@@ -49,6 +51,7 @@ import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
 import { contextoFiscalRepository } from "./produtos-fiscal.repository.js";
 import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
 import { lojaFiscalDaEmpresa, margemPadraoDoGrupo, tabelasFiscais } from "./produtos-fiscal.service.js";
+import { idsDeGrupoOficiais } from "./produtos-grupo-id.js";
 
 /**
  * Nome/descricao repetidos na mesma loja. Recusa com confirmacao — o "cadastrar mesmo assim"
@@ -265,6 +268,8 @@ export async function salvarProduto(
   // Le as regras fiscais ANTES da trava do cadastro: dentro da transacao a classificacao usa o cache em
   // memoria e o Google nunca segura a trava. Falha aqui nao derruba nada (vira "fonte_indisponivel").
   await tabelasFiscais().catch(() => null);
+  // Mesmo motivo: os IDs oficiais de grupo (F7) sao lidos antes da trava. Sem fonte vira `null`.
+  const idsDeGrupo = entradaDaPessoa ? await idsDeGrupoOficiais() : null;
 
   const salvo = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
@@ -291,13 +296,17 @@ export async function salvarProduto(
     });
     if (problemas.length) throw new ReferenciaDeOutraEmpresaError(problemas.join(" "));
 
-    await recusarDuplicados(tx, {
-      empresaId: dados.empresaId,
-      descricao,
-      codigoBarras,
-      ignorarId: alvo?.id,
-      forcar: dados.forcar
-    });
+    // Paralelo (`product.service.ts`): duplicidade so na CRIACAO, pelo nome do catalogo (sem gramatura)
+    // ou pelo EAN. Na edicao a loja mexia so no preco de um produto de nome repetido (ha 246 no catalogo)
+    // e caia em "Cadastrar mesmo assim" (R1, doc 56).
+    if (!alvo) {
+      await recusarDuplicados(tx, {
+        empresaId: dados.empresaId,
+        nome: dados.nomeCatalogo?.trim() || descricao,
+        codigoBarras,
+        forcar: dados.forcar
+      });
+    }
 
     // Fiscal puxado pelo grupo, igual ao app da loja. A copia da BASE nao reclassifica: copia o fiscal.
     const contextoFiscal = await contextoFiscalRepository(tx, {
@@ -343,7 +352,18 @@ export async function salvarProduto(
           nomeCatalogo:
             dados.nomeCatalogo === undefined ? (alvo?.nomeCatalogo ?? null) : dados.nomeCatalogo?.trim() || null,
           ...balanca,
-          grupoIdExterno: dados.grupoIdExterno === undefined ? (alvo?.grupoIdExterno ?? null) : dados.grupoIdExterno,
+          // F7: na entrada de uma pessoa o ID do grupo no PDV segue o NOME do grupo (aba oficial), como no
+          // paralelo; a copia da BASE traz o ID que a BASE ja tem.
+          grupoIdExterno: entradaDaPessoa
+            ? grupoIdDaEntrada({
+                atual: alvo?.grupoIdExterno,
+                criacao: !alvo,
+                grupoMudou: Boolean(alvo) && (alvo?.grupoMercadoriaId ?? null) !== (dados.grupoMercadoriaId ?? null),
+                oficial: grupoIdDoNome(idsDeGrupo, contextoFiscal.grupoNome)
+              })
+            : dados.grupoIdExterno === undefined
+              ? (alvo?.grupoIdExterno ?? null)
+              : dados.grupoIdExterno,
           areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
           produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
           codigoInterno: opcoes.codigoInterno ?? null,
@@ -478,32 +498,22 @@ async function recusarDuplicados(
   tx: TransacaoBanco,
   entrada: {
     empresaId: string;
-    descricao: string;
+    /** Nome do catalogo (sem gramatura), como o `nome` do paralelo. */
+    nome: string;
     codigoBarras: string | null;
-    ignorarId: string | undefined;
     forcar: boolean;
   }
 ) {
   // Oficial: nome e EAN repetidos pedem confirmacao; `forcar` ("cadastrar mesmo assim") vale para os dois.
   if (entrada.forcar) return;
   if (entrada.codigoBarras) {
-    const porBarras = await buscarProdutoPorCodigoBarrasRepository(
-      tx,
-      entrada.empresaId,
-      entrada.codigoBarras,
-      entrada.ignorarId
-    );
+    const porBarras = await buscarProdutoPorCodigoBarrasRepository(tx, entrada.empresaId, entrada.codigoBarras);
     if (porBarras) {
       throw new CodigoBarrasDuplicadoError(mensagemDeDuplicado(porBarras, " com este codigo de barras"));
     }
   }
-  const porDescricao = await buscarProdutoPorDescricaoRepository(
-    tx,
-    entrada.empresaId,
-    entrada.descricao,
-    entrada.ignorarId
-  );
-  if (porDescricao) throw new ProdutoDuplicadoError(mensagemDeDuplicado(porDescricao, ""));
+  const porNome = await buscarProdutoPorDescricaoRepository(tx, entrada.empresaId, entrada.nome);
+  if (porNome) throw new ProdutoDuplicadoError(mensagemDeDuplicado(porNome, ""));
 }
 
 /**
