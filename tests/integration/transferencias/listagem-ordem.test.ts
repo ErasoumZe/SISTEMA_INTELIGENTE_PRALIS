@@ -6,14 +6,11 @@ import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-// A ordem da listagem de transferencias era escrita a mao como SQL cru (`desc nulls last`), o unico
-// uso de tagged template em `api/src`. Ele derrubava `npm run check` no 3o dos 9 passos desde o
-// commit 1f2dbe4 e, com isso, escondia os SEIS checks seguintes.
-//
-// A troca pelo predicado `is null` como primeira chave devolve o mesmo plano sem SQL cru, mas e uma
-// equivalencia que NAO e obvia de ler: em Postgres o padrao de `desc` e NULLS FIRST, entao quem
-// simplesmente apagasse o `nulls last` inverteria a tela inteira — a transferencia pendente subiria
-// para o topo e a recebida mais recente desceria. Este teste prende exatamente essa equivalencia.
+// Decisao do Marco (27/10): a lista de Transferencias e um HISTORICO — o lancamento MAIS RECENTE
+// (data/hora em que a Tesouraria lancou) vem primeiro, estando recebido ou pendente. Antes a ordem era
+// "recebidas primeiro, pendentes por ultimo" (`is null` como primeira chave), o que escondia no fim da
+// lista o malote que o Leo acabara de lancar e que ainda nao tinha sido usado. O desempate por `id`
+// mantem a paginacao estavel.
 describe("transferencias - ordem da listagem", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
@@ -50,7 +47,7 @@ describe("transferencias - ordem da listagem", () => {
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
-  it("coloca a recebida mais recente primeiro e a pendente por ultimo", async () => {
+  it("coloca o lancamento mais recente primeiro, recebido ou pendente", async () => {
     // Criadas em sequencia: sem o carimbo de recebimento, o desempate seria `criado_em desc` e a
     // ordem natural seria C, B, A — o inverso do que a regra de recebimento manda. Isso garante que
     // um acerto acidental nao passe por teste verde.
@@ -86,6 +83,6 @@ describe("transferencias - ordem da listagem", () => {
     assertOk(lista);
 
     const ids = json<{ data: { id: string }[] }>(lista).data.map((item) => item.id);
-    expect(ids).toEqual([recente, antiga, pendente]);
+    expect(ids).toEqual([pendente, recente, antiga]);
   });
 });

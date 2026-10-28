@@ -2,6 +2,7 @@
 export type { CadastroForm } from "@padaria/shared";
 
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
+import type { CaixaDaTransferencia, LacreRelatorio, SituacaoMalote } from "@padaria/shared/transferencias";
 
 // Dados fiscais do produto como vêm da API (numeric chega como string).
 export type Opcao = {
@@ -239,6 +240,13 @@ export type OperacaoResumo = {
   // Transferência: esta linha está sob as regras ESTRITAS da Transferência de retorno? Calculado
   // pelo servidor (caixa_id + tipo retorno/sangria) — a tela não conhece o tipo.
   ehCaixaParaCofre?: boolean;
+  // Relatorio de Transferencias (campos devolvidos por GET /api/transferencias; todos opcionais: as
+  // demais telas usam OperacaoResumo para outros tipos de lancamento e nao os recebem).
+  tipoMovimento?: "abertura" | "suprimento" | "sangria" | "retorno";
+  situacaoMalote?: SituacaoMalote | null;
+  pdvsDestino?: string[];
+  lacres?: LacreRelatorio[];
+  caixa?: CaixaDaTransferencia | null;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
   fotoNotaUrl?: string | null;

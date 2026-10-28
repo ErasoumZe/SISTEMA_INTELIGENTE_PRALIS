@@ -58,6 +58,52 @@ export const transferenciaPayloadSchema = z.object({
   computar: z.boolean().default(true)
 });
 
+// Relatorio de Transferencias (Tesouraria): os tres lacres de um malote e o estado de cada um.
+// Tudo aqui e DERIVADO de `lacres`/`transferencias` na leitura; nada novo e gravado.
+export const tipoLacreRelatorioSchema = z.enum(["abertura", "sangria", "fechamento"]);
+// abertura   : disponivel | usado
+// fechamento : reservado | usado
+// sangria    : disponivel | usada_aguardando_conferencia | conferida
+export const situacaoLacreRelatorioSchema = z.enum([
+  "disponivel",
+  "reservado",
+  "usado",
+  "usada_aguardando_conferencia",
+  "conferida"
+]);
+export const lacreRelatorioSchema = z.object({
+  tipo: tipoLacreRelatorioSchema,
+  // `null` quando o perfil nao pode ler o numero de um lacre ainda nao rompido (fechamento e
+  // bolsas): o operador digita o selo fisico, entao o numero nao pode estar na tela dele.
+  numero: z.string().nullable(),
+  situacao: situacaoLacreRelatorioSchema,
+  // Sangria que consumiu a bolsa (so em `usada_aguardando_conferencia` e `conferida`).
+  usadoEmTransferenciaId: z.string().nullable()
+});
+export const situacaoMaloteSchema = z.enum([
+  "disponivel",
+  "agendado",
+  "usado",
+  "recebido_sem_caixa",
+  "divergente",
+  "cancelado"
+]);
+export const tipoMovimentoTransferenciaSchema = z.enum(["abertura", "suprimento", "sangria", "retorno"]);
+// Caixa a que a transferencia pertence (o que usou o malote, ou de onde saiu a sangria).
+export const caixaDaTransferenciaSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  pdvNome: z.string().nullable(),
+  turnoNome: z.string().nullable(),
+  // Nomes DIGITADOS na abertura (obrigatorios): sao o registro operacional de quem estava no posto.
+  operadorNome: z.string().nullable(),
+  supervisorNome: z.string().nullable(),
+  abertoEm: z.string().nullable()
+});
+export type LacreRelatorio = z.infer<typeof lacreRelatorioSchema>;
+export type SituacaoMalote = z.infer<typeof situacaoMaloteSchema>;
+export type CaixaDaTransferencia = z.infer<typeof caixaDaTransferenciaSchema>;
+
 export const transferenciaDtoSchema = z.object({
   id: z.string(),
   empresaId: z.string(),
@@ -96,7 +142,16 @@ export const transferenciaDtoSchema = z.object({
   // Sem este campo a tela tratava TODA transferencia como
   // se fosse do Caixa — exigia valor sempre e oferecia "Nao bateu" numa generica, onde a rota de
   // recusa responde 404.
-  ehCaixaParaCofre: z.boolean()
+  ehCaixaParaCofre: z.boolean(),
+  // --- Relatorio de Transferencias (campos ADITIVOS; nenhum campo acima mudou) ---
+  tipoMovimento: tipoMovimentoTransferenciaSchema,
+  // Cofre -> PDV: disponivel (ninguem abriu com ele), usado, agendado... `null` nas demais linhas.
+  situacaoMalote: situacaoMaloteSchema.nullable(),
+  // PDVs PREVISTOS pela conta de destino (e pelos candidatos do multiplo destino). O PDV REAL, depois
+  // do uso, esta em `caixa.pdvNome`.
+  pdvsDestino: z.array(z.string()),
+  lacres: z.array(lacreRelatorioSchema),
+  caixa: caixaDaTransferenciaSchema.nullable()
 });
 
 // Decisao 9 (R-026): lacre e OPCIONAL no movimento, entao tem de ser opcional na conferencia.

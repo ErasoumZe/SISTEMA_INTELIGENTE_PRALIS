@@ -35,15 +35,20 @@ const opcoesContas = computed(() => [
   { title: "Todas as contas", value: "" },
   ...props.contas.map((conta) => ({ title: conta.nome ?? conta.id, value: conta.id }))
 ]);
-const rotuloStatus = computed(() => props.opcoesStatus.find((opcao) => opcao.value === props.status)?.title ?? "Status");
+const rotuloStatus = computed(
+  () => props.opcoesStatus.find((opcao) => opcao.value === props.status)?.title ?? "Status"
+);
 const filtrosAtivos = computed(() => {
   const chips: Array<{ chave: "status" | keyof FiltrosTransferencias; texto: string }> = [];
   if (props.status) chips.push({ chave: "status", texto: rotuloStatus.value });
   if (props.filtros.dataInicio) chips.push({ chave: "dataInicio", texto: `De ${props.filtros.dataInicio}` });
   if (props.filtros.dataFim) chips.push({ chave: "dataFim", texto: `Até ${props.filtros.dataFim}` });
   if (props.filtros.pdvId)
-    chips.push({ chave: "pdvId", texto: opcoesPdvs.value.find((opcao) => opcao.value === props.filtros.pdvId)?.title ?? "PDV" });
-  if (props.filtros.usuario) chips.push({ chave: "usuario", texto: `Criado por: ${props.filtros.usuario}` });
+    chips.push({
+      chave: "pdvId",
+      texto: opcoesPdvs.value.find((opcao) => opcao.value === props.filtros.pdvId)?.title ?? "PDV"
+    });
+  if (props.filtros.usuario) chips.push({ chave: "usuario", texto: `Lançado por: ${props.filtros.usuario}` });
   if (props.filtros.contaOrigemId)
     chips.push({
       chave: "contaOrigemId",
@@ -129,13 +134,19 @@ function limpar() {
         :prepend-icon="avancadosAbertos ? 'mdi-chevron-up' : 'mdi-tune-variant'"
         @click="avancadosAbertos = !avancadosAbertos"
       >
-        {{ avancadosAbertos ? 'Menos filtros' : 'Mais filtros' }}
+        {{ avancadosAbertos ? "Menos filtros" : "Mais filtros" }}
       </v-btn>
     </div>
 
     <div v-if="filtrosAtivos.length" class="filtros-transferencias__chips" aria-label="Filtros aplicados">
       <span class="filtros-transferencias__rotulo">Aplicados</span>
-      <v-chip v-for="filtro in filtrosAtivos" :key="filtro.chave" closable size="small" @click:close="remover(filtro.chave)">
+      <v-chip
+        v-for="filtro in filtrosAtivos"
+        :key="filtro.chave"
+        closable
+        size="small"
+        @click:close="remover(filtro.chave)"
+      >
         {{ filtro.texto }}
       </v-chip>
       <v-btn variant="text" size="x-small" @click="limpar">Limpar tudo</v-btn>
@@ -144,7 +155,7 @@ function limpar() {
     <div v-if="avancadosAbertos" class="filtros-transferencias__avancados">
       <v-text-field
         :model-value="filtros.usuario"
-        label="Criado por"
+        label="Lançado por"
         density="compact"
         variant="outlined"
         hide-details
@@ -219,13 +230,23 @@ function limpar() {
   font-weight: 700;
 }
 @media (width <= 1024px) {
-  .filtros-transferencias__barra { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filtros-transferencias__mais { justify-self: start; }
-  .filtros-transferencias__avancados { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filtros-transferencias__barra {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .filtros-transferencias__mais {
+    justify-self: start;
+  }
+  .filtros-transferencias__avancados {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (width <= 560px) {
-  .filtros-transferencias { padding: 12px; }
+  .filtros-transferencias {
+    padding: 12px;
+  }
   .filtros-transferencias__barra,
-  .filtros-transferencias__avancados { grid-template-columns: 1fr; }
+  .filtros-transferencias__avancados {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

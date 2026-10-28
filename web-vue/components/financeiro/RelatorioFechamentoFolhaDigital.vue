@@ -57,7 +57,7 @@ function descricaoTransferencia(item: Transferencia) {
         ? "Fundo de abertura"
         : item.tipo === "suprimento"
           ? "Suprimento"
-          : item.tipo === "sangria"
+          : item.tipo === "sangria" || item.lacreNumero
             ? "Sangria"
             : "Retorno final")
   );
@@ -78,6 +78,13 @@ function rotuloPagamento(item: Registro) {
         <span v-if="resumo?.supervisorResponsavelNomeFechamento">
           Supervisor: {{ texto(resumo.supervisorResponsavelNomeFechamento) }}
         </span>
+        <span v-if="caixa.caixaResponsavelNomeAbertura">
+          Abertura: {{ texto(caixa.caixaResponsavelNomeAbertura) }}
+          <template v-if="caixa.supervisorResponsavelNomeAbertura">
+            · supervisor {{ texto(caixa.supervisorResponsavelNomeAbertura) }}
+          </template>
+        </span>
+        <span v-if="caixa.usuarioCaixaNome">Conta do posto: {{ texto(caixa.usuarioCaixaNome) }}</span>
       </div>
     </section>
 
