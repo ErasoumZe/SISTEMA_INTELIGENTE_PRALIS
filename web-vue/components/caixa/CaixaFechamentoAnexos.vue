@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
+import { useCapturaCamera } from "~/composables/useCapturaCamera";
 type Anexo = {
   id: string;
   tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare";
@@ -16,6 +18,7 @@ const emit = defineEmits<{
 const { apiUrl, apiGet } = useApi();
 const arquivo = useTemplateRef<HTMLInputElement>("arquivo");
 const camera = useTemplateRef<HTMLInputElement>("camera");
+const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(camera);
 const anexos = ref<Anexo[]>([]);
 const enviando = ref(false);
 const removendo = ref<string | null>(null);
@@ -105,7 +108,7 @@ watch(
         prepend-icon="mdi-camera"
         :loading="enviando"
         :disabled="!caixaId"
-        @click="camera?.click()"
+        @click="abrirCamera()"
         >Abrir câmera</v-btn
       >
       <v-btn
@@ -119,6 +122,7 @@ watch(
     </div>
     <input ref="camera" class="d-none" type="file" accept="image/*" capture="environment" @change="enviar" />
     <input ref="arquivo" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar" />
+    <CapturaCameraDialog v-model="cameraAberta" @capturada="aoCapturar" @indisponivel="aoIndisponivel" />
     <div v-if="folhas.length" class="folha__lista mt-4">
       <div v-for="anexo in folhas" :key="anexo.id">
         <v-icon :icon="anexo.mimeType.startsWith('image/') ? 'mdi-image-outline' : 'mdi-file-pdf-box'" /><span>{{

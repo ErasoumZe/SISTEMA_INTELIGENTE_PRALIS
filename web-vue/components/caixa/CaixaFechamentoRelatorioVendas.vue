@@ -3,6 +3,8 @@ import type { VendaCanceladaCaixa } from "@padaria/shared";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
+import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
+import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
 type LeituraCreare = Record<
   "totalBruto" | "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "despesasExcetoSangria" | "resultadoFinal",
@@ -32,6 +34,7 @@ type SugestaoCreare = Record<
 const props = defineProps<{ caixaId: string }>();
 const { apiUrl, apiGet, apiPost } = useApi();
 const cameraCreare = useTemplateRef<HTMLInputElement>("cameraCreare");
+const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(cameraCreare);
 const galeriaCreare = useTemplateRef<HTMLInputElement>("galeriaCreare");
 
 const carregando = ref(false);
@@ -120,7 +123,8 @@ async function carregarRelatorioExistente() {
       try {
         await analisarAnexoCreare(anexoCreare.id);
       } catch {
-        aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
+        aviso.value =
+          "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
       }
     }
     if (consulta !== consultaAtual || !relatorio) return;
@@ -144,10 +148,7 @@ async function gerarRelatorio() {
             leituraCreare: {
               documentoLegivel: true,
               ...Object.fromEntries(
-                camposCreare.map(({ chave }) => [
-                  chave,
-                  numeroDoCampo(leituraCreare.value[chave])
-                ])
+                camposCreare.map(({ chave }) => [chave, numeroDoCampo(leituraCreare.value[chave])])
               ),
               camposDuvidosos: [],
               observacoes: []
@@ -190,7 +191,8 @@ async function enviarRelatorioCreare(evento: Event) {
     try {
       await analisarAnexoCreare(anexoCreareId.value);
     } catch {
-      aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
+      aviso.value =
+        "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
     }
   } catch (falha) {
     erro.value = mensagemErro(falha);
@@ -224,7 +226,7 @@ watch(
         <p>Anexe a folha do turno. Ela é separada da folha de fechamento do malote.</p>
       </div>
       <div>
-        <v-btn prepend-icon="mdi-camera" :loading="enviandoCreare" @click="cameraCreare?.click()">Câmera</v-btn>
+        <v-btn prepend-icon="mdi-camera" :loading="enviandoCreare" @click="abrirCamera()">Câmera</v-btn>
         <v-btn prepend-icon="mdi-image" :loading="enviandoCreare" @click="galeriaCreare?.click()">Galeria</v-btn>
       </div>
       <input
@@ -243,6 +245,7 @@ watch(
         @change="enviarRelatorioCreare"
       />
       <small v-if="anexoCreareEnviado" class="text-success">Folha do CREARE anexada.</small>
+      <CapturaCameraDialog v-model="cameraAberta" @capturada="aoCapturar" @indisponivel="aoIndisponivel" />
     </section>
 
     <v-alert v-if="aviso" type="info" density="compact" variant="tonal" class="mt-4">{{ aviso }}</v-alert>
