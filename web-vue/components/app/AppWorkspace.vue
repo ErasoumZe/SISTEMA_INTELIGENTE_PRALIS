@@ -2008,7 +2008,6 @@ function tipoCopiaTela(tela = telaAtiva.value) {
     fornecedores: "fornecedores",
     socios_gestores: "socios-gestores",
     maquininhas: "maquininhas",
-    produtos: "produtos",
     colaboradores: "colaboradores"
   };
   return mapa[tela] ?? tela.replaceAll("_", "-");
@@ -2325,6 +2324,7 @@ const pageContext = computed(() => ({
   cancelarPlanejamentoRetorno,
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
+  podeVerTransferencias: temPermissao("transferencias_visualizar"),
   podeConferirFechamento: podeAcessarFolhaFechamento.value && temPermissao("fechamentos_caixa_conferir"),
   // R-200: o painel de mensagens mora no Monitor de caixas abertos e nao tem item de menu proprio.
   // O servidor exige as mesmas chaves; isto aqui so decide o que aparece.

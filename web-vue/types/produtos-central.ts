@@ -1,0 +1,79 @@
+import type { JsonValue } from "@padaria/shared/api";
+
+export type FonteCentral =
+  | "sia_li"
+  | "compilart_tnp"
+  | "planilha_tnp"
+  | "fiscal_tnp"
+  | "planilha_nova"
+  | "vendidos_tnp"
+  | "pralis";
+export type LojaCentral = "" | "LI" | "TNP" | "BASE" | "HORA";
+
+export type CargaCentral = {
+  id: string;
+  estado: string;
+  criadoEm: string;
+  resumo: Record<string, JsonValue> | null;
+};
+
+export type ItemFonteCentral = {
+  fonte: FonteCentral;
+  loja: string;
+  codigoInterno: string;
+  codigoBarras: string;
+  nome: string;
+  custo: string | null;
+  venda: string | null;
+  fiscal: Record<string, string | null> | null;
+};
+
+export type GrupoCentral = {
+  id: string;
+  chave: string;
+  motivo: string;
+  nome: string;
+  lojas: string[];
+  fontes: FonteCentral[];
+  alertaNomeDivergente: boolean;
+  alertaBarrasConflitantes: boolean;
+  alertaSemFiscalTnp: boolean;
+  alertaSemGrupo: boolean;
+  alertaJaNaBase: boolean;
+  decisao: { acao: string; usuarioNome: string | null; criadoEm: string } | null;
+  itens: ItemFonteCentral[];
+};
+
+export type ResumoCargaCentral = {
+  linhas: number;
+  grupos: number;
+  barrasConflitantes: number;
+  nomesDivergentes: number;
+  semFiscalTnp: number;
+  semGrupo: number;
+};
+
+export type PreviaCatalogoBase = {
+  estado: "ok" | "sem_base";
+  total?: number;
+  novos?: number;
+  existentes?: number;
+  idsDuplicados?: number;
+  codigosInternosDuplicados?: number;
+  eansDuplicados?: number;
+  codigosInternosEmProdutos?: number;
+  eansEmProdutos?: number;
+  semNcm?: number;
+  semCst?: number;
+  amostra?: Array<{
+    idOrigem: string | null;
+    nome: string;
+    codigoInterno: string;
+    codigoBarras: string;
+    ncm: string | null;
+    cstPisCofins: string | null;
+    conflitoCodigoInterno: boolean;
+    conflitoEan: boolean;
+    acao: "incluir" | "atualizar";
+  }>;
+};

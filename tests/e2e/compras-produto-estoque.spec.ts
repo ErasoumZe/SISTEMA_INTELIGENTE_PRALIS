@@ -1,35 +1,47 @@
 import { expect, test } from "@playwright/test";
-import { entrar, escolherNoSelect, escolherPrimeiraOpcao, observarConsole, USUARIOS } from "./apoio.js";
-import { codigoDeTeste, escolherNoFiltro, irParaTela } from "./apoio-compras.js";
+import { entrar, observarConsole, USUARIOS } from "./apoio.js";
+import {
+  abrirContextoCompras,
+  codigoDeTeste,
+  criarProdutoPelaBase,
+  escolherNoFiltro,
+  irParaTela
+} from "./apoio-compras.js";
 
 test.setTimeout(180_000);
 
+/**
+ * Oficial (R-222): o produto nasce na BASE pelo administrador e a loja recebe a copia, completada
+ * com o que e dela (estoque, locais, curva). O comprador CONFERE o cadastro e usa os filtros.
+ */
 test("produto de Compras persiste parametros e aparece nos cinco filtros de estoque", async ({ page }) => {
   const problemas = observarConsole(page);
   const sufixo = codigoDeTeste();
   const nome = `Leite integral 1 L (teste ${sufixo})`;
   const area = `Area E2E ${sufixo}`;
-  const localVenda1 = `Balcao E2E ${sufixo}`;
-  const localVenda2 = `Vitrine E2E ${sufixo}`;
-  const localEstoque = `Deposito E2E ${sufixo}`;
+  // Setor de estoque e locais de venda sao gravados em MAIUSCULAS (regra do app oficial).
+  const localVenda1 = `BALCAO E2E ${sufixo}`;
+  const localVenda2 = `VITRINE E2E ${sufixo}`;
+  const localEstoque = `DEPOSITO E2E ${sufixo}`;
+
+  const compras = await abrirContextoCompras();
+  await compras.api.dispose();
+  await criarProdutoPelaBase(
+    { descricao: nome, grupoNome: "Farinhas" },
+    {
+      estoqueMin: 10,
+      estoqueMax: 40,
+      areaEstoque: area,
+      setorEstoque: localEstoque,
+      curvaAbc: "B",
+      localVenda1,
+      localVenda2
+    },
+    compras.empresaId
+  );
 
   await entrar(page, USUARIOS.compras);
-  await irParaTela(page, "/produtos/novo", "Novo produto");
-  await page.locator('[data-campo="descricao"] input').fill(nome);
-  await page.locator('[data-campo="quantidadeIndividual"] input').fill("1");
-  await escolherPrimeiraOpcao(page, '[data-campo="unidadeIndividualId"]');
-  await escolherNoSelect(page, "Grupo de mercadoria", "Farinhas");
-  await page.getByLabel("Estoque mínimo").fill("10");
-  await page.getByLabel("Estoque máximo").fill("40");
-  await page.getByLabel("Área", { exact: true }).fill(area);
-  await page.getByLabel("Local de estoque", { exact: true }).fill(localEstoque);
-  await page.getByLabel("Local de estoque", { exact: true }).press("Enter");
-  await escolherNoSelect(page, "Curva ABC", "B");
-  await page.getByLabel("Local de venda 1").fill(localVenda1);
-  await page.getByLabel("Local de venda 2").fill(localVenda2);
-  await page.getByRole("button", { name: "Salvar produto" }).click();
-
-  await page.waitForURL("**/produtos");
+  await irParaTela(page, "/produtos", "Produtos");
   await page.getByPlaceholder(/Buscar por nome/).fill(nome);
   const cartao = page.locator(".produto-card").filter({ hasText: nome });
   await expect(cartao).toBeVisible();

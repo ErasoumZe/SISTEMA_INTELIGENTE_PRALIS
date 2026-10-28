@@ -1,0 +1,48 @@
+.pesaveis-card {
+  display: grid;
+  gap: var(--cx-sp-3);
+  min-width: 0;
+}
+.pesaveis-card h2 {
+  font-size: var(--cx-fs-title);
+  font-weight: 700;
+  color: var(--cx-ink);
+}
+.pesaveis-card p {
+  margin: 0;
+  color: var(--cx-ink-soft);
+}
+.pesaveis-card__envio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--cx-sp-3);
+  align-items: center;
+}
+.pesaveis-card__numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--cx-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pesaveis-card__numeros li {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.pesaveis-card__numeros strong {
+  display: block;
+  font-size: var(--cx-fs-title);
+  color: var(--cx-ink);
+}
+.pesaveis-card__lista {
+  margin: 0;
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 768px) {
+  .pesaveis-card__envio {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

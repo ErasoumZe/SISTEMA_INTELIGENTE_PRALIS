@@ -153,6 +153,24 @@ export class GoogleSheetsService {
     return resposta.values ?? [];
   }
 
+  /**
+   * Varias faixas numa chamada so (`values:batchGet`), com o valor FORMATADO — como o app oficial le as
+   * abas fiscais. Uma faixa fora da grade derruba o lote inteiro; quem chama decide o que reler.
+   */
+  async lerFaixasEmLote(faixas: string[]): Promise<string[][][]> {
+    const token = await this.tokenProvider();
+    const consulta = faixas.map((faixa) => `ranges=${encodeURIComponent(faixa)}`).join("&");
+    const resposta = await executarGoogleJson<{ valueRanges?: SpreadsheetValuesResponse[] }>(
+      this.fetcher,
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(this.spreadsheetId)}/values:batchGet?${consulta}&valueRenderOption=FORMATTED_VALUE`,
+      { headers: cabecalhoGoogle(token) },
+      "ler faixas da planilha"
+    );
+    return (resposta.valueRanges ?? []).map((faixa) =>
+      (faixa.values ?? []).map((linha) => linha.map((valor) => (valor == null ? "" : String(valor))))
+    );
+  }
+
   async lerLinhas(sheetName: string, range = "A:ZZ") {
     return this.lerLinhasParaCabecalho(sheetName, range);
   }

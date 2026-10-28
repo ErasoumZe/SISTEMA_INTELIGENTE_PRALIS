@@ -1,0 +1,398 @@
+import { formatoCreare } from "./formato-creare.js";
+import { montarComoSeCompra, montarDescricao } from "./regras.js";
+
+/**
+ * Espelho na planilha — as celulas de cada coluna, porte literal de `product-sheet.mapper.ts` do app
+ * oficial (R-222). A entrada (`ProdutoPlanilha`) usa os MESMOS nomes de campo do produto do app.
+ */
+export interface ProdutoPlanilha {
+  id: string;
+  nome: string;
+  quantidade: number;
+  medidaBase: string;
+  codigoBarras: string | null;
+  marca: string | null;
+  embalagem: string | null;
+  cDe: "C/" | "DE" | null;
+  qtCad: number;
+  medidaCompra: string | null;
+  compraAproximada?: boolean | null;
+  codigoInterno: string | null;
+  fotoUrl: string | null;
+  grupo: string | null;
+  tipo: "revenda" | "transformacao";
+  status: string;
+  habilitarAjuda: boolean;
+  estoqueMin: number | null;
+  estoqueMax: number | null;
+  setorEstoque: string | null;
+  custo: number | null;
+  margemPontual: number | null;
+  vVendaPontual: number | null;
+  auto: boolean;
+  localVenda1: string | null;
+  localVenda2: string | null;
+  promocoes: Array<{
+    tipo: "valor" | "desconto";
+    valor?: number | null;
+    descontoPct?: number | null;
+    descontoAte?: string | null;
+    horaInicio?: string | null;
+    horaFim?: string | null;
+    dias?: boolean[] | null;
+  }>;
+  transformacao: {
+    precisao: string | null;
+    qtd: number | null;
+    unidade: string | null;
+    produtoReceituario: string | null;
+    refReceituario: string | null;
+  } | null;
+  fiscal: {
+    reducaoIcms?: number | null;
+    aliquotaCheia?: number | null;
+    aliquotaFcp?: number | null;
+    cstPisCofins?: string | null;
+    aliquotaPis?: number | null;
+    aliquotaCofins?: number | null;
+    ncm?: string | null;
+    categoria?: string | null;
+    icms?: number | null;
+    cest?: string | null;
+    aliquotaEcf?: string | null;
+    aliquotaEcfId?: string | null;
+    pctNcm?: number | null;
+  } | null;
+}
+
+/**
+ * Mapeamento INVERSO do importador (`src/db/gen-base-json.ts`): produto do
+ * Postgres -> células da aba "(BASE) CADASTRO PRODUTOS".
+ *
+ * Só as colunas de ENTRADA aparecem aqui. As calculadas (H, P, U, AD, AF, AH,
+ * AK, AO, AP, AR, AT, AV, AX, AY, BI, BJ, BR) nunca são escritas — elas vêm das
+ * fórmulas copiadas da linha-modelo.
+ *
+ * Formatos confirmados na planilha (linha 5 = cabeçalhos, dados a partir da 11):
+ *  - F  QUANTIDADE  -> coluna TEXTO, no padrão pt-BR com 3 casas ("25,000")
+ *  - AL MARGEM PONT -> formato 0%     -> fração (0,7 = 70%) — igual ao banco
+ *  - AZ PROMO DESC  -> formato 0.00%  -> fração             — igual ao banco
+ *  - BL/BO HORAS    -> formato HH:mm:ss
+ *  - J  CODIGO BARRAS -> hoje numérico; vira TEXTO quando tem zero à esquerda
+ *  - AC/BV/CA/CE    -> TEXTO (preservam zeros à esquerda)
+ */
+
+type Product = ProdutoPlanilha;
+
+/**
+ * `text`    -> gravado com RAW: fica literal (preserva zero à esquerda e evita
+ *              que um nome iniciado por "=" vire fórmula).
+ * `number`  -> gravado com USER_ENTERED como número.
+ * `entered` -> gravado com USER_ENTERED como string: a planilha interpreta
+ *              (hora "12:00", percentual "20%").
+ * `empty`   -> limpa a célula.
+ */
+export type SheetCell =
+  | { kind: "empty" }
+  | { kind: "text"; value: string }
+  | { kind: "number"; value: number }
+  | { kind: "entered"; value: string };
+
+export type CellMap = Record<string, SheetCell>;
+
+export interface MapperOptions {
+  /** Conteúdo da coluna D (LOJAS) — vem de GOOGLE_SHEETS_DEFAULT_LOJAS. */
+  defaultLojas: string;
+  footerColumns?: SheetFooterColumns;
+}
+
+export interface SheetFooterColumns {
+  help?: string | null;
+  photo: string;
+  id: string;
+}
+
+export const DEFAULT_FOOTER_COLUMNS: SheetFooterColumns = {
+  help: "CN",
+  photo: "CO",
+  id: "CP"
+};
+
+// ---- helpers ----
+const EMPTY: SheetCell = { kind: "empty" };
+
+const text = (v: string | null | undefined): SheetCell => {
+  const s = (v ?? "").trim();
+  return s === "" ? EMPTY : { kind: "text", value: s };
+};
+
+const number = (v: number | null | undefined): SheetCell =>
+  v == null || Number.isNaN(v) ? EMPTY : { kind: "number", value: v };
+
+const entered = (v: string | null | undefined): SheetCell => {
+  const s = (v ?? "").trim();
+  return s === "" ? EMPTY : { kind: "entered", value: s };
+};
+
+/** SIM/NÃO — a convenção da planilha para booleanos. */
+export const simNao = (v: boolean): string => (v ? "SIM" : "NÃO");
+
+/**
+ * Rótulos dos dias, na ordem das colunas BB..BH (= ordem do array `dias` do banco).
+ *
+ * A coluna AP (V. VENDA FINAL) decide se a promoção vale hoje com
+ * `HLOOKUP(<rótulo do dia de hoje>, $BB$11:$BH$11, 1, 0)`, e o rótulo vem da
+ * tabela de apoio `(TNPLIHORA - EXP.) DATASNUMEROS!AH11:AI17`
+ * (1=DOM, 2=SEG, ... 7=SAB). Ou seja: a célula tem de conter o PRÓPRIO rótulo
+ * do dia quando ativo e ficar VAZIA quando inativo — "SIM"/"NÃO" nunca casaria
+ * no HLOOKUP e a promoção jamais seria aplicada.
+ */
+export const DIA_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"] as const;
+
+/**
+ * Desconto promocional para a coluna AZ, em fração NEGATIVA.
+ *
+ * A coluna AY calcula `(AZ*AO)+AO`, ou seja `AO*(1+AZ)`: 20% de desconto só
+ * resulta em 0,8×AO se AZ for -0,20. A validação de dados da coluna (intervalo
+ * nomeado PORCENTAGEMDESCONTO) aceita apenas 0 e valores negativos.
+ * No banco o desconto é guardado como fração positiva, então normalizamos aqui.
+ */
+export const descontoParaAZ = (pct: number): number => (pct === 0 ? 0 : -Math.abs(pct));
+
+/**
+ * Quantidade no padrão da coluna F (texto pt-BR, 3 casas): 25 -> "25,000".
+ * Sem separador de milhar — o importador remove pontos, então "1234,500" volta
+ * a ser lido como 1234,5 sem ambiguidade.
+ */
+export const formatQuantidade = (n: number): string => n.toFixed(3).replace(".", ",");
+
+/**
+ * Código de barras: mantém número quando a planilha já guarda número (é o caso
+ * hoje), mas vira TEXTO se tiver zero à esquerda ou não for só dígitos — assim
+ * nenhum dígito se perde.
+ */
+export const barcodeCell = (codigo: string | null | undefined): SheetCell => {
+  const s = (codigo ?? "").trim();
+  if (s === "") return EMPTY;
+  const soDigitos = /^[0-9]+$/.test(s);
+  if (!soDigitos) return { kind: "text", value: s };
+  if (s.length > 1 && s.startsWith("0")) return { kind: "text", value: s }; // preserva zero à esquerda
+  if (!Number.isSafeInteger(Number(s))) return { kind: "text", value: s }; // longo demais para número exato
+  return { kind: "number", value: Number(s) };
+};
+
+/** Colunas dos dias da promoção, na ordem SEG..DOM. */
+export const DIAS_COLS = ["BB", "BC", "BD", "BE", "BF", "BG", "BH"] as const;
+
+/** Todas as colunas de entrada controladas por este mapper. */
+export const INPUT_COLUMNS: readonly string[] = [
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "AB",
+  "AC",
+  "AE",
+  "AG",
+  "AI",
+  "AJ",
+  "AL",
+  "AM",
+  "AN",
+  "AQ",
+  "AS",
+  "AU",
+  "AW",
+  "AZ",
+  "BA",
+  ...DIAS_COLS,
+  "BK",
+  "BL",
+  "BM",
+  "BO",
+  "BP",
+  "BS",
+  "BT",
+  "BU",
+  "BV",
+  "BW",
+  "BX",
+  "CA",
+  "CB",
+  "CD",
+  "CE"
+];
+
+/**
+ * Chaves que existem SÓ na planilha nova.
+ *
+ * `ALIQUOTA ECF` e `ALIQUOTA ECF ID` não tinham coluna na BASE antiga, então
+ * não há letra real que as carregue. `CF`/`CG` são chaves sintéticas, escolhidas
+ * entre as letras que a BASE antiga não usava.
+ *
+ * Ficam FORA de `INPUT_COLUMNS` de propósito: é `INPUT_COLUMNS` que manda no
+ * leiaute antigo, e lá as colunas CF e CG são outra coisa. Escrever nelas
+ * corromperia a planilha antiga. No leiaute novo o destino é resolvido por
+ * NOME de cabeçalho, então a letra sintética não incomoda ninguém.
+ */
+export const COLUNAS_SO_DA_NOVA = ["CF", "CG", "CH"] as const;
+
+export const inputColumnsFor = (footer: SheetFooterColumns): string[] => [
+  ...INPUT_COLUMNS,
+  ...(footer.help ? [footer.help] : []),
+  footer.photo,
+  footer.id
+];
+
+/**
+ * Monta o mapa coluna -> célula para um produto da BASE.
+ * Toda coluna de entrada aparece no resultado; ausência de valor vira `empty`
+ * (célula limpa), nunca sobra do que estava na linha antes.
+ */
+export function mapProductToCells(product: Product, opts: MapperOptions): CellMap {
+  const revenda = product.tipo === "revenda";
+  const tr = product.transformacao;
+  const fiscal = product.fiscal;
+  const footer = opts.footerColumns ?? DEFAULT_FOOTER_COLUMNS;
+  // A planilha tem UM bloco de promoção por linha; usamos a primeira do produto.
+  const promo = product.promocoes?.[0] ?? null;
+
+  const cells: CellMap = {
+    // ---- cadastro geral ----
+    C: { kind: "text", value: product.status === "inativo" ? "INATIVO" : "ATIVO" },
+    D: text(opts.defaultLojas),
+    E: text(product.nome),
+    F: { kind: "text", value: formatQuantidade(product.quantidade ?? 0) },
+    G: text(product.medidaBase),
+    J: barcodeCell(product.codigoBarras),
+    K: text(product.marca),
+    L: text(product.embalagem),
+    M: text(product.cDe),
+    N: number(product.qtCad),
+    O: text(product.medidaCompra),
+    // A fórmula histórica desta coluna depende de células auxiliares que
+    // estão inconsistentes na planilha oficial. Geramos o valor no backend.
+    // montarComoSeCompra do ERP e o do oficial (mesmo texto); so muda o nome do campo da quantidade.
+    P: text(
+      montarComoSeCompra({
+        embalagem: product.embalagem ?? "",
+        cDe: product.cDe,
+        quantidadeCaixa: product.qtCad,
+        medidaCompra: product.medidaCompra ?? "",
+        descricao: montarDescricao(product.nome, product.quantidade, product.medidaBase),
+        aproximado: product.compraAproximada ?? false
+      })
+    ),
+
+    // ---- grupo: revenda (R) x transformação (T) — exclusivos ----
+    // Q e S são os flags que a planilha usa junto com R/T. São sempre
+    // complementares: a coluna U só monta o texto "DENTRO DA EMB..." se S=SIM.
+    Q: { kind: "text", value: simNao(revenda) },
+    R: revenda ? text(product.grupo) : EMPTY,
+    S: { kind: "text", value: simNao(!revenda) },
+    T: revenda ? EMPTY : text(product.grupo),
+
+    // ---- transformação ----
+    V: tr ? text(tr.precisao) : EMPTY,
+    W: tr ? number(tr.qtd) : EMPTY,
+    X: tr ? text(tr.unidade) : EMPTY,
+    Y: tr ? text(tr.produtoReceituario) : EMPTY,
+    Z: tr ? text(tr.refReceituario) : EMPTY,
+
+    // ---- cadastro / estoque / preço ----
+    // AB espelha o status: a coluna AD (`IF(AB<>"";P;"")`) só mostra a descrição
+    // quando AB está preenchida. Nas 150 linhas existentes AB == C sempre.
+    AB: { kind: "text", value: product.status === "inativo" ? "INATIVO" : "ATIVO" },
+    AC: text(product.codigoInterno), // TEXTO: preserva "00001"
+    AE: number(product.estoqueMin),
+    AG: number(product.estoqueMax),
+    AI: text(product.setorEstoque),
+    AJ: number(product.custo),
+    AL: number(product.margemPontual), // fração, igual ao formato 0% da coluna
+    AM: number(product.vVendaPontual),
+    AN: { kind: "text", value: simNao(product.auto) },
+    AQ: text(product.localVenda1),
+    AS: text(product.localVenda2),
+
+    // ---- promoção ----
+    AU: { kind: "text", value: simNao(!!promo) },
+    AW: promo && promo.tipo === "valor" ? number(promo.valor) : EMPTY,
+    AZ:
+      promo && promo.tipo === "desconto" && promo.descontoPct != null
+        ? { kind: "number", value: descontoParaAZ(promo.descontoPct) } // fração NEGATIVA
+        : EMPTY,
+    // BA aceita só os rótulos da lista DESCONTOATE ("ATÉ 5%" … "ATÉ 50%") — é
+    // texto, apesar do formato de percentual da coluna. Nenhuma fórmula a usa.
+    BA: promo ? text(promo.descontoAte) : EMPTY,
+    BK: { kind: "text", value: "DE:" }, // rótulo fixo antes da hora inicial
+    BL: promo ? entered(promo.horaInicio) : EMPTY,
+    BM: { kind: "text", value: "ATÉ:" }, // rótulo fixo antes da hora final
+    BO: promo ? entered(promo.horaFim) : EMPTY,
+    BP: { kind: "text", value: "NÃO REVISADO" },
+
+    // ---- fiscal ----
+    /*
+     * Os campos numéricos do Creare vão na GRAFIA do Creare, não como decimal.
+     *
+     * As colunas da faixa fiscal da planilha nova estão formatadas como
+     * `NUMBER #0` — inteiro, sem casas. Gravar `53.33` exibe `53` e perde os
+     * 0,33. No cadastro de origem a coluna equivalente usa o padrão `0000` e
+     * guarda `5333`; aqui devolvemos o mesmo.
+     *
+     * As larguras e casas foram medidas no dado real, não inferidas:
+     *   REDUCAO_ICMS  `0000` / `5333`      -> 4 caracteres, 2 casas
+     *   ALIQUOTA CHEIA `00000` / `18000`   -> 5 caracteres, 3 casas
+     *   ALIQUOTA FCP  `0000`               -> 4 caracteres, 2 casas
+     *   PIS e COFINS  `00000000`           -> 8 caracteres; a escala não é
+     *     verificável porque as 3.122 linhas são zero, e zero é zero em
+     *     qualquer escala. Se um valor diferente aparecer, confira antes.
+     */
+    BS: text(formatoCreare(fiscal?.reducaoIcms ?? null, 2, 4)),
+    BT: text(formatoCreare(fiscal?.aliquotaCheia ?? null, 3, 5)),
+    BU: text(formatoCreare(fiscal?.aliquotaFcp ?? null, 2, 4)),
+    BV: text(fiscal?.cstPisCofins ?? null), // TEXTO: "01" não pode virar 1
+    BW: text(formatoCreare(fiscal?.aliquotaPis ?? null, 4, 8)),
+    BX: text(formatoCreare(fiscal?.aliquotaCofins ?? null, 4, 8)),
+    CA: text(fiscal?.ncm ?? null), // TEXTO: NCM com zero à esquerda
+    CB: text(fiscal?.categoria ?? null),
+    CD: number(fiscal?.icms ?? null),
+    CE: text(fiscal?.cest ?? null), // TEXTO: CEST com zero à esquerda
+    // Só existem na planilha nova; no leiaute antigo estas chaves são ignoradas.
+    // TEXTO nos dois: "SUBST TRIB" não é número e o ID "03" perderia o zero.
+    CF: text(fiscal?.aliquotaEcf ?? null),
+    CG: text(fiscal?.aliquotaEcfId ?? null),
+    CH: number(fiscal?.pctNcm ?? null)
+  };
+
+  // O rodapé varia entre versões da planilha. Na homologação é CN/CO/CP;
+  // na oficial atual FOTO/ID estão em FO/FP e não há HABILITAR AJUDA.
+  if (footer.help) cells[footer.help] = { kind: "text", value: simNao(product.habilitarAjuda) };
+  cells[footer.photo] = text(product.fotoUrl);
+  cells[footer.id] = { kind: "text", value: product.id }; // chave de idempotência
+
+  // dias da promoção: o RÓTULO do dia quando ativo, célula vazia quando inativo
+  // (é o que o HLOOKUP da coluna AP procura — ver DIA_LABELS).
+  DIAS_COLS.forEach((col, i) => {
+    const ativo = !!promo && (promo.dias?.[i] ?? false);
+    cells[col] = ativo ? { kind: "text", value: DIA_LABELS[i]! } : EMPTY;
+  });
+
+  return cells;
+}

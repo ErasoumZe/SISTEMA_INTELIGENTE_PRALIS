@@ -60,6 +60,7 @@ import {
   contaEhPdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
   transferenciaPossuiLacreFechamentoPlanejadoRepository,
+  transferenciaEhMaloteDeAberturaRepository,
   transferenciaPossuiRetornosPlanejadosRepository,
   efetivarTransferenciaAgendadaRepository,
   listarAgendadasVencidasRepository,
@@ -69,9 +70,12 @@ import {
   listarTravamentosTransferenciaDoUsuarioRepository,
   transferenciaAdmitePrazoRepository,
   listarTransferenciasVencidasRepository,
-  listarTransferenciasRepository,
   registrarRecusaConferenciaRepository
 } from "./transferencias.repository.js";
+import {
+  listarTransferenciasRepository,
+  type OpcoesListagemTransferencias
+} from "./transferencias-relatorio.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contaOrigemId === dados.contaDestinoId) throw new Error("Conta de destino deve ser diferente da origem");
@@ -133,10 +137,11 @@ function ehTesouraria(perfil: PerfilUsuario): boolean {
 
 export async function listarTransferencias(
   query: TransferenciasQuery,
-  empresasPermitidasIds: string[] | null
-): Promise<TransferenciaDto[]> {
-  if (empresasPermitidasIds?.length === 0) return [];
-  return listarTransferenciasRepository(query, empresasPermitidasIds);
+  empresasPermitidasIds: string[] | null,
+  opcoes: OpcoesListagemTransferencias
+): Promise<{ itens: TransferenciaDto[]; total: number }> {
+  if (empresasPermitidasIds?.length === 0) return { itens: [], total: 0 };
+  return listarTransferenciasRepository(query, empresasPermitidasIds, opcoes);
 }
 
 // P1/#101 · a entrega ao cofre tem UM caminho, e nao e a transferencia comum.
@@ -301,6 +306,15 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+    // O lacre principal do malote so e usado quando o Caixa e ABERTO com ele. A conferencia comum nao pode dar o
+    // malote como recebido: o dinheiro iria para a conta do PDV sem caixa e a abertura falharia ("lacre rompido").
+    if (await transferenciaEhMaloteDeAberturaRepository(transferenciaId, tx)) {
+      throw new ErroDominio(
+        "O malote para o PDV so e recebido pela abertura do Caixa, usando o lacre do malote.",
+        409,
+        "MALOTE_SO_PELA_ABERTURA"
+      );
+    }
     if (await transferenciaPossuiRetornosPlanejadosRepository(transferenciaId, tx)) {
       throw new Error("Transferencia com retorno planejado deve ser recebida pela abertura do Caixa usando o lacre");
     }

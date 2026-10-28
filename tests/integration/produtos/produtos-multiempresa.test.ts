@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 /**
  * Isolamento entre empresas e concorrencia no cadastro de produtos (P-04, ETAPA 2).
@@ -35,19 +36,15 @@ describe("produtos - isolamento entre empresas", () => {
     unidadeB = await criarUnidade(cookieMultiempresa, idsTeste.empresaB, "Unidade Cross B", "crb");
 
     // Vitima: produto da empresa B COM as quatro satelites preenchidas.
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaB,
-        descricao: "Produto vitima da empresa B",
-        unidadeIndividualId: unidadeB,
-        quantidadeIndividual: 1,
-        conversoes: [{ unidadeMedidaId: unidadeB, quantidade: 2, unidadesIndividuais: 4 }],
-        fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA" },
-        promocoes: [{ tipo: "desconto", descontoFracao: 0.2, seg: true }]
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaB,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaB,
+      descricao: "Produto vitima da empresa B",
+      unidadeIndividualId: unidadeB,
+      quantidadeIndividual: 1,
+      conversoes: [{ unidadeMedidaId: unidadeB, quantidade: 2, unidadesIndividuais: 4 }],
+      fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA" },
+      promocoes: [{ tipo: "desconto", descontoFracao: 0.2, seg: true }]
     });
     expect(criado.statusCode).toBe(201);
     produtoDaEmpresaB = json<RespostaId>(criado).data.id;
@@ -94,6 +91,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieAdminA },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Sequestrado pela empresa A",
         unidadeIndividualId: unidadeA,
         quantidadeIndividual: 1,
@@ -106,23 +104,20 @@ describe("produtos - isolamento entre empresas", () => {
     await expect(
       consultarUm("select id from produtos where id = $1 and descricao = $2", [
         produtoDaEmpresaB,
-        "Produto vitima da empresa B"
+        // O cadastro grava a descricao em maiusculas (regra do app oficial).
+        "PRODUTO VITIMA DA EMPRESA B"
       ])
     ).resolves.toBeTruthy();
   });
 
   it("Deve_Recusar_Quando_PayloadTentaMoverProdutoDeEmpresa", async () => {
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto que nao muda de loja",
-        unidadeIndividualId: unidadeA,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao: "Produto que nao muda de loja",
+      unidadeIndividualId: unidadeA,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
     const produtoId = json<RespostaId>(criado).data.id;
 
@@ -133,6 +128,7 @@ describe("produtos - isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: {
         empresaId: idsTeste.empresaB,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaB,
         descricao: "Produto que nao muda de loja",
         unidadeIndividualId: unidadeB,
         quantidadeIndividual: 1,
@@ -165,17 +161,13 @@ describe("produtos - isolamento entre empresas", () => {
   });
 
   it("Deve_Recusar_Quando_UnidadeIndividualEDeOutraEmpresa", async () => {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto com unidade alheia",
-        unidadeIndividualId: unidadeB,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao: "Produto com unidade alheia",
+      unidadeIndividualId: unidadeB,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
 
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
@@ -185,20 +177,46 @@ describe("produtos - isolamento entre empresas", () => {
   });
 
   it("Deve_Recusar_Quando_UnidadeDeConversaoEDeOutraEmpresa", async () => {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto com conversao alheia",
-        unidadeIndividualId: unidadeA,
-        quantidadeIndividual: 1,
-        conversoes: [{ unidadeMedidaId: unidadeB, quantidade: 1, unidadesIndividuais: 1 }]
-      }
+    const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao: "Produto com conversao alheia",
+      unidadeIndividualId: unidadeA,
+      quantidadeIndividual: 1,
+      conversoes: [{ unidadeMedidaId: unidadeB, quantidade: 1, unidadesIndividuais: 1 }]
     });
 
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+  });
+
+  it("Deve_GerarCodigosInternosGlobaisUnicos_EmCadastrosConcorrentesDeLojasDiferentes", async () => {
+    const criar = (empresaId: string, grupoMercadoriaId: string, unidadeIndividualId: string, descricao: string) =>
+      cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+        empresaId,
+        grupoMercadoriaId,
+        descricao,
+        unidadeIndividualId,
+        quantidadeIndividual: 1,
+        conversoes: []
+      });
+
+    const [respostaA, respostaB] = await Promise.all([
+      criar(idsTeste.empresaA, idsTeste.grupoMercadoriaInsumos, unidadeA, "Código global concorrente loja A"),
+      criar(idsTeste.empresaB, idsTeste.grupoMercadoriaB, unidadeB, "Código global concorrente loja B")
+    ]);
+    expect(respostaA.statusCode).toBe(201);
+    expect(respostaB.statusCode).toBe(201);
+
+    const idA = json<RespostaId>(respostaA).data.id;
+    const idB = json<RespostaId>(respostaB).data.id;
+    const codigos = await consultarUm<{ codigo_a: string; codigo_b: string }>(
+      "select a.codigo_interno as codigo_a, b.codigo_interno as codigo_b from produtos a cross join produtos b where a.id = $1 and b.id = $2",
+      [idA, idB]
+    );
+    expect(codigos).toBeTruthy();
+    expect(Number(codigos?.codigo_a)).toBeGreaterThanOrEqual(13_130);
+    expect(Number(codigos?.codigo_b)).toBeGreaterThanOrEqual(13_130);
+    expect(codigos?.codigo_a).not.toBe(codigos?.codigo_b);
   });
 
   it("Deve_Recusar_Quando_GrupoDeMercadoriaEDeOutraEmpresa", async () => {
@@ -211,52 +229,25 @@ describe("produtos - isolamento entre empresas", () => {
     expect(grupoB.statusCode).toBe(201);
     const grupoBId = json<RespostaId>(grupoB).data.id;
 
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto com grupo alheio",
-        unidadeIndividualId: unidadeA,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: grupoBId,
-        conversoes: []
-      }
+    const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto com grupo alheio",
+      unidadeIndividualId: unidadeA,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: grupoBId,
+      conversoes: []
     });
 
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
-
-  it("Deve_Retornar404_Quando_ExportarProdutoForaDoEscopo", async () => {
-    // `admin` so acessa a empresa A; o produto e da empresa B. Sucesso com "0 inseridos" seria
-    // sucesso falso — e a diferenca entre 404 e 200 permitiria enumerar o cadastro alheio.
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: `/api/produtos/${produtoDaEmpresaB}/exportar`,
-      headers: { cookie: cookieAdminA },
-      payload: { empresaDestinoId: idsTeste.empresaA, modo: "simples" }
-    });
-
-    assertProblem(resposta, 404, "NOT_FOUND");
-  });
-
-  it("Deve_Retornar404_Quando_ExportarProdutoInexistente", async () => {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos/99999999-9999-4999-8999-999999999998/exportar",
-      headers: { cookie: cookieMultiempresa },
-      payload: { empresaDestinoId: idsTeste.empresaB, modo: "simples" }
-    });
-
-    assertProblem(resposta, 404, "NOT_FOUND");
-  });
 });
 
-describe("produtos - duplicidade e concorrencia", () => {
+// Produto novo nasce na BASE (modelo do app oficial): duplicidade e codigo interno se decidem la.
+describe("produtos - duplicidade e concorrencia na BASE", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let unidade: string;
+  const criadosNaBase: string[] = [];
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -271,128 +262,95 @@ describe("produtos - duplicidade e concorrencia", () => {
   }, 180_000);
 
   afterAll(async () => {
+    await executarSql("delete from produtos_catalogo_base where id = any($1::uuid[])", [criadosNaBase]);
     await contexto.fechar();
   });
 
-  it("Deve_BloquearCodigoBarrasRepetido_MesmoComForcar", async () => {
-    const base = {
-      empresaId: idsTeste.empresaA,
-      unidadeIndividualId: unidade,
-      quantidadeIndividual: 1,
+  const payload = (extra: Record<string, unknown>) => ({
+    empresaId: idsTeste.empresaA,
+    grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+    unidadeIndividualId: unidade,
+    quantidadeIndividual: 1,
+    conversoes: [],
+    ...extra
+  });
+
+  async function criarNaBase(extra: Record<string, unknown>) {
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos/base",
+      headers: { cookie: cookieAdmin },
+      payload: payload(extra)
+    });
+    if (resposta.statusCode === 201) criadosNaBase.push(json<RespostaId>(resposta).data.id);
+    return resposta;
+  }
+
+  const codigoNaBase = async (resposta: { json: () => unknown }) =>
+    (
+      await consultarUm<{ codigo_interno: string }>("select codigo_interno from produtos_catalogo_base where id = $1", [
+        json<RespostaId>(resposta).data.id
+      ])
+    )?.codigo_interno ?? "";
+
+  it("Deve_PedirConfirmacaoDeCodigoBarrasRepetido_E_AceitarComForcar", async () => {
+    const primeiro = await criarNaBase({ descricao: "EAN unico primeiro", codigoBarras: "7891234567895" });
+    expect(primeiro.statusCode, primeiro.body).toBe(201);
+
+    // Oficial: nome OU EAN repetido na BASE pede confirmacao; sem ela, 409 com o motivo.
+    const semForcar = await criarNaBase({ descricao: "EAN unico segundo", codigoBarras: "7891234567895" });
+    assertProblem(semForcar, 409, "DUPLICATE_PRODUCT");
+
+    // Com o "cadastrar mesmo assim", grava.
+    const comForcar = await criarNaBase({
+      descricao: "EAN unico segundo",
       codigoBarras: "7891234567895",
-      conversoes: []
-    };
-
-    const primeiro = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: { ...base, descricao: "EAN unico primeiro" }
+      forcar: true
     });
-    expect(primeiro.statusCode).toBe(201);
-
-    // Descricao diferente, EAN igual, e com o "cadastrar mesmo assim" ligado: continua bloqueado.
-    const segundo = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: { ...base, descricao: "EAN unico segundo", forcar: true }
-    });
-
-    assertProblem(segundo, 409, "DUPLICATE_BARCODE");
+    expect(comForcar.statusCode, comForcar.body).toBe(201);
   });
 
   it("Deve_PermitirDescricaoRepetida_Quando_Forcar", async () => {
-    const base = {
-      empresaId: idsTeste.empresaA,
-      unidadeIndividualId: unidade,
-      quantidadeIndividual: 1,
-      descricao: "Descricao repetida com confirmacao",
-      conversoes: []
-    };
-
-    expect(
-      (
-        await contexto.app.inject({
-          method: "POST",
-          url: "/api/produtos",
-          headers: { cookie: cookieAdmin },
-          payload: base
-        })
-      ).statusCode
-    ).toBe(201);
-
-    const semForcar = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: base
-    });
-    assertProblem(semForcar, 409, "DUPLICATE_PRODUCT");
-
-    const comForcar = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: { ...base, forcar: true }
-    });
-    expect(comForcar.statusCode).toBe(201);
+    expect((await criarNaBase({ descricao: "Descricao repetida com confirmacao" })).statusCode).toBe(201);
+    assertProblem(await criarNaBase({ descricao: "Descricao repetida com confirmacao" }), 409, "DUPLICATE_PRODUCT");
+    expect((await criarNaBase({ descricao: "Descricao repetida com confirmacao", forcar: true })).statusCode).toBe(201);
   });
 
   it("Deve_GerarCodigosInternosDistintos_Quando_CadastrosSimultaneos", async () => {
-    // Sem a trava por empresa, `max(codigo_interno) + 1` roda em READ COMMITTED e as seis
-    // requisicoes leem o MESMO maximo: o unique estoura e o cadastro em massa quebra.
+    // Sem a trava do cadastro, `max(codigo_interno) + 1` roda em READ COMMITTED e as seis
+    // requisicoes leem o MESMO maximo.
     const respostas = await Promise.all(
-      Array.from({ length: 6 }, (_, indice) =>
-        contexto.app.inject({
-          method: "POST",
-          url: "/api/produtos",
-          headers: { cookie: cookieAdmin },
-          payload: {
-            empresaId: idsTeste.empresaA,
-            descricao: `Produto simultaneo ${indice}`,
-            unidadeIndividualId: unidade,
-            quantidadeIndividual: 1,
-            conversoes: []
-          }
-        })
-      )
+      Array.from({ length: 6 }, (_, indice) => criarNaBase({ descricao: `Produto simultaneo ${indice}` }))
     );
-
     expect(respostas.map((resposta) => resposta.statusCode)).toEqual([201, 201, 201, 201, 201, 201]);
-
-    const ids = respostas.map((resposta) => json<RespostaId>(resposta).data.id);
-    const codigos = await Promise.all(
-      ids.map(async (id) => {
-        const linha = await consultarUm<{ codigo_interno: string }>(
-          "select codigo_interno from produtos where id = $1",
-          [id]
-        );
-        return linha?.codigo_interno ?? "";
-      })
-    );
+    const codigos = await Promise.all(respostas.map(codigoNaBase));
     expect(new Set(codigos).size).toBe(codigos.length);
     expect(codigos.every((codigo) => /^\d{5}$/.test(codigo))).toBe(true);
   });
 
-  it("Deve_DeixarPassarUmSo_Quando_DuplicadosSimultaneos", async () => {
-    const payload = {
-      empresaId: idsTeste.empresaA,
-      descricao: "Corrida de duplicidade",
-      unidadeIndividualId: unidade,
-      quantidadeIndividual: 1,
-      conversoes: []
-    };
-
-    const respostas = await Promise.all(
-      Array.from({ length: 4 }, () =>
-        contexto.app.inject({ method: "POST", url: "/api/produtos", headers: { cookie: cookieAdmin }, payload })
-      )
+  it("Deve_ContinuarAcimaDoCatalogoBase_Quando_GerarCodigoInterno", async () => {
+    // Regressao (R-222): a sequencia e global e inclui o catalogo mestre BASE.
+    await executarSql(
+      `insert into produtos_catalogo_base (id_origem, nome, status, codigo_interno, dados_oficiais)
+       values ('regressao-codigo-base', 'REGRESSAO CODIGO BASE', 'ativo', '650000', '{}'::jsonb)`
     );
+    try {
+      const criado = await criarNaBase({ descricao: "Produto depois da BASE" });
+      expect(criado.statusCode, criado.body).toBe(201);
+      expect(await codigoNaBase(criado)).toBe("650001");
+    } finally {
+      // Volta a sequencia ao normal para os demais casos (os arquivos rodam em sequencia).
+      await executarSql("delete from produtos_catalogo_base where id = any($1::uuid[])", [criadosNaBase]);
+      criadosNaBase.length = 0;
+      await executarSql("delete from produtos_catalogo_base where id_origem = 'regressao-codigo-base'");
+    }
+  });
 
-    const criados = respostas.filter((resposta) => resposta.statusCode === 201);
-    const recusados = respostas.filter((resposta) => resposta.statusCode === 409);
-    expect(criados).toHaveLength(1);
-    expect(recusados).toHaveLength(3);
+  it("Deve_DeixarPassarUmSo_Quando_DuplicadosSimultaneos", async () => {
+    const respostas = await Promise.all(
+      Array.from({ length: 4 }, () => criarNaBase({ descricao: "Corrida de duplicidade" }))
+    );
+    expect(respostas.filter((resposta) => resposta.statusCode === 201)).toHaveLength(1);
+    expect(respostas.filter((resposta) => resposta.statusCode === 409)).toHaveLength(3);
   });
 });

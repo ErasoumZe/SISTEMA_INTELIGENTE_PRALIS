@@ -28,14 +28,15 @@ export function useFotoDeProduto() {
   }
 
   /** Baixa a foto ja gravada. `produtoId` nulo ou produto sem foto limpa o preview. */
-  async function carregar(apiUrl: string, produtoId: string | null, temFoto: boolean) {
+  /** `rota`: "/api/produtos" (loja) ou "/api/produtos/base" (base geral). */
+  async function carregar(apiUrl: string, produtoId: string | null, temFoto: boolean, rota = "/api/produtos") {
     if (!produtoId || !temFoto) {
       revogar();
       return;
     }
     carregando.value = true;
     try {
-      const resposta = await fetch(`${apiUrl}/api/produtos/${produtoId}/foto`, { credentials: "include" });
+      const resposta = await fetch(`${apiUrl}${rota}/${produtoId}/foto`, { credentials: "include" });
       if (!resposta.ok) {
         revogar();
         return;

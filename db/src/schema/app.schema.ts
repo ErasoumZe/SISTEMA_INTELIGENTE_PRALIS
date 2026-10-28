@@ -21,6 +21,7 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import type { JsonValue } from "@padaria/shared/api";
 import type {
   AcaoHistoricoProcesso,
   AcaoHistoricoTeste,
@@ -43,6 +44,70 @@ const empresaId = uuid("empresa_id")
   .notNull()
   .references(() => empresas.id, { onDelete: "cascade" });
 const valorMonetario = (nome: string) => numeric(nome, { precision: 14, scale: 2 });
+
+/** Catálogo mestre BASE do app Pralis; não pertence a nenhuma empresa do ERP. */
+export const produtosCatalogoBase = pgTable(
+  "produtos_catalogo_base",
+  {
+    id: idUuid,
+    idOrigem: text("id_origem").notNull(),
+    codigoInterno: text("codigo_interno"),
+    codigoBarras: text("codigo_barras"),
+    nome: text("nome").notNull(),
+    status: text("status").notNull().default("ativo"),
+    grupoIdOrigem: text("grupo_id_origem"),
+    dadosOficiais: jsonb("dados_oficiais").$type<Record<string, JsonValue>>().notNull(),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    uniqueIndex("produtos_catalogo_base_id_origem_uidx").on(table.idOrigem),
+    check("produtos_catalogo_base_status_check", sql`${table.status} in ('ativo', 'inativo')`),
+    index("produtos_catalogo_base_codigo_interno_idx").on(table.codigoInterno),
+    index("produtos_catalogo_base_codigo_barras_idx").on(table.codigoBarras),
+    index("produtos_catalogo_base_nome_idx").on(table.nome)
+  ]
+);
+
+/**
+ * De-para do SIA por loja (tabela `sia_produto_depara` do app oficial de Produtos): o cadastro que JA
+ * existe no PDV da loja, casado pelo codigo de barras. E daqui que saem o fiscal de LI e HORA (aliquota
+ * ECF, reducao, grupo) e o `coditem` que o importador do CREARE usa como chave. Substituido inteiro a
+ * cada importacao da exportacao do SIA — dado real da loja, nunca versionado.
+ */
+export const siaProdutoDepara = pgTable(
+  "sia_produto_depara",
+  {
+    id: idUuid,
+    empresaId,
+    /** Como esta no SIA (14 posicoes com zeros); o casamento usa `chaveBarras`. */
+    codigoBarras: text("codigo_barras").notNull(),
+    /** O mesmo codigo sem pontuacao e sem zeros a esquerda. */
+    chaveBarras: text("chave_barras").notNull(),
+    /** Chave do importador do CREARE: sem ela, importar duplica em vez de atualizar. */
+    coditem: text("coditem").notNull(),
+    descricao: text("descricao").notNull().default(""),
+    codGrupo: text("cod_grupo").notNull().default(""),
+    /** Codigo de tributacao do ECF (03 tributado, 10 ST, 11 isento): vem do SIA, nunca recalculado. */
+    aliqSaidaEcf: text("aliq_saida_ecf").notNull().default(""),
+    reducao: numeric("reducao", { precision: 7, scale: 4 }),
+    aliquotaInterna: numeric("aliquota_interna", { precision: 7, scale: 4 }),
+    cstSaida: text("cst_saida").notNull().default(""),
+    csosn: text("csosn").notNull().default(""),
+    ncm: text("ncm").notNull().default(""),
+    ativo: text("ativo").notNull().default(""),
+    // Nulo = "nao veio da fonte"; ausencia nunca vira N/zero.
+    pesavel: text("pesavel"),
+    teclaBalanca: text("tecla_balanca"),
+    validadeBalanca: text("validade_balanca"),
+    importadoEm: timestamp("importado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    // Um codigo de barras e um coditem identificam UM produto no SIA da loja.
+    uniqueIndex("sia_produto_depara_barras_uidx").on(table.empresaId, table.chaveBarras),
+    uniqueIndex("sia_produto_depara_coditem_uidx").on(table.empresaId, table.coditem)
+  ]
+);
 
 // --- Descontos da discriminacao em 3 NIVEIS (PROJECT_BRAIN/17 §5) ---------------------------
 // Niveis 1 e 2 vivem no ITEM; o nivel 3 (geral) vive no CABECALHO do lancamento. Em todos,
@@ -911,14 +976,23 @@ export const produtos = pgTable(
   {
     id: idUuid,
     empresaId,
+    produtoBaseId: uuid("produto_base_id").references(() => produtosCatalogoBase.id, { onDelete: "set null" }),
     grupoMercadoriaId: uuid("grupo_mercadoria_id"),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
     codigo: text("codigo"), // codigo externo (PR-XXXX-XXXX gerado quando vazio; ou manual)
-    codigoInterno: text("codigo_interno"), // sequencial 5 digitos por empresa; herdado na importacao
+    codigoInterno: text("codigo_interno"), // sequencial global da fonte oficial; preservado na importacao
     codigoBarras: text("codigo_barras"),
     descricao: text("descricao").notNull(), // auto (montarDescricao) por padrao, com override manual
+    nomeCatalogo: text("nome_catalogo"), // nome separado da descricao automatica oficial; NULL identifica cadastro legado
+    pesavel: boolean("pesavel"), // NULL = legado sem conferencia; novos cadastros recebem false
+    teclaBalanca: integer("tecla_balanca"),
+    validadeBalanca: integer("validade_balanca"),
+    grupoIdExterno: text("grupo_id_externo"),
+    areaVenda: text("area_venda"),
     marca: text("marca"),
+    compraAproximada: boolean("compra_aproximada").notNull().default(false),
+    habilitarAjuda: boolean("habilitar_ajuda").notNull().default(false),
     quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
     // Como se compra (porte do Pralis; enums fieis mantidos como texto)
     embalagem: text("embalagem"), // sigla de unidades_medida (cadastro de Unidades)
@@ -946,6 +1020,8 @@ export const produtos = pgTable(
     // Locais de venda e foto
     localVenda1: text("local_venda_1"),
     localVenda2: text("local_venda_2"),
+    setorVenda1: text("setor_venda_1"),
+    setorVenda2: text("setor_venda_2"),
     fotoUrl: text("foto_url"),
     criadoPor: text("criado_por"), // auditoria (usuarioId; nome resolvido via join)
     criadoEm,
@@ -962,6 +1038,9 @@ export const produtos = pgTable(
     }).onDelete("restrict"),
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
     uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
+    uniqueIndex("produtos_empresa_produto_base_uidx")
+      .on(table.empresaId, table.produtoBaseId)
+      .where(sql`${table.produtoBaseId} is not null`),
     check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
     check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`),
     check("produtos_curva_abc_check", sql`${table.curvaAbc} is null or ${table.curvaAbc} in ('A', 'B', 'C')`),
@@ -969,6 +1048,233 @@ export const produtos = pgTable(
       "produtos_quantidade_variavel_tolerancia_check",
       sql`(${table.quantidadeVariavel} = false and ${table.toleranciaQuantidadePercentual} is null) or (${table.quantidadeVariavel} = true and ${table.toleranciaQuantidadePercentual} between 0 and 30)`
     )
+  ]
+);
+
+/** Trilha imutável das mudanças no nome oficial do produto, sempre isolada por empresa. */
+export const produtosHistoricoNomes = pgTable(
+  "produtos_historico_nomes",
+  {
+    id: idUuid,
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    nomeAnterior: text("nome_anterior").notNull(),
+    nomeNovo: text("nome_novo").notNull(),
+    alteradoPor: text("alterado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    alteradoPorNome: text("alterado_por_nome"),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      name: "produtos_historico_nomes_produto_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    index("produtos_historico_nomes_empresa_produto_data_idx").on(
+      table.empresaId,
+      table.produtoId,
+      table.alteradoEm.desc()
+    )
+  ]
+);
+
+/**
+ * Historico de codigo interno (R-222, migration 0089; oficial `product_codigo_interno_history`): toda
+ * troca feita pela reconciliacao do codigo de cadastro, na BASE (`produto_base_id`) ou num produto de loja
+ * (`empresa_id` + `produto_id`) — e o "desfazer" possivel de um lote que troca codigos no PDV.
+ */
+export const produtosHistoricoCodigoInterno = pgTable(
+  "produtos_historico_codigo_interno",
+  {
+    id: idUuid,
+    empresaId: uuid("empresa_id"),
+    produtoId: uuid("produto_id"),
+    produtoBaseId: uuid("produto_base_id"),
+    codigoAnterior: text("codigo_anterior"),
+    codigoNovo: text("codigo_novo").notNull(),
+    fonte: text("fonte").notNull(),
+    alteradoPor: text("alterado_por"),
+    alteradoPorNome: text("alterado_por_nome"),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    check(
+      "produtos_historico_codigo_interno_alvo_check",
+      sql`(${table.empresaId} is null and ${table.produtoBaseId} is not null and ${table.produtoId} is null) or (${table.empresaId} is not null and ${table.produtoId} is not null and ${table.produtoBaseId} is null)`
+    ),
+    foreignKey({
+      name: "prod_hist_codigo_empresa_fk",
+      columns: [table.empresaId],
+      foreignColumns: [empresas.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_produto_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_base_fk",
+      columns: [table.produtoBaseId],
+      foreignColumns: [produtosCatalogoBase.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_alterado_por_fk",
+      columns: [table.alteradoPor],
+      foreignColumns: [perfisUsuarios.usuarioId]
+    }).onDelete("set null"),
+    index("prod_hist_codigo_produto_idx").on(table.empresaId, table.produtoId, table.alteradoEm.desc()),
+    index("prod_hist_codigo_base_idx").on(table.produtoBaseId, table.alteradoEm.desc())
+  ]
+);
+
+// --- Exportacao para o PDV CREARE e espelho na planilha (R-222, migration 0088) ----------------
+// Porte das tabelas do app oficial de Produtos (creare_export_batch / _delivery_state / _state e
+// product_sheet_sync), com empresa_id no lugar do texto da loja. Escrita DESLIGADA ate a virada.
+
+/** Cada TXT montado para o robo da loja: snapshot imutavel (conteudo, hash e itens). */
+export const creareExportacaoLotes = pgTable(
+  "creare_exportacao_lotes",
+  {
+    id: idUuid,
+    empresaId,
+    conteudo: text("conteudo").notNull(),
+    sha256: text("sha256").notNull(),
+    /** [{ produtoId, hash }] — o que este lote leva, igual ao oficial. */
+    itens: jsonb("itens").$type<Array<{ produtoId: string; hash: string }>>().notNull(),
+    formatoVersao: integer("formato_versao").notNull().default(1),
+    criadoEm,
+    entregueEm: timestamp("entregue_em", { withTimezone: true }),
+    confirmadoEm: timestamp("confirmado_em", { withTimezone: true }),
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("creare_exportacao_lotes_id_empresa_unico").on(table.id, table.empresaId),
+    check("creare_exportacao_lotes_sha256_check", sql`${table.sha256} ~ '^[a-f0-9]{64}$'`),
+    check(
+      "creare_exportacao_lotes_itens_check",
+      sql`jsonb_typeof(${table.itens}) = 'array' and jsonb_array_length(${table.itens}) > 0`
+    ),
+    check("creare_exportacao_lotes_conteudo_check", sql`length(${table.conteudo}) > 0`),
+    check("creare_exportacao_lotes_formato_versao_check", sql`${table.formatoVersao} >= 1`),
+    // Um lote aberto por loja (junto com a trava da empresa na transacao).
+    uniqueIndex("creare_exportacao_lotes_aberto_uidx")
+      .on(table.empresaId)
+      .where(sql`${table.entregueEm} is null and ${table.confirmadoEm} is null and ${table.canceladoEm} is null`),
+    index("creare_exportacao_lotes_empresa_criado_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
+/** Cursor de ENTREGA no PC da loja: o hash do registro de cada produto que o robo ja salvou. */
+export const creareExportacaoEntregas = pgTable(
+  "creare_exportacao_entregas",
+  {
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    hash: text("hash").notNull(),
+    loteId: uuid("lote_id").notNull(),
+    entregueEm: timestamp("entregue_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({
+      name: "creare_exportacao_entregas_empresa_id_produto_id_pk",
+      columns: [table.empresaId, table.produtoId]
+    }),
+    check("creare_exportacao_entregas_hash_check", sql`${table.hash} ~ '^[a-f0-9]{64}$'`),
+    foreignKey({
+      name: "creare_exportacao_entregas_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "creare_exportacao_entregas_lote_mesma_empresa_fk",
+      columns: [table.loteId, table.empresaId],
+      foreignColumns: [creareExportacaoLotes.id, creareExportacaoLotes.empresaId]
+    }).onDelete("restrict"),
+    index("creare_exportacao_entregas_lote_idx").on(table.loteId)
+  ]
+);
+
+/** Cursor de CONFIRMACAO (auditoria opcional depois de conferir a importacao no SIA). */
+export const creareExportacaoConfirmacoes = pgTable(
+  "creare_exportacao_confirmacoes",
+  {
+    empresaId,
+    produtoId: uuid("produto_id").notNull(),
+    hash: text("hash").notNull(),
+    loteId: uuid("lote_id").notNull(),
+    confirmadoEm: timestamp("confirmado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({
+      name: "creare_exportacao_confirmacoes_empresa_id_produto_id_pk",
+      columns: [table.empresaId, table.produtoId]
+    }),
+    check("creare_exportacao_confirmacoes_hash_check", sql`${table.hash} ~ '^[a-f0-9]{64}$'`),
+    foreignKey({
+      name: "creare_exportacao_confirmacoes_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "creare_exportacao_confirmacoes_lote_mesma_empresa_fk",
+      columns: [table.loteId, table.empresaId],
+      foreignColumns: [creareExportacaoLotes.id, creareExportacaoLotes.empresaId]
+    }).onDelete("restrict"),
+    index("creare_exportacao_confirmacoes_lote_idx").on(table.loteId)
+  ]
+);
+
+/**
+ * Fila (outbox) do espelho na planilha Google: uma linha por produto da BASE (sem empresa) ou por
+ * copia da loja (com empresa) — nunca os dois. Reenvio com espera crescente e teto de tentativas.
+ */
+export const produtosPlanilhaSincronizacoes = pgTable(
+  "produtos_planilha_sincronizacoes",
+  {
+    id: idUuid,
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id"),
+    produtoBaseId: uuid("produto_base_id"),
+    planilhaId: text("planilha_id").notNull(),
+    aba: text("aba").notNull(),
+    linha: integer("linha"),
+    status: text("status").notNull().default("pendente"),
+    tentativas: integer("tentativas").notNull().default(0),
+    ultimoErro: text("ultimo_erro"),
+    proximaTentativaEm: timestamp("proxima_tentativa_em", { withTimezone: true }),
+    sincronizadoEm: timestamp("sincronizado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "produtos_planilha_sincronizacoes_status_check",
+      sql`${table.status} in ('pendente', 'sincronizado', 'falhou')`
+    ),
+    check("produtos_planilha_sincronizacoes_tentativas_check", sql`${table.tentativas} >= 0`),
+    check("produtos_planilha_sincronizacoes_linha_check", sql`${table.linha} is null or ${table.linha} > 0`),
+    check(
+      "produtos_planilha_sincronizacoes_alvo_check",
+      sql`(${table.empresaId} is null and ${table.produtoBaseId} is not null and ${table.produtoId} is null) or (${table.empresaId} is not null and ${table.produtoId} is not null and ${table.produtoBaseId} is null)`
+    ),
+    foreignKey({
+      name: "produtos_planilha_sincronizacoes_produto_mesma_empresa_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    // Nome curto de proposito: o gerado passaria de 63 bytes e o Postgres o cortaria.
+    foreignKey({
+      name: "produtos_planilha_sincronizacoes_base_fk",
+      columns: [table.produtoBaseId],
+      foreignColumns: [produtosCatalogoBase.id]
+    }).onDelete("cascade"),
+    uniqueIndex("produtos_planilha_sincronizacoes_produto_uidx")
+      .on(table.produtoId)
+      .where(sql`${table.produtoId} is not null`),
+    uniqueIndex("produtos_planilha_sincronizacoes_produto_base_uidx")
+      .on(table.produtoBaseId)
+      .where(sql`${table.produtoBaseId} is not null`),
+    index("produtos_planilha_sincronizacoes_fila_idx").on(table.status, table.proximaTentativaEm, table.atualizadoEm)
   ]
 );
 
@@ -1336,6 +1642,23 @@ export const produtosFiscal = pgTable("produtos_fiscal", {
   aliquotaCofins: numeric("aliquota_cofins", { precision: 6, scale: 4 }),
   reducaoIcms: numeric("reducao_icms", { precision: 6, scale: 4 }),
   icms: numeric("icms", { precision: 6, scale: 4 }),
+  tributacaoSimples: text("tributacao_simples"),
+  aliquotaSimples: numeric("aliquota_simples", { precision: 8, scale: 6 }),
+  icmsRe: numeric("icms_re", { precision: 8, scale: 6 }),
+  baseFiscal: text("base_fiscal"),
+  codigoFiscal: text("codigo_fiscal"),
+  produtoFiscal: text("produto_fiscal"),
+  cstReforma: text("cst_reforma"),
+  cClassTrib: text("cclass_trib"),
+  aliquotaIbs: numeric("aliquota_ibs", { precision: 8, scale: 6 }),
+  aliquotaCbs: numeric("aliquota_cbs", { precision: 8, scale: 6 }),
+  origemFiscal: text("origem_fiscal"),
+  aliquotaEcf: text("aliquota_ecf"),
+  aliquotaEcfId: text("aliquota_ecf_id"),
+  estado: text("estado"),
+  motivo: text("motivo"),
+  conferidoEm: timestamp("conferido_em", { withTimezone: true }),
+  pctNcm: numeric("pct_ncm", { precision: 6, scale: 4 }),
   criadoEm,
   atualizadoEm
 });
@@ -1352,6 +1675,7 @@ export const produtosTransformacao = pgTable(
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
     unidade: text("unidade"), // sigla de unidades_medida (cadastro de Unidades)
     produtoReceituario: text("produto_receituario"),
+    refReceituario: text("ref_receituario"),
     criadoEm,
     atualizadoEm
   },
