@@ -64,6 +64,28 @@ services:
       GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID:-}
       GOOGLE_ADMISSAO_SYNC_ENABLED: ${GOOGLE_ADMISSAO_SYNC_ENABLED:-false}
       CONPLUS_GOOGLE_SYNC_ENABLED: ${CONPLUS_GOOGLE_SYNC_ENABLED:-false}
+      # Cadastro de Produtos (R-222). Lidas pelo env.ts desde a PR #207, mas NAO eram repassadas: em
+      # producao o fiscal ficava "fonte_indisponivel" e a margem do grupo 0 (28/10/2026). Os padroes
+      # repetem os do env.ts de proposito: aba vazia derruba a API (z.string().min(1)).
+      # As flags ficam DESLIGADAS ate a virada; so ligar no painel do Coolify no dia combinado.
+      GOOGLE_PRODUTOS_SPREADSHEET_ID: ${GOOGLE_PRODUTOS_SPREADSHEET_ID:-}
+      GOOGLE_PRODUTOS_FISCAL_TAB: "${GOOGLE_PRODUTOS_FISCAL_TAB:-(TNP) FISCAL - DE PARA PRODUTOS}"
+      GOOGLE_PRODUTOS_GRUPOS_TAB: "${GOOGLE_PRODUTOS_GRUPOS_TAB:-(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA}"
+      GOOGLE_PRODUTOS_BASE_TAB: "${GOOGLE_PRODUTOS_BASE_TAB:-(BASE) CADASTRO PRODUTOS}"
+      GOOGLE_PRODUTOS_ESPELHO_ENABLED: ${GOOGLE_PRODUTOS_ESPELHO_ENABLED:-false}
+      GOOGLE_PRODUTOS_DEFAULT_LOJAS: ${GOOGLE_PRODUTOS_DEFAULT_LOJAS:-TNP,LI,HORA}
+      GOOGLE_PRODUTOS_LOJA_TABS: ${GOOGLE_PRODUTOS_LOJA_TABS:-}
+      GOOGLE_PRODUTOS_TIMEOUT_MS: ${GOOGLE_PRODUTOS_TIMEOUT_MS:-20000}
+      GOOGLE_PRODUTOS_MER_SPREADSHEET_ID: ${GOOGLE_PRODUTOS_MER_SPREADSHEET_ID:-}
+      GOOGLE_PRODUTOS_MER_TAB: "${GOOGLE_PRODUTOS_MER_TAB:-TNP - DISCRIMINAÇÃO MERCADORIAS (MER)}"
+      GOOGLE_PRODUTOS_MER_LINHA_FINAL: ${GOOGLE_PRODUTOS_MER_LINHA_FINAL:-20000}
+      # TXT do PDV CREARE e publicacao no Drive: DESLIGADOS ate a virada. O token e o JSON sao segredos
+      # do painel do Coolify, nunca deste arquivo.
+      CREARE_EXPORT_ENABLED: ${CREARE_EXPORT_ENABLED:-false}
+      CREARE_STORE_CONFIG_JSON: ${CREARE_STORE_CONFIG_JSON:-}
+      CREARE_EXPORT_TOKEN: ${CREARE_EXPORT_TOKEN:-}
+      CREARE_DRIVE_ENABLED: ${CREARE_DRIVE_ENABLED:-false}
+      CREARE_DRIVE_FOLDERS_JSON: ${CREARE_DRIVE_FOLDERS_JSON:-}
       # E-mail transacional (recuperacao de senha + verificacao), via Resend. Estavam declaradas no
       # .env.example e lidas pelo env.ts, mas NAO eram repassadas aqui — e o compose so injeta no
       # container o que esta listado neste bloco. Sem elas o link de recuperacao nunca sai por

@@ -6,7 +6,8 @@ import ProdutoVinculoBase from "~/components/produtos/ProdutoVinculoBase.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 
 const router = useRouter();
-const { carregarSessao } = useApi();
+// A API mora em outro domínio (api-sistema.…): download por href relativo caía no front.
+const { carregarSessao, apiUrl } = useApi();
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
 const caixaStatus = ref<CaixaStatus | null>(null);
@@ -75,7 +76,7 @@ onMounted(async () => {
                 <v-btn
                   variant="tonal"
                   prepend-icon="mdi-file-delimited-outline"
-                  href="/api/produtos/export.csv"
+                  :href="`${apiUrl}/api/produtos/export.csv`"
                   download="produtos-pralis.csv"
                 >
                   Exportar CSV
@@ -94,7 +95,7 @@ onMounted(async () => {
                 <v-btn
                   variant="tonal"
                   prepend-icon="mdi-database-export-outline"
-                  href="/api/produtos/backup.xlsx"
+                  :href="`${apiUrl}/api/produtos/backup.xlsx`"
                   download="backup-produtos-pralis.xlsx"
                 >
                   Baixar backup XLSX
