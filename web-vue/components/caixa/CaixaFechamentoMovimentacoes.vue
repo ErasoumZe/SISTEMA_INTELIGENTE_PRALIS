@@ -26,7 +26,7 @@ type Transferencia = {
 };
 type Transferencias = { itens: Transferencia[] };
 
-const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string }>();
+const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string; pdvNome?: string | null }>();
 const { apiGet } = useApi();
 const carregando = ref(false);
 const erro = ref("");
@@ -114,6 +114,7 @@ watch(
         :versao="folhaCreare.versao"
         :maquininha="leituraMaquininha"
         :periodo="periodoVendas"
+        :pdv-nome="pdvNome"
       />
       <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
         <article class="fechamento-movimentacoes__vendas">

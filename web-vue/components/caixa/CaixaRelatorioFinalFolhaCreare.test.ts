@@ -26,7 +26,8 @@ const props = {
   creare,
   versao: 4,
   maquininha: { credito: 947.05, debito: 770, pix: null, voucher: null },
-  periodo: { inicio: "2026-10-26T09:30:00.000Z", fim: "2026-10-26T17:00:00.000Z" }
+  periodo: { inicio: "2026-10-26T09:30:00.000Z", fim: "2026-10-26T17:00:00.000Z" },
+  pdvNome: "TNP-PC-CXPDV-1"
 };
 
 // O formato de moeda usa espaco nao separavel ("R$ 0,01"): normaliza para comparar o texto.
@@ -36,9 +37,11 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
   it("uma tabela: folha, Pralis e maquininha por linha, com o sentido da diferenca", () => {
     const wrapper = mount(CaixaRelatorioFinalFolhaCreare, { props });
     expect(texto(wrapper.get('[data-teste="final-linha-credito"]'))).toContain("Confere");
-    expect(texto(wrapper.get('[data-teste="final-linha-total"]'))).toContain("Folha R$ 0,01 a mais que o Pralis");
+    expect(texto(wrapper.get('[data-teste="final-linha-total"]'))).toContain(
+      "Folha R$ 0,01 a mais que o TNP-PC-CXPDV-1"
+    );
     expect(texto(wrapper.get('[data-teste="final-linha-debito"]'))).toContain(
-      "Maquininha R$ 9,72 a menos que o Pralis"
+      "Maquininha R$ 9,72 a menos que o TNP-PC-CXPDV-1"
     );
     expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Sem valor na folha");
     expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Maquininha sem leitura");
@@ -54,7 +57,10 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
     const total = wrapper.get('[data-teste="final-linha-total"]');
     expect(credito.element.tagName).toBe("DETAILS");
     expect(credito.get("summary").text()).toContain("Confere");
-    expect(total.get("summary").text()).toContain("Diferença");
+    expect(texto(total.get("summary"))).toContain("Diferença R$ 0,01");
+    expect(credito.get("summary").classes()).toBeDefined();
+    expect(credito.get(".conferencia__selo").classes()).toContain("conferencia__selo--ok");
+    expect(total.get(".conferencia__selo").classes()).toContain("conferencia__selo--divergente");
     expect(wrapper.get('[data-teste="final-linha-pix"]').get("summary").text()).toContain("Sem valor");
     (total.element as HTMLDetailsElement).open = true;
     expect((credito.element as HTMLDetailsElement).open).toBe(false);

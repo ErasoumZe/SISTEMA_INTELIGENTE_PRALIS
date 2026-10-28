@@ -13,7 +13,10 @@ const props = defineProps<{
   versao: number;
   maquininha: Partial<Record<FormaMaquininha, number | null>>;
   periodo: { inicio: string; fim: string } | null;
+  // O que o Pralis registrou e o que o PDV vendeu: o operador reconhece pelo nome do PDV, nao "Pralis".
+  pdvNome?: string | null;
 }>();
+const nomePdv = computed(() => props.pdvNome?.trim() || "PDV");
 
 const FORMAS_MAQUININHA: readonly string[] = ["credito", "debito", "pix", "voucher"];
 const centavos = (valor: number) => Math.round(valor * 100);
@@ -43,15 +46,19 @@ const linhas = computed(() =>
       const temMaquininha = FORMAS_MAQUININHA.includes(campo.chave);
       const maquininha = temMaquininha ? (props.maquininha[campo.chave as FormaMaquininha] ?? null) : null;
       const problemas: string[] = [];
+      // Maior diferenca encontrada (folha ou maquininha contra o PDV): vai no selo.
+      let diferenca = 0;
       if (folha === null) problemas.push("Sem valor na folha");
       else if (pralis !== null && centavos(folha) !== centavos(pralis)) {
-        problemas.push(`Folha ${sentido(folha - pralis)} que o Pralis`);
+        problemas.push(`Folha ${sentido(folha - pralis)} que o ${nomePdv.value}`);
+        diferenca = Math.max(diferenca, Math.abs(folha - pralis));
       }
       if (temMaquininha && maquininha === null) problemas.push("Maquininha sem leitura");
       else if (temMaquininha && maquininha !== null && pralis !== null && centavos(maquininha) !== centavos(pralis)) {
-        problemas.push(`Maquininha ${sentido(maquininha - pralis)} que o Pralis`);
+        problemas.push(`Maquininha ${sentido(maquininha - pralis)} que o ${nomePdv.value}`);
+        diferenca = Math.max(diferenca, Math.abs(maquininha - pralis));
       }
-      return { ...campo, folha, pralis, temMaquininha, maquininha, problemas };
+      return { ...campo, folha, pralis, temMaquininha, maquininha, problemas, diferenca };
     })
 );
 const comDiferenca = computed(() => linhas.value.filter((linha) => linha.problemas.length).length);
@@ -74,12 +81,10 @@ const CORES: Record<string, string> = {
   despesas: "var(--cat-despesas-base)",
   sangria: "var(--cx-attention)"
 };
-function selo(problemas: string[]) {
-  if (!problemas.length) return { classe: "ok", texto: "Confere" };
-  if (problemas.every((problema) => problema.startsWith("Sem valor") || problema.endsWith("sem leitura"))) {
-    return { classe: "pendente", texto: "Sem valor" };
-  }
-  return { classe: "divergente", texto: "Diferença" };
+function selo(linha: { problemas: string[]; diferenca: number }) {
+  if (!linha.problemas.length) return { classe: "ok", texto: "✓ Confere" };
+  if (!linha.diferenca) return { classe: "pendente", texto: "Sem valor" };
+  return { classe: "divergente", texto: `Diferença ${dinheiro(Math.round(linha.diferenca * 100) / 100)}` };
 }
 
 // Horario em datas legiveis ("folha 26/10/2026 06:14:58 · caixa 28/10/2026 13:18"), nunca em minutos.
@@ -133,8 +138,8 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
         <summary>
           <span class="conferencia__nome">{{ linha.rotulo }}</span>
           <span class="conferencia__valor">{{ valor(linha.folha, linha.negativo) }}</span>
-          <span class="conferencia__selo" :class="`conferencia__selo--${selo(linha.problemas).classe}`">{{
-            selo(linha.problemas).texto
+          <span class="conferencia__selo" :class="`conferencia__selo--${selo(linha).classe}`">{{
+            selo(linha).texto
           }}</span>
         </summary>
         <dl class="conferencia__valores">
@@ -143,7 +148,7 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
             <dd>{{ valor(linha.folha, linha.negativo) }}</dd>
           </div>
           <div>
-            <dt>Pralis</dt>
+            <dt>{{ nomePdv }}</dt>
             <dd>{{ valor(linha.pralis, linha.negativo) }}</dd>
           </div>
           <div v-if="linha.temMaquininha">
@@ -152,7 +157,7 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
           </div>
         </dl>
         <p class="conferencia__explicacao">
-          {{ linha.problemas.length ? linha.problemas.join(" · ") : "Folha e Pralis iguais." }}
+          {{ linha.problemas.length ? linha.problemas.join(" · ") : `Folha e ${nomePdv} iguais.` }}
         </p>
       </details>
 
@@ -270,18 +275,21 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
 .conferencia__valor {
   font-weight: 700;
 }
+/* Selos em destaque: verde solido quando confere, vermelho solido com o valor quando ha diferenca. */
 .conferencia__selo {
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: var(--cx-fs-caption);
+  font-size: 0.8rem;
   font-weight: 800;
   white-space: nowrap;
 }
 .conferencia__selo--ok {
-  background: color-mix(in srgb, var(--cx-positive) 24%, transparent);
+  background: var(--cx-positive);
+  color: #fff;
 }
 .conferencia__selo--divergente {
-  background: color-mix(in srgb, var(--cx-negative) 26%, transparent);
+  background: var(--cx-negative);
+  color: #fff;
 }
 .conferencia__selo--pendente {
   background: var(--cx-surface-sunken);

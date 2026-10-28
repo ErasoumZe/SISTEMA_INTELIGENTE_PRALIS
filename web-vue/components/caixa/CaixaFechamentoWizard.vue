@@ -232,7 +232,12 @@ function formatarHora(dataHora: string | null | undefined) {
 
     <CaixaFechamentoMaquininha v-else-if="etapaAtual === 3" id="fechamento-painel-3" :caixa="caixa" />
 
-    <CaixaFechamentoMovimentacoes v-else-if="etapaAtual === 4" :resumo="resumo" :caixa-id="caixa.id" />
+    <CaixaFechamentoMovimentacoes
+      v-else-if="etapaAtual === 4"
+      :resumo="resumo"
+      :caixa-id="caixa.id"
+      :pdv-nome="caixa.pdvNome"
+    />
 
     <CaixaFechamentoEtapas
       v-else
