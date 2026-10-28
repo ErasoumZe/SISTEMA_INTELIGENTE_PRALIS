@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   conferenciaMaquininhaDoRelatorio,
+  duracaoDaParada,
   corDaSituacao,
   numero,
+  rotuloMotivoParada,
   separarPorSituacao,
   textoDaSituacao,
   valorOpcional,
@@ -54,5 +56,20 @@ describe("numeros e maquininha", () => {
     expect(linhas.find((item) => item.forma === "Credito")?.liquido).toBe(150);
     expect(linhas.find((item) => item.forma === "Pix")?.liquido).toBeNull();
     expect(linhas.find((item) => item.forma === "Debito")?.liquido).toBeNull();
+  });
+});
+
+describe("parada do computador do PDV", () => {
+  it("traduz o motivo e mantem o desconhecido como veio", () => {
+    expect(rotuloMotivoParada("falta_energia")).toBe("Falta de energia na loja");
+    expect(rotuloMotivoParada("motivo_novo")).toBe("motivo_novo");
+  });
+
+  it("calcula a duracao da parada", () => {
+    expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T12:12:00Z")).toBe("12 min");
+    expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T13:05:00Z")).toBe("1h05");
+    expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T12:00:20Z")).toBe("menos de 1 min");
+    expect(duracaoDaParada("2026-10-27T12:00:00Z", null)).toBe("Sem retorno registrado");
+    expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T11:00:00Z")).toBe("Duração indisponível");
   });
 });

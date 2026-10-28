@@ -224,4 +224,47 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
       "divergencia_confirmada_tesouraria"
     );
   });
+
+  it("o dossie traz as paradas do computador do PDV (motivos, inicio, retorno e quem registrou)", async () => {
+    const [usuario] = await consultarTodos<{ usuario_id: string }>("select usuario_id from perfis_usuarios limit 1");
+    await executarSql(
+      `insert into caixa_indisponibilidades (empresa_id, fechamento_caixa_id, motivos, motivo_outro, iniciado_em, retornado_em, registrado_por, retornado_por)
+       select empresa_id, id, array['falta_energia','outro'], 'gerador falhou', '2026-07-20T12:00:00Z', '2026-07-20T12:25:00Z', $2, $2
+         from fechamentos_caixa where id = $1`,
+      [idsTeste.caixaFechado, usuario?.usuario_id]
+    );
+    const dossie = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${idsTeste.caixaFechado}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(dossie.statusCode, dossie.body).toBe(200);
+    const paradas = json<{
+      data: {
+        indisponibilidades: Array<{
+          motivos: string[];
+          motivoOutro: string | null;
+          iniciadoEm: string;
+          retornadoEm: string | null;
+          registradoPorNome: string | null;
+        }>;
+      };
+    }>(dossie).data.indisponibilidades;
+    expect(paradas).toHaveLength(1);
+    expect(paradas[0]).toMatchObject({
+      motivos: ["falta_energia", "outro"],
+      motivoOutro: "gerador falhou",
+      iniciadoEm: "2026-07-20T12:00:00.000Z",
+      retornadoEm: "2026-07-20T12:25:00.000Z"
+    });
+    expect(paradas[0]?.registradoPorNome).toBeTruthy();
+
+    // Caixa sem parada devolve lista vazia (nunca ausente).
+    const semParada = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${caixaComDivergencia}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(json<{ data: { indisponibilidades: unknown[] } }>(semParada).data.indisponibilidades).toEqual([]);
+  });
 });

@@ -14,6 +14,7 @@ import {
 import RelatorioFechamentoDetalhes from "./RelatorioFechamentoDetalhes.vue";
 import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
 import RelatorioFechamentoPainelConferencia from "./RelatorioFechamentoPainelConferencia.vue";
+import RelatorioFechamentoParadaComputador from "./RelatorioFechamentoParadaComputador.vue";
 import RelatorioFechamentoQuebraDialog from "./RelatorioFechamentoQuebraDialog.vue";
 import RelatorioFechamentoQuemFechou from "./RelatorioFechamentoQuemFechou.vue";
 import RelatorioFechamentoTransferencias from "./RelatorioFechamentoTransferencias.vue";
@@ -242,6 +243,7 @@ function anexoUrl(anexo: { id: string }) {
             :texto="texto"
             :data-hora="dataHoraOuTraco"
           />
+          <RelatorioFechamentoParadaComputador :paradas="dossie.indisponibilidades ?? []" />
           <RelatorioFechamentoDetalhes
             :conferencias="dossie.conferencias"
             :quebras="dossie.quebras"

@@ -35,6 +35,17 @@ export type DecisaoTesouraria = {
   conferidoEm: string | null;
 };
 
+// Parada do computador do PDV durante o caixa (registrada pelo operador; o retorno e confirmado depois).
+export type ParadaComputador = {
+  id: string;
+  motivos: string[];
+  motivoOutro: string | null;
+  iniciadoEm: string;
+  retornadoEm: string | null;
+  registradoPorNome: string | null;
+  retornadoPorNome: string | null;
+};
+
 export type Dossie = {
   caixa: Registro;
   resumo: Registro | null;
@@ -48,6 +59,7 @@ export type Dossie = {
   anexos: Anexo[];
   lancamentos: Record<string, Registro[]>;
   vendasCanceladas: Registro[];
+  indisponibilidades: ParadaComputador[];
   ajuste: Registro | null;
 };
 
@@ -130,4 +142,30 @@ export function separarPorSituacao(linhas: LinhaRelatorio[]) {
   );
   const emOperacao = linhas.filter((linha) => !paraConferir.includes(linha) && !historico.includes(linha));
   return { paraConferir, historico, emOperacao };
+}
+
+const MOTIVOS_PARADA: Record<string, string> = {
+  falta_energia: "Falta de energia na loja",
+  oscilacao_eletrica: "Oscilação ou pane elétrica",
+  internet_caiu: "Internet caiu",
+  cabo_desconectado: "Esbarrão em fio / cabo desconectado",
+  computador_travou: "Computador travou, tive que reiniciar",
+  limpeza_manutencao: "Limpeza ou manutenção na loja",
+  atualizacao_sistema: "Atualização do sistema (Windows)",
+  outro: "Outro"
+};
+
+// Motivo desconhecido (API nova) aparece como veio, em vez de sumir.
+export function rotuloMotivoParada(motivo: string): string {
+  return MOTIVOS_PARADA[motivo] ?? motivo;
+}
+
+// "12 min", "1h05" ou "Sem retorno registrado" quando o computador ainda esta marcado como desligado.
+export function duracaoDaParada(iniciadoEm: string, retornadoEm: string | null): string {
+  if (!retornadoEm) return "Sem retorno registrado";
+  const minutos = Math.round((Date.parse(retornadoEm) - Date.parse(iniciadoEm)) / 60_000);
+  if (!Number.isFinite(minutos) || minutos < 0) return "Duração indisponível";
+  if (minutos < 1) return "menos de 1 min";
+  if (minutos < 60) return `${minutos} min`;
+  return `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, "0")}`;
 }
