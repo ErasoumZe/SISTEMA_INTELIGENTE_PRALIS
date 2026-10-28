@@ -219,7 +219,7 @@ export async function buscarBackupCatalogoProdutos(perfil: PerfilComEmpresa) {
 
 function mensagemDeDuplicado(duplicado: { descricao: string; criadoPorNome: string | null }, motivo: string) {
   const porQuem = duplicado.criadoPorNome ? ` (cadastrado por ${duplicado.criadoPorNome})` : "";
-  return `Ja existe o produto "${duplicado.descricao}" nesta loja${porQuem}${motivo}.`;
+  return `Já existe o produto "${duplicado.descricao}" nesta loja${porQuem}${motivo}.`;
 }
 
 export interface AtorDaEscrita {
@@ -509,7 +509,7 @@ async function recusarDuplicados(
   if (entrada.codigoBarras) {
     const porBarras = await buscarProdutoPorCodigoBarrasRepository(tx, entrada.empresaId, entrada.codigoBarras);
     if (porBarras) {
-      throw new CodigoBarrasDuplicadoError(mensagemDeDuplicado(porBarras, " com este codigo de barras"));
+      throw new CodigoBarrasDuplicadoError(mensagemDeDuplicado(porBarras, " com este código de barras"));
     }
   }
   const porNome = await buscarProdutoPorDescricaoRepository(tx, entrada.empresaId, entrada.nome);

@@ -38,10 +38,7 @@ const DICAS_PRODUTO: Record<string, string> = {
   reducaoIcms: "Percentual de redução da base de ICMS."
 };
 
-export function dicaProduto(
-  campo: string,
-  habilitarAjuda: boolean,
-  dicaPersonalizada?: (campo: string) => string | undefined
-): string | undefined {
-  return dicaPersonalizada?.(campo) || (habilitarAjuda ? DICAS_PRODUTO[campo] : undefined);
+/** Uma ajuda so, como no paralelo: a dica aparece quando o "Habilitar ajuda" do produto esta ligado. */
+export function dicaProduto(campo: string, habilitarAjuda: boolean): string | undefined {
+  return habilitarAjuda ? DICAS_PRODUTO[campo] : undefined;
 }

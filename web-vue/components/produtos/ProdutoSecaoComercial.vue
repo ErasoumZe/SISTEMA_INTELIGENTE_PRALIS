@@ -4,8 +4,12 @@
  *
  * O estoque ATUAL e somente leitura: ele so muda por movimentacao. Esta entrega nao cria
  * movimentacao nenhuma — o campo existe para conferencia, nao para digitacao.
+ *
+ * A ficha de transformacao fica EDITAVEL tambem na copia da loja (decisao D1 de Jose, igual ao
+ * paralelo: ela fica fora da trava do que veio da BASE).
  */
 import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
+import { limitarMargem } from "~/utils/produto-numeros";
 
 const props = defineProps<{
   form: ProdutoForm;
@@ -14,13 +18,24 @@ const props = defineProps<{
   erros: Record<string, string>;
   precoPreview: number;
   validacaoQtdPreview: string;
+  /** Margem padrao do grupo escolhido, em % (null = o grupo nao tem). */
+  margemDoGrupoPct: string | null;
+  /**
+   * Cadastro da BASE: esconde o que a BASE nao grava (estoque atual, area, curva ABC, vendido por
+   * peso e tolerancia) — campo que aparece e nao salva e pior que campo nenhum (decisao D4).
+   */
+  naBase: boolean;
   somenteLeitura: boolean;
-  /** Copia da loja: a ficha de transformacao vem da BASE e fica em leitura (oficial). */
-  herdadoTravado: boolean;
   dica: (campo: string) => string | undefined;
 }>();
 
 const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const dicaDaMargem = computed(() =>
+  props.margemDoGrupoPct != null
+    ? `Padrão do grupo: ${props.margemDoGrupoPct}% — vazio usa esse valor, 0 vende pelo custo.`
+    : "Ex.: 70 = 70%. Vazio = sem margem própria."
+);
 
 // Desligar "vendido por peso" limpa a tolerancia. O campo fica desabilitado, mas continuava exibindo
 // o numero digitado enquanto o payload mandava null — a tela afirmava uma tolerancia que nao seria
@@ -50,11 +65,14 @@ watch(
         v-model="form.margemPercentual"
         type="number"
         min="0"
+        max="1000"
         label="Margem do produto"
         suffix="%"
-        placeholder="vazio = usa a do grupo"
-        :hint="dica('margem')"
+        data-campo="margemPercentual"
+        :hint="dicaDaMargem"
+        persistent-hint
         :disabled="somenteLeitura"
+        @blur="form.margemPercentual = limitarMargem(form.margemPercentual)"
       />
       <div class="secao__interruptor">
         <v-switch
@@ -84,6 +102,7 @@ watch(
       />
 
       <v-text-field
+        v-if="!naBase"
         :model-value="form.quantidadeEstoque"
         label="Estoque atual"
         readonly
@@ -98,8 +117,9 @@ watch(
         :hint="dica('setorEstoque')"
         :disabled="somenteLeitura"
       />
-      <v-text-field v-model="form.areaEstoque" label="Área" :disabled="somenteLeitura" />
+      <v-text-field v-if="!naBase" v-model="form.areaEstoque" label="Área" :disabled="somenteLeitura" />
       <v-select
+        v-if="!naBase"
         v-model="form.curvaAbc"
         :items="['A', 'B', 'C']"
         label="Curva ABC"
@@ -126,7 +146,7 @@ watch(
         :hint="dica('estoqueMax')"
         :disabled="somenteLeitura"
       />
-      <div class="secao__interruptor">
+      <div v-if="!naBase" class="secao__interruptor">
         <v-switch
           v-model="form.quantidadeVariavel"
           color="primary"
@@ -137,6 +157,7 @@ watch(
         />
       </div>
       <v-text-field
+        v-if="!naBase"
         v-model="form.toleranciaQuantidadePercentual"
         type="number"
         min="0"
@@ -172,7 +193,7 @@ watch(
           :items="['EXATOS', 'APROXIMADOS']"
           label="Precisão"
           :hint="dica('precisao')"
-          :disabled="somenteLeitura || herdadoTravado"
+          :disabled="somenteLeitura"
         />
         <v-text-field
           v-model="form.quantidadeTransformacao"
@@ -180,7 +201,7 @@ watch(
           min="0"
           label="Quantidade"
           :hint="dica('quantidadeTransformacao')"
-          :disabled="somenteLeitura || herdadoTravado"
+          :disabled="somenteLeitura"
         />
         <v-select
           v-model="form.unidadeTransformacao"
@@ -188,19 +209,15 @@ watch(
           label="Unidade"
           clearable
           :hint="dica('unidadeTransformacao')"
-          :disabled="somenteLeitura || herdadoTravado"
+          :disabled="somenteLeitura"
         />
         <v-text-field
           v-model="form.produtoReceituario"
           label="Produto de receituário"
           :hint="dica('produtoReceituario')"
-          :disabled="somenteLeitura || herdadoTravado"
+          :disabled="somenteLeitura"
         />
-        <v-text-field
-          v-model="form.refReceituario"
-          label="Referência do receituário"
-          :disabled="somenteLeitura || herdadoTravado"
-        />
+        <v-text-field v-model="form.refReceituario" label="Referência do receituário" :disabled="somenteLeitura" />
         <v-text-field
           :model-value="validacaoQtdPreview"
           label="Validação de quantidade (prévia)"

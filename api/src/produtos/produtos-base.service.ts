@@ -138,7 +138,7 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
 
     if (!dados.forcar) {
       const duplicado = await duplicadoNaBaseRepository(tx, { nome, codigoBarras });
-      if (duplicado) throw new ProdutoDuplicadoError(`Ja existe o produto "${duplicado.nome}" na base.`);
+      if (duplicado) throw new ProdutoDuplicadoError(`Já existe o produto "${duplicado.nome}" na base.`);
     }
 
     const { fiscal } = await resolverFiscalDaGravacao({

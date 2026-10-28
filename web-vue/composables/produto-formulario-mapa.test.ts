@@ -76,12 +76,55 @@ describe("produto-formulario-mapa", () => {
     const form = formularioDoDetalhe(detalhe);
     expect(form.teclaBalanca).toBe("131");
     expect(form.validadeBalanca).toBe("7");
-    expect(payloadDoFormulario(form, detalhe.empresaId, false)).toMatchObject({
+    const payload = payloadDoFormulario(form, detalhe.empresaId, false);
+    expect(payload).toMatchObject({
       teclaBalanca: 131,
       validadeBalanca: 7,
-      grupoIdExterno: "GR-09",
       areaVenda: "vitrine_paes"
     });
+    // O ID do grupo no PDV nao e digitado: o servidor resolve pelo nome do grupo (decisao D4).
+    expect(payload).not.toHaveProperty("grupoIdExterno");
+  });
+
+  it("carrega numeros sem as casas do banco e margem/desconto sem lixo de ponto flutuante", () => {
+    const form = formularioDoDetalhe({
+      empresaId: "e1",
+      descricao: "X",
+      quantidadeIndividual: "25.000",
+      custo: "12.5000",
+      margem: "0.2900",
+      precoVenda: "10.000",
+      quantidadeEstoque: "3.000",
+      estoqueMin: "10.000",
+      estoqueMax: null,
+      promocoes: [{ tipo: "desconto", valor: null, descontoFracao: "0.2900", seg: true }]
+    } as unknown as ProdutoDetalhe);
+    expect(form.quantidadeIndividual).toBe("25");
+    expect(form.custo).toBe("12.5");
+    expect(form.margemPercentual).toBe("29");
+    expect(form.precoVenda).toBe("10");
+    expect(form.quantidadeEstoque).toBe("3");
+    expect(form.estoqueMin).toBe("10");
+    expect(form.estoqueMax).toBe("");
+    expect(form.promocoes[0]?.descontoPercentual).toBe("29");
+  });
+
+  it("campo vazio vai como null, nunca 0: custo, preco manual, margem e estoque", () => {
+    const vazio = { ...formularioVazio("e1"), custo: "", precoVenda: "", margemPercentual: "", estoqueMin: "" };
+    expect(payloadDoFormulario(vazio, "e1", false)).toMatchObject({
+      custo: null,
+      precoVenda: null,
+      margem: null,
+      estoqueMin: null,
+      estoqueMax: null
+    });
+    // Zero digitado continua zero (margem 0 = vender pelo custo).
+    const zero = { ...formularioVazio("e1"), custo: "0", margemPercentual: "0" };
+    expect(payloadDoFormulario(zero, "e1", false)).toMatchObject({ custo: 0, margem: 0 });
+  });
+
+  it("produto novo nasce com gramatura 0, como no paralelo", () => {
+    expect(formularioVazio("e1").quantidadeIndividual).toBe("0");
   });
 
   it("preserva os campos oficiais de compra, venda, fiscal e receituário no round-trip", () => {

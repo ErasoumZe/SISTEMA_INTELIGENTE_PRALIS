@@ -12,9 +12,10 @@ import ProdutoSecaoComercial from "~/components/produtos/ProdutoSecaoComercial.v
 import ProdutoSecaoFiscalPromocoes from "~/components/produtos/ProdutoSecaoFiscalPromocoes.vue";
 import ProdutoHerancaBase from "~/components/produtos/ProdutoHerancaBase.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
-import { useAjudaDeCampo } from "~/composables/useAjudaDeCampo";
+import { useAvisoAoNavegar } from "~/composables/useAvisoAoNavegar";
 import { useProdutoFormulario, type ModoDoProduto } from "~/composables/useProdutoFormulario";
 import { dicaProduto } from "~/utils/produto-dicas";
+import { semRolagemNoNumero } from "~/utils/produto-numeros";
 import { mensagemErro } from "~/utils/domain";
 
 const props = defineProps<{ produtoId: string | null; modo: ModoDoProduto }>();
@@ -59,20 +60,26 @@ const formulario = useProdutoFormulario(
   idDoProduto,
   computed(() => props.modo)
 );
-const ajuda = useAjudaDeCampo(computed(() => sessao.value?.user?.id));
-const dicaDoProduto = (campo: string) => dicaProduto(campo, formulario.form.value.habilitarAjuda, ajuda.dica);
+// Uma ajuda so, como no paralelo: o "Habilitar ajuda" do proprio produto.
+const dicaDoProduto = (campo: string) => dicaProduto(campo, formulario.form.value.habilitarAjuda);
+const { avisar } = useAvisoAoNavegar();
 
+/** Salvar so pelo BOTAO: o leitor de codigo de barras manda Enter, e Enter nao pode salvar e sair. */
 async function salvar(forcar = false) {
-  const id = await formulario.salvar(forcar);
-  if (id) await router.push(listagem.value);
-  else focarPrimeiroInvalido();
+  const salvo = await formulario.salvar(forcar);
+  if (salvo) {
+    avisar(salvo.mensagem);
+    await router.push(listagem.value);
+  } else focarPrimeiroInvalido();
 }
 
 /** Foco no primeiro campo invalido — quem salva e cai num erro precisa saber ONDE. */
 function focarPrimeiroInvalido() {
   const campo = Object.keys(formulario.erros.value)[0];
-  if (!campo) return;
-  const alvo = document.querySelector<HTMLElement>(`[data-campo="${campo}"] input, [data-campo="${campo}"]`);
+  // Erro sem campo (promocao, API): leva ao alerta do topo, que diz o motivo.
+  const alvo = campo
+    ? document.querySelector<HTMLElement>(`[data-campo="${campo}"] input, [data-campo="${campo}"]`)
+    : document.querySelector<HTMLElement>(".produto-form__erro");
   alvo?.focus();
   alvo?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
@@ -144,7 +151,9 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
   >
     <v-alert v-if="erroDeAcesso" type="error" variant="tonal">{{ erroDeAcesso }}</v-alert>
 
-    <form v-else class="produto-form" @submit.prevent="salvar(false)">
+    <!-- Sem <form>: Enter (do teclado ou do leitor de codigo) nao submete. A rolagem do mouse tira o
+         foco de qualquer campo numerico, para o numero nao mudar sozinho. -->
+    <div v-else class="produto-form" @wheel.passive="semRolagemNoNumero">
       <header class="produto-form__cabecalho">
         <v-btn icon="mdi-arrow-left" variant="text" aria-label="Voltar para a listagem" @click="sair" />
         <div>
@@ -160,19 +169,11 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
         >
           Histórico de nomes
         </v-btn>
-        <v-btn
-          :variant="ajuda.ligada.value ? 'flat' : 'outlined'"
-          :color="ajuda.ligada.value ? 'primary' : undefined"
-          size="small"
-          prepend-icon="mdi-help-circle-outline"
-          :aria-pressed="ajuda.ligada.value"
-          @click="ajuda.alternar"
-        >
-          Ajuda
-        </v-btn>
       </header>
 
-      <v-alert v-if="formulario.erro.value" type="error" variant="tonal">{{ formulario.erro.value }}</v-alert>
+      <v-alert v-if="formulario.erro.value" type="error" variant="tonal" class="produto-form__erro">
+        {{ formulario.erro.value }}
+      </v-alert>
 
       <v-alert v-if="formulario.duplicado.value" type="warning" variant="tonal">
         <div class="d-flex flex-wrap align-center ga-3">
@@ -228,8 +229,9 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :erros="formulario.erros.value"
           :preco-preview="formulario.precoPreview.value"
           :validacao-qtd-preview="formulario.validacaoQtdPreview.value"
+          :margem-do-grupo-pct="formulario.margemDoGrupoPct.value"
+          :na-base="modo === 'base'"
           :somente-leitura="somenteLeitura"
-          :herdado-travado="formulario.herdadoTravado.value"
           :dica="dicaDoProduto"
         />
 
@@ -250,16 +252,15 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
         <v-btn variant="text" @click="sair">Cancelar</v-btn>
         <v-btn
           v-if="!somenteLeitura"
-          type="submit"
           color="primary"
           prepend-icon="mdi-content-save-outline"
           :loading="formulario.salvando.value"
-          :disabled="formulario.salvando.value || !formulario.valido.value"
+          @click="salvar(false)"
         >
           Salvar produto
         </v-btn>
       </footer>
-    </form>
+    </div>
   </AppShell>
 </template>
 
