@@ -568,6 +568,7 @@ watch(
             :transferencias="dossie.transferencias"
             :relatorio-vendas="dossie.relatorioVendas"
             :ajuste="dossie.ajuste"
+            :vendas-canceladas="dossie.vendasCanceladas"
             :dinheiro="dinheiro"
             :numero="numero"
             :texto="texto"
@@ -577,7 +578,6 @@ watch(
           <RelatorioFechamentoDetalhes
             :conferencias="dossie.conferencias"
             :quebras="dossie.quebras"
-            :vendas-canceladas="dossie.vendasCanceladas"
             :decisoes="dossie.conferenciasTesouraria"
             :anexos="dossie.anexos"
             :anexo-url="anexoUrl"

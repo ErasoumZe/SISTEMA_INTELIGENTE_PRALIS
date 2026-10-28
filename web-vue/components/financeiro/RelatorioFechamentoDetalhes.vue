@@ -18,7 +18,6 @@ type Decisao = {
 const props = defineProps<{
   conferencias: Registro[];
   quebras: Registro[];
-  vendasCanceladas: Registro[];
   decisoes: Decisao[];
   anexos: Anexo[];
   anexoUrl: (anexo: Anexo) => string;
@@ -27,13 +26,6 @@ const props = defineProps<{
   texto: (valor: unknown) => string;
 }>();
 
-const totalCanceladas = computed(() =>
-  props.vendasCanceladas.reduce((soma, venda) => soma + props.numero(venda.valorOriginal), 0)
-);
-
-function lista(valor: unknown): Registro[] {
-  return Array.isArray(valor) ? (valor as Registro[]) : [];
-}
 function quando(valor: unknown) {
   return valor ? formatarDataHora(String(valor)) : "--";
 }
@@ -65,46 +57,6 @@ function rotuloAnexo(tipo: string) {
       <v-alert v-for="quebra in quebras" :key="String(quebra.id)" type="error" variant="tonal" density="compact">
         <strong>Quebra {{ dinheiro(numero(quebra.valor)) }}</strong> · {{ texto(quebra.observacao) }}
       </v-alert>
-    </section>
-
-    <section class="det__secao" style="--sec: #8b5cf6" aria-labelledby="det-canceladas" data-teste="vendas-canceladas">
-      <h3 id="det-canceladas">
-        Vendas canceladas
-        <span class="det__contagem">{{ vendasCanceladas.length }}</span>
-      </h3>
-      <p v-if="vendasCanceladas.length" class="det__nota">
-        {{ dinheiro(totalCanceladas) }} em vendas canceladas, fora dos totais do caixa.
-      </p>
-      <p v-else class="det__vazio">Nenhuma venda cancelada neste caixa.</p>
-      <article v-for="venda in vendasCanceladas" :key="String(venda.id)" class="det__venda">
-        <header>
-          <strong>{{ texto(venda.descricao) }}</strong>
-          <span class="cx-num">{{ dinheiro(numero(venda.valorOriginal)) }}</span>
-        </header>
-        <small>
-          {{ quando(venda.dataHora ?? venda.data) }}
-          <template v-if="venda.identificadorExterno"> · venda {{ texto(venda.identificadorExterno) }}</template>
-        </small>
-        <p class="det__motivo">
-          <b>Motivo:</b> {{ texto(venda.cancelamentoMotivo) }}
-          <template v-if="venda.cancelamentoJustificativa"> · {{ texto(venda.cancelamentoJustificativa) }}</template>
-          <template v-if="venda.cancelamentoAutorizadoPorAutomacao">
-            · autorizado por {{ texto(venda.cancelamentoAutorizadoPorAutomacao) }}</template
-          >
-        </p>
-        <ul v-if="lista(venda.produtos).length" class="det__itens" aria-label="Produtos da venda">
-          <li v-for="produto in lista(venda.produtos)" :key="String(produto.id)">
-            <span>{{ texto(produto.quantidade) }} × {{ texto(produto.descricao) }}</span>
-            <span class="cx-num">{{ dinheiro(numero(produto.valorTotal)) }}</span>
-          </li>
-        </ul>
-        <ul v-if="lista(venda.pagamentos).length" class="det__itens det__itens--pag" aria-label="Pagamentos da venda">
-          <li v-for="pagamento in lista(venda.pagamentos)" :key="String(pagamento.id)">
-            <span>{{ texto(pagamento.formaPagamento || pagamento.tipoPagamentoAutomacao) }}</span>
-            <span class="cx-num">{{ dinheiro(numero(pagamento.valor)) }}</span>
-          </li>
-        </ul>
-      </article>
     </section>
 
     <section class="det__secao" style="--sec: #22a35a" aria-labelledby="det-decisoes">
@@ -224,35 +176,6 @@ function rotuloAnexo(tipo: string) {
   background: color-mix(in srgb, var(--sec) 18%, transparent);
   font-size: var(--cx-fs-caption);
   font-weight: 700;
-}
-.det__venda {
-  display: grid;
-  gap: var(--cx-sp-1);
-  padding: var(--cx-sp-3);
-  border: 1px solid color-mix(in srgb, var(--sec) 40%, var(--cx-line));
-  border-radius: var(--cx-r-md);
-  background: color-mix(in srgb, var(--sec) 6%, transparent);
-}
-.det__venda header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--cx-sp-2);
-  overflow-wrap: anywhere;
-}
-.det__motivo {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.det__itens li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--cx-sp-3);
-  overflow-wrap: anywhere;
-}
-.det__itens--pag {
-  padding-top: var(--cx-sp-1);
-  border-top: 1px dashed var(--cx-line);
 }
 .det__anexos {
   display: grid;

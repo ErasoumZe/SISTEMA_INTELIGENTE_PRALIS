@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import VendasCanceladasBotao from "./VendasCanceladasBotao.vue";
+
 type Registro = Record<string, unknown>;
 type LinhaMaquininha = { forma: string; liquido: number | null };
 type Transferencia = Registro & {
@@ -15,6 +17,7 @@ const props = defineProps<{
   transferencias: Transferencia[];
   relatorioVendas: Registro | null;
   ajuste: Registro | null;
+  vendasCanceladas?: Registro[];
   dinheiro: (valor: number) => string;
   numero: (valor: unknown) => number;
   texto: (valor: unknown) => string;
@@ -175,6 +178,7 @@ function rotuloPagamento(item: Registro) {
           ><span>Retiradas</span><strong>{{ dinheiro(numero(resumo?.totalRetiradas)) }}</strong></v-sheet
         >
       </div>
+      <VendasCanceladasBotao :vendas="vendasCanceladas ?? []" :dinheiro="dinheiro" :numero="numero" :texto="texto" />
       <v-sheet class="diferenca-geral" :class="diferenca ? 'diferenca-geral--alerta' : 'diferenca-geral--ok'">
         <span>Diferença geral</span><strong>{{ diferenca ? dinheiro(diferenca) : "R$ 0,00" }}</strong>
         <small>{{
