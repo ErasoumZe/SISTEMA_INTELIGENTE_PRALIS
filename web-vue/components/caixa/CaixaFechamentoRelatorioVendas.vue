@@ -12,6 +12,7 @@ import {
   leituraDaSugestao,
   leituraFolhaCreareVazia,
   leituraParaEnvio,
+  rotuloCampoFolha,
   type SugestaoFolhaCreare
 } from "~/utils/folha-creare";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
@@ -75,10 +76,12 @@ function aplicarSugestaoCreare(sugestao: SugestaoFolhaCreare) {
   sugestaoCreare.value = sugestao;
   leituraCreare.value = leituraDaSugestao(sugestao);
   leituraPronta.value = true;
-  const pendentes = sugestao.camposDuvidosos.length ? " Revise: " + sugestao.camposDuvidosos.join(", ") + "." : "";
+  const pendentes = sugestao.camposDuvidosos.length
+    ? " Revise: " + sugestao.camposDuvidosos.map(rotuloCampoFolha).join(", ") + "."
+    : "";
   aviso.value = sugestao.documentoLegivel
-    ? "A leitura preencheu os valores visiveis da folha. Confira antes de gerar." + pendentes
-    : "A leitura nao confirmou a legibilidade da folha. Confira e preencha os campos visiveis." + pendentes;
+    ? "A leitura preencheu os valores visíveis da folha. Confira antes de gerar." + pendentes
+    : "A leitura não confirmou a legibilidade da folha. Confira e preencha os campos visíveis." + pendentes;
 }
 
 async function analisarAnexoCreare(anexoId: string) {

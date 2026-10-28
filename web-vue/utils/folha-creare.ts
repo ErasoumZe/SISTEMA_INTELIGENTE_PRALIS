@@ -133,3 +133,16 @@ export type FolhaCreareGerada = {
   somaFormasConfereTotal?: boolean | null;
   horario?: { inicio: ConferenciaInicioFolhaCreare; emissao: ConferenciaEmissaoFolhaCreare };
 };
+
+const ROTULOS_DATAS: Record<string, string> = {
+  dataEmissao: "Data da emissão",
+  periodoInicio: "Período de",
+  periodoFim: "Período até",
+  nomeLoja: "Nome da loja"
+};
+
+/** Rotulo do cupom para um campo da leitura (ex.: "saldoFinalDinheiro" -> "Saldo Final Dinheiro"). */
+export function rotuloCampoFolha(chave: string) {
+  const campo = GRUPOS_FOLHA_CREARE.flatMap((grupo) => grupo.campos).find((item) => item.chave === chave);
+  return campo?.rotulo ?? ROTULOS_DATAS[chave] ?? chave;
+}
