@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   empresas,
   produtos,
@@ -121,11 +121,18 @@ export async function copiasDaBaseParaCodigoRepository(tx: TransacaoBanco, produ
 }
 
 /** Outro produto da MESMA empresa ja usa o codigo? (o ERP tem unico por empresa; o oficial nao tinha). */
+/** As grafias de um codigo numerico: sem zeros a esquerda e completado ate 5 e 6 digitos. */
+function grafiasDoCodigo(codigo: string): string[] {
+  const numero = codigo.replace(/^0+(?=\d)/u, "");
+  return [...new Set([codigo, numero, numero.padStart(5, "0"), numero.padStart(6, "0")])];
+}
+
 export async function donoDoCodigoNaEmpresaRepository(tx: TransacaoBanco, empresaId: string, codigo: string) {
   const [dono] = await tx
     .select({ id: produtos.id, descricao: produtos.descricao })
     .from(produtos)
-    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.codigoInterno, codigo)))
+    // "123" e "00123" sao o MESMO codigo para o SIA: compara as grafias com e sem zeros a esquerda.
+    .where(and(eq(produtos.empresaId, empresaId), inArray(produtos.codigoInterno, grafiasDoCodigo(codigo))))
     .limit(1);
   return dono ?? null;
 }

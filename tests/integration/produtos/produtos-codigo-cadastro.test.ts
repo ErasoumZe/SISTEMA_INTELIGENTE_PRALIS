@@ -81,6 +81,7 @@ describe("produtos - codigo de cadastro x SIA", () => {
       await executarSql("update empresas set matricula_prefixo = $2 where id = $1", [id, p]);
     await executarSql("delete from sia_produto_depara where coditem = '10500'");
     await executarSql("delete from produtos_historico_codigo_interno");
+    await executarSql("delete from produtos_catalogo_base where id_origem = 'entrega-teste-codigo'");
     await contexto.fechar();
   });
 
@@ -143,6 +144,10 @@ describe("produtos - codigo de cadastro x SIA", () => {
       [baseId]
     );
     await executarSql("update produtos set codigo_interno = '00077', codigo_barras = null where id = $1", [copiaId]);
+    // Um codigo de entrega (>= 700000) gravado na BASE nao pode puxar a cunhagem para a faixa reservada.
+    await executarSql(
+      "insert into produtos_catalogo_base (id_origem, nome, codigo_interno, dados_oficiais) values ('entrega-teste-codigo', 'ENTREGA TESTE', '750001', '{}'::jsonb)"
+    );
     const estado = await previa();
     expect(estado.itens.find((i) => i.productId === baseId)?.balde).toBe("novo");
 
@@ -165,6 +170,7 @@ describe("produtos - codigo de cadastro x SIA", () => {
     expect(cunhado.statusCode, cunhado.body).toBe(200);
     const codigo = json<{ data: { codigo: string } }>(cunhado).data.codigo;
     expect(Number(codigo)).toBeGreaterThan(estado.teto);
+    expect(Number(codigo)).toBeLessThan(700_000);
     const copia = await consultarUm<{ codigo: string }>("select codigo_interno as codigo from produtos where id = $1", [
       copiaId
     ]);

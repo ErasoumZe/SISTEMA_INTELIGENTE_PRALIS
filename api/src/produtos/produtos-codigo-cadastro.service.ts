@@ -1,7 +1,6 @@
 import {
-  codigoCadastroValido,
   formatarCodigoCadastro,
-  MAIOR_CODIGO_CADASTRO,
+  PRIMEIRO_CODIGO_DE_ENTREGA,
   reconciliarCodigoCadastro,
   type BaldeCodigo,
   type ParSia,
@@ -20,6 +19,7 @@ import {
   trocarCodigoDaBaseRepository,
   trocarCodigoDoProdutoRepository
 } from "./produtos-codigo-cadastro.repository.js";
+import { calcularProximoCodigoInterno } from "./codigo-interno.js";
 import { travarCadastroDeProdutos } from "./produtos-escrita.repository.js";
 import { lojaFiscalDaEmpresa } from "./produtos-fiscal.service.js";
 import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
@@ -70,12 +70,44 @@ const numeroDoCodigo = (valor: string | null) => {
   return digitos ? Number(digitos) : 0;
 };
 
-/** Oficial: `MAX(codigo_interno)` so dos numericos puros. */
+/**
+ * Maior codigo numerico DENTRO da faixa de produtos (< 700000). O oficial nao tinha teto aqui, e um
+ * codigo de entrega/equipamento (>= 700000) gravado faria o proximo cunhado cair na faixa reservada; o
+ * ERP usa a mesma regra do cadastro normal (`calcularProximoCodigoInterno`), entao os dois nunca divergem.
+ */
+const naFaixa = (codigo: string | null) =>
+  codigo && /^\d+$/u.test(codigo) && Number(codigo) < PRIMEIRO_CODIGO_DE_ENTREGA ? Number(codigo) : 0;
 const maiorGravado = (codigos: Array<string | null>) =>
-  codigos.reduce<number>(
-    (maior, codigo) => (codigo && /^\d+$/u.test(codigo) && Number(codigo) > maior ? Number(codigo) : maior),
-    0
-  );
+  codigos.reduce<number>((maior, c) => Math.max(maior, naFaixa(c)), 0);
+
+/** SQLSTATE da falha, no topo ou embrulhado pelo drizzle em `cause`. */
+function codigoDoPostgres(falha: Error | null | undefined): string | undefined {
+  let atual: Error | null | undefined = falha;
+  for (let salto = 0; salto < 4 && atual instanceof Error; salto += 1) {
+    const codigo = (atual as Error & { code?: string }).code;
+    if (typeof codigo === "string") return codigo;
+    atual = atual.cause instanceof Error ? atual.cause : null;
+  }
+  return undefined;
+}
+
+/**
+ * A troca sob a trava do cadastro, com o indice unico (empresa, codigo) traduzido para 409: se outro
+ * caminho gravou o codigo fora da trava, a resposta e "ocupado", nunca 500.
+ */
+async function trocarSobATrava<T>(fazer: (tx: TransacaoBanco) => Promise<T>): Promise<T> {
+  try {
+    return await executarEmTransacao(async (tx) => {
+      await travarCadastroDeProdutos(tx);
+      return fazer(tx);
+    });
+  } catch (falha) {
+    if (falha instanceof Error && codigoDoPostgres(falha) === "23505") {
+      throw new CodigoCadastroError("Esse código já está em uso nesta loja. Nada foi gravado.", 409, "CODIGO_OCUPADO");
+    }
+    throw falha;
+  }
+}
 
 function exigirAdministrador(ator: Ator) {
   if (!ator.administrador) {
@@ -123,11 +155,8 @@ async function carregar(ator: Ator) {
 
 /** Teto da numeracao: o maior coditem do SIA (ate o limite) e o maior codigo ja gravado. */
 async function teto(pares: ParSia[]) {
-  // Oficial: so coditem numerico puro, ate o limite da numeracao.
-  const sia = pares
-    .filter((par) => /^\d+$/u.test(par.coditem))
-    .map((par) => Number(par.coditem))
-    .reduce((maior, n) => (n <= MAIOR_CODIGO_CADASTRO && n > maior ? n : maior), 0);
+  // Oficial: so coditem numerico puro. No ERP, so a faixa de produtos (entrega >= 700000 nao conta).
+  const sia = pares.reduce((maior, par) => Math.max(maior, naFaixa(par.coditem)), 0);
   const gravado = maiorGravado(await codigosGravadosRepository());
   const valor = Math.max(sia, gravado);
   return { teto: valor, tetoDe: valor === sia && sia > 0 ? "de-para do SIA" : "maior código já gravado" };
@@ -257,16 +286,15 @@ export async function adotarCodigosEmLote(ator: Ator, confirmacao: string, balde
   let conflitos = 0;
   for (const proposta of lote) {
     try {
-      const trocado = await executarEmTransacao(async (tx) => {
-        await travarCadastroDeProdutos(tx);
-        return aplicar(
+      const trocado = await trocarSobATrava((tx) =>
+        aplicar(
           tx,
           proposta.produto.id,
           alvos.get(proposta.produto.id)!,
           { esperado: proposta.produto.codigoInterno, codigoNovo: proposta.codigoProposto!, fonte: proposta.fonte },
           ator
-        );
-      });
+        )
+      );
       if (trocado) aplicadas += 1;
       else conflitos += 1;
     } catch (erro) {
@@ -320,12 +348,14 @@ export async function decidirCodigo(ator: Ator, pedido: DecisaoDeCodigo) {
         "SEM_TETO"
       );
     }
-    return executarEmTransacao(async (tx) => {
-      // Sob a trava do cadastro: o MAX relido aqui e o numero gravado nao tem como ser de outro.
-      await travarCadastroDeProdutos(tx);
+    // Sob a trava do cadastro: o MAX relido aqui e o numero gravado nao tem como ser de outro.
+    return trocarSobATrava(async (tx) => {
       const maior = maiorGravado(await codigosGravadosRepository(tx));
-      const codigo = String(Math.max(valor, maior) + 1).padStart(5, "0");
-      if (!codigoCadastroValido(codigo)) {
+      let codigo: string;
+      try {
+        // A mesma regra do cadastro normal: piso 13129, nunca na faixa de entrega.
+        codigo = calcularProximoCodigoInterno(Math.max(valor, maior));
+      } catch {
         throw new CodigoCadastroError("A numeração do código de cadastro esgotou.", 409, "NUMERACAO_ESGOTADA");
       }
       const trocado = await aplicar(
@@ -366,9 +396,8 @@ export async function decidirCodigo(ator: Ator, pedido: DecisaoDeCodigo) {
     );
   }
   const origem = par ? `SIA ${par.loja}` : proposta.fonte;
-  const trocado = await executarEmTransacao(async (tx) => {
-    await travarCadastroDeProdutos(tx);
-    return aplicar(
+  const trocado = await trocarSobATrava((tx) =>
+    aplicar(
       tx,
       pedido.productId,
       alvo,
@@ -378,8 +407,8 @@ export async function decidirCodigo(ator: Ator, pedido: DecisaoDeCodigo) {
         fonte: `${origem} (escolhido por ${proposta.balde})`
       },
       ator
-    );
-  });
+    )
+  );
   if (!trocado) throw mudouEmbaixo();
   return { codigo: escolhido, fonte: origem };
 }

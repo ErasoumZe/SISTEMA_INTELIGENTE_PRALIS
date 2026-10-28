@@ -46,7 +46,8 @@ export async function estadoDaBalancaRepository(empresaId: string, filtro: Filtr
     })
     .from(siaProdutoDepara)
     .where(eq(siaProdutoDepara.empresaId, empresaId))
-    .orderBy(asc(filtro.espelhoPorCoditem ? siaProdutoDepara.coditem : siaProdutoDepara.id));
+    // Desempate por id: em coditem repetido a ordem do Postgres nao e garantida e o hash da previa mudaria.
+    .orderBy(asc(filtro.espelhoPorCoditem ? siaProdutoDepara.coditem : siaProdutoDepara.id), asc(siaProdutoDepara.id));
   const [linhas, espelhos] = filtro.bloquear
     ? [await consultaProdutos.for("update"), await consultaEspelhos.for("update")]
     : [await consultaProdutos, await consultaEspelhos];
@@ -71,7 +72,12 @@ export interface BalancaDoProduto {
 }
 
 /** Grava pesavel/tecla/validade nos produtos (em lotes de 500, como o oficial). */
-export async function gravarBalancaDosProdutosRepository(tx: TransacaoBanco, ids: string[], valores: BalancaDoProduto) {
+export async function gravarBalancaDosProdutosRepository(
+  tx: TransacaoBanco,
+  empresaId: string,
+  ids: string[],
+  valores: BalancaDoProduto
+) {
   for (let inicio = 0; inicio < ids.length; inicio += 500) {
     await tx
       .update(produtos)
@@ -81,13 +87,14 @@ export async function gravarBalancaDosProdutosRepository(tx: TransacaoBanco, ids
         validadeBalanca: valores.validadeBalanca,
         atualizadoEm: new Date()
       })
-      .where(inArray(produtos.id, ids.slice(inicio, inicio + 500)));
+      .where(and(eq(produtos.empresaId, empresaId), inArray(produtos.id, ids.slice(inicio, inicio + 500))));
   }
 }
 
 /** O mesmo no de-para do SIA, na grafia de texto dele ('000', '5'). */
 export async function gravarBalancaDoEspelhoRepository(
   tx: TransacaoBanco,
+  empresaId: string,
   ids: string[],
   valores: { pesavel: string; teclaBalanca: string; validadeBalanca: string }
 ) {
@@ -95,6 +102,8 @@ export async function gravarBalancaDoEspelhoRepository(
     await tx
       .update(siaProdutoDepara)
       .set(valores)
-      .where(inArray(siaProdutoDepara.id, ids.slice(inicio, inicio + 500)));
+      .where(
+        and(eq(siaProdutoDepara.empresaId, empresaId), inArray(siaProdutoDepara.id, ids.slice(inicio, inicio + 500)))
+      );
   }
 }

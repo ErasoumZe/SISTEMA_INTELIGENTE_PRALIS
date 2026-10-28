@@ -142,14 +142,14 @@ export async function aplicarPesaveis(
       );
     }
     for (const { atual: produto, fonte } of plano.atualizarProdutos) {
-      await gravarBalancaDosProdutosRepository(tx, [produto.id], {
+      await gravarBalancaDosProdutosRepository(tx, empresaId, [produto.id], {
         pesavel: "S",
         teclaBalanca: 0,
         validadeBalanca: fonte.validadeDias
       });
     }
     for (const { atual: espelho, fonte } of plano.atualizarEspelhos) {
-      await gravarBalancaDoEspelhoRepository(tx, [espelho.id], {
+      await gravarBalancaDoEspelhoRepository(tx, empresaId, [espelho.id], {
         pesavel: "S",
         teclaBalanca: "000",
         validadeBalanca: String(fonte.validadeDias)

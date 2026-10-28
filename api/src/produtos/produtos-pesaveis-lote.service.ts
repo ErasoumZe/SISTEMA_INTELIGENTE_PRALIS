@@ -115,13 +115,13 @@ export async function aplicarBackfillPesavel(
     }
     const gravar = async (decisoes: DecisaoBackfill[]) => {
       for (const d of decisoes) {
-        await gravarBalancaDosProdutosRepository(tx, [d.produto.id], d);
+        await gravarBalancaDosProdutosRepository(tx, empresaId, [d.produto.id], d);
       }
     };
     await gravar(plano.gravar);
     await gravar(plano.completarBalanca);
     for (const c of plano.espelhoCorrigir) {
-      await gravarBalancaDoEspelhoRepository(tx, [c.espelhoId], c);
+      await gravarBalancaDoEspelhoRepository(tx, empresaId, [c.espelhoId], c);
     }
     return {
       loja,
@@ -206,6 +206,7 @@ export async function aplicarPadronizarPesavel(
       if (valores) {
         await gravarBalancaDosProdutosRepository(
           tx,
+          empresaId,
           mudancas.map((g) => g.produto.id),
           valores
         );
@@ -215,6 +216,7 @@ export async function aplicarPadronizarPesavel(
       if (texto) {
         await gravarBalancaDoEspelhoRepository(
           tx,
+          empresaId,
           espelhos.map((c) => c.espelhoId),
           texto
         );
