@@ -428,3 +428,5 @@ export * from "./creare-layout.js";
 export * from "./creare.js";
 export * from "./formato-creare.js";
 export * from "./planilha-mapa.js";
+export * from "./planilha-traducao.js";
+export * from "./planilha-leiaute.js";

@@ -12,6 +12,7 @@ import {
 } from "@padaria/shared/produtos";
 import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
+import { publicarCreareDaEmpresaAposSalvar } from "./produtos-creare-drive.js";
 import { apenasDigitos } from "../utils.js";
 import type { MultipartFile } from "@fastify/multipart";
 import {
@@ -260,7 +261,7 @@ export async function salvarProduto(
   // memoria e o Google nunca segura a trava. Falha aqui nao derruba nada (vira "fonte_indisponivel").
   await tabelasFiscais().catch(() => null);
 
-  return executarEmTransacao(async (tx) => {
+  const salvo = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
 
     const alvo = id ? await carregarProdutoAlvoValidado(tx, id, dados.empresaId, ator.empresasPermitidas) : null;
@@ -360,6 +361,9 @@ export async function salvarProduto(
     await registrarNaFilaDaPlanilha(tx, { empresaId: salvo.empresaId, produtoId: salvo.id });
     return salvo;
   });
+  // TXT do PDV no Drive da loja (desligado ate a virada), DEPOIS do commit: nunca derruba o salvamento.
+  await publicarCreareDaEmpresaAposSalvar(salvo.empresaId);
+  return salvo;
 }
 
 export async function listarHistoricoNomesProduto(empresaId: string, produtoId: string, empresasPermitidas: string[]) {

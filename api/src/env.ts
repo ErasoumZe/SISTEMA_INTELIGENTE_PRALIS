@@ -88,6 +88,17 @@ const envSchema = z.object({
     .default("false")
     .transform((valor) => valor === "true"),
   GOOGLE_PRODUTOS_BASE_TAB: z.string().trim().min(1).default("(BASE) CADASTRO PRODUTOS"),
+  // Mesmos padroes do oficial: coluna LOJAS, abas de loja (JSON {"TNP":"..."}; vazio = abas padrao) e prazo.
+  GOOGLE_PRODUTOS_DEFAULT_LOJAS: z.string().default("TNP,LI,HORA"),
+  GOOGLE_PRODUTOS_LOJA_TABS: z.string().default(""),
+  GOOGLE_PRODUTOS_TIMEOUT_MS: z.coerce.number().int().min(0).default(20_000),
+  // Publicacao do TXT do CREARE na pasta do Drive da loja (oficial `creare-drive`): DESLIGADA ate a virada.
+  // `{"TNP":"<id da pasta>"}`, sem fallback: o destino e sempre decisao explicita de quem configura.
+  CREARE_DRIVE_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  CREARE_DRIVE_FOLDERS_JSON: z.string().default(""),
   // Download pelo robo da loja (Bearer). Menos de 32 caracteres = desligado, nunca enfraquecido.
   CREARE_EXPORT_TOKEN: z.string().default(""),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde

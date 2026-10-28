@@ -734,8 +734,8 @@ virada**. Aplicada só no banco local; a FK da BASE na fila ganhou nome curto (o
   - O robô autentica por `Bearer CREARE_EXPORT_TOKEN` e informa `?loja=`; sem token, vale a sessão.
   - `GET /api/produtos/creare/saude` dá o diagnóstico (só admin).
   - A trava por loja é a linha da empresa, e não `pg_advisory` (o ERP proíbe SQL cru).
-  - `CREARE_EXPORT_ENABLED=false` por padrão. A publicação no Drive **não foi portada**: é escrita e só
-    entra na virada.
+  - `CREARE_EXPORT_ENABLED=false` por padrão. A publicação no Drive foi portada depois (ver a seção
+    seguinte).
 - **Espelho na planilha:**
   - O mapa das colunas e a grafia numérica do Creare foram copiados literalmente, com os 44 testes oficiais.
   - A fila `produtos_planilha_sincronizacoes` recebe toda gravação na mesma transação: loja, BASE, foto,
@@ -744,11 +744,52 @@ virada**. Aplicada só no banco local; a FK da BASE na fila ganhou nome curto (o
     no app ele contava a vida inteira do produto, e um produto muito editado desistia na primeira falha.
   - Rotas `GET /api/produtos/planilha/fila` e `POST /api/produtos/planilha/reenvio`, só admin.
   - `GOOGLE_PRODUTOS_ESPELHO_ENABLED=false` por padrão: desligado, nada entra na fila.
-  - **O escritor real na planilha ainda não existe** (reserva de linha pelo ID, fórmulas da linha-modelo,
-    abas de loja). Ele precisa ser validado contra a planilha de verdade e entra na virada.
+  - O escritor real foi portado depois (ver a seção seguinte).
+
+### Escritor da planilha e publicação no Drive — portados, desligados (27/10/2026)
+
+José autorizou ("Sim, segue") portar o escritor real e a publicação no Drive, **sem ligar nada**.
+
+- **Escritor** (`produtos-planilha-escritor.ts`, porte do `ProductSheetService`):
+  - Acha a linha pelo UUID na coluna `ID`. Na BASE o UUID é o `id_origem` (o mesmo id do app), então as
+    linhas que o app já criou são reencontradas.
+  - Produto novo da BASE segue a ordem do oficial: aumenta a grade, reserva a linha gravando **só o ID**
+    (RAW), registra a linha na fila e copia formato e validação da linha-modelo 12 (duas requisições).
+    Depois repõe as fórmulas que faltam e grava as células de entrada.
+  - Coluna que a linha calcula nunca recebe valor. Texto vai RAW; número, hora e percentual vão
+    USER_ENTERED. A planilha nova é detectada pelos rótulos da linha 3; a antiga continua suportada para a
+    BASE.
+  - A cópia da loja grava só a faixa dela (`TNP - CADASTRO`) na linha do produto da BASE. **Nunca cria
+    linha**: sem a linha da BASE, falha com o motivo e não recadastra o produto. É a regra oficial de 25/09,
+    a do `syncStoreProducts`; no oficial, a edição avulsa da loja ainda podia reservar uma linha.
+  - As abas `(TNP)` e `(LI) CADASTRO PRODUTOS` recebem a mesma linha, cada uma só com os produtos da sua
+    loja. HORA fica fora.
+  - Fila em processo: uma gravação de cada vez, como no oficial.
+- **Drive** (`produtos-creare-drive.ts`, porte do `CreareDriveService`):
+  - Depois do commit, publica `cadastro-{loja}.txt` com o catálogo inteiro da loja. A BASE republica todas
+    as lojas.
+  - Só atualiza um arquivo que já existe: ele é criado uma vez por uma pessoa.
+  - Nunca derruba o salvamento. Estados: publicado, desligado, sem_pasta, sem_arquivo, sem_depara,
+    sem_produtos, falhou.
+- **Diferenças conscientes em relação ao app:**
+  - Credencial: o ERP usa a OAuth da conta Google dele, e não a conta de serviço. Na virada, a planilha e
+    as pastas da loja precisam estar compartilhadas com essa conta.
+  - O espelho roda pela fila (worker de 5 min mais "Reenviar"), não logo depois de salvar.
+  - Não foram portados o espelho legado por posição das abas de loja (`espelharVarios`), a limpeza da
+    linha na exclusão (o ERP não exclui produto) nem o health da planilha.
+  - O ERP não guarda o rótulo "ATÉ x%" da promoção: a coluna `DESCONTO ATÉ` fica vazia.
+- **Clientes reais:** os dois clientes Google recusam rodar sob teste, como no oficial. Os testes usam uma
+  planilha em memória (`tests/setup/planilha-falsa.ts`).
+- **Flags, todas `false`/vazias por padrão:**
+  - `GOOGLE_PRODUTOS_ESPELHO_ENABLED` e `GOOGLE_PRODUTOS_SPREADSHEET_ID`;
+  - `GOOGLE_PRODUTOS_LOJA_TABS`, `GOOGLE_PRODUTOS_DEFAULT_LOJAS` e `GOOGLE_PRODUTOS_TIMEOUT_MS`;
+  - `CREARE_DRIVE_ENABLED` e `CREARE_DRIVE_FOLDERS_JSON`.
 - **Para a virada:**
-  1. Configurar `CREARE_STORE_CONFIG_JSON` (o mesmo JSON do Coolify do app) e o token do robô.
-  2. Portar o escritor da planilha e a publicação no Drive.
-  3. Ligar as duas flags.
-  4. Apontar o robô da loja para o ERP.
-  5. Só então desligar o app.
+  1. Aplicar as migrations 0084/0087/0088 em produção (autorização própria).
+  2. Configurar `CREARE_STORE_CONFIG_JSON`, o token do robô e `CREARE_DRIVE_FOLDERS_JSON`.
+  3. Compartilhar a planilha e as pastas com a conta Google do ERP.
+  4. Desligar a escrita do app.
+  5. Ligar as flags do ERP.
+  6. Conferir um produto na planilha e no TXT.
+  7. Apontar o robô da loja para o ERP.
+  - Nunca deixar os dois escrevendo ao mesmo tempo: as linhas se trocariam.

@@ -12,6 +12,7 @@ import {
   type ProdutoPayload
 } from "@padaria/shared/produtos";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
+import { publicarCreareAposSalvar } from "./produtos-creare-drive.js";
 import { apenasDigitos } from "../utils.js";
 import { dadosOficiaisDaBase, valoresHerdadosDaCopia, valoresHerdadosDoPayload } from "./produtos-base.dados.js";
 import {
@@ -124,7 +125,7 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
   // Regras fiscais lidas ANTES da trava: dentro da transacao a classificacao usa o cache.
   await tabelasFiscais().catch(() => null);
 
-  return executarEmTransacao(async (tx) => {
+  const criado = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
     if (!dados.grupoMercadoriaId) throw new Error("Selecione o grupo de mercadorias para aplicar a regra fiscal.");
     const { sigla, grupoNome } = await nomesDaEntrada(tx, dados);
@@ -175,6 +176,8 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
     await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
     return { id };
   });
+  await publicarCreareAposSalvar("BASE");
+  return criado;
 }
 
 type LinhaBase = NonNullable<Awaited<ReturnType<typeof carregarProdutoBaseRepository>>>;
@@ -207,7 +210,7 @@ export async function editarProdutoBase(
   const dados = lerEntrada(body, ator);
   await tabelasFiscais().catch(() => null);
 
-  return executarEmTransacao(async (tx) => {
+  const editado = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
     const alvo = await carregarProdutoBaseRepository(tx, id);
     if (!alvo) throw new ProdutoNaoEncontradoError();
@@ -265,6 +268,9 @@ export async function editarProdutoBase(
     await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
     return { id, lojasAtualizadas };
   });
+  // A BASE pode ter descido para as lojas (heranca): republica o arquivo de todas (oficial).
+  await publicarCreareAposSalvar("BASE");
+  return editado;
 }
 
 /**

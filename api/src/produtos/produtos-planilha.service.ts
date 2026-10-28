@@ -1,4 +1,6 @@
 import { env } from "../env.js";
+import { GoogleSheetsGatewayReal, sanitizeError } from "../google/google-sheets-gateway.js";
+import { EscritorPlanilhaGoogle } from "./produtos-planilha-escritor.js";
 import type { ExecutorBanco } from "../banco/conexao.js";
 import {
   filaDaPlanilhaRepository,
@@ -17,15 +19,16 @@ import {
  * ar, ele e quem escreve na planilha — dois escritores na mesma linha trocariam cadastros. Desligado,
  * nada entra na fila e o reenvio nao roda.
  *
- * Quem escreve de fato e o `EscritorDaPlanilha`. O escritor real (reserva de linha por ID, formulas da
- * linha-modelo, abas de loja) entra na virada, validado contra a planilha de verdade; ate la so existe
- * o contrato e um escritor de teste.
+ * Quem escreve de fato e o `EscritorDaPlanilha`: o real e o `EscritorPlanilhaGoogle` (porte do oficial —
+ * reserva de linha por ID, formulas da linha-modelo, faixa da loja, abas de loja). Os testes injetam um
+ * escritor com gateway falso; o cliente Google real recusa rodar sob teste.
  */
 export interface EscritorDaPlanilha {
   escrever(alvo: AlvoDaPlanilha): Promise<{ linha: number | null }>;
 }
 
 let escritorInjetado: EscritorDaPlanilha | null = null;
+let escritorReal: EscritorDaPlanilha | null = null;
 
 /** So para testes: troca o escritor. */
 export function definirEscritorDaPlanilhaParaTeste(escritor: EscritorDaPlanilha | null): void {
@@ -34,11 +37,20 @@ export function definirEscritorDaPlanilhaParaTeste(escritor: EscritorDaPlanilha 
 
 function escritor(): EscritorDaPlanilha {
   if (escritorInjetado) return escritorInjetado;
-  return {
-    async escrever() {
-      throw new Error("A escrita na planilha ainda não foi ligada no ERP (virada combinada).");
-    }
-  };
+  const planilhaId = env.GOOGLE_PRODUTOS_SPREADSHEET_ID;
+  // Ligado sem destino explicito: recusa antes de qualquer chamada ao Google (oficial `misconfigured`).
+  if (!planilhaId) {
+    return {
+      async escrever() {
+        throw new Error(
+          "Espelho ligado, mas sem destino configurado: GOOGLE_PRODUTOS_SPREADSHEET_ID. Nada foi escrito."
+        );
+      }
+    };
+  }
+  // Um por processo: o cache de aba/leiaute e a fila interna (primeira linha livre) sao dele.
+  escritorReal ??= new EscritorPlanilhaGoogle(new GoogleSheetsGatewayReal(), planilhaId);
+  return escritorReal;
 }
 
 export const espelhoNaPlanilhaLigado = () => env.GOOGLE_PRODUTOS_ESPELHO_ENABLED;
@@ -82,7 +94,11 @@ export async function reprocessarFilaDaPlanilha(
       await marcarSincronizadoRepository(item.id, linha);
       sincronizados += 1;
     } catch (erro) {
-      await marcarFalhaRepository(item.id, item.tentativas, erro instanceof Error ? erro.message : "Falha ao escrever");
+      await marcarFalhaRepository(
+        item.id,
+        item.tentativas,
+        erro instanceof Error ? sanitizeError(erro) : "Falha ao escrever"
+      );
       falharam += 1;
     }
   }

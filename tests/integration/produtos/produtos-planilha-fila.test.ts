@@ -79,7 +79,7 @@ describe("produtos - fila do espelho na planilha", () => {
     expect(await linhaDa(produtoId)).toMatchObject({
       status: "falhou",
       tentativas: 1,
-      ultimo_erro: "Google fora do ar"
+      ultimo_erro: "Error: Google fora do ar"
     });
 
     // Ainda na espera: a proxima rodada nao tenta de novo.
