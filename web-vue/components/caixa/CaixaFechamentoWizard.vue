@@ -58,6 +58,7 @@ const emit = defineEmits<{
   (event: "executarPlanejamento", payload: { caixaId: string; planejamentoId: string }): void;
   (event: "folhaEnviada", valor: boolean): void;
   (event: "anexosAtualizados", anexos: AnexoFechamento[]): void;
+  (event: "inicioAjustado"): void;
 }>();
 
 const etapaAtual = ref(1);
@@ -219,7 +220,14 @@ function formatarHora(dataHora: string | null | undefined) {
       :responsaveis-pendentes="!podeAvancarResumo"
     />
 
-    <CaixaFechamentoRelatorioVendas v-else-if="etapaAtual === 2" id="fechamento-painel-2" :caixa-id="caixa.id" />
+    <CaixaFechamentoRelatorioVendas
+      v-else-if="etapaAtual === 2"
+      id="fechamento-painel-2"
+      :caixa-id="caixa.id"
+      :abertura-oficial="caixa.abertoEm"
+      :inicio-vendas="caixa.dataHoraAbertura"
+      @inicio-ajustado="emit('inicioAjustado')"
+    />
 
     <CaixaFechamentoMaquininha v-else-if="etapaAtual === 3" id="fechamento-painel-3" :caixa="caixa" />
 

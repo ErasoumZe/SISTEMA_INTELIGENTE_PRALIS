@@ -4,6 +4,7 @@ import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/u
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
+import CaixaInicioVendasAjuste from "~/components/caixa/CaixaInicioVendasAjuste.vue";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
 type LeituraCreare = Record<
@@ -31,7 +32,9 @@ type SugestaoCreare = Record<
   observacoes: string[];
 };
 
-const props = defineProps<{ caixaId: string }>();
+// `aberturaOficial`/`inicioVendas`: opcionais para nao quebrar quem ainda nao passa (o ajuste so aparece com eles).
+const props = defineProps<{ caixaId: string; aberturaOficial?: string; inicioVendas?: string }>();
+const emit = defineEmits<{ (event: "inicioAjustado"): void }>();
 const { apiUrl, apiGet, apiPost } = useApi();
 const cameraCreare = useTemplateRef<HTMLInputElement>("cameraCreare");
 const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(cameraCreare);
@@ -132,6 +135,23 @@ async function carregarRelatorioExistente() {
   } catch {
     // A leitura do rascunho salvo não pode bloquear a geração manual do relatório.
   }
+}
+
+// R-224: depois de ajustar o inicio, o relatorio gerado antes vale para o periodo antigo e e descartado.
+function aoAjustarInicio(resultado: {
+  vendasAnexadas: number;
+  vendasDesanexadas: number;
+  relatorioVendasInvalidado: boolean;
+}) {
+  totais.value = null;
+  intervalo.value = null;
+  gerado.value = false;
+  comparacaoCreare.value = null;
+  canceladas.value = [];
+  const saidas = resultado.vendasDesanexadas ? `, ${resultado.vendasDesanexadas} saíram` : "";
+  aviso.value = `Início ajustado (${resultado.vendasAnexadas} venda(s) entraram neste caixa${saidas}). Gere o relatório de novo.`;
+  // O saldo esperado e o cabecalho do caixa vem do status: o pai recarrega agora, nao no proximo minuto.
+  emit("inicioAjustado");
 }
 
 async function gerarRelatorio() {
@@ -278,6 +298,14 @@ watch(
           : "Há valores pendentes ou divergentes no comparativo CREARE × Pralis. Revise a folha e os lançamentos."
       }}
     </v-alert>
+
+    <CaixaInicioVendasAjuste
+      v-if="aberturaOficial && inicioVendas"
+      :caixa-id="caixaId"
+      :abertura-oficial="aberturaOficial"
+      :inicio-vendas="inicioVendas"
+      @ajustado="aoAjustarInicio"
+    />
 
     <v-btn
       class="relatorio-vendas__gerar mt-4"

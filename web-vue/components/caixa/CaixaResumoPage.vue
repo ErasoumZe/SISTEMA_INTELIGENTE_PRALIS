@@ -958,6 +958,7 @@ function confirmarFechamento() {
           @executar-planejamento="emit('executarPlanejamento', $event)"
           @folha-enviada="folhaFechamentoEnviada = $event"
           @anexos-atualizados="anexosFechamento = $event"
+          @inicio-ajustado="emit('recarregar')"
         />
 
         <template v-else>

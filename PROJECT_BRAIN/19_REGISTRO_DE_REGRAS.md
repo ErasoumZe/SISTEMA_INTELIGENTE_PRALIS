@@ -1366,6 +1366,23 @@ Custo aceito por Marco: o operador deixa de provar que tem o lacre físico na m�
 conferência final da Tesouraria (lacre de fechamento informado contra o reservado) continua existindo no
 Relatório de fechamento. Tela: `CampoLacreFechamento.vue`.
 
+### R-224 — Início das vendas do caixa pode recuar até 60 min, com motivo (Marco, 28/10/2026)
+
+**Supera em parte a R-209** (que proibia o operador de escolher o período). Quando o operador abre o caixa no sistema
+depois de já estar vendendo no PDV (ex.: abriu 13:18, vende desde 13:00), ele pode, na etapa **Vendas** do
+fechamento, tocar em **Ajustar início** e escolher uma hora anterior. As vendas do CREARE desse intervalo **que
+estão sem caixa** passam a ser deste caixa (Entradas, saldo e relatório); venda que já pertence a outro caixa nunca
+é tirada de lá.
+
+Limites (servidor): no máximo **60 min antes da abertura oficial**, no **mesmo dia de negócio**, **nunca antes do
+fechamento do caixa anterior do mesmo PDV**, só com o caixa **aberto ou em fechamento**, e com **motivo
+obrigatório**. A **abertura oficial** (`aberto_em`) nunca muda; muda só o início do período das vendas
+(`data_hora_abertura`). Cada ajuste grava em `edicoes_caixa` quem, quando, o motivo e as duas horas. Se o
+relatório de vendas já tinha sido gerado, ele é descartado e precisa ser gerado de novo. O fim continua sendo o
+corte do fechamento.
+
+Rota `POST /api/caixa/:caixaId/inicio-vendas`; tela `CaixaInicioVendasAjuste.vue`.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
