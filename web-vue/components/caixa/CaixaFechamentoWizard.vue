@@ -219,7 +219,13 @@ function formatarHora(dataHora: string | null | undefined) {
       :responsaveis-pendentes="!podeAvancarResumo"
     />
 
-    <CaixaFechamentoRelatorioVendas v-else-if="etapaAtual === 2" id="fechamento-painel-2" :caixa-id="caixa.id" />
+    <CaixaFechamentoRelatorioVendas
+      v-else-if="etapaAtual === 2"
+      id="fechamento-painel-2"
+      :caixa-id="caixa.id"
+      :abertura-oficial="caixa.abertoEm"
+      :inicio-vendas="caixa.dataHoraAbertura"
+    />
 
     <CaixaFechamentoMaquininha v-else-if="etapaAtual === 3" id="fechamento-painel-3" :caixa="caixa" />
 

@@ -6,6 +6,7 @@ import { basename } from "node:path";
 import { readFile, unlink } from "node:fs/promises";
 import type {
   AbrirCaixaPayload,
+  AjustarInicioVendasCaixaPayload,
   CancelarPlanejamentoRetornoPayload,
   CaixaOperacional,
   CaixaStatus,
@@ -62,6 +63,9 @@ import {
   salvarRelatorioVendasFechamentoRepository,
   invalidarRelatorioMaquininhaFechamentoRepository,
   invalidarRelatorioVendasFechamentoRepository,
+  atualizarInicioVendasCaixaRepository,
+  buscarFimDoCaixaAnteriorNoPdvRepository,
+  registrarEdicaoCaixaRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
@@ -837,6 +841,90 @@ export async function registrarRetornoIndisponibilidadeCaixa(caixaId: string, pe
     );
     if (!retorno) throw new Error("Nenhuma indisponibilidade em andamento neste caixa");
     return { id: retorno.id, retornadoEm: retorno.retornadoEm?.toISOString() ?? new Date().toISOString() };
+  });
+}
+
+// R-224 · o operador recua o inicio das vendas do caixa (abriu no sistema depois de ja estar vendendo).
+// Limites: no maximo 60 min antes da abertura OFICIAL (`abertoEm`, que nunca muda), no mesmo dia de negocio,
+// nunca antes do fim do caixa anterior do mesmo PDV, e so com motivo. As vendas sem caixa desse intervalo passam
+// a ser deste caixa (as que ja sao de outro caixa nunca sao tiradas de la). Se o fechamento ja comecou, o
+// relatorio de vendas gerado fica invalido e precisa ser gerado de novo com o periodo novo.
+const RECUO_MAXIMO_INICIO_VENDAS_MS = 60 * 60_000;
+export async function ajustarInicioVendasCaixa(
+  caixaId: string,
+  dados: AjustarInicioVendasCaixaPayload,
+  perfil: PerfilUsuario
+) {
+  return executarEmTransacao(async (tx) => {
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (!(await travarCaixaRepository(caixa.id, tx))) throw new Error("Caixa nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!travado || !["aberto", "em_fechamento"].includes(travado.status)) {
+      throw new ErroDominio(
+        "O inicio das vendas so pode ser ajustado com o caixa aberto ou em fechamento.",
+        409,
+        "CAIXA_NAO_AJUSTAVEL"
+      );
+    }
+    if (!travado.abertoEm || !travado.pdvId || !travado.dataHoraAbertura)
+      throw new Error("Caixa sem abertura registrada");
+    const oficial = new Date(travado.abertoEm);
+    const inicio = new Date(dados.inicio);
+    if (inicio.getTime() > oficial.getTime()) {
+      throw new ErroDominio("O inicio so pode ser antes da abertura oficial.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
+    }
+    if (oficial.getTime() - inicio.getTime() > RECUO_MAXIMO_INICIO_VENDAS_MS) {
+      throw new ErroDominio(
+        "O inicio pode recuar no maximo 60 minutos da abertura oficial.",
+        422,
+        "INICIO_VENDAS_FORA_DA_JANELA"
+      );
+    }
+    if (diaNegocio(inicio) !== diaNegocio(oficial)) {
+      throw new ErroDominio("O inicio precisa ser no mesmo dia da abertura.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
+    }
+    const fimAnterior = await buscarFimDoCaixaAnteriorNoPdvRepository(
+      { empresaId: travado.empresaId, pdvId: travado.pdvId, caixaId: travado.id, abertoAte: oficial },
+      tx
+    );
+    if (fimAnterior && inicio.getTime() < fimAnterior.getTime()) {
+      throw new ErroDominio(
+        "O inicio nao pode ser antes do fechamento do caixa anterior deste PDV.",
+        422,
+        "INICIO_VENDAS_ANTES_DO_CAIXA_ANTERIOR"
+      );
+    }
+
+    await atualizarInicioVendasCaixaRepository(travado.id, inicio, tx);
+    await registrarEdicaoCaixaRepository(
+      {
+        caixaId: travado.id,
+        tokenUsado: null,
+        autorizadorId: perfil.usuarioId,
+        observacao: dados.motivo.trim(),
+        editadoPor: perfil.usuarioId,
+        valoresAntigos: {
+          inicioVendas: new Date(travado.dataHoraAbertura).toISOString(),
+          aberturaOficial: oficial.toISOString()
+        },
+        valoresNovos: { inicioVendas: inicio.toISOString(), aberturaOficial: oficial.toISOString() }
+      },
+      tx
+    );
+    const atualizado = await buscarCaixaPorIdRepository(travado.id, tx);
+    if (!atualizado) throw new Error("Caixa nao encontrado");
+    const { anexadas } = await revincularVendasAoCaixa(atualizado, tx);
+    if (travado.status === "em_fechamento") {
+      await invalidarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
+    }
+    return {
+      inicioVendas: inicio.toISOString(),
+      aberturaOficial: oficial.toISOString(),
+      vendasAnexadas: anexadas,
+      relatorioVendasInvalidado: travado.status === "em_fechamento"
+    };
   });
 }
 
