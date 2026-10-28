@@ -85,7 +85,10 @@ function alternar(id: string) {
 </template>
 
 <style scoped>
+/* UMA grade para o cabecalho e para TODAS as linhas: as colunas ficam no mesmo x de cima a baixo. Larguras fixas
+   (menos Movimento) para que nenhuma linha empurre a outra. */
 .lista-transferencias {
+  --trl-colunas: 116px minmax(180px, 1.5fr) 208px 124px 176px 92px;
   container: lista / inline-size;
   display: grid;
   background: var(--cx-surface-raised);
@@ -93,8 +96,9 @@ function alternar(id: string) {
 }
 .lista-transferencias__cabecalho {
   display: grid;
-  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(110px, 0.6fr) minmax(150px, 1.1fr) auto;
+  grid-template-columns: var(--trl-colunas);
   gap: var(--cx-sp-3);
+  align-items: center;
   padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) calc(var(--cx-sp-4) + 3px);
   border-bottom: 1px solid var(--cx-line);
   background: var(--cx-surface-sunken);
@@ -106,9 +110,6 @@ function alternar(id: string) {
 }
 .lista-transferencias__cabecalho > :nth-child(3) {
   text-align: right;
-}
-.lista-transferencias__cabecalho > :nth-child(6) {
-  min-width: 44px;
 }
 .lista-transferencias__so-leitor {
   position: absolute;
@@ -139,7 +140,7 @@ function alternar(id: string) {
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
 }
-@container lista (width <= 1160px) {
+@container lista (width <= 1000px) {
   .lista-transferencias__cabecalho {
     display: none;
   }

@@ -113,13 +113,23 @@ const rotuloExpandir = computed(
         <strong class="trl__total cx-num" :data-cancelada="cancelada ? 'sim' : undefined">{{
           dinheiro(operacao.valorOriginal)
         }}</strong>
-        <small v-if="composicao" class="cx-num"
-          >Dinheiro {{ dinheiro(composicao.especie) }} · Moedas {{ dinheiro(composicao.moedas) }}</small
-        >
-        <small v-else-if="ehMalote">Composição não informada</small>
-        <small v-if="operacao.valorRecebido != null" class="cx-num"
-          >Contado {{ dinheiro(operacao.valorRecebido) }}</small
-        >
+        <dl v-if="composicao || operacao.valorRecebido != null" class="trl__partes cx-num">
+          <template v-if="composicao">
+            <div>
+              <dt>Dinheiro</dt>
+              <dd>{{ dinheiro(composicao.especie) }}</dd>
+            </div>
+            <div>
+              <dt>Moedas</dt>
+              <dd>{{ dinheiro(composicao.moedas) }}</dd>
+            </div>
+          </template>
+          <div v-if="operacao.valorRecebido != null">
+            <dt>Contado</dt>
+            <dd>{{ dinheiro(operacao.valorRecebido) }}</dd>
+          </div>
+        </dl>
+        <small v-if="!composicao && ehMalote">Composição não informada</small>
       </div>
 
       <div class="trl__lacres" role="cell" data-col="Lacres">
@@ -143,19 +153,23 @@ const rotuloExpandir = computed(
           variant="text"
           icon="mdi-pencil"
           aria-label="Editar transferência"
+          title="Editar"
           data-teste="botao-editar"
           @click="emit('editar', operacao)"
         />
         <v-btn
-          v-if="permiteCancelar"
+          v-else-if="permiteCancelar"
           size="small"
           variant="text"
           color="error"
+          icon="mdi-close-circle-outline"
           :disabled="salvando"
+          aria-label="Cancelar planejamento de retorno"
+          title="Cancelar planejamento"
           data-teste="cancelar-planejamento-retorno"
           @click="emit('cancelar-planejamento', operacao)"
-          >Cancelar</v-btn
-        >
+        />
+        <span v-else class="trl__vaga" aria-hidden="true" />
         <v-btn
           size="small"
           variant="text"
@@ -187,9 +201,10 @@ const rotuloExpandir = computed(
 .trl__linha {
   position: relative;
   display: grid;
-  grid-template-columns: 138px minmax(170px, 1.3fr) 168px minmax(110px, 0.6fr) minmax(150px, 1.1fr) auto;
+  grid-template-columns: var(--trl-colunas, 116px minmax(180px, 1.5fr) 208px 124px 176px 92px);
   gap: var(--cx-sp-3);
-  align-items: start;
+  align-items: center;
+  min-height: 76px;
   padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) calc(var(--cx-sp-4) + 3px);
   min-width: 0;
 }
@@ -203,6 +218,9 @@ const rotuloExpandir = computed(
 }
 .trl__linha--cancelada {
   color: var(--cx-ink-soft);
+}
+.trl__linha:hover {
+  background: color-mix(in srgb, var(--sit) 6%, transparent);
 }
 .trl__lanc,
 .trl__mov,
@@ -261,10 +279,32 @@ const rotuloExpandir = computed(
   gap: var(--cx-sp-1);
 }
 .trl__acoes {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--cx-sp-1);
+  justify-content: end;
+}
+.trl__vaga {
+  width: 44px;
+  height: 44px;
+}
+/* Composicao do valor como um mini extrato: rotulo a esquerda, valor a direita, sempre alinhados. */
+.trl__partes {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.trl__partes > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cx-sp-2);
+}
+.trl__partes dt,
+.trl__partes dd {
+  margin: 0;
 }
 .trl__acoes :deep(.v-btn) {
   min-width: 44px;
@@ -275,7 +315,7 @@ const rotuloExpandir = computed(
   outline-offset: 2px;
 }
 
-@container lista (width <= 1160px) {
+@container lista (width <= 1000px) {
   .trl__linha {
     grid-template-columns: 138px minmax(0, 1fr) 160px minmax(150px, 0.8fr);
     grid-template-areas:
@@ -312,13 +352,12 @@ const rotuloExpandir = computed(
     overflow: hidden;
   }
   .trl__linha {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      "situ valor"
-      "mov mov"
-      "lacres lacres"
       "lanc lanc"
-      "acoes acoes";
+      "mov mov"
+      "valor situ"
+      "lacres acoes";
     gap: var(--cx-sp-3);
     padding: var(--cx-sp-3) var(--cx-sp-3) var(--cx-sp-3) calc(var(--cx-sp-3) + 3px);
   }
@@ -328,11 +367,10 @@ const rotuloExpandir = computed(
     gap: var(--cx-sp-1) var(--cx-sp-2);
   }
   .trl__acoes {
-    justify-content: stretch;
-    flex-wrap: wrap;
+    justify-content: end;
   }
-  .trl__acoes :deep(.v-btn) {
-    flex: 1 1 auto;
+  .trl__vaga {
+    display: none;
   }
 }
 
