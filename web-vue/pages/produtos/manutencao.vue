@@ -137,6 +137,19 @@ onMounted(async () => {
               </v-card-actions>
             </v-card>
           </v-col>
+          <v-col cols="12" md="6">
+            <v-card variant="outlined" height="100%">
+              <v-card-title class="text-subtitle-1">Custo da discriminação</v-card-title>
+              <v-card-text>
+                Custo de cada produto da TNP pela compra mais recente na base de discriminação de mercadorias.
+              </v-card-text>
+              <v-card-actions>
+                <v-btn variant="tonal" prepend-icon="mdi-cash-sync" to="/produtos/custo-discriminacao"
+                  >Abrir custo</v-btn
+                >
+              </v-card-actions>
+            </v-card>
+          </v-col>
         </v-row>
 
         <ProdutoPanoramaFiscal />
