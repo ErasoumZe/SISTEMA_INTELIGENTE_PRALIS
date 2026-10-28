@@ -102,6 +102,12 @@ const total = computed(() => props.lacres.length || (props.nLacreDoc ? 1 : 0));
   font-size: var(--cx-fs-caption);
 }
 .lacres-botao__vazio {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--cx-sp-3);
+  border: 1px dashed var(--cx-line);
+  border-radius: var(--cx-r-md);
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
 }
