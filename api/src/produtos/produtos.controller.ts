@@ -2,35 +2,31 @@ import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
-  exportarProdutoSchema as exportarPayloadSchema,
-  importarProdutosSchema as importarPayloadSchema,
+  alterarStatusProdutosSchema,
   produtoParamsSchema as idParamsSchema,
   produtosListaQuerySchema,
   produtosOpcoesQuerySchema,
   produtosQuerySchema as empresaQuerySchema
 } from "@padaria/shared/produtos";
-import {
-  criadoId,
-  erro,
-  ok,
-  paginadoDeResultado,
-  semConteudo,
-  type DadosExternos,
-  type ReplyHttp
-} from "@padaria/shared/api";
-import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
+import { erro, ok, paginadoDeResultado, semConteudo, type DadosExternos, type ReplyHttp } from "@padaria/shared/api";
+import { exigirAlgumaPermissao, exigirAutenticacao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
+import { montarCsvCatalogo } from "./produtos-csv.js";
+import { montarXlsxCatalogo } from "./produtos-xlsx.js";
 import { FotoInvalidaError, TAMANHO_MAXIMO_DA_FOTO } from "./produtos-foto.js";
 import {
   CodigoBarrasDuplicadoError,
+  buscarBackupCatalogoProdutos,
+  consultarPanoramaFiscalProdutos,
   detalharProduto,
-  exportarProduto,
-  importarProdutos,
+  exportarCatalogoCsvProdutos,
   listarFiltrosDeProduto,
+  listarHistoricoNomesProduto,
   listarOpcoesDeProduto,
   listarProdutos,
   obterFotoDeProdutoNoEscopo,
+  AreaDeVendaForaDaTnpError,
   ProdutoDuplicadoError,
   ProdutoNaoEncontradoError,
   ReferenciaDeOutraEmpresaError,
@@ -38,6 +34,20 @@ import {
   salvarFotoDeProdutoNoEscopo,
   salvarProduto
 } from "./produtos.service.js";
+import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
+import { FiscalSoAdministradorError } from "./produtos-fiscal-gravacao.js";
+import { herancaDaCopia } from "./produtos-base.service.js";
+import { BackfillSoAdministradorError, executarBackfillFiscal } from "./produtos-fiscal-backfill.service.js";
+import { z } from "zod";
+
+const corpoBackfill = z.object({
+  aplicar: z.boolean().default(false),
+  limite: z.coerce.number().int().min(1).max(500).optional(),
+  cursor: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
+  produtoId: z.string().uuid().optional()
+});
+import { FonteFiscalIndisponivelError, listarRegrasFiscaisPorGrupo } from "./produtos-fiscal.service.js";
 
 /**
  * Rastro do ator sem tabela nova: `produtos.criado_por` guarda quem CRIOU (imutavel na edicao) e o
@@ -46,7 +56,7 @@ import {
  */
 function registrarEscrita(
   request: FastifyRequest,
-  acao: "criar" | "editar",
+  acao: "criar" | "editar" | "status",
   dados: { produtoId: string; empresaId?: string }
 ) {
   request.log.info(
@@ -67,20 +77,122 @@ function responderErroDeFoto(reply: ReplyHttp, error: DadosExternos) {
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
 
-function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
+export function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
   if (error instanceof CodigoBarrasDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_BARCODE");
   if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
   if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
   if (error instanceof ReferenciaDeOutraEmpresaError) return erro(reply, 403, error.message, "FORBIDDEN_COMPANY");
+  if (error instanceof FiscalSoAdministradorError) return erro(reply, 403, error.message, "ONLY_ADMIN_FISCAL");
+  if (error instanceof AreaDeVendaForaDaTnpError) return erro(reply, 422, error.message, error.code);
   const mensagem = mensagemDominioOuRelancar(error);
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
 
 export async function registrarRotasProdutos(app: FastifyInstance): Promise<void> {
+  app.get(
+    "/api/produtos/fiscal/panorama",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(
+          reply,
+          403,
+          "Somente administradores podem consultar o panorama fiscal.",
+          "INSUFFICIENT_PERMISSION"
+        );
+      }
+      return ok(await consultarPanoramaFiscalProdutos(request.perfilUsuario));
+    }
+  );
+
+  /**
+   * Backfill da carga fiscal (oficial `/admin/fiscal/backfill`): por padrao so CONFERE; grava so com
+   * `aplicar: true`. Retomada por cursor, ate 500 por rodada. So administrador.
+   */
+  app.post(
+    "/api/produtos/fiscal/backfill",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const corpo = corpoBackfill.parse(request.body ?? {});
+      const perfil = request.perfilUsuario;
+      try {
+        const resultado = await executarBackfillFiscal(corpo, {
+          administrador: perfil?.role === "usuario_admin",
+          empresasPermitidas: perfil ? empresasPermitidas(perfil) : []
+        });
+        if (resultado.aplicou) {
+          request.log.info({
+            evento: "produtos.fiscal.backfill",
+            usuarioId: request.usuarioId,
+            analisados: resultado.analisados,
+            alterados: resultado.alterados.length
+          });
+        }
+        return ok(resultado);
+      } catch (error) {
+        if (error instanceof BackfillSoAdministradorError) return erro(reply, 403, error.message, error.code);
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/produtos/export.csv",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(reply, 403, "Somente administradores podem exportar o catálogo.", "INSUFFICIENT_PERMISSION");
+      }
+      const linhas = await exportarCatalogoCsvProdutos(request.perfilUsuario);
+      reply.header("Content-Type", "text/csv; charset=utf-8");
+      reply.header("Content-Disposition", 'attachment; filename="produtos-pralis.csv"');
+      reply.header("Cache-Control", "no-store");
+      return reply.send(montarCsvCatalogo(linhas));
+    }
+  );
+
+  app.get(
+    "/api/produtos/backup.xlsx",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      if (request.perfilUsuario?.role !== "usuario_admin") {
+        return erro(
+          reply,
+          403,
+          "Somente administradores podem exportar o backup do catálogo.",
+          "INSUFFICIENT_PERMISSION"
+        );
+      }
+      const dados = await buscarBackupCatalogoProdutos(request.perfilUsuario);
+      reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      reply.header("Content-Disposition", 'attachment; filename="backup-produtos-pralis.xlsx"');
+      reply.header("Cache-Control", "no-store");
+      return reply.send(montarXlsxCatalogo(dados));
+    }
+  );
+
   /**
    * Listagem COMPLETA da tela de Produtos: busca, quatro filtros, seis ordenacoes e paginacao —
    * tudo no banco. Exige `cadastro_produtos_visualizar`; quem so opera mercadorias usa `/opcoes`.
    */
+  /**
+   * Regras fiscais por grupo, com a margem padrao — lidas da MESMA planilha do app oficial
+   * (`GET /apoio/grupos-fiscais` la). A tela usa para a previa do preco; fonte fora do ar = 503.
+   */
+  app.get("/api/produtos/regras-fiscais", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async () => {
+    // Planilha fora do ar e um estado conhecido do cadastro (o produto salva e fica "fonte
+    // indisponivel"): responde 200 com o aviso, para a tela explicar em vez de registrar erro.
+    try {
+      return ok({ disponivel: true, regras: await listarRegrasFiscaisPorGrupo() });
+    } catch (error) {
+      if (error instanceof FonteFiscalIndisponivelError) {
+        return ok({ disponivel: false, motivo: error.message, regras: [] });
+      }
+      throw error;
+    }
+  });
+
   app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
     const query = produtosListaQuerySchema.parse(request.query);
     try {
@@ -95,6 +207,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         tipo: query.tipo,
         grupoMercadoriaId: query.grupoMercadoriaId,
         setorEstoque: query.setorEstoque,
+        somenteVendidos: query.somenteVendidos,
         ordenar: query.ordenar,
         page: query.page,
         pageSize: query.pageSize
@@ -154,7 +267,8 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       const { id } = idParamsSchema.parse(request.params);
       try {
         const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-        return ok(await detalharProduto(id, escopo));
+        const produto = await detalharProduto(id, escopo);
+        return ok({ ...produto, heranca: await herancaDaCopia(produto) });
       } catch (error) {
         if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
         const mensagem = mensagemDominioOuRelancar(error);
@@ -163,22 +277,56 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
     }
   );
 
-  app.post("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
-    const body = request.body as { empresaId?: string };
-    if (body.empresaId && request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
-      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+  app.get(
+    "/api/produtos/:id/historico-nomes",
+    {
+      preHandler: async (request, reply) => {
+        const perfil = await exigirAutenticacao(request, reply);
+        if (!perfil) return;
+        if (perfil.role !== "usuario_admin") {
+          erro(reply, 403, "Somente administradores podem consultar o histórico de nomes", "INSUFFICIENT_PERMISSION");
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        const empresaId = query.empresaId ?? request.perfilUsuario?.empresaId;
+        if (!empresaId) return erro(reply, 400, "Informe a empresa do produto", "INVALID_COMPANY");
+        return ok(await listarHistoricoNomesProduto(empresaId, id, escopo));
+      } catch (error) {
+        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
     }
-    try {
-      const salvo = await salvarProduto(null, request.body, {
-        usuarioId: request.usuarioId,
-        empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
-      });
-      registrarEscrita(request, "criar", { produtoId: salvo.id, empresaId: salvo.empresaId });
-      return criadoId(reply, salvo?.id ?? "produtos");
-    } catch (error) {
-      return responderErroDeEscrita(reply, error);
+  );
+
+  /** Ativar/inativar (um produto) e inativar em lote (so administrador). Nao existe excluir. */
+  app.patch(
+    "/api/produtos/status",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const corpo = alterarStatusProdutosSchema.parse(request.body);
+      const perfil = request.perfilUsuario;
+      try {
+        const resultado = await alterarStatusDeProdutos(corpo, {
+          administrador: perfil?.role === "usuario_admin",
+          empresasPermitidas: perfil ? empresasPermitidas(perfil) : []
+        });
+        for (const produtoId of resultado.alterados) {
+          registrarEscrita(request, "status", { produtoId, empresaId: corpo.empresaId });
+        }
+        return ok(resultado);
+      } catch (error) {
+        if (error instanceof StatusEmLoteNaoPermitidoError) return erro(reply, 403, error.message, "FORBIDDEN_BATCH");
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
     }
-  });
+  );
 
   app.put("/api/produtos/:id", { preHandler: exigirPermissao("cadastro_produtos_editar") }, async (request, reply) => {
     const { id } = idParamsSchema.parse(request.params);
@@ -189,7 +337,9 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
     try {
       const salvo = await salvarProduto(id, request.body, {
         usuarioId: request.usuarioId,
-        empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
+        nome: request.perfilUsuario?.nome,
+        empresasPermitidas: request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+        administrador: request.perfilUsuario?.role === "usuario_admin"
       });
       registrarEscrita(request, "editar", { produtoId: salvo.id, empresaId: salvo.empresaId });
       return semConteudo(reply);
@@ -247,35 +397,6 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         return reply.send(createReadStream(foto.caminhoAbsoluto));
       } catch (error) {
         return responderErroDeFoto(reply, error);
-      }
-    }
-  );
-
-  app.post(
-    "/api/produtos/importar",
-    { preHandler: exigirPermissao("cadastro_produtos_criar") },
-    async (request, reply) => {
-      try {
-        return ok(await importarProdutos(importarPayloadSchema.parse(request.body), request.perfilUsuario));
-      } catch (error) {
-        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
-      }
-    }
-  );
-
-  app.post(
-    "/api/produtos/:id/exportar",
-    { preHandler: exigirPermissao("cadastro_produtos_criar") },
-    async (request, reply) => {
-      const { id } = idParamsSchema.parse(request.params);
-      try {
-        return ok(await exportarProduto(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
-      } catch (error) {
-        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
   );

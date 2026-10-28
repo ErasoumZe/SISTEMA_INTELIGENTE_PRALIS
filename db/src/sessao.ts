@@ -9,21 +9,51 @@ import { sql, type SQLWrapper } from "drizzle-orm";
 // a API importa a constante pronta e executa dentro de `executarEmTransacao`.
 export const sqlTetosDaTransacaoApi = sql`select set_config('lock_timeout', '10s', true), set_config('idle_in_transaction_session_timeout', '60s', true)`;
 
-// Serializa o CADASTRO DE PRODUTOS de UMA empresa dentro da transacao corrente.
+// Serializa a escolha de codigo interno global e as verificacoes de duplicidade no cadastro.
 //
 // Por que advisory e nao uma trava de linha: as duas coisas que precisam ser seriais aqui —
 // escolher o proximo `codigo_interno` (max + 1) e decidir se ja existe duplicado — leem o
 // AGREGADO da tabela, nao uma linha. `SELECT max(...)` nao trava nada em READ COMMITTED, entao
 // dois cadastros simultaneos leem o mesmo maximo e o segundo estoura o unique
-// `produtos_codigo_interno_empresa_uidx` (ou, sem ele, duplicaria em silencio).
+// `produtos_codigo_interno_empresa_uidx` (ou, sem ele, duplicaria em silencio). A sequência oficial
+// considera as lojas em conjunto, então todas as empresas usam a mesma trava.
 //
 // `pg_advisory_xact_lock` solta sozinho no commit/rollback e nao exige migration nem coluna nova.
-// O escopo e a EMPRESA: duas lojas cadastrando ao mesmo tempo nao esperam uma pela outra, e o
-// volume real (dezenas de cadastros por dia) nao justifica nada mais fino.
+// O escopo é global; a trava transacional não exige migration nem coluna nova.
 //
 // Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
-export function sqlTravarCadastroDeProdutosDaEmpresa(empresaId: string) {
-  return sql`select pg_advisory_xact_lock(hashtext('produtos:cadastro'), hashtext(${empresaId}::text))`;
+export function sqlTravarCadastroDeProdutos() {
+  return sql`select pg_advisory_xact_lock(hashtext('produtos:codigo-interno-global'))`;
+}
+
+/**
+ * Consulta completa do maior código interno numérico dentro da faixa de produtos (app oficial): empresas e
+ * catálogo BASE juntos. Sempre devolve UMA linha (`maximo`), mesmo sem nenhum produto — selecionar a expressão
+ * "from produtos" devolvia zero linhas com a tabela vazia e ignorava os códigos da BASE.
+ */
+export function sqlConsultaMaiorCodigoInterno() {
+  const codigoEmpresa = sql.raw('"produtos"."codigo_interno"');
+  const numeroEmpresa = sql`NULLIF(regexp_replace(${codigoEmpresa}, '\\D', '', 'g'), '')`;
+  const codigoBase = sql.raw('"produtos_catalogo_base"."codigo_interno"');
+  const numeroBase = sql`NULLIF(regexp_replace(${codigoBase}, '\\D', '', 'g'), '')`;
+  return sql`SELECT (
+    SELECT COALESCE(MAX(codigo), 13129)::numeric
+    FROM (
+      SELECT CASE
+        WHEN ${numeroEmpresa} ~ '^[0-9]+$' AND ${numeroEmpresa}::numeric < 700000
+        THEN ${numeroEmpresa}::numeric
+        ELSE NULL
+      END AS codigo
+      FROM produtos
+      UNION ALL
+      SELECT CASE
+        WHEN ${numeroBase} ~ '^[0-9]+$' AND ${numeroBase}::numeric < 700000
+        THEN ${numeroBase}::numeric
+        ELSE NULL
+      END AS codigo
+      FROM produtos_catalogo_base
+    ) AS codigos_internos
+  ) AS maximo`;
 }
 
 /**

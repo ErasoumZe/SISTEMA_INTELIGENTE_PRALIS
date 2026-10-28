@@ -2008,7 +2008,6 @@ function tipoCopiaTela(tela = telaAtiva.value) {
     fornecedores: "fornecedores",
     socios_gestores: "socios-gestores",
     maquininhas: "maquininhas",
-    produtos: "produtos",
     colaboradores: "colaboradores"
   };
   return mapa[tela] ?? tela.replaceAll("_", "-");

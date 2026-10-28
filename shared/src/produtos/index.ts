@@ -1,12 +1,6 @@
 import { z } from "zod";
-import {
-  empresaQuerySchema,
-  exportarEmpresaPayloadSchema,
-  apiIdParamsSchema,
-  importarEmpresaPayloadSchema,
-  type ExportarEmpresaPayload,
-  type ImportarEmpresaPayload
-} from "../api/index.js";
+import { empresaQuerySchema, apiIdParamsSchema } from "../api/index.js";
+import type { ValoresHerdados } from "./heranca-base.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -39,7 +33,24 @@ export const produtoFiscalSchema = z.object({
   aliquotaPis: z.coerce.number().min(0).optional().nullable(),
   aliquotaCofins: z.coerce.number().min(0).optional().nullable(),
   reducaoIcms: z.coerce.number().min(0).optional().nullable(),
-  icms: z.coerce.number().min(0).optional().nullable()
+  icms: z.coerce.number().min(0).optional().nullable(),
+  tributacaoSimples: z.string().optional().nullable(),
+  aliquotaSimples: z.coerce.number().min(0).optional().nullable(),
+  icmsRe: z.coerce.number().min(0).optional().nullable(),
+  baseFiscal: z.string().optional().nullable(),
+  codigoFiscal: z.string().optional().nullable(),
+  produtoFiscal: z.string().optional().nullable(),
+  cstReforma: z.string().optional().nullable(),
+  cClassTrib: z.string().optional().nullable(),
+  aliquotaIbs: z.coerce.number().min(0).optional().nullable(),
+  aliquotaCbs: z.coerce.number().min(0).optional().nullable(),
+  origemFiscal: z.string().optional().nullable(),
+  aliquotaEcf: z.string().optional().nullable(),
+  aliquotaEcfId: z.string().optional().nullable(),
+  estado: z.string().optional().nullable(),
+  motivo: z.string().optional().nullable(),
+  conferidoEm: z.string().datetime().optional().nullable(),
+  pctNcm: z.coerce.number().min(0).optional().nullable()
 });
 
 export const precisaoSchema = z.enum(["EXATOS", "APROXIMADOS"]);
@@ -52,7 +63,8 @@ export const produtoTransformacaoSchema = z.object({
   precisao: precisaoSchema.optional().nullable(),
   quantidade: z.coerce.number().min(0).optional().nullable(),
   unidade: unidadeTransformacaoSchema.optional().nullable(),
-  produtoReceituario: z.string().optional().nullable()
+  produtoReceituario: z.string().optional().nullable(),
+  refReceituario: z.string().optional().nullable()
 });
 
 // Promocao (1:N). Porte de promocoes do Pralis: preco fixo ou desconto (fracao), janela + dias da semana.
@@ -78,9 +90,36 @@ export const produtoPayloadSchema = z
     codigo: z.string().optional().nullable(),
     codigoBarras: z.string().optional().nullable(),
     descricao: z.string().min(1),
+    nomeCatalogo: z.string().trim().min(1).max(200).optional().nullable(),
+    pesavel: z.boolean().nullable().optional(),
+    teclaBalanca: z.coerce.number().int().min(0).nullable().optional(),
+    validadeBalanca: z.coerce.number().int().min(0).nullable().optional(),
+    grupoIdExterno: z.string().trim().max(120).nullable().optional(),
+    areaVenda: z
+      .enum([
+        "caixa",
+        "vitrine",
+        "copa",
+        "chapa",
+        "mesas",
+        "vasca_paes",
+        "vitrine_paes",
+        "paes_empacotados",
+        "mesa_paes",
+        "frios",
+        "bebidas",
+        "laticinios",
+        "mercearia",
+        "estoque_bebidas",
+        "biscoitos",
+        "dml_limpeza"
+      ])
+      .nullable()
+      .optional(),
     marca: z.string().optional().nullable(),
     unidadeIndividualId: uuidSchema,
-    quantidadeIndividual: z.coerce.number().positive(),
+    // Gramatura 0 e valida (produto sem peso por unidade), como no app oficial.
+    quantidadeIndividual: z.coerce.number().min(0),
     grupoMercadoriaId: uuidSchema.optional().nullable(),
     conversoes: z.array(produtoConversaoPayloadSchema).default([]),
     // Como se compra (porte do Pralis): embalagem + preposicao + unidades por caixa + medida de compra.
@@ -109,6 +148,10 @@ export const produtoPayloadSchema = z
     toleranciaQuantidadePercentual: z.coerce.number().min(0).max(30).optional().nullable(),
     localVenda1: z.string().optional().nullable(),
     localVenda2: z.string().optional().nullable(),
+    compraAproximada: z.boolean().optional().default(false),
+    habilitarAjuda: z.boolean().optional().default(false),
+    setorVenda1: z.string().optional().nullable(),
+    setorVenda2: z.string().optional().nullable(),
     fotoUrl: z.string().optional().nullable(),
     fiscal: produtoFiscalSchema.optional().nullable(),
     transformacao: produtoTransformacaoSchema.optional().nullable(),
@@ -133,6 +176,23 @@ export const produtoPayloadSchema = z
     }
   });
 
+/**
+ * Ativar/inativar sem reenviar o produto inteiro. Excluir nao existe (decisao de Jose, 27/10/2026):
+ * o produto sai de uso pelo status. Mais de um produto por vez e so do administrador, so para
+ * inativar e com a frase de confirmacao — o mesmo cuidado do "excluir em lote" do app oficial.
+ */
+export const alterarStatusProdutosSchema = z.object({
+  empresaId: uuidSchema,
+  ids: z.array(uuidSchema).min(1).max(100),
+  status: statusProdutoSchema,
+  confirmacao: z.string().trim().max(60).optional()
+});
+export type AlterarStatusProdutosPayload = z.infer<typeof alterarStatusProdutosSchema>;
+
+export function fraseDeInativacaoEmLote(quantidade: number): string {
+  return `INATIVAR ${quantidade} PRODUTOS`;
+}
+
 // As SEIS ordenacoes da listagem. Sao contrato: o banco ordena, nao o navegador.
 export const ordenacaoProdutosSchema = z
   .enum(["recentes", "antigos", "az", "za", "codigo_asc", "codigo_desc"])
@@ -148,6 +208,10 @@ export const produtosListaQuerySchema = empresaQuerySchema.extend({
   tipo: tipoProdutoSchema.optional(),
   grupoMercadoriaId: uuidSchema.optional(),
   setorEstoque: z.string().trim().max(120).optional(),
+  somenteVendidos: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((valor) => valor === "true"),
   ordenar: ordenacaoProdutosSchema
 });
 
@@ -170,8 +234,6 @@ export const produtosOpcoesQuerySchema = empresaQuerySchema.extend({
 });
 
 export const produtosQuerySchema = empresaQuerySchema;
-export const importarProdutosSchema = importarEmpresaPayloadSchema;
-export const exportarProdutoSchema = exportarEmpresaPayloadSchema;
 export const produtoParamsSchema = apiIdParamsSchema;
 
 export type OrdenacaoProdutos = z.infer<typeof ordenacaoProdutosSchema>;
@@ -186,7 +248,15 @@ export interface ProdutoResumo {
   codigoInterno: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   tipo: string;
   status: string;
   grupoMercadoriaId: string | null;
@@ -230,6 +300,15 @@ export interface FiltrosDeProduto {
 export interface ProdutoDetalhe {
   id: string;
   empresaId: string;
+  /** Loja do produto (TNP/LI/HORA, pelo prefixo de matricula da empresa). Na BASE: "BASE". */
+  loja: string;
+  /** Copia de um produto da BASE (catalogo mestre). `null` = produto proprio da loja. */
+  produtoBaseId: string | null;
+  /**
+   * Heranca da BASE (so em copia): os rotulos dos campos em que esta loja tem valor proprio e os
+   * valores atuais da BASE, ja resolvidos para esta loja (para "voltar a herdar").
+   */
+  heranca: { naoSeguem: string[]; base: ValoresHerdados } | null;
   grupoMercadoriaId: string | null;
   grupoNome: string | null;
   unidadeMedidaId: string | null;
@@ -239,7 +318,15 @@ export interface ProdutoDetalhe {
   codigoInterno: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   quantidadeIndividual: string;
   embalagem: string | null;
   cDe: string | null;
@@ -262,6 +349,8 @@ export interface ProdutoDetalhe {
   toleranciaQuantidadePercentual: string | null;
   localVenda1: string | null;
   localVenda2: string | null;
+  setorVenda1: string | null;
+  setorVenda2: string | null;
   fotoUrl: string | null;
   criadoPorNome: string | null;
   conversoes: Array<{
@@ -281,12 +370,30 @@ export interface ProdutoDetalhe {
     aliquotaCofins: string | null;
     reducaoIcms: string | null;
     icms: string | null;
+    tributacaoSimples: string | null;
+    aliquotaSimples: string | null;
+    icmsRe: string | null;
+    baseFiscal: string | null;
+    codigoFiscal: string | null;
+    produtoFiscal: string | null;
+    cstReforma: string | null;
+    cClassTrib: string | null;
+    aliquotaIbs: string | null;
+    aliquotaCbs: string | null;
+    origemFiscal: string | null;
+    aliquotaEcf: string | null;
+    aliquotaEcfId: string | null;
+    estado: string | null;
+    motivo: string | null;
+    conferidoEm: string | null;
+    pctNcm: string | null;
   } | null;
   transformacao: {
     precisao: string | null;
     quantidade: string | null;
     unidade: string | null;
     produtoReceituario: string | null;
+    refReceituario: string | null;
   } | null;
   promocoes: Array<{
     id: string;
@@ -308,7 +415,24 @@ export interface ProdutoDetalhe {
 
 export type ProdutoPayload = z.infer<typeof produtoPayloadSchema>;
 export type ProdutoConversaoPayload = z.infer<typeof produtoConversaoPayloadSchema>;
-export type ImportarProdutosPayload = ImportarEmpresaPayload;
-export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
 export * from "./regras.js";
+export * from "./regras-cadastro.js";
+export * from "./heranca-base.js";
+export * from "./fiscal-motor.js";
+export * from "./central-reconciliacao.js";
+export * from "./central-fontes.js";
+export * from "./central-ingestao.js";
+export * from "./sia-depara.js";
+export * from "./creare-layout.js";
+export * from "./creare.js";
+export * from "./formato-creare.js";
+export * from "./planilha-mapa.js";
+export * from "./planilha-traducao.js";
+export * from "./planilha-leiaute.js";
+export * from "./pesaveis.js";
+export * from "./pesaveis-backfill.js";
+export * from "./pesaveis-padronizar.js";
+export * from "./semelhanca-de-nome.js";
+export * from "./codigo-cadastro.js";
+export * from "./custo-mer.js";

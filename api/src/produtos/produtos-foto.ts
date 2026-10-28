@@ -25,6 +25,16 @@ export const TAMANHO_MAXIMO_DA_FOTO = 8 * 1024 * 1024;
 
 const raizDoStorage = path.resolve(process.cwd(), "storage");
 const PASTA = "produtos";
+/**
+ * Foto do produto da BASE (catalogo mestre): pasta propria. E o prefixo que separa a foto gravada
+ * pelo ERP — que as lojas herdam — do caminho do storage do app de origem, que aqui nao existe.
+ */
+const PASTA_BASE = "produtos-base";
+
+/** `foto_url` da BASE que aponta para o storage DESTE ERP (e nao para o do app de origem). */
+export function ehFotoDaBaseNoErp(fotoUrl: string): boolean {
+  return fotoUrl.startsWith(`${PASTA_BASE}/`);
+}
 
 export class FotoInvalidaError extends Error {
   constructor(mensagem: string) {
@@ -42,12 +52,13 @@ export class FotoInvalidaError extends Error {
  */
 export async function salvarFotoDeProduto(
   produtoId: string,
-  arquivo: MultipartFile
+  arquivo: MultipartFile,
+  origem: "loja" | "base" = "loja"
 ): Promise<{ caminhoRelativo: string; mimeType: string }> {
   const extensao = EXTENSAO_POR_MIME[arquivo.mimetype];
   if (!extensao) throw new FotoInvalidaError("Formato nao aceito. Envie JPEG, PNG ou WebP.");
 
-  const pasta = path.join(raizDoStorage, PASTA, produtoId);
+  const pasta = path.join(raizDoStorage, origem === "base" ? PASTA_BASE : PASTA, produtoId);
   await mkdir(pasta, { recursive: true });
   const caminho = path.join(pasta, `${randomUUID()}${extensao}`);
   await pipeline(arquivo.file, createWriteStream(caminho));

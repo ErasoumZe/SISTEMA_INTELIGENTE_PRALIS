@@ -125,15 +125,18 @@ function maiusculo(texto: string | null | undefined): string {
     .toUpperCase();
 }
 
-/** Descricao automatica: NOME + QUANTIDADE (ate 3 casas) + MEDIDA. */
+/**
+ * Descricao automatica: NOME + QUANTIDADE (ate 3 casas) + MEDIDA. Gramatura 0 (produto sem peso por
+ * unidade) NAO aparece — como no app oficial; antes saia "BOLO 0 UN".
+ */
 export function montarDescricao(nome: string, quantidade: number | string, medida: string): string {
   const nomeUp = maiusculo(nome);
   const medidaUp = maiusculo(medida);
   const quantidadeNumero = Number.parseFloat(String(quantidade).replace(",", ".")) || 0;
-  const mostrarQuantidade = nomeUp !== "" || medidaUp !== "" || quantidadeNumero > 0;
-  const quantidadeFmt = mostrarQuantidade
-    ? quantidadeNumero.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })
-    : "";
+  const quantidadeFmt =
+    quantidadeNumero > 0
+      ? quantidadeNumero.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })
+      : "";
   return [nomeUp, quantidadeFmt, medidaUp].filter(Boolean).join(" ");
 }
 
@@ -173,6 +176,8 @@ export interface ComoSeCompraEntrada {
   medidaCompra: string | null;
   /** Descricao do produto (a mesma que `montarDescricao` monta). */
   descricao: string;
+  /** Quantidade de compra variável, indicada na frase como estimativa. */
+  aproximado: boolean;
 }
 
 /**
@@ -188,13 +193,14 @@ export interface ComoSeCompraEntrada {
 export function montarComoSeCompra(entrada: ComoSeCompraEntrada): string {
   const sigla = maiusculo(entrada.embalagem);
   if (!sigla) return "";
-  const rotulo = ROTULO_DA_EMBALAGEM[sigla] ?? sigla;
-  const preposicao = entrada.cDe === "C/" ? "com" : "de";
-  const quantidade = Number(entrada.quantidadeCaixa) || 0;
+  const rotulo = (ROTULO_DA_EMBALAGEM[sigla] ?? sigla).toUpperCase();
+  const preposicao = entrada.cDe === "C/" ? "COM" : "DE";
   const medida = maiusculo(entrada.medidaCompra);
-  const quantidadeTexto = quantidade ? [String(quantidade), medida].filter(Boolean).join(" ") : "";
   const descricao = String(entrada.descricao ?? "").trim();
-  return [rotulo, preposicao, quantidadeTexto, descricao ? `— ${descricao}` : ""].filter(Boolean).join(" ");
+  const quantidadeTexto = [entrada.aproximado ? "APROXIMADAMENTE" : "", `${entrada.quantidadeCaixa ?? ""}${medida}`]
+    .filter(Boolean)
+    .join(" ");
+  return [descricao, "-", rotulo, preposicao, descricao, quantidadeTexto].filter(Boolean).join(" ");
 }
 
 /** Retorna a margem (fracao) do grupo de mercadoria pelo nome, ou 0 se nao encontrado. */

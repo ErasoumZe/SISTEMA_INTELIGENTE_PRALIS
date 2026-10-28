@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -43,17 +44,13 @@ describe("produtos - foto", () => {
       headers: { cookie },
       payload: { empresaId, nome: `Unidade ${sigla}`, sigla }
     });
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie },
-      payload: {
-        empresaId,
-        descricao,
-        unidadeIndividualId: json<RespostaId>(unidade).data.id,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookie, {
+      empresaId,
+      grupoMercadoriaId: empresaId === idsTeste.empresaB ? idsTeste.grupoMercadoriaB : idsTeste.grupoMercadoriaInsumos,
+      descricao,
+      unidadeIndividualId: json<RespostaId>(unidade).data.id,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
     expect(criado.statusCode).toBe(201);
     return json<RespostaId>(criado).data.id;

@@ -561,6 +561,76 @@
       "when": 1792777123905,
       "tag": "0079_eventos_layout_oficial",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793032170351,
+      "tag": "0080_cadastro_produtos_oficial",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "tag": "0081_cadastro_produtos_identidade_pesagem",
+      "breakpoints": true,
+      "when": 1793036657763
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793045573575,
+      "tag": "0082_cadastro_produtos_historico_nomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793047446349,
+      "tag": "0083_curly_kulan_gath",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793060897397,
+      "tag": "0084_catalogo_base_separado",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793100000000,
+      "tag": "0085_produtos_campos_oficiais",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793104759411,
+      "tag": "0086_central_chaves_restricao",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793132741964,
+      "tag": "0087_sia_produto_depara",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793144451341,
+      "tag": "0088_creare_exportacao_e_planilha",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793189657272,
+      "tag": "0089_produtos_historico_codigo_interno",
+      "breakpoints": true
     }
   ]
 }

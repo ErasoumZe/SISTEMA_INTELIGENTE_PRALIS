@@ -1,12 +1,18 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, ilike, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
 import type { OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
 import {
+  empresas,
   gruposMercadorias,
   perfisUsuarios,
   produtos,
+  produtosConversoes,
   produtosPromocoes,
+  produtosFiscal,
+  produtosTransformacao,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
+import { vendas, vendasProdutos } from "@padaria/db/schema/venda";
 import { banco } from "../banco/conexao.js";
 
 /**
@@ -27,6 +33,7 @@ export interface FiltroListaProdutos {
   tipo?: string | undefined;
   grupoMercadoriaId?: string | undefined;
   setorEstoque?: string | undefined;
+  somenteVendidos?: boolean | undefined;
   ordenar: OrdenacaoProdutos;
   page: number;
   pageSize: number;
@@ -38,6 +45,31 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
   if (filtro.tipo) condicoes.push(eq(produtos.tipo, filtro.tipo));
   if (filtro.grupoMercadoriaId) condicoes.push(eq(produtos.grupoMercadoriaId, filtro.grupoMercadoriaId));
   if (filtro.setorEstoque) condicoes.push(eq(produtos.setorEstoque, filtro.setorEstoque));
+  if (filtro.somenteVendidos) {
+    const codigoBarrasCorrespondente = and(
+      isNotNull(produtos.codigoBarras),
+      eq(
+        codigoBarrasSemZerosIniciais(vendasProdutos.produtoAutomacaoCodigo),
+        codigoBarrasSemZerosIniciais(produtos.codigoBarras)
+      )
+    );
+    condicoes.push(
+      exists(
+        banco
+          .select({ encontrado: vendasProdutos.id })
+          .from(vendasProdutos)
+          .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+          .where(
+            and(
+              eq(vendas.empresaId, produtos.empresaId),
+              ne(vendas.status, "cancelado"),
+              eq(vendasProdutos.cancelado, false),
+              or(eq(vendasProdutos.produtoId, produtos.id), codigoBarrasCorrespondente)
+            )
+          )
+      )
+    );
+  }
   if (filtro.busca) {
     const termo = termoDeBusca(filtro.busca);
     condicoes.push(
@@ -90,7 +122,15 @@ export async function listarProdutosPaginadoRepository(
       codigoInterno: produtos.codigoInterno,
       codigoBarras: produtos.codigoBarras,
       descricao: produtos.descricao,
+      nomeCatalogo: produtos.nomeCatalogo,
+      pesavel: produtos.pesavel,
+      teclaBalanca: produtos.teclaBalanca,
+      validadeBalanca: produtos.validadeBalanca,
+      grupoIdExterno: produtos.grupoIdExterno,
+      areaVenda: produtos.areaVenda,
       marca: produtos.marca,
+      compraAproximada: produtos.compraAproximada,
+      habilitarAjuda: produtos.habilitarAjuda,
       tipo: produtos.tipo,
       status: produtos.status,
       grupoMercadoriaId: produtos.grupoMercadoriaId,
@@ -122,6 +162,185 @@ export async function listarProdutosPaginadoRepository(
   const [totalizador] = await banco.select({ total: count() }).from(produtos).where(onde);
 
   return { itens, total: Number(totalizador?.total ?? 0) };
+}
+
+/** Exportação de reconciliação compatível com o CSV do app Cadastro de Produtos. */
+export async function exportarCatalogoCsvRepository(escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
+  return banco
+    .select({
+      id: produtos.id,
+      loja: empresas.nome,
+      codigo: produtos.codigo,
+      codigoBarras: produtos.codigoBarras,
+      codigoInterno: produtos.codigoInterno,
+      produtoBaseId: produtos.produtoBaseId,
+      nome: produtos.nomeCatalogo,
+      descricao: produtos.descricao,
+      grupo: gruposMercadorias.nome,
+      tipo: produtos.tipo,
+      status: produtos.status,
+      custo: produtos.custo,
+      precoVenda: produtos.precoVenda,
+      margem: produtos.margem,
+      quantidade: produtos.quantidadeIndividual,
+      medidaBase: unidadesMedida.sigla,
+      quantidadeCaixa: produtos.quantidadeCaixa,
+      ncm: produtosFiscal.ncm,
+      cest: produtosFiscal.cest,
+      categoria: produtosFiscal.categoriaFiscal,
+      cstPisCofins: produtosFiscal.cstPisCofins,
+      icms: produtosFiscal.icms,
+      reducaoIcms: produtosFiscal.reducaoIcms,
+      aliquotaPis: produtosFiscal.aliquotaPis,
+      aliquotaCofins: produtosFiscal.aliquotaCofins
+    })
+    .from(produtos)
+    .innerJoin(empresas, eq(produtos.empresaId, empresas.id))
+    .leftJoin(gruposMercadorias, eq(produtos.grupoMercadoriaId, gruposMercadorias.id))
+    .leftJoin(unidadesMedida, eq(produtos.unidadeIndividualId, unidadesMedida.id))
+    .leftJoin(produtosFiscal, eq(produtos.id, produtosFiscal.produtoId))
+    .where(inArray(produtos.empresaId, escopoEmpresas))
+    .orderBy(asc(empresas.nome), asc(produtos.descricao), asc(produtos.id));
+}
+
+/** Backup XLSX completo dos campos atualmente persistidos, sem saldo operacional em outro tenant. */
+export async function buscarCatalogoParaBackupRepository(escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return { produtos: [], promocoes: [], conversoes: [] };
+  const [itens, promocoes, conversoes] = await Promise.all([
+    banco
+      .select({
+        id: produtos.id,
+        loja: empresas.nome,
+        empresaId: produtos.empresaId,
+        codigo: produtos.codigo,
+        codigoInterno: produtos.codigoInterno,
+        codigoBarras: produtos.codigoBarras,
+        produtoBaseId: produtos.produtoBaseId,
+        nome: produtos.nomeCatalogo,
+        descricao: produtos.descricao,
+        pesavel: produtos.pesavel,
+        marca: produtos.marca,
+        grupo: gruposMercadorias.nome,
+        tipo: produtos.tipo,
+        status: produtos.status,
+        quantidade: produtos.quantidadeIndividual,
+        unidade: unidadesMedida.sigla,
+        embalagem: produtos.embalagem,
+        cDe: produtos.cDe,
+        quantidadeCaixa: produtos.quantidadeCaixa,
+        medidaCompra: produtos.medidaCompra,
+        compraAproximada: produtos.compraAproximada,
+        fotoUrl: produtos.fotoUrl,
+        habilitarAjuda: produtos.habilitarAjuda,
+        estoque: produtos.quantidadeEstoque,
+        estoqueMin: produtos.estoqueMin,
+        estoqueMax: produtos.estoqueMax,
+        areaEstoque: produtos.areaEstoque,
+        setorEstoque: produtos.setorEstoque,
+        curvaAbc: produtos.curvaAbc,
+        quantidadeVariavel: produtos.quantidadeVariavel,
+        toleranciaQuantidadePercentual: produtos.toleranciaQuantidadePercentual,
+        custo: produtos.custo,
+        margem: produtos.margem,
+        precoVenda: produtos.precoVenda,
+        auto: produtos.auto,
+        setorVenda1: produtos.setorVenda1,
+        setorVenda2: produtos.setorVenda2,
+        localVenda1: produtos.localVenda1,
+        localVenda2: produtos.localVenda2,
+        transformacaoPrecisao: produtosTransformacao.precisao,
+        transformacaoQuantidade: produtosTransformacao.quantidade,
+        transformacaoUnidade: produtosTransformacao.unidade,
+        produtoReceituario: produtosTransformacao.produtoReceituario,
+        refReceituario: produtosTransformacao.refReceituario,
+        ncm: produtosFiscal.ncm,
+        cest: produtosFiscal.cest,
+        categoria: produtosFiscal.categoriaFiscal,
+        cstPisCofins: produtosFiscal.cstPisCofins,
+        aliquotaCheia: produtosFiscal.aliquotaCheia,
+        aliquotaFcp: produtosFiscal.aliquotaFcp,
+        aliquotaPis: produtosFiscal.aliquotaPis,
+        aliquotaCofins: produtosFiscal.aliquotaCofins,
+        reducaoIcms: produtosFiscal.reducaoIcms,
+        icms: produtosFiscal.icms,
+        tributacaoSimples: produtosFiscal.tributacaoSimples,
+        aliquotaSimples: produtosFiscal.aliquotaSimples,
+        icmsRe: produtosFiscal.icmsRe,
+        baseFiscal: produtosFiscal.baseFiscal,
+        codigoFiscal: produtosFiscal.codigoFiscal,
+        produtoFiscal: produtosFiscal.produtoFiscal,
+        cstReforma: produtosFiscal.cstReforma,
+        cClassTrib: produtosFiscal.cClassTrib,
+        aliquotaIbs: produtosFiscal.aliquotaIbs,
+        aliquotaCbs: produtosFiscal.aliquotaCbs,
+        origemFiscal: produtosFiscal.origemFiscal,
+        aliquotaEcf: produtosFiscal.aliquotaEcf,
+        aliquotaEcfId: produtosFiscal.aliquotaEcfId,
+        estadoFiscal: produtosFiscal.estado,
+        motivoFiscal: produtosFiscal.motivo,
+        conferidoEm: produtosFiscal.conferidoEm,
+        pctNcm: produtosFiscal.pctNcm,
+        criadoPor: perfisUsuarios.nome,
+        criadoEm: produtos.criadoEm
+      })
+      .from(produtos)
+      .innerJoin(empresas, eq(produtos.empresaId, empresas.id))
+      .leftJoin(gruposMercadorias, eq(produtos.grupoMercadoriaId, gruposMercadorias.id))
+      .leftJoin(unidadesMedida, eq(produtos.unidadeIndividualId, unidadesMedida.id))
+      .leftJoin(produtosFiscal, eq(produtos.id, produtosFiscal.produtoId))
+      .leftJoin(produtosTransformacao, eq(produtos.id, produtosTransformacao.produtoId))
+      .leftJoin(perfisUsuarios, eq(produtos.criadoPor, perfisUsuarios.usuarioId))
+      .where(inArray(produtos.empresaId, escopoEmpresas))
+      .orderBy(asc(empresas.nome), asc(produtos.descricao), asc(produtos.id)),
+    banco
+      .select({
+        produtoId: produtosPromocoes.produtoId,
+        tipo: produtosPromocoes.tipo,
+        valor: produtosPromocoes.valor,
+        descontoFracao: produtosPromocoes.descontoFracao,
+        horaInicio: produtosPromocoes.horaInicio,
+        horaFim: produtosPromocoes.horaFim,
+        seg: produtosPromocoes.seg,
+        ter: produtosPromocoes.ter,
+        qua: produtosPromocoes.qua,
+        qui: produtosPromocoes.qui,
+        sex: produtosPromocoes.sex,
+        sab: produtosPromocoes.sab,
+        dom: produtosPromocoes.dom,
+        validaAte: produtosPromocoes.validaAte
+      })
+      .from(produtosPromocoes)
+      .innerJoin(produtos, eq(produtos.id, produtosPromocoes.produtoId))
+      .where(inArray(produtos.empresaId, escopoEmpresas))
+      .orderBy(asc(produtosPromocoes.produtoId), asc(produtosPromocoes.criadoEm)),
+    banco
+      .select({
+        produtoId: produtosConversoes.produtoId,
+        unidade: unidadesMedida.sigla,
+        quantidade: produtosConversoes.quantidade,
+        unidadesIndividuais: produtosConversoes.unidadesIndividuais
+      })
+      .from(produtosConversoes)
+      .innerJoin(produtos, eq(produtos.id, produtosConversoes.produtoId))
+      .leftJoin(unidadesMedida, eq(unidadesMedida.id, produtosConversoes.unidadeMedidaId))
+      .where(inArray(produtos.empresaId, escopoEmpresas))
+      .orderBy(asc(produtosConversoes.produtoId), asc(produtosConversoes.id))
+  ]);
+  return { produtos: itens, promocoes, conversoes };
+}
+
+/** Contagem por estado fiscal, somente leitura e restrita ao escopo das empresas permitidas. */
+export async function buscarPanoramaFiscalProdutosRepository(escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return {};
+  const estado = sql<string>`coalesce(${produtosFiscal.estado}, 'sem_registro')`;
+  const linhas = await banco
+    .select({ estado, total: count() })
+    .from(produtos)
+    .leftJoin(produtosFiscal, eq(produtosFiscal.produtoId, produtos.id))
+    .where(inArray(produtos.empresaId, escopoEmpresas))
+    .groupBy(estado);
+  return Object.fromEntries(linhas.map((linha) => [linha.estado, linha.total]));
 }
 
 /** Promocoes SO dos produtos da pagina — o preco vigente (ADR-003) e derivado na leitura. */
