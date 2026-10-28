@@ -61,6 +61,7 @@ export {
   produtosConversoes,
   produtosFiscal,
   produtosHistoricoNomes,
+  produtosHistoricoCodigoInterno,
   produtosPromocoes,
   produtosTransformacao,
   siaProdutoDepara,

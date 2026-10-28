@@ -1078,6 +1078,55 @@ export const produtosHistoricoNomes = pgTable(
   ]
 );
 
+/**
+ * Historico de codigo interno (R-222, migration 0089; oficial `product_codigo_interno_history`): toda
+ * troca feita pela reconciliacao do codigo de cadastro, na BASE (`produto_base_id`) ou num produto de loja
+ * (`empresa_id` + `produto_id`) — e o "desfazer" possivel de um lote que troca codigos no PDV.
+ */
+export const produtosHistoricoCodigoInterno = pgTable(
+  "produtos_historico_codigo_interno",
+  {
+    id: idUuid,
+    empresaId: uuid("empresa_id"),
+    produtoId: uuid("produto_id"),
+    produtoBaseId: uuid("produto_base_id"),
+    codigoAnterior: text("codigo_anterior"),
+    codigoNovo: text("codigo_novo").notNull(),
+    fonte: text("fonte").notNull(),
+    alteradoPor: text("alterado_por"),
+    alteradoPorNome: text("alterado_por_nome"),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    check(
+      "produtos_historico_codigo_interno_alvo_check",
+      sql`(${table.empresaId} is null and ${table.produtoBaseId} is not null and ${table.produtoId} is null) or (${table.empresaId} is not null and ${table.produtoId} is not null and ${table.produtoBaseId} is null)`
+    ),
+    foreignKey({
+      name: "prod_hist_codigo_empresa_fk",
+      columns: [table.empresaId],
+      foreignColumns: [empresas.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_produto_fk",
+      columns: [table.produtoId, table.empresaId],
+      foreignColumns: [produtos.id, produtos.empresaId]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_base_fk",
+      columns: [table.produtoBaseId],
+      foreignColumns: [produtosCatalogoBase.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "prod_hist_codigo_alterado_por_fk",
+      columns: [table.alteradoPor],
+      foreignColumns: [perfisUsuarios.usuarioId]
+    }).onDelete("set null"),
+    index("prod_hist_codigo_produto_idx").on(table.empresaId, table.produtoId, table.alteradoEm.desc()),
+    index("prod_hist_codigo_base_idx").on(table.produtoBaseId, table.alteradoEm.desc())
+  ]
+);
+
 // --- Exportacao para o PDV CREARE e espelho na planilha (R-222, migration 0088) ----------------
 // Porte das tabelas do app oficial de Produtos (creare_export_batch / _delivery_state / _state e
 // product_sheet_sync), com empresa_id no lugar do texto da loja. Escrita DESLIGADA ate a virada.

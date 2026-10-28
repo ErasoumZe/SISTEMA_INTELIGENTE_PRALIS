@@ -624,6 +624,13 @@
       "when": 1793144451341,
       "tag": "0088_creare_exportacao_e_planilha",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793189657272,
+      "tag": "0089_produtos_historico_codigo_interno",
+      "breakpoints": true
     }
   ]
 }
