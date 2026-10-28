@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { entrar, observarConsole, USUARIOS } from "./apoio.js";
-import { abrirContextoCompras, criarProdutoPelaBase, escolherNoFiltro, irParaTela } from "./apoio-compras.js";
+import {
+  abrirContextoCompras,
+  codigoDeTeste,
+  criarProdutoPelaBase,
+  escolherNoFiltro,
+  irParaTela
+} from "./apoio-compras.js";
 
 test.setTimeout(180_000);
 
@@ -10,8 +16,8 @@ test.setTimeout(180_000);
  */
 test("produto de Compras persiste parametros e aparece nos cinco filtros de estoque", async ({ page }) => {
   const problemas = observarConsole(page);
-  const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const nome = `E2E Estoque ${sufixo}`;
+  const sufixo = codigoDeTeste();
+  const nome = `Leite integral 1 L (teste ${sufixo})`;
   const area = `Area E2E ${sufixo}`;
   // Setor de estoque e locais de venda sao gravados em MAIUSCULAS (regra do app oficial).
   const localVenda1 = `BALCAO E2E ${sufixo}`;

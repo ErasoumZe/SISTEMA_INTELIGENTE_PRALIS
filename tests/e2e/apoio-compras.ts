@@ -253,6 +253,19 @@ export async function irParaTela(page: Page, rota: string, titulo: string, timeo
   await expect(page.getByRole("heading", { name: titulo, exact: true })).toBeVisible({ timeout });
 }
 
+/**
+ * Codigo curto e unico da execucao. Os testes criam produtos e fornecedores com nome de verdade ("Abacaxi perola",
+ * "Hortifruti Bahamas") e o codigo entre parenteses, para a tela continuar legivel no banco de dev e cada teste
+ * achar a sua linha.
+ */
+export function codigoDeTeste(): string {
+  const tempo = Date.now().toString(36).slice(-4);
+  const sorte = Math.floor(Math.random() * 1296)
+    .toString(36)
+    .padStart(2, "0");
+  return `${tempo}${sorte}`;
+}
+
 /** O dialogo Vuetify que esta aberto agora. */
 export function dialogoAberto(page: Page): Locator {
   return page.locator(".v-dialog.v-overlay--active").last();
@@ -267,14 +280,14 @@ export async function prepararRodada(
   sufixo: string,
   quantidade = 4.5
 ): Promise<{ solicitacaoId: string; rodadaId: string; token: string; produto: string; produtoId: string }> {
-  const produto = `E2E Rodada com nome longo para quebrar linha ${sufixo}`;
+  const produto = `Bolo de laranja com cobertura de chocolate, forma grande (teste ${sufixo})`;
   const produtoId = await criarProdutoDeEstoque(contexto, {
     descricao: produto,
     estoqueMin: 1,
     estoqueMax: 50,
     setorEstoque: `Deposito ${sufixo}`
   });
-  const fornecedorId = await criarFornecedor(contexto, `E2E Rodada ${sufixo}`, "11977776666");
+  const fornecedorId = await criarFornecedor(contexto, `Bauducco (teste ${sufixo})`, "11977776666");
   const solicitacao = await contexto.api.post("/api/compras/solicitacoes", {
     data: { empresaId: contexto.empresaId, itens: [{ produtoId, quantidade }] }
   });

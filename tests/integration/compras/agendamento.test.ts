@@ -18,7 +18,7 @@ type AgendamentoDto = {
   id: string;
   resumo: string;
   proximas: Array<{ previstoPara: string; dataAtual: string; situacao: string }>;
-  produtos: Array<{ produtoId: string; quantidadePadrao: string | null }>;
+  produtos: Array<{ produtoId: string; descricao: string }>;
 };
 
 /** `AAAA-MM-DD` local (Sao Paulo) daqui a N dias. */
@@ -38,7 +38,7 @@ describe("agendamento de pedido integration", () => {
     regra: { tipo: "padrao", frequencia: "semanal", intervalo: 1 },
     termino: { tipo: "nunca" },
     prazoRespostaHoras: 12,
-    produtos: [{ produtoId: idsTeste.produto, quantidadePadrao: 3 }],
+    produtos: [{ produtoId: idsTeste.produto }],
     ...extra
   });
   const pedir = (method: "GET" | "POST" | "PUT", url: string, payload?: object, cookie = cookieAdmin) =>
@@ -92,7 +92,7 @@ describe("agendamento de pedido integration", () => {
     expect(agenda.proximas.every((ocorrencia) => ocorrencia.situacao === "prevista")).toBe(true);
     // A primeira e o inicio, as 08:00 de Sao Paulo (11:00 UTC).
     expect(agenda.proximas[0]?.previstoPara).toBe(`${diaLocal(1)}T11:00:00.000Z`);
-    expect(Number(agenda.produtos[0]?.quantidadePadrao)).toBe(3);
+    expect(agenda.produtos.map((produto) => produto.produtoId)).toEqual([idsTeste.produto]);
   });
 
   it("recusa inicio no passado, produto e grupo de fora, e prazo fora de 1-720 h", async () => {
@@ -121,7 +121,6 @@ describe("agendamento de pedido integration", () => {
     margemVariacaoPercentual: number;
     itens: Array<{
       produtoId: string;
-      quantidadeSugerida: string | null;
       fornecedores: Array<{ fornecedorId: string }>;
     }>;
   };
@@ -188,7 +187,13 @@ describe("agendamento de pedido integration", () => {
       margemVariacaoPercentual: 20
     });
     const item = detalhe.itens.find((linha) => linha.produtoId === idsTeste.produto);
-    expect(Number(item?.quantidadeSugerida)).toBe(3);
+    // Doc 58 §2: o produto chega sem quantidade; quem decide e o responsavel. A solicitacao nasce sem item.
+    expect(item).not.toHaveProperty("quantidadeSugerida");
+    const itensSolicitacao = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_solicitacoes_itens where solicitacao_id = $1",
+      [ocorrencia.solicitacao_id]
+    );
+    expect(itensSolicitacao?.total).toBe("0");
     expect(item?.fornecedores.map((fornecedor) => fornecedor.fornecedorId).sort()).toEqual(
       [FORNECEDOR, SEGUNDO].sort()
     );
@@ -225,7 +230,7 @@ describe("agendamento de pedido integration", () => {
       recebimento_inicio: "07:00:00",
       recebimento_fim: "11:00:00"
     });
-    // A quantidade que vale e a que o responsavel conferiu (4), nao a sugestao (3).
+    // A quantidade e a que o responsavel pos na Solicitacao de compra.
     const item = await consultarUm<{ quantidade: string }>(
       "select quantidade::text from compras_rodadas_itens where rodada_id = $1",
       [rodada!.id]
@@ -275,17 +280,6 @@ describe("agendamento de pedido integration", () => {
         idsTeste.empresaA
       ]);
     }
-  });
-
-  it("produto sem quantidade sugerida aparece sem quantidade; o responsavel decide", async () => {
-    await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
-    await executarSql("update produtos set estoque_max = null where id = $1", [idsTeste.produto]);
-    const id = await criar({ produtos: [{ produtoId: idsTeste.produto, quantidadePadrao: null }] });
-    await materializar(depoisDoInicio());
-    const ocorrencia = await ocorrenciaDa(id);
-    expect(ocorrencia.situacao).toBe("aguardando_conferencia");
-    const item = (await detalhar(ocorrencia.id)).itens.find((linha) => linha.produtoId === idsTeste.produto);
-    expect(item?.quantidadeSugerida).toBeNull();
   });
 
   it("cancela e move uma data (so esta), e o agendador respeita as duas", async () => {

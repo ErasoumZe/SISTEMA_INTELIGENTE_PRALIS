@@ -1,4 +1,5 @@
 import type { PedidoStatus, PedidoTipo } from "@padaria/shared";
+import type { TomSituacao } from "~/utils/compras-visual";
 
 // De onde veio o pedido (R-221, E8). Depois do E8 so `rodada` nasce: o pedido e consequencia da rodada
 // de cotacao (compra automatica ou excecao do comprador). `manual` e `automatico` sao pedidos criados
@@ -38,10 +39,11 @@ export function rotuloStatusPedido(status: PedidoStatus): string {
   return ROTULO_STATUS[status];
 }
 
-export function corStatusPedido(status: PedidoStatus): string {
-  if (status === "recebido") return "success";
-  if (status === "recebido_parcial" || status === "confirmado") return "info";
-  if (status === "cancelado") return "error";
-  if (status === "retornado" || status === "cotado") return "warning";
-  return "secondary";
+/** O tom da etiqueta de situacao do pedido (ComprasSituacao): a caminho, chegou parte, chegou tudo, cancelado. */
+export function tomStatusPedido(status: PedidoStatus): TomSituacao {
+  if (status === "recebido") return "positivo";
+  if (status === "recebido_parcial") return "atencao";
+  if (status === "confirmado") return "info";
+  if (status === "cancelado") return "negativo";
+  return "neutro";
 }

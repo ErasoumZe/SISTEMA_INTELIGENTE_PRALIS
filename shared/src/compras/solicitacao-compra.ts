@@ -53,7 +53,6 @@ export type SolicitacaoCompraItemDto = {
   estoqueAtual: string | null;
   estoqueMax: string | null;
   /** Sugestao: a quantidade padrao do agendamento ou maximo - saldo. Vazio = sem sugestao. */
-  quantidadeSugerida: string | null;
   /** Fornecedores do catalogo (aprovados, com WhatsApp) que recebem este produto. Vazio = escolher. */
   fornecedores: SolicitacaoCompraFornecedorDto[];
   maisVende: boolean;

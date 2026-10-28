@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { AgendamentoDto, AgendamentoOcorrenciaDto } from "@padaria/shared";
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
+import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 
 // Os agendamentos salvos e as próximas datas de cada um (doc 56 §3): como no iPhone, uma data pode ser
 // movida ou excluída "só esta"; "Excluir todas as futuras" encerra a série.
@@ -47,35 +49,42 @@ function confirmarMover() {
 </script>
 
 <template>
-  <v-card variant="outlined">
-    <v-card-title class="d-flex align-center ga-2">
-      <v-icon icon="mdi-calendar-month-outline" color="primary" />
-      Agendamentos
-    </v-card-title>
-    <v-card-text class="d-grid ga-3">
-      <p v-if="!carregando && !agendamentos.length" class="text-medium-emphasis mb-0">Nenhum pedido agendado.</p>
+  <ComprasSecao rente data-secao="agendamentos">
+    <template #titulo>
+      Agendamentos <span class="conta">{{ agendamentos.length }}</span>
+    </template>
+    <v-progress-linear v-if="carregando" indeterminate height="2" />
+    <ComprasVazio
+      v-if="!carregando && !agendamentos.length"
+      icone="mdi-calendar-blank-outline"
+      titulo="Nenhum pedido agendado."
+      texto="Use Novo agendamento para escolher o grupo, os produtos e a repetição."
+    />
+    <div v-else class="lista">
       <article v-for="agenda in agendamentos" :key="agenda.id" class="agenda" :data-agenda="agenda.id">
         <header class="agenda__topo">
           <div class="agenda__titulo">
             <strong>{{
               agenda.grupoPaiNome ? `${agenda.grupoPaiNome} › ${agenda.grupoNome}` : agenda.grupoNome
             }}</strong>
-            <span class="text-body-2" data-campo="resumo">{{ agenda.resumo }} · às {{ agenda.inicioHora }}</span>
-            <span class="text-caption text-medium-emphasis">
+            <span class="agenda__resumo" data-campo="resumo">{{ agenda.resumo }} · às {{ agenda.inicioHora }}</span>
+            <span class="agenda__meta">
               {{ agenda.produtos.length }} produto(s) · resposta em {{ prazo(agenda.prazoRespostaHoras) }} · variação
-              {{ agenda.margemVariacaoPercentual }}% · responsável
-              {{ agenda.responsavelNome }}
+              {{ agenda.margemVariacaoPercentual }}% · {{ agenda.responsavelNome }}
             </span>
           </div>
-          <div v-if="podeGerir" class="d-flex ga-1 flex-wrap">
-            <v-btn size="small" variant="tonal" prepend-icon="mdi-pencil" @click="emit('editar', agenda)">Editar</v-btn>
+          <div v-if="podeGerir" class="agenda__acoes">
             <v-btn size="small" variant="text" color="error" @click="encerrando = agenda"
               >Excluir todas as futuras</v-btn
             >
+            <v-btn size="small" variant="tonal" prepend-icon="mdi-pencil-outline" @click="emit('editar', agenda)"
+              >Editar</v-btn
+            >
           </div>
         </header>
-        <div class="d-flex flex-wrap ga-2">
-          <span v-if="!agenda.proximas.length" class="text-caption text-medium-emphasis">Sem próximas datas.</span>
+        <div class="agenda__datas">
+          <span class="agenda__rotulo">Próximas datas</span>
+          <span v-if="!agenda.proximas.length" class="agenda__meta">Nenhuma.</span>
           <v-menu v-for="ocorrencia in agenda.proximas" :key="ocorrencia.previstoPara" :disabled="!podeGerir">
             <template #activator="{ props: ativador }">
               <v-chip
@@ -111,7 +120,7 @@ function confirmarMover() {
           </v-menu>
         </div>
       </article>
-    </v-card-text>
+    </div>
 
     <v-dialog :model-value="movendo !== null" max-width="420" @update:model-value="movendo = null">
       <v-card>
@@ -151,30 +160,76 @@ function confirmarMover() {
         </v-card-actions>
       </v-card>
     </v-dialog>
-  </v-card>
+  </ComprasSecao>
 </template>
 
 <style scoped>
+.conta {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  line-height: 20px;
+  text-align: center;
+}
+
 .agenda {
   display: grid;
-  gap: 10px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--cx-line-soft);
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-4) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line-soft);
 }
-.agenda:last-child {
-  border-bottom: 0;
-}
+
 .agenda__topo {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--cx-sp-2);
 }
+
 .agenda__titulo {
   display: grid;
   gap: 2px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.agenda__resumo {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+}
+
+.agenda__meta {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
+.agenda__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-1);
+}
+
+.agenda__datas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cx-sp-2);
+}
+
+.agenda__rotulo {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+}
+
+@media (max-width: 599px) {
+  .agenda {
+    padding-left: var(--cx-sp-4);
+    padding-right: var(--cx-sp-4);
+  }
 }
 </style>

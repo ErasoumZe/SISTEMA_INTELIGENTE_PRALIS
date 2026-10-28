@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import PedidoDetalheDialog from "~/components/pedidos/PedidoDetalheDialog.vue";
 import PedidoRecebimentoDialog from "~/components/pedidos/PedidoRecebimentoDialog.vue";
 import PedidosFinalizadosLista from "~/components/pedidos/PedidosFinalizadosLista.vue";
@@ -53,30 +54,30 @@ const {
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-5">
+    <ComprasTela>
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos_finalizados?.titulo ?? ''"
         subtitulo="O que já foi comprado: a caminho e recebido. O recebimento é feito aqui."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <PedidosFinalizadosLista :pedidos="pedidos" :carregando="empresaCarregando" @abrir="verPedido" />
-    </div>
 
-    <PedidoRecebimentoDialog
-      v-model="dialogRecebimento"
-      :pedido="detalhe"
-      :salvando="recebendo"
-      @confirmar="confirmarRecebimento"
-    />
-    <PedidoDetalheDialog
-      v-model="dialogDetalhe"
-      :pedido="detalhe"
-      :pode-editar="podeEditar"
-      :pode-receber="podeReceber"
-      :transicionando="transicionando"
-      @situacao="mudarSituacao"
-      @receber="abrirRecebimento"
-    />
+      <PedidoRecebimentoDialog
+        v-model="dialogRecebimento"
+        :pedido="detalhe"
+        :salvando="recebendo"
+        @confirmar="confirmarRecebimento"
+      />
+      <PedidoDetalheDialog
+        v-model="dialogDetalhe"
+        :pedido="detalhe"
+        :pode-editar="podeEditar"
+        :pode-receber="podeReceber"
+        :transicionando="transicionando"
+        @situacao="mudarSituacao"
+        @receber="abrirRecebimento"
+      />
+    </ComprasTela>
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>

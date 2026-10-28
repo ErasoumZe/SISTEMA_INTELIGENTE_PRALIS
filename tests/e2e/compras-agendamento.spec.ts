@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { entrar, LARGURAS, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  codigoDeTeste,
   criarProdutoDeEstoque,
   dialogoAberto,
   esperarOverlayFechar,
@@ -39,8 +40,8 @@ test.describe("agendamento de pedido", () => {
 
   test("agenda bebidas duas vezes por semana e mexe so numa data", async ({ page }) => {
     const problemas = observarConsole(page);
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const produto = `E2E Agenda ${sufixo}`;
+    const sufixo = codigoDeTeste();
+    const produto = `Coca-Cola lata 350 ml (teste ${sufixo})`;
     await criarProdutoDeEstoque(contexto, {
       descricao: produto,
       estoqueMin: 2,
@@ -50,11 +51,14 @@ test.describe("agendamento de pedido", () => {
 
     await entrar(page, USUARIOS.compras);
     await irParaTela(page, "/agendamento_pedidos", "Agendamento de pedidos");
+    // O formulario so abre pelo "Novo agendamento"; a tela comeca pelos agendamentos salvos.
+    await page.getByRole("button", { name: "Novo agendamento" }).click();
 
-    // 1) Marca o produto na lista (filtrando pelo nome) e define a quantidade padrao.
+    // 1) Marca o produto na lista (filtrando pelo nome).
     await page.getByRole("textbox", { name: "Buscar produto" }).fill(sufixo);
     await page.getByRole("checkbox", { name: `Marcar ${produto}` }).check();
-    await page.getByRole("spinbutton", { name: `Quantidade padrão de ${produto}` }).fill("6");
+    // Doc 58 §2: aqui nao se poe quantidade; ela e decidida na Solicitacao de compra.
+    await expect(page.getByRole("spinbutton", { name: /Quantidade/u })).toHaveCount(0);
     const card = page.locator('[data-secao="card-agendamento"]');
     await expect(card.locator('[data-campo="produtos-marcados"]')).toContainText("1 produto(s)");
 
@@ -119,7 +123,8 @@ test.describe("agendamento de pedido", () => {
     await expect(page.locator(".v-snackbar__content")).toContainText("Data excluída.");
     await expect(agenda.locator(".v-chip").first()).toHaveClass(/text-decoration-line-through/u);
 
-    // 5) Responsivo, com a tela e com o editor de repeticao aberto.
+    // 5) Responsivo, com a tela e com o editor de repeticao aberto (salvar fechou o formulario).
+    await page.getByRole("button", { name: "Novo agendamento" }).click();
     for (const { nome, largura, altura } of LARGURAS) {
       await page.setViewportSize({ width: largura, height: altura });
       await semRolagemHorizontal(page);

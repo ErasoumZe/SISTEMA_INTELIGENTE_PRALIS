@@ -3,7 +3,6 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   comprasHistoricoPrecos,
   comprasSolicitacoes,
-  comprasSolicitacoesItens,
   fornecedores,
   fornecedoresProdutos,
   gruposMercadorias,
@@ -16,7 +15,6 @@ import {
 import { vendas, vendasProdutos } from "@padaria/db/schema/venda";
 import type { RegraRecorrencia } from "@padaria/shared/compras";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
-import type { ItemEntrada } from "./compras-solicitacoes.repository.js";
 
 // Agendamento de pedido (PROJECT_BRAIN/56). Persistencia da serie, dos produtos marcados e das ocorrencias.
 
@@ -34,7 +32,7 @@ export type AgendaEntrada = {
   margemVariacaoPercentual: number;
   recebimentoInicio: string | null;
   recebimentoFim: string | null;
-  produtos: Array<{ produtoId: string; quantidadePadrao: number | null }>;
+  produtos: Array<{ produtoId: string }>;
 };
 
 const grupoPai = alias(gruposMercadorias, "grupo_pai");
@@ -100,8 +98,7 @@ export async function produtosDasAgendasRepository(agendaIds: string[], db: Exec
     .select({
       agendaId: pedidosAgendasProdutos.agendaId,
       produtoId: pedidosAgendasProdutos.produtoId,
-      descricao: produtos.descricao,
-      quantidadePadrao: pedidosAgendasProdutos.quantidadePadrao
+      descricao: produtos.descricao
     })
     .from(pedidosAgendasProdutos)
     .innerJoin(produtos, eq(produtos.id, pedidosAgendasProdutos.produtoId))
@@ -190,8 +187,7 @@ async function substituirProdutosDaAgenda(
     itens.map((item) => ({
       empresaId,
       agendaId,
-      produtoId: item.produtoId,
-      quantidadePadrao: item.quantidadePadrao === null ? null : String(item.quantidadePadrao)
+      produtoId: item.produtoId
     }))
   );
 }
@@ -289,9 +285,9 @@ export async function registrarOcorrenciaRepository(
   return linha;
 }
 
-/** A solicitacao do dia: sem item quando nada tinha quantidade (o comprador preenche na conferencia). */
+/** A solicitacao do dia nasce sem item: o responsavel poe as quantidades na Solicitacao de compra (doc 58 §2). */
 export async function criarSolicitacaoDoAgendamentoRepository(
-  input: { empresaId: string; criadoPor: string; observacao: string; itens: ItemEntrada[] },
+  input: { empresaId: string; criadoPor: string; observacao: string },
   tx: TransacaoBanco
 ) {
   const [solicitacao] = await tx
@@ -304,23 +300,7 @@ export async function criarSolicitacaoDoAgendamentoRepository(
     })
     .returning({ id: comprasSolicitacoes.id });
   if (!solicitacao) throw new Error("Solicitacao nao criada");
-  if (!input.itens.length) return { id: solicitacao.id, itens: [] };
-  const itens = await tx
-    .insert(comprasSolicitacoesItens)
-    .values(
-      input.itens.map((item) => ({
-        empresaId: input.empresaId,
-        solicitacaoId: solicitacao.id,
-        produtoId: item.produtoId,
-        descricaoProduto: item.descricaoProduto,
-        quantidade: String(item.quantidade),
-        estoqueAtual: item.estoqueAtual === null ? null : String(item.estoqueAtual),
-        estoqueMin: item.estoqueMin === null ? null : String(item.estoqueMin),
-        estoqueMax: item.estoqueMax === null ? null : String(item.estoqueMax)
-      }))
-    )
-    .returning({ id: comprasSolicitacoesItens.id, produtoId: comprasSolicitacoesItens.produtoId });
-  return { id: solicitacao.id, itens };
+  return { id: solicitacao.id };
 }
 
 export async function cancelarSolicitacaoDoAgendamentoRepository(solicitacaoId: string, tx: TransacaoBanco) {

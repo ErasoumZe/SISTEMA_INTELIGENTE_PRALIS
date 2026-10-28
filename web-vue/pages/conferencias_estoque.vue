@@ -8,6 +8,7 @@ import type {
 } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import ConferenciaAgendaCard from "~/components/compras/ConferenciaAgendaCard.vue";
 import ConferenciaContagemDialog from "~/components/compras/ConferenciaContagemDialog.vue";
 import ConferenciasAgendasLista from "~/components/compras/ConferenciasAgendasLista.vue";
@@ -39,6 +40,7 @@ const dados = useConferenciasEstoque(empresaId, podeAgendar);
 const { conferencias, agendas, opcoes, carregando } = dados;
 
 const editando = ref<ConferenciaAgendaDto | null>(null);
+const formAberto = ref(false);
 const card = ref<InstanceType<typeof ConferenciaAgendaCard> | null>(null);
 const contagemAberta = ref(false);
 const detalhe = ref<ConferenciaDetalheDto | null>(null);
@@ -66,11 +68,17 @@ async function executar(acao: () => Promise<void>, mensagem: string) {
 
 function cancelarEdicao() {
   editando.value = null;
+  formAberto.value = false;
   card.value?.limpar();
+}
+function novaAgenda() {
+  cancelarEdicao();
+  formAberto.value = true;
 }
 function editar(agenda: ConferenciaAgendaDto) {
   editando.value = agenda;
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  formAberto.value = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function salvarAgenda(payload: ConferenciaAgendaPayload) {
   const ok = await executar(
@@ -153,15 +161,18 @@ onMounted(async () => {
     :carregando-empresa="carregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-4">
+    <ComprasTela>
       <AppCabecalhoTela
         titulo="Conferência de estoque"
         subtitulo="As contagens do dia, as já feitas e o agendamento. Contar só registra: o estoque não muda."
-      />
+      >
+        <template v-if="podeAgendar && !formAberto" #acoes>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="novaAgenda">Agendar conferência</v-btn>
+        </template>
+      </AppCabecalhoTela>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-      <ConferenciasLista :conferencias="conferencias" :carregando="carregando" @abrir="abrir" />
       <ConferenciaAgendaCard
-        v-if="podeAgendar"
+        v-if="podeAgendar && formAberto"
         ref="card"
         :empresa-id="empresaId"
         :opcoes="opcoes"
@@ -170,6 +181,7 @@ onMounted(async () => {
         @salvar="salvarAgenda"
         @cancelar="cancelarEdicao"
       />
+      <ConferenciasLista :conferencias="conferencias" :carregando="carregando" @abrir="abrir" />
       <ConferenciasAgendasLista
         :agendas="agendas"
         :pode-agendar="podeAgendar"
@@ -177,15 +189,15 @@ onMounted(async () => {
         @editar="editar"
         @encerrar="encerrar"
       />
-    </div>
-    <ConferenciaContagemDialog
-      v-model="contagemAberta"
-      :conferencia="detalhe"
-      :pode-contar="podeContar"
-      :salvando="salvando"
-      @salvar="salvarContagem"
-      @concluir="concluir"
-    />
+      <ConferenciaContagemDialog
+        v-model="contagemAberta"
+        :conferencia="detalhe"
+        :pode-contar="podeContar"
+        :salvando="salvando"
+        @salvar="salvarContagem"
+        @concluir="concluir"
+      />
+    </ComprasTela>
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
