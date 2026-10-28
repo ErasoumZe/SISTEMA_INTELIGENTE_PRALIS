@@ -890,9 +890,56 @@ só no banco local.
   - **Decisão de José (28/10/2026): grava só o custo, como no app.** O preço guardado se ajusta no próximo
     salvamento do produto. Até lá, o TXT do PDV recalcula pelo custo e pode divergir do preço que a tela mostra.
 
-**Ainda aguarda decisão:**
+**Duplicados históricos** (aposentar os códigos 00001–00428 que duplicam o SIA 10000–13126). José pediu em
+28/10/2026 para fechar todas as pendências; segui a recomendação, **a confirmar com ele**:
 
-- **Duplicados históricos** (aposentar os códigos 00001–00428 que duplicam o SIA 10000–13126):
-  - precisa do status `unificado` e de uma tabela de merges, ou seja, migration;
-  - muda listagens, TXT e planilha;
-  - é preciso decidir se a unificação é feita no ERP ou se o ERP só importa o resultado do app.
+- a unificação continua no app, dono do cadastro até a virada;
+- o ERP só importa o resultado: a carga da BASE traz o produto unificado como **inativo**, porque o ERP não tem
+  esse status;
+- não foi portada a ferramenta nem criada migration. Se um dia precisar unificar no ERP, aí sim entra o status
+  `unificado` e a migration.
+
+### Ligar os produtos da loja à BASE (28/10/2026)
+
+- **Onde:** card na Manutenção, só para administrador. É a peça que faltava para a virada.
+- **O que faz:** cada produto da loja que já existe no ERP passa a apontar para o produto da BASE com o **mesmo
+  código interno**, como as cópias do app. "951" e "00951" contam como o mesmo código.
+- **Só liga o inequívoco.** Na prévia aparecem com o motivo, e ficam soltos como hoje:
+  - código sem BASE, ou com BASE ambígua;
+  - BASE que já tem cópia na loja;
+  - dois produtos da loja apontando para a mesma BASE;
+  - barras que se contradizem.
+- **Como grava:** frase `LIGAR PRODUTOS A BASE` mais o hash da prévia. Nenhum outro campo do produto muda.
+
+### Roteiro da virada, passo a passo (para o dia combinado com a loja)
+
+**Antes (sem mexer na loja)**
+
+1. Backup do banco de produção.
+2. Merge da PR #207 na main. O Coolify faz o deploy e aplica as migrations 0084–0089. Com todas as flags
+   desligadas, nada muda na loja: o app continua dono da planilha e do PDV.
+3. **Central:** subir o backup XLSX do app, conferir a prévia da BASE e importar. Os códigos e IDs vêm iguais
+   aos do app.
+4. **Manutenção, "Ligar os produtos da loja à BASE":** conferir a TNP (e LI/HORA) e ligar. Resolver à mão o
+   que ficar com motivo.
+5. **Manutenção, "De-para do SIA":** importar a exportação atual de cada loja.
+
+**Configuração (Coolify e Google)**
+
+6. No Coolify:
+   - `CREARE_STORE_CONFIG_JSON` (o mesmo JSON do app);
+   - `CREARE_EXPORT_TOKEN` (32 caracteres ou mais);
+   - `CREARE_DRIVE_FOLDERS_JSON`;
+   - `GOOGLE_PRODUTOS_SPREADSHEET_ID`;
+   - `GOOGLE_PRODUTOS_MER_SPREADSHEET_ID`.
+7. Compartilhar a planilha de cadastro, a de discriminação e as pastas do Drive com a conta Google do ERP.
+   Confirmar que a coluna ID da planilha de produção está preenchida.
+
+**Virada (com a loja, uma janela de 2 a 3 horas)**
+
+8. Desligar a escrita do app (planilha, Drive e robô).
+9. Ligar no ERP: `GOOGLE_PRODUTOS_ESPELHO_ENABLED`, `CREARE_EXPORT_ENABLED` e `CREARE_DRIVE_ENABLED`.
+10. Teste com UM produto: editar no ERP, conferir a linha na planilha, baixar o TXT e importar no PDV.
+11. Apontar o robô da loja para o ERP.
+12. Se algo falhar: desligar as flags do ERP e religar o app. Os dados do ERP continuam lá. Nunca os dois
+    escrevendo ao mesmo tempo.
