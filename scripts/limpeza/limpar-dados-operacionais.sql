@@ -13,8 +13,12 @@
 --        psql "$DATABASE_URL" -f scripts/limpeza/limpar-dados-operacionais.sql
 --   3) Conferiu as contagens? Aplicar de verdade:
 --        psql "$DATABASE_URL" -v confirmar=1 -f scripts/limpeza/limpar-dados-operacionais.sql
---   4) Apagar tambem os ARQUIVOS anexados (fotos da folha, comprovantes) no volume /app/storage: este script so
---      cuida do banco; sem isso sobram arquivos orfaos no disco.
+--   4) Os ARQUIVOS anexados ficam no volume /app/storage (container da API), FORA do banco: este script so cuida
+--      do banco. NAO apague o /app/storage inteiro: ali tambem ficam as fotos de PRODUTOS (cadastro) e os documentos
+--      de ADMISSOES. Depois do passo 3, apague SOMENTE estas pastas do caixa:
+--          cd /app/storage && ls                      (conferir primeiro)
+--          rm -rf fechamentos-caixa vendas despesas mercadorias retiradas
+--      Mantenha: produtos  produtos-base  admissoes  admissoes-dependentes
 --
 -- Tudo roda em UMA transacao. Qualquer erro (por exemplo uma tabela nova que referencia estas) desfaz tudo.
 
