@@ -53,6 +53,9 @@ const envSchema = z.object({
   GOOGLE_PRODUTOS_SPREADSHEET_ID: envOpcionalNaoVazio,
   GOOGLE_PRODUTOS_FISCAL_TAB: z.string().trim().min(1).default("(TNP) FISCAL - DE PARA PRODUTOS"),
   GOOGLE_PRODUTOS_GRUPOS_TAB: z.string().trim().min(1).default("(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA"),
+  // ID do grupo no PDV pelo NOME (AC5:AD), como o `GOOGLE_SHEETS_GRUPO_IDS_TAB` do oficial. O nome da aba tem
+  // DOIS espacos antes de "GRUPOS" - e assim na planilha.
+  GOOGLE_PRODUTOS_GRUPO_IDS_TAB: z.string().trim().min(1).default("TNP/LI/HORA - VLD EXP -  GRUPOS/REF (VLD)"),
   // A sincronizacao da admissao so pode ser habilitada explicitamente depois de a migration de
   // controle Google ser aplicada e o destino real ser validado. O default seguro e desligado.
   GOOGLE_ADMISSAO_SYNC_ENABLED: z

@@ -4,6 +4,8 @@ import type { DadosExternos } from "@padaria/shared/api";
 import {
   camposQueNaoSeguemABase,
   codigoBarrasNaCriacao,
+  grupoIdDaEntrada,
+  grupoIdDoNome,
   normalizarGrupoFiscal,
   normalizarTextosProduto,
   patchDeHeranca,
@@ -43,6 +45,7 @@ import {
   salvarFotoDeProduto
 } from "./produtos-foto.js";
 import { margemPadraoDoGrupo, tabelasFiscais } from "./produtos-fiscal.service.js";
+import { idsDeGrupoOficiais } from "./produtos-grupo-id.js";
 import {
   AreaDeVendaForaDaTnpError,
   balancaDaEntrada,
@@ -124,6 +127,7 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
   const dados = lerEntrada(body, ator);
   // Regras fiscais lidas ANTES da trava: dentro da transacao a classificacao usa o cache.
   await tabelasFiscais().catch(() => null);
+  const idsDeGrupo = await idsDeGrupoOficiais();
 
   const criado = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
@@ -152,12 +156,19 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
     // Codigo interno da sequencia global, sob a trava; EAN vazio recebe o proprio codigo (oficial).
     const codigoInterno = await proximoCodigoInterno(tx);
     const codigoBarrasFinal = codigoBarrasNaCriacao(codigoBarras, codigoInterno);
+    // F7: o ID do grupo no PDV segue o NOME do grupo (aba oficial), como no paralelo.
+    const grupoIdCriado = grupoIdDaEntrada({
+      atual: null,
+      criacao: true,
+      grupoMudou: false,
+      oficial: grupoIdDoNome(idsDeGrupo, grupoNome)
+    });
     const dadosOficiais = dadosOficiaisDaBase({
       dados,
       nome,
       siglaUnidade: sigla,
       grupoNome,
-      grupoIdExterno: dados.grupoIdExterno ?? null,
+      grupoIdExterno: grupoIdCriado,
       balanca: balancaDaEntrada(dados, null),
       codigoInterno,
       codigoBarras: codigoBarrasFinal,
@@ -170,7 +181,7 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
       codigoBarras: codigoBarrasFinal,
       nome,
       status: dados.status,
-      grupoIdOrigem: dados.grupoIdExterno ?? null,
+      grupoIdOrigem: grupoIdCriado,
       dadosOficiais
     });
     await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
@@ -209,6 +220,7 @@ export async function editarProdutoBase(
   }
   const dados = lerEntrada(body, ator);
   await tabelasFiscais().catch(() => null);
+  const idsDeGrupo = await idsDeGrupoOficiais();
 
   const editado = await executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutos(tx);
@@ -239,18 +251,24 @@ export async function editarProdutoBase(
       loja: "BASE",
       fiscalAtual: anterior.fiscal ?? null
     });
+    const grupoIdEditado = grupoIdDaEntrada({
+      atual: alvo.grupoIdOrigem,
+      criacao: false,
+      grupoMudou: normalizarGrupoFiscal(grupoAnterior ?? "") !== normalizarGrupoFiscal(grupoNome ?? ""),
+      oficial: grupoIdDoNome(idsDeGrupo, grupoNome)
+    });
     const novaLinha = {
       codigoInterno: alvo.codigoInterno,
       codigoBarras,
       nome,
       status: dados.status,
-      grupoIdOrigem: dados.grupoIdExterno ?? alvo.grupoIdOrigem,
+      grupoIdOrigem: grupoIdEditado,
       dadosOficiais: dadosOficiaisDaBase({
         dados,
         nome,
         siglaUnidade: sigla,
         grupoNome,
-        grupoIdExterno: dados.grupoIdExterno ?? alvo.grupoIdOrigem,
+        grupoIdExterno: grupoIdEditado,
         balanca: balancaDaEntrada(dados, {
           pesavel: anterior.pesavel ?? null,
           teclaBalanca: anterior.teclaBalanca ?? null,
