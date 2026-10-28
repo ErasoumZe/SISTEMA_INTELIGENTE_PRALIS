@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Formulario de produto em PAGINA DEDICADA. Substitui as ~290 linhas de template que viviam dentro
- * do `WorkspaceDialogs.vue` (arquivo de quase mil linhas) — produto saiu do modal.
+ * Formulario de produto em PAGINA DEDICADA. Dois cadastros, um formulario (igual ao app oficial):
+ *  - `base`: produto novo e edicao da base geral — so o administrador; a edicao desce para as lojas;
+ *  - `loja`: a copia importada — o que veio da base fica em leitura; a loja completa o resto.
  */
 import type { AuthSession, FiltrosDeProduto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
@@ -9,12 +10,14 @@ import AppShell from "~/components/app/AppShell.vue";
 import ProdutoSecaoIdentificacao from "~/components/produtos/ProdutoSecaoIdentificacao.vue";
 import ProdutoSecaoComercial from "~/components/produtos/ProdutoSecaoComercial.vue";
 import ProdutoSecaoFiscalPromocoes from "~/components/produtos/ProdutoSecaoFiscalPromocoes.vue";
+import ProdutoHerancaBase from "~/components/produtos/ProdutoHerancaBase.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useAjudaDeCampo } from "~/composables/useAjudaDeCampo";
-import { useProdutoFormulario } from "~/composables/useProdutoFormulario";
+import { useProdutoFormulario, type ModoDoProduto } from "~/composables/useProdutoFormulario";
+import { dicaProduto } from "~/utils/produto-dicas";
 import { mensagemErro } from "~/utils/domain";
 
-const props = defineProps<{ produtoId: string | null }>();
+const props = defineProps<{ produtoId: string | null; modo: ModoDoProduto }>();
 
 const router = useRouter();
 const { apiGet, carregarSessao } = useApi();
@@ -33,18 +36,35 @@ const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesab
   () => Boolean(caixaStatus.value?.caixaAberto)
 );
 
-/** Sem permissao de escrita a tela abre em leitura — nao esconde o produto, so nao deixa salvar. */
-const somenteLeitura = computed(() =>
-  props.produtoId ? !temPermissao("cadastro_produtos_editar") : !temPermissao("cadastro_produtos_criar")
-);
+const ehAdmin = computed(() => sessao.value?.perfil?.role === "usuario_admin");
+
+/**
+ * Sem permissao de escrita a tela abre em leitura — nao esconde o produto, so nao deixa salvar.
+ * A BASE (produto novo e edicao da base geral) e so do administrador (oficial).
+ */
+const somenteLeitura = computed(() => {
+  if (props.modo === "base" && !ehAdmin.value) return true;
+  return props.produtoId ? !temPermissao("cadastro_produtos_editar") : !temPermissao("cadastro_produtos_criar");
+});
+/** Para onde volta: a base geral volta ao catalogo BASE; a loja, a listagem da loja. */
+const listagem = computed(() => (props.modo === "base" ? "/produtos/base" : "/produtos"));
+const titulo = computed(() => {
+  if (props.modo === "loja") return "Editar produto";
+  return props.produtoId ? "Editar produto da base" : "Novo produto na base";
+});
 
 const idDoProduto = computed(() => props.produtoId);
-const formulario = useProdutoFormulario(empresaId, idDoProduto);
+const formulario = useProdutoFormulario(
+  empresaId,
+  idDoProduto,
+  computed(() => props.modo)
+);
 const ajuda = useAjudaDeCampo(computed(() => sessao.value?.user?.id));
+const dicaDoProduto = (campo: string) => dicaProduto(campo, formulario.form.value.habilitarAjuda, ajuda.dica);
 
 async function salvar(forcar = false) {
   const id = await formulario.salvar(forcar);
-  if (id) await router.push("/produtos");
+  if (id) await router.push(listagem.value);
   else focarPrimeiroInvalido();
 }
 
@@ -59,7 +79,12 @@ function focarPrimeiroInvalido() {
 
 function sair() {
   if (formulario.alterado.value && !window.confirm("Há alterações não salvas. Sair mesmo assim?")) return;
-  void router.push("/produtos");
+  void router.push(listagem.value);
+}
+
+function abrirHistorico() {
+  if (formulario.alterado.value && !window.confirm("Há alterações não salvas. Abrir o histórico mesmo assim?")) return;
+  void router.push(`/produtos/${props.produtoId}/historico?empresaId=${encodeURIComponent(empresaId.value)}`);
 }
 
 /** Fechar a aba com alteracao pendente tambem avisa. */
@@ -77,6 +102,11 @@ onMounted(async () => {
     }
     if (!temPermissao("cadastro_produtos_visualizar")) {
       erroDeAcesso.value = "Sem permissão para acessar esta página.";
+      return;
+    }
+    if (props.modo === "base" && !props.produtoId && !ehAdmin.value) {
+      erroDeAcesso.value =
+        "Apenas o administrador cadastra produtos novos (na base geral). A loja recebe produtos importando da base.";
       return;
     }
     empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
@@ -118,10 +148,18 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
       <header class="produto-form__cabecalho">
         <v-btn icon="mdi-arrow-left" variant="text" aria-label="Voltar para a listagem" @click="sair" />
         <div>
-          <h1>{{ produtoId ? "Editar produto" : "Novo produto" }}</h1>
+          <h1>{{ titulo }}</h1>
           <p v-if="somenteLeitura">Você pode ver, mas não editar este cadastro.</p>
         </div>
         <v-spacer />
+        <v-btn
+          v-if="produtoId && modo === 'loja' && ehAdmin"
+          variant="outlined"
+          prepend-icon="mdi-history"
+          @click="abrirHistorico"
+        >
+          Histórico de nomes
+        </v-btn>
         <v-btn
           :variant="ajuda.ligada.value ? 'flat' : 'outlined'"
           :color="ajuda.ligada.value ? 'primary' : undefined"
@@ -146,19 +184,40 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
         </div>
       </v-alert>
 
+      <v-alert
+        v-if="!formulario.carregando.value && formulario.planilhaFiscalForaDoAr.value"
+        type="warning"
+        variant="tonal"
+        density="compact"
+      >
+        A planilha fiscal está fora do ar: o produto salva normalmente e fica marcado "fonte indisponível". A prévia do
+        preço sai sem a margem do grupo.
+      </v-alert>
+
       <v-progress-linear v-if="formulario.carregando.value" indeterminate color="primary" />
 
       <template v-else>
+        <ProdutoHerancaBase
+          v-if="formulario.herdadoTravado.value && formulario.heranca.value"
+          :nao-seguem="formulario.heranca.value.naoSeguem"
+          :somente-leitura="somenteLeitura"
+          @voltar-a-herdar="formulario.voltarAHerdar"
+        />
+
         <ProdutoSecaoIdentificacao
           :form="formulario.form.value"
           :produto-id="produtoId"
           :unidades="formulario.unidades.value"
           :grupos="formulario.grupos.value"
           :erros="formulario.erros.value"
+          :grupo-obrigatorio="formulario.grupoObrigatorio.value"
           :descricao-preview="formulario.descricaoPreview.value"
           :como-se-compra-preview="formulario.comoSeCompraPreview.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :herdado-travado="formulario.herdadoTravado.value"
+          :rota-foto="modo === 'base' ? '/api/produtos/base' : '/api/produtos'"
+          :mostrar-area-venda="formulario.loja.value === 'TNP'"
+          :dica="dicaDoProduto"
           @foto-escolhida="formulario.fotoPendente.value = $event"
         />
 
@@ -170,16 +229,20 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :preco-preview="formulario.precoPreview.value"
           :validacao-qtd-preview="formulario.validacaoQtdPreview.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :herdado-travado="formulario.herdadoTravado.value"
+          :dica="dicaDoProduto"
         />
 
+        <!-- Oficial: fiscal e promocao sao da LOJA; a base geral nao tem esses cartoes. -->
         <ProdutoSecaoFiscalPromocoes
+          v-if="modo === 'loja'"
           :form="formulario.form.value"
           :unidades="formulario.unidades.value"
           :erros="formulario.erros.value"
           :erros-de-promocao="formulario.errosDePromocao.value"
           :somente-leitura="somenteLeitura"
-          :dica="ajuda.dica"
+          :fiscal-editavel="ehAdmin && !somenteLeitura"
+          :dica="dicaDoProduto"
         />
       </template>
 

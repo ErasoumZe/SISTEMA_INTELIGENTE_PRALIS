@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  empresas,
   gruposMercadorias,
   perfisUsuarios,
   produtos,
@@ -24,6 +25,8 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
     .select({
       id: produtos.id,
       empresaId: produtos.empresaId,
+      produtoBaseId: produtos.produtoBaseId,
+      matriculaPrefixo: empresas.matriculaPrefixo,
       grupoMercadoriaId: produtos.grupoMercadoriaId,
       grupoNome: gruposMercadorias.nome,
       unidadeMedidaId: produtos.unidadeMedidaId,
@@ -33,7 +36,15 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       codigoInterno: produtos.codigoInterno,
       codigoBarras: produtos.codigoBarras,
       descricao: produtos.descricao,
+      nomeCatalogo: produtos.nomeCatalogo,
+      pesavel: produtos.pesavel,
+      teclaBalanca: produtos.teclaBalanca,
+      validadeBalanca: produtos.validadeBalanca,
+      grupoIdExterno: produtos.grupoIdExterno,
+      areaVenda: produtos.areaVenda,
       marca: produtos.marca,
+      compraAproximada: produtos.compraAproximada,
+      habilitarAjuda: produtos.habilitarAjuda,
       quantidadeIndividual: produtos.quantidadeIndividual,
       embalagem: produtos.embalagem,
       cDe: produtos.cDe,
@@ -55,11 +66,14 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       toleranciaQuantidadePercentual: produtos.toleranciaQuantidadePercentual,
       localVenda1: produtos.localVenda1,
       localVenda2: produtos.localVenda2,
+      setorVenda1: produtos.setorVenda1,
+      setorVenda2: produtos.setorVenda2,
       fotoUrl: produtos.fotoUrl,
       criadoEm: produtos.criadoEm,
       criadoPorNome: perfisUsuarios.nome
     })
     .from(produtos)
+    .innerJoin(empresas, eq(produtos.empresaId, empresas.id))
     .leftJoin(gruposMercadorias, eq(produtos.grupoMercadoriaId, gruposMercadorias.id))
     .leftJoin(unidadesMedida, eq(produtos.unidadeIndividualId, unidadesMedida.id))
     .leftJoin(perfisUsuarios, eq(produtos.criadoPor, perfisUsuarios.usuarioId))
@@ -88,7 +102,24 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       aliquotaPis: produtosFiscal.aliquotaPis,
       aliquotaCofins: produtosFiscal.aliquotaCofins,
       reducaoIcms: produtosFiscal.reducaoIcms,
-      icms: produtosFiscal.icms
+      icms: produtosFiscal.icms,
+      tributacaoSimples: produtosFiscal.tributacaoSimples,
+      aliquotaSimples: produtosFiscal.aliquotaSimples,
+      icmsRe: produtosFiscal.icmsRe,
+      baseFiscal: produtosFiscal.baseFiscal,
+      codigoFiscal: produtosFiscal.codigoFiscal,
+      produtoFiscal: produtosFiscal.produtoFiscal,
+      cstReforma: produtosFiscal.cstReforma,
+      cClassTrib: produtosFiscal.cClassTrib,
+      aliquotaIbs: produtosFiscal.aliquotaIbs,
+      aliquotaCbs: produtosFiscal.aliquotaCbs,
+      origemFiscal: produtosFiscal.origemFiscal,
+      aliquotaEcf: produtosFiscal.aliquotaEcf,
+      aliquotaEcfId: produtosFiscal.aliquotaEcfId,
+      estado: produtosFiscal.estado,
+      motivo: produtosFiscal.motivo,
+      conferidoEm: produtosFiscal.conferidoEm,
+      pctNcm: produtosFiscal.pctNcm
     })
     .from(produtosFiscal)
     .where(eq(produtosFiscal.produtoId, id));
@@ -98,7 +129,8 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       precisao: produtosTransformacao.precisao,
       quantidade: produtosTransformacao.quantidade,
       unidade: produtosTransformacao.unidade,
-      produtoReceituario: produtosTransformacao.produtoReceituario
+      produtoReceituario: produtosTransformacao.produtoReceituario,
+      refReceituario: produtosTransformacao.refReceituario
     })
     .from(produtosTransformacao)
     .where(eq(produtosTransformacao.produtoId, id));
@@ -123,5 +155,11 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
     .from(produtosPromocoes)
     .where(eq(produtosPromocoes.produtoId, id));
 
-  return { ...produto, conversoes, fiscal: fiscal ?? null, transformacao: transformacao ?? null, promocoes };
+  return {
+    ...produto,
+    conversoes,
+    fiscal: fiscal ? { ...fiscal, conferidoEm: fiscal.conferidoEm?.toISOString() ?? null } : null,
+    transformacao: transformacao ?? null,
+    promocoes
+  };
 }

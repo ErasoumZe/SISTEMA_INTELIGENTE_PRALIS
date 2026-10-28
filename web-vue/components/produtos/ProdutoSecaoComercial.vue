@@ -15,6 +15,8 @@ const props = defineProps<{
   precoPreview: number;
   validacaoQtdPreview: string;
   somenteLeitura: boolean;
+  /** Copia da loja: a ficha de transformacao vem da BASE e fica em leitura (oficial). */
+  herdadoTravado: boolean;
   dica: (campo: string) => string | undefined;
 }>();
 
@@ -109,6 +111,8 @@ watch(
         type="number"
         min="0"
         label="Estoque mínimo"
+        data-campo="estoqueMin"
+        :error-messages="erros['estoqueMin']"
         :hint="dica('estoqueMin')"
         :disabled="somenteLeitura"
       />
@@ -156,6 +160,8 @@ watch(
         :hint="dica('localVenda2')"
         :disabled="somenteLeitura"
       />
+      <v-text-field v-model="form.setorVenda1" label="Setor de venda 1" :disabled="somenteLeitura" />
+      <v-text-field v-model="form.setorVenda2" label="Setor de venda 2" :disabled="somenteLeitura" />
     </div>
 
     <template v-if="form.tipo === 'transformacao'">
@@ -166,7 +172,7 @@ watch(
           :items="['EXATOS', 'APROXIMADOS']"
           label="Precisão"
           :hint="dica('precisao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-text-field
           v-model="form.quantidadeTransformacao"
@@ -174,7 +180,7 @@ watch(
           min="0"
           label="Quantidade"
           :hint="dica('quantidadeTransformacao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-select
           v-model="form.unidadeTransformacao"
@@ -182,13 +188,18 @@ watch(
           label="Unidade"
           clearable
           :hint="dica('unidadeTransformacao')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-text-field
           v-model="form.produtoReceituario"
           label="Produto de receituário"
           :hint="dica('produtoReceituario')"
-          :disabled="somenteLeitura"
+          :disabled="somenteLeitura || herdadoTravado"
+        />
+        <v-text-field
+          v-model="form.refReceituario"
+          label="Referência do receituário"
+          :disabled="somenteLeitura || herdadoTravado"
         />
         <v-text-field
           :model-value="validacaoQtdPreview"

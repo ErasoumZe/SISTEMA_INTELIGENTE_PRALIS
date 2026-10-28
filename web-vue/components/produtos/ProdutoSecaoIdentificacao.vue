@@ -10,12 +10,22 @@ const props = defineProps<{
   unidades: Array<{ id: string; sigla: string; nome: string }>;
   grupos: Array<{ id: string; nome: string }>;
   erros: Record<string, string>;
+  grupoObrigatorio: boolean;
   descricaoPreview: string;
   comoSeCompraPreview: string;
   somenteLeitura: boolean;
+  /** Copia da loja: o que veio da BASE so o administrador altera, la na BASE (oficial). */
+  herdadoTravado: boolean;
+  /** Onde a foto vive: "/api/produtos" (loja) ou "/api/produtos/base" (base geral). */
+  rotaFoto: string;
+  /** Area de venda so existe no cadastro da TNP (oficial). */
+  mostrarAreaVenda: boolean;
   dica: (campo: string) => string | undefined;
 }>();
 const emit = defineEmits<{ "foto-escolhida": [arquivo: File | null] }>();
+
+/** Campos herdados da BASE: travados na copia da loja, alem do modo somente leitura. */
+const travado = computed(() => props.somenteLeitura || props.herdadoTravado);
 
 const scannerAberto = ref(false);
 const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
@@ -39,9 +49,10 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :disabled="somenteLeitura"
         />
         <ProdutoFoto
+          :rota="rotaFoto"
           :produto-id="produtoId"
           :foto-url="form.fotoUrl"
-          :somente-leitura="somenteLeitura"
+          :somente-leitura="travado"
           @arquivo-escolhido="emit('foto-escolhida', $event)"
           @alterada="form.fotoUrl = $event"
         />
@@ -53,7 +64,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           label="Código interno"
           readonly
           class="cx-num"
-          hint="Gerado pelo sistema, sequencial por loja."
+          hint="Gerado pelo sistema, sequencial no catálogo oficial."
           persistent-hint
         />
         <v-text-field v-model="form.codigo" label="Código externo" :hint="dica('codigo')" :disabled="somenteLeitura" />
@@ -62,20 +73,21 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           v-model="form.codigoBarras"
           label="Código de barras (EAN)"
           :hint="dica('codigoBarras')"
-          :disabled="somenteLeitura"
+          :disabled="travado"
           append-inner-icon="mdi-barcode-scan"
           class="cx-num"
           @click:append-inner="scannerAberto = true"
         />
-        <v-text-field v-model="form.marca" label="Marca" :hint="dica('marca')" :disabled="somenteLeitura" />
+        <v-text-field v-model="form.marca" label="Marca" :hint="dica('marca')" :disabled="travado" />
+        <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda" :disabled="travado" />
 
         <v-text-field
-          v-model="form.descricao"
-          label="Descrição *"
-          data-campo="descricao"
-          :error-messages="erros['descricao']"
-          :hint="dica('descricao')"
-          :disabled="somenteLeitura"
+          v-model="form.nomeCatalogo"
+          label="Nome do produto *"
+          data-campo="nomeCatalogo"
+          :error-messages="erros['nomeCatalogo']"
+          :hint="dica('nomeCatalogo')"
+          :disabled="travado"
           class="secao__campo-largo"
         />
 
@@ -83,21 +95,88 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           v-model="form.quantidadeIndividual"
           type="number"
           min="0"
-          label="Quantidade individual *"
+          label="Gramatura *"
           data-campo="quantidadeIndividual"
           :error-messages="erros['quantidadeIndividual']"
           :hint="dica('quantidadeIndividual')"
-          :disabled="somenteLeitura"
+          :disabled="travado"
         />
         <v-select
           v-model="form.unidadeIndividualId"
           :items="unidades"
           item-title="sigla"
           item-value="id"
-          label="Unidade individual *"
+          label="Medida base *"
           data-campo="unidadeIndividualId"
           :error-messages="erros['unidadeIndividualId']"
           :hint="dica('unidadeIndividual')"
+          :disabled="travado"
+        />
+
+        <v-select
+          v-model="form.pesavel"
+          :items="[
+            { title: 'Não informado — conferir no SIA', value: null },
+            { title: 'Não', value: false },
+            { title: 'Sim', value: true }
+          ]"
+          label="Vai para balança? *"
+          data-campo="pesavel"
+          :error-messages="erros['pesavel']"
+          :hint="
+            form.pesavel === null
+              ? 'Para produtos existentes, confira o cadastro SIA. KG não define este campo.'
+              : dica('pesavel')
+          "
+          :disabled="travado"
+          class="secao__campo-largo"
+        />
+
+        <template v-if="form.pesavel === true">
+          <!-- Oficial: a tecla e fixa (000, confirmada para a TNP); o servidor grava o valor fixo. -->
+          <v-text-field
+            model-value="000"
+            label="Tecla da balança"
+            readonly
+            persistent-hint
+            hint="Valor fixo 000 confirmado para a TNP."
+          />
+          <v-text-field
+            v-model="form.validadeBalanca"
+            type="number"
+            min="0"
+            max="999"
+            label="Validade na balança (dias) *"
+            data-campo="validadeBalanca"
+            :error-messages="erros['validadeBalanca']"
+            :disabled="travado"
+            @wheel.prevent
+          />
+        </template>
+        <v-text-field v-model="form.grupoIdExterno" label="Grupo oficial (ID externo)" :disabled="travado" />
+        <v-select
+          v-if="mostrarAreaVenda"
+          v-model="form.areaVenda"
+          :items="[
+            { value: 'caixa', title: 'Caixa' },
+            { value: 'vitrine', title: 'Vitrine' },
+            { value: 'copa', title: 'Copa' },
+            { value: 'chapa', title: 'Chapa' },
+            { value: 'mesas', title: 'Mesas' },
+            { value: 'vasca_paes', title: 'Vasca de pães' },
+            { value: 'vitrine_paes', title: 'Vitrine de pães' },
+            { value: 'paes_empacotados', title: 'Pães empacotados' },
+            { value: 'mesa_paes', title: 'Mesa de pães' },
+            { value: 'frios', title: 'Frios' },
+            { value: 'bebidas', title: 'Bebidas' },
+            { value: 'laticinios', title: 'Laticínios' },
+            { value: 'mercearia', title: 'Mercearia' },
+            { value: 'estoque_bebidas', title: 'Estoque de bebidas' },
+            { value: 'biscoitos', title: 'Biscoitos' },
+            { value: 'dml_limpeza', title: 'DML / limpeza' }
+          ]"
+          label="Área de venda"
+          clearable
           :disabled="somenteLeitura"
         />
 
@@ -106,10 +185,12 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :items="grupos"
           item-title="nome"
           item-value="id"
-          label="Grupo de mercadoria"
-          clearable
+          :label="grupoObrigatorio ? 'Grupo de mercadoria *' : 'Grupo de mercadoria'"
+          :clearable="!grupoObrigatorio"
+          data-campo="grupoMercadoriaId"
+          :error-messages="erros['grupoMercadoriaId']"
           :hint="dica('grupoMercadoria')"
-          :disabled="somenteLeitura"
+          :disabled="travado"
         />
         <v-select
           v-model="form.tipo"
@@ -119,15 +200,15 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           ]"
           label="Tipo"
           :hint="dica('tipo')"
-          :disabled="somenteLeitura"
+          :disabled="travado"
         />
 
         <v-text-field
           :model-value="descricaoPreview"
-          label="Descrição automática (prévia)"
+          label="Descrição (automática)"
           readonly
           class="secao__campo-largo secao__previa"
-          hint="NOME + QUANTIDADE + UNIDADE. O servidor monta e valida a versão final."
+          hint="Nome + gramatura + medida base. A descrição é montada automaticamente."
           persistent-hint
         />
       </div>
@@ -141,22 +222,16 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         label="Embalagem"
         clearable
         :hint="dica('embalagem')"
-        :disabled="somenteLeitura"
+        :disabled="travado"
       />
-      <v-select
-        v-model="form.cDe"
-        :items="['C/', 'DE']"
-        label="C/ ou DE"
-        :hint="dica('cDe')"
-        :disabled="somenteLeitura"
-      />
+      <v-select v-model="form.cDe" :items="['C/', 'DE']" label="C/ ou DE" :hint="dica('cDe')" :disabled="travado" />
       <v-text-field
         v-model="form.quantidadeCaixa"
         type="number"
         min="1"
         label="Qtd. por embalagem"
         :hint="dica('quantidadeCaixa')"
-        :disabled="somenteLeitura"
+        :disabled="travado"
       />
       <v-select
         v-model="form.medidaCompra"
@@ -164,7 +239,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         label="Medida de compra"
         clearable
         :hint="dica('medidaCompra')"
-        :disabled="somenteLeitura"
+        :disabled="travado"
       />
       <v-text-field
         :model-value="comoSeCompraPreview"
@@ -173,6 +248,7 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         placeholder="Preencha a embalagem para gerar"
         class="secao__campo-largo secao__previa"
       />
+      <v-checkbox v-model="form.compraAproximada" label="Quantidade de compra aproximada" :disabled="travado" />
     </div>
 
     <ProdutoScanner v-model:aberto="scannerAberto" @lido="form.codigoBarras = $event" />

@@ -1,15 +1,20 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
 import {
   calcularPrecoVenda,
+  normalizarGrupoFiscal,
+  type RegraFiscalGrupo,
   montarComoSeCompra,
-  montarDescricao,
   montarValidacaoQtd,
+  validarBalanca,
+  validarEstoquePorEmbalagem,
   validarPromocoesDoProduto
 } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import {
+  aplicarValoresDaBase,
   formularioDoDetalhe,
   formularioVazio,
+  descricaoPreviewDoProduto,
   numero,
   payloadDoFormulario,
   type ProdutoForm
@@ -18,9 +23,15 @@ import {
 /**
  * Estado do formulario de produto. As previas (descricao, "como se compra", preco) usam as MESMAS
  * funcoes puras que o servidor usa — e por isso que previa e valor gravado nunca divergem.
+ *
+ * Dois cadastros, um formulario (igual ao app oficial):
+ *  - `base`: o que o produto E. So o administrador cria e edita; a edicao desce para as lojas.
+ *  - `loja`: a copia importada. A loja completa o que e dela (estoque, preco, fiscal, promocao);
+ *    o que veio da BASE fica em leitura.
  */
+export type ModoDoProduto = "base" | "loja";
 
-export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<string | null>) {
+export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<string | null>, modo: Ref<ModoDoProduto>) {
   const { apiGet, apiPost, apiPut } = useApi();
 
   const form = ref<ProdutoForm>(formularioVazio(empresaId.value));
@@ -34,6 +45,16 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   const alterado = ref(false);
   /** Foto escolhida antes de o produto existir: sobe logo depois do POST. */
   const fotoPendente = ref<File | null>(null);
+  /** Grupo com que o produto chegou: quem ja tinha grupo nao pode ficar sem (oficial). */
+  const grupoOriginal = ref<string | null>(null);
+  const grupoObrigatorio = computed(() => !produtoId.value || Boolean(grupoOriginal.value));
+  /** Copia de um produto da BASE: so ela tem campos herdados (produto proprio da loja nao). */
+  const produtoBaseId = ref<string | null>(null);
+  /** Loja do produto (TNP/LI/HORA; "BASE" na base geral). Area de venda so na TNP. */
+  const loja = ref("");
+  /** Selo de heranca: campos em que esta loja nao segue mais a base, e os valores atuais da base. */
+  const heranca = ref<ProdutoDetalhe["heranca"]>(null);
+  const herdadoTravado = computed(() => modo.value === "loja" && Boolean(produtoBaseId.value));
 
   let estadoOriginal = JSON.stringify(form.value);
   watch(
@@ -49,7 +70,13 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   );
 
   const descricaoPreview = computed(() =>
-    montarDescricao(form.value.descricao, form.value.quantidadeIndividual, siglaDaUnidade.value)
+    descricaoPreviewDoProduto({
+      nome: form.value.nomeCatalogo,
+      nomeOriginal: form.value.nomeCatalogoOriginal,
+      descricaoAtual: form.value.descricao,
+      quantidade: form.value.quantidadeIndividual,
+      siglaUnidade: siglaDaUnidade.value
+    })
   );
 
   const comoSeCompraPreview = computed(() =>
@@ -58,7 +85,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       cDe: form.value.cDe,
       quantidadeCaixa: numero(form.value.quantidadeCaixa),
       medidaCompra: form.value.medidaCompra,
-      descricao: descricaoPreview.value || form.value.descricao
+      descricao: descricaoPreview.value || form.value.descricao,
+      aproximado: form.value.compraAproximada
     })
   );
 
@@ -73,10 +101,21 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       : ""
   );
 
+  /** Regras fiscais por grupo da planilha oficial (com a margem padrao). Fora do ar = lista vazia. */
+  const regrasFiscais = ref<RegraFiscalGrupo[]>([]);
+  /** Planilha fiscal fora do ar: a previa do preco fica sem a margem do grupo (o servidor recalcula). */
+  const planilhaFiscalForaDoAr = ref(false);
+  /** Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial. */
+  const margemDoGrupo = computed(() => {
+    const nome = grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.nome;
+    if (!nome) return 0;
+    const chave = normalizarGrupoFiscal(nome);
+    return regrasFiscais.value.find((regra) => normalizarGrupoFiscal(regra.grupo) === chave)?.margemPadrao ?? 0;
+  });
+
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
-   * numero antes de salvar. `margemGrupo: 0` porque `grupos_mercadorias.margem` ainda nao existe
-   * (migration bloqueada; ver PROJECT_BRAIN/30 §7).
+   * numero antes de salvar. Sem margem propria vale a margem do grupo da planilha (igual ao oficial).
    */
   const precoPreview = computed(() =>
     calcularPrecoVenda({
@@ -84,23 +123,39 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       custo: numero(form.value.custo) ?? 0,
       quantidadeCaixa: numero(form.value.quantidadeCaixa) ?? 1,
       margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
-      margemGrupo: 0,
+      margemGrupo: margemDoGrupo.value,
       precoManual: numero(form.value.precoVenda) ?? 0,
-      temProduto: Boolean(form.value.descricao.trim())
+      temProduto: Boolean(form.value.nomeCatalogo.trim())
     })
   );
 
   /** Erros por campo — alimentam `error-messages` e o foco no primeiro invalido. */
   const erros = computed(() => {
     const lista: Record<string, string> = {};
-    if (!form.value.descricao.trim()) lista["descricao"] = "Informe a descrição do produto.";
+    if (!form.value.nomeCatalogo.trim()) lista["nomeCatalogo"] = "Informe o nome do produto.";
     if (!form.value.unidadeIndividualId) lista["unidadeIndividualId"] = "Escolha a unidade individual.";
     const quantidade = numero(form.value.quantidadeIndividual);
-    if (quantidade == null || quantidade <= 0) lista["quantidadeIndividual"] = "A quantidade precisa ser maior que 0.";
+    if (quantidade == null || quantidade < 0) lista["quantidadeIndividual"] = "Informe a quantidade (0 ou mais).";
+    if (grupoObrigatorio.value && !form.value.grupoMercadoriaId) {
+      lista["grupoMercadoriaId"] = "Selecione o grupo de mercadorias para aplicar os impostos.";
+    }
+    if (form.value.pesavel === null) lista["pesavel"] = "Escolha Sim ou Não para o campo Vai para balança.";
+    const [erroDeBalanca] = validarBalanca({
+      pesavel: form.value.pesavel,
+      validadeBalanca: form.value.validadeBalanca === "" ? null : numero(form.value.validadeBalanca)
+    });
+    if (erroDeBalanca) lista["validadeBalanca"] = erroDeBalanca;
     const minimo = numero(form.value.estoqueMin);
     const maximo = numero(form.value.estoqueMax);
     if (minimo != null && maximo != null && maximo < minimo) {
       lista["estoqueMax"] = "O máximo não pode ser menor que o mínimo.";
+    }
+    for (const item of validarEstoquePorEmbalagem({
+      quantidadeCaixa: numero(form.value.quantidadeCaixa),
+      estoqueMin: form.value.estoqueMin === "" ? null : minimo,
+      estoqueMax: form.value.estoqueMax === "" ? null : maximo
+    })) {
+      lista[item.campo] ??= item.mensagem;
     }
     const unidadesDasConversoes = form.value.conversoes.map((item) => item.unidadeMedidaId).filter(Boolean);
     if (new Set(unidadesDasConversoes).size !== unidadesDasConversoes.length) {
@@ -134,6 +189,12 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     ]);
     unidades.value = listaUnidades;
     grupos.value = listaGrupos.gruposMercadorias;
+    // A planilha pode estar fora do ar: a tela segue, e a previa usa margem 0 ate ela voltar.
+    const fonte = await apiGet<{ disponivel: boolean; regras: RegraFiscalGrupo[] }>(
+      "/api/produtos/regras-fiscais"
+    ).catch(() => ({ disponivel: false, regras: [] }));
+    regrasFiscais.value = fonte.regras;
+    planilhaFiscalForaDoAr.value = !fonte.disponivel;
   }
 
   async function carregar() {
@@ -142,8 +203,19 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     try {
       await carregarOpcoes();
       if (produtoId.value) {
-        form.value = formularioDoDetalhe(await apiGet<ProdutoDetalhe>(`/api/produtos/${produtoId.value}`));
+        const detalhe = await apiGet<ProdutoDetalhe>(
+          modo.value === "base"
+            ? `/api/produtos/base/${produtoId.value}?empresaId=${encodeURIComponent(empresaId.value)}`
+            : `/api/produtos/${produtoId.value}`
+        );
+        form.value = formularioDoDetalhe(detalhe);
+        produtoBaseId.value = detalhe.produtoBaseId;
+        loja.value = detalhe.loja;
+        heranca.value = detalhe.heranca;
+      } else {
+        loja.value = modo.value === "base" ? "BASE" : "";
       }
+      grupoOriginal.value = form.value.grupoMercadoriaId || null;
       estadoOriginal = JSON.stringify(form.value);
       alterado.value = false;
     } catch (falha) {
@@ -163,13 +235,16 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     erro.value = "";
     duplicado.value = "";
     try {
-      const payload = payloadDoFormulario(form.value, empresaId.value, forcar);
+      const payload = payloadDoFormulario(form.value, empresaId.value, forcar, descricaoPreview.value);
       let id = produtoId.value;
-      if (id) {
+      if (modo.value === "base") {
+        // Produto novo so nasce na BASE (oficial); a loja recebe por importacao.
+        if (id) await apiPut(`/api/produtos/base/${id}`, payload);
+        else id = (await apiPost<{ id: string }>("/api/produtos/base", payload)).id;
+      } else if (id) {
         await apiPut(`/api/produtos/${id}`, payload);
       } else {
-        const criado = await apiPost<{ id: string }>("/api/produtos", payload);
-        id = criado.id;
+        throw new Error("Produto novo é cadastrado na base geral e importado pela loja.");
       }
       // Foto escolhida antes de o produto existir sobe agora. Se ELA falhar, o produto ja esta
       // salvo — o erro aparece, mas ninguem recadastra o produto por causa disso.
@@ -182,8 +257,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       return id;
     } catch (falha) {
       const mensagem = mensagemErro(falha);
-      // "Cadastrar mesmo assim" vale para descricao repetida; EAN repetido e bloqueio absoluto.
-      if (mensagem.includes("Ja existe o produto") && !mensagem.includes("codigo de barras")) {
+      // "Cadastrar mesmo assim" vale para nome e para codigo de barras repetidos (oficial).
+      if (mensagem.includes("Ja existe o produto")) {
         duplicado.value = mensagem;
       } else {
         erro.value = mensagem;
@@ -194,11 +269,17 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     }
   }
 
+  /** Devolve ao formulario os valores da base nos campos herdados (oficial "Voltar a herdar da base"). */
+  function voltarAHerdar() {
+    if (heranca.value) aplicarValoresDaBase(form.value, heranca.value.base);
+  }
+
   const { apiUrl } = useApi();
   async function enviarFotoPendente(id: string) {
     const corpo = new FormData();
     corpo.append("arquivo", fotoPendente.value as File);
-    const resposta = await fetch(`${apiUrl}/api/produtos/${id}/foto`, {
+    const rota = modo.value === "base" ? "/api/produtos/base" : "/api/produtos";
+    const resposta = await fetch(`${apiUrl}${rota}/${id}/foto`, {
       method: "POST",
       credentials: "include",
       body: corpo
@@ -219,11 +300,19 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     erros,
     errosDePromocao,
     valido,
+    grupoObrigatorio,
     siglaDaUnidade,
     descricaoPreview,
     comoSeCompraPreview,
     validacaoQtdPreview,
     precoPreview,
+    margemDoGrupo,
+    planilhaFiscalForaDoAr,
+    produtoBaseId,
+    loja,
+    heranca,
+    herdadoTravado,
+    voltarAHerdar,
     carregar,
     salvar
   };

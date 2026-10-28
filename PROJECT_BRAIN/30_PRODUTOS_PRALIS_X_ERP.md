@@ -6,6 +6,13 @@
 > Complementa o `24`, que já havia detectado que o módulo existe. Este documento vai ao detalhe e
 > responde à pergunta prática: **o que ainda falta trazer, e como.**
 
+> **Atualização de 26/10/2026 — R-222:** José definiu que o app Cadastro de Produtos atualmente usado
+> nas lojas é a fonte oficial e deve ser integrado ao ERP, inclusive dados e funcionalidades fiscais.
+> Isso revoga as conclusões conflitantes da R-145/R-165 abaixo, que ficam preservadas apenas como
+> histórico. O app standalone não pode ser considerado aposentado até a paridade ser entregue e
+> verificada. A origem de código consultada é `SISTEMA_PRALIS@1ba6774`; confirmar o SHA real de produção
+> antes de qualquer carga. Ver R-222 em `19_REGISTRO_DE_REGRAS.md` e plano `56`.
+
 ---
 
 > ⚠️ **Errata de 12/08/2026 (P-04).** Este documento foi escrito em 05/08 e seis afirmações dele
@@ -393,3 +400,34 @@ O que **já está pronto e testado** no nível de regra pura, esperando só a fi
 
 O único ponto de fiação no servidor está marcado no código com
 `TODO(P-04/ETAPA 4)` em `api/src/produtos/produtos.service.ts`.
+
+## §8 · Retomada de integração oficial (26/10/2026)
+
+A R-222 e a inspeção autenticada de 26/10 substituem as conclusões antigas desta seção quando
+conflitarem com o app que está operando nas lojas. A branch `feat/cadastro-produtos-integracao`
+está sendo continuada com o app oficial como referência; o catálogo antigo do ERP não foi removido.
+
+- O motor de agrupamento, o parser de fontes e a prévia sem escrita em `produtos` estão em
+  `shared/src/produtos/central-*` e `api/src/produtos/produtos-central.*`.
+- A rota `/produtos/central` agora permite criar carga, anexar CSVs, validar, filtrar e comparar
+  grupos e registrar as decisões auditáveis `ignorado` e `nao_e_o_mesmo`. Essas ações não criam nem
+  atualizam produtos. A área é administrativa e distinta da manutenção do catálogo.
+- Ainda não estão implementadas as decisões de vincular/atualizar e adicionar à Base, nem as fontes
+  vivas de Pralis/PDV. Não usar exportações antigas para importar o catálogo atual.
+- Código interno deve seguir `proximoCodigoInterno` e `calcularProximoCodigoInterno` da R-222, com
+  geração global serializada. A correspondência por código interno continua restrita à mesma loja;
+  jamais copiar o código do SIA/CREARE sobre um destino sem validação do fluxo de reconciliação.
+- A 0081 (colunas `nome_catalogo` e `pesavel`) já estava aplicada no banco local `padaria`. Com
+  autorização explícita, 0082 criou `produtos_historico_nomes` e 0083 criou as cinco tabelas de
+  staging/auditoria. A primeira tentativa de 0083 foi revertida porque duas FKs compostas precediam
+  seus índices únicos; a ordem foi corrigida sem mudar o schema e a aplicação local seguinte passou.
+  Nenhuma migration foi aplicada em homologação/produção, e nenhuma linha de produto foi alterada.
+- Não foi importado, atualizado ou excluído nenhum registro de catálogo. Não houve alteração em
+  homologação/produção, deploy, push ou merge.
+
+**Paridade integral segue incompleta.** Antes de encerrar esta integração, portar e testar a lista,
+formulário completo, identidade/código, fiscal, embalagem/conversões, foto, scanner, ajuda, promoções,
+transformação, importação e conferência de planilha, Central, histórico, permissões e relatórios;
+resolver duplicidades antigas do ERP; verificar 1440/1024/768/390; obter a versão efetivamente
+implantada como referência; e fechar gates de lint, check e testes. A tela de prévia desta etapa não
+é a conclusão do pedido.

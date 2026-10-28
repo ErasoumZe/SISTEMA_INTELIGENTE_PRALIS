@@ -110,30 +110,30 @@ describe("produtos/regras — texto e lookups", () => {
     expect(montarDescricao("Farinha de Trigo", 25, "KG")).toBe("FARINHA DE TRIGO 25 KG");
   });
 
-  // Formato OFICIAL (12/08/2026). Havia duas implementacoes divergentes — a compartilhada
-  // (`"1 SACO DE25 (…)"`) e a da tela; sobrou uma so, e este e o caso canonico do enunciado.
-  it("montarComoSeCompra: formato oficial com DE", () => {
+  it("montarComoSeCompra: formato oficial com DE e quantidade exata", () => {
     expect(
       montarComoSeCompra({
         embalagem: "SACO",
         cDe: "DE",
         quantidadeCaixa: 25,
         medidaCompra: "KG",
-        descricao: "FARINHA DE TRIGO 25 KG"
+        descricao: "FARINHA DE TRIGO 25 KG",
+        aproximado: false
       })
-    ).toBe("Saco de 25 KG — FARINHA DE TRIGO 25 KG");
+    ).toBe("FARINHA DE TRIGO 25 KG - SACO DE FARINHA DE TRIGO 25 KG 25KG");
   });
 
-  it("montarComoSeCompra: formato oficial com C/", () => {
+  it("montarComoSeCompra: formato oficial aproximado com C/", () => {
     expect(
       montarComoSeCompra({
         embalagem: "CX",
         cDe: "C/",
         quantidadeCaixa: 12,
         medidaCompra: "UN",
-        descricao: "REFRIGERANTE 350 ML"
+        descricao: "QUEIJO MINAS FRESCAL KG",
+        aproximado: true
       })
-    ).toBe("Caixa com 12 UN — REFRIGERANTE 350 ML");
+    ).toBe("QUEIJO MINAS FRESCAL KG - CAIXA COM QUEIJO MINAS FRESCAL KG APROXIMADAMENTE 12UN");
   });
 
   it("montarComoSeCompra: sigla fora do dicionario vira ela mesma", () => {
@@ -143,9 +143,10 @@ describe("produtos/regras — texto e lookups", () => {
         cDe: "DE",
         quantidadeCaixa: 5,
         medidaCompra: "LT",
-        descricao: "OLEO 5 LT"
+        descricao: "OLEO 5 LT",
+        aproximado: false
       })
-    ).toBe("BALDE de 5 LT — OLEO 5 LT");
+    ).toBe("OLEO 5 LT - BALDE DE OLEO 5 LT 5LT");
   });
 
   it("montarComoSeCompra: sem embalagem nao inventa texto", () => {
@@ -155,7 +156,8 @@ describe("produtos/regras — texto e lookups", () => {
         cDe: "DE",
         quantidadeCaixa: 25,
         medidaCompra: "KG",
-        descricao: "FARINHA DE TRIGO 25 KG"
+        descricao: "FARINHA DE TRIGO 25 KG",
+        aproximado: false
       })
     ).toBe("");
   });

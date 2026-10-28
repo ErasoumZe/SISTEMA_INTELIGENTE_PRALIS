@@ -65,6 +65,12 @@ describe("seguranca default-deny integration", () => {
       "/api/admissao/ficha",
       "/api/admissao/ficha/enviar",
       "/api/auth/*",
+      // R-222: o robo da loja baixa o TXT do PDV e registra a entrega por Bearer proprio (CREARE_EXPORT_TOKEN);
+      // sem bearer, a propria rota exige a sessao. Testado em produtos-creare.test.ts.
+      "/api/creare/lotes/:id/confirmar",
+      "/api/creare/lotes/:id/entrega",
+      "/api/creare/lotes/pendente",
+      "/api/creare/produtos.txt",
       "/api/integracoes",
       "/api/integracoes/conciliacao",
       "/api/me",
