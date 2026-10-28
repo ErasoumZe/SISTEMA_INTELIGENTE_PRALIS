@@ -15,6 +15,13 @@ import { consultarUm, executarSql } from "../../setup/integracao.js";
  * mostrar nada da ficha, que o filtro seja do servidor (com total coerente), e que continuar
  * respeitando a fronteira de empresa e a de documento.
  */
+const SEQUENCIA_DE_11_DIGITOS = /(?<!\d)\d{11}(?!\d)/u;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+// Tira os identificadores aleatorios do corpo antes de procurar digitos de CPF.
+function semUuids(corpo: string) {
+  return corpo.replace(UUID, "");
+}
+
 describe("admissoes fila de revisao integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
@@ -276,8 +283,10 @@ describe("admissoes fila de revisao integration", () => {
         "turnoResumo"
       ]);
     }
-    // E o corpo inteiro nao carrega digito de CPF nem texto de pendencia.
-    expect(resposta.body).not.toMatch(/(?<!\d)\d{11}(?!\d)/u);
+    // E o corpo inteiro nao carrega digito de CPF nem texto de pendencia. Os `id` (UUID) saem antes da busca: o
+    // ultimo bloco de um UUID tem 12 hexadecimais e, as vezes, 11 deles sao digitos — a regex confundia isso com um
+    // CPF e a suite falhava ao acaso (~1 em cada 25 execucoes), sem nenhum dado pessoal vazando.
+    expect(semUuids(resposta.body)).not.toMatch(SEQUENCIA_DE_11_DIGITOS);
     expect(resposta.body).not.toContain("Confira o RG.");
     expect(resposta.body).not.toContain("nomeMae");
     expect(resposta.body).not.toContain("dependentes");
@@ -412,5 +421,15 @@ describe("admissoes fila de revisao integration", () => {
     const semPermissao = await cookieSessao(contexto.app, "semPermissao");
     const resposta = await listar("page=1&pageSize=10&ficha=enviada", semPermissao);
     expect(resposta.statusCode).toBe(403);
+  });
+
+  it("a checagem de CPF ignora UUID (um id com 11 digitos seguidos nao e CPF)", () => {
+    const corpoComIdDeOnzeDigitos = '{"ok":true,"data":[{"id":"01a1834d-4900-7000-8000-12345678901a"}]}';
+    expect(corpoComIdDeOnzeDigitos).toMatch(SEQUENCIA_DE_11_DIGITOS);
+    expect(semUuids(corpoComIdDeOnzeDigitos)).not.toMatch(SEQUENCIA_DE_11_DIGITOS);
+    // E um CPF de verdade, fora de um UUID, continua sendo pego.
+    expect(semUuids('{"id":"01a1834d-4900-7000-8000-12345678901a","cpf":"12345678901"}')).toMatch(
+      SEQUENCIA_DE_11_DIGITOS
+    );
   });
 });
