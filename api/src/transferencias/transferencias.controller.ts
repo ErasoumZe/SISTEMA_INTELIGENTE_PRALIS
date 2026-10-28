@@ -10,7 +10,8 @@ import {
 } from "@padaria/shared/transferencias";
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
-import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
+import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray, paginadoDeResultado } from "@padaria/shared/api";
+import { temPermissao } from "@padaria/shared/autenticacao";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarTransferencia,
@@ -48,7 +49,24 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       );
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
-      return paginadoDeArray(await listarTransferencias(queryComCaixa, escopoDados), query.page, query.pageSize);
+      // O numero dos lacres AINDA NAO rompidos (fechamento e bolsas) e o segredo fisico do posto: so quem
+      // confere ou cadastra lacre o le, e nunca quem esta preso ao proprio caixa. Os demais veem so a situacao.
+      const permissoes = request.perfilUsuario?.permissoes;
+      const presoAoProprioCaixa = temPermissao(permissoes, "menu_transferencias_somente_caixa_aberto");
+      const mostrarNumerosLacre =
+        !presoAoProprioCaixa &&
+        (temPermissao(permissoes, "transferencias_conferir") || temPermissao(permissoes, "cadastro_lacres_visualizar"));
+      const resultado = await listarTransferencias(queryComCaixa, escopoDados, {
+        page: query.page,
+        pageSize: query.pageSize,
+        mostrarNumerosLacre
+      });
+      return paginadoDeResultado({
+        itens: resultado.itens,
+        total: resultado.total,
+        page: query.page,
+        pageSize: query.pageSize
+      });
     }
   );
 

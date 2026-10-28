@@ -49,7 +49,7 @@ describe("TransferenciasFiltros", () => {
 
     await wrapper.get(".filtros-transferencias__mais").trigger("click");
 
-    expect(wrapper.html()).toContain("Criado por");
+    expect(wrapper.html()).toContain("Lançado por");
     expect(wrapper.html()).toContain("Conta de origem");
     expect(wrapper.html()).toContain("Conta de destino");
     expect(wrapper.html()).toContain("Lacre");
