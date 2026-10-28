@@ -54,9 +54,9 @@ describe("VendasCanceladasBotao", () => {
     expect(conteudo).toContain("fora dos totais do caixa");
   });
 
-  it("sem cancelamento o botao fica desabilitado e diz que nao ha venda cancelada", () => {
+  it("sem cancelamento o botao continua ativo e o popup diz que nao ha venda cancelada", () => {
     const wrapper = montar([]);
-    expect(wrapper.get('[data-teste="botao-vendas-canceladas"]').attributes("disabled")).toBeDefined();
-    expect(wrapper.text()).toContain("Nenhuma venda cancelada neste caixa");
+    expect(wrapper.get('[data-teste="botao-vendas-canceladas"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.get('[data-teste="sem-vendas-canceladas"]').text()).toContain("Nenhuma venda cancelada neste caixa");
   });
 });

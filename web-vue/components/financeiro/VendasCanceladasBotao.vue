@@ -32,7 +32,6 @@ function quando(valor: unknown) {
       color="deep-purple-lighten-2"
       class="vc__botao"
       prepend-icon="mdi-receipt-text-remove-outline"
-      :disabled="!vendas.length"
       data-teste="botao-vendas-canceladas"
       @click="aberto = true"
     >
@@ -40,7 +39,6 @@ function quando(valor: unknown) {
       <span class="vc__contagem">{{ vendas.length }}</span>
       <span v-if="vendas.length" class="vc__valor cx-num">{{ dinheiro(total) }}</span>
     </v-btn>
-    <p v-if="!vendas.length" class="vc__vazio">Nenhuma venda cancelada neste caixa.</p>
 
     <v-dialog v-model="aberto" max-width="720" scrollable>
       <v-card class="vc__card">
@@ -49,7 +47,10 @@ function quando(valor: unknown) {
           <v-btn icon="mdi-close" aria-label="Fechar vendas canceladas" @click="aberto = false" />
         </v-toolbar>
         <v-card-text class="vc__corpo">
-          <p class="vc__nota">{{ dinheiro(total) }} em vendas canceladas, fora dos totais do caixa.</p>
+          <p v-if="vendas.length" class="vc__nota">
+            {{ dinheiro(total) }} em vendas canceladas, fora dos totais do caixa.
+          </p>
+          <p v-else class="vc__vazio" data-teste="sem-vendas-canceladas">Nenhuma venda cancelada neste caixa.</p>
           <article v-for="venda in vendas" :key="String(venda.id)" class="vc__venda">
             <header>
               <strong>{{ texto(venda.descricao) }}</strong>
