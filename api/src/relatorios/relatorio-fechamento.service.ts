@@ -13,6 +13,7 @@ import {
   listarAnexosFechamentoCaixaRepository,
   listarConferenciasFisicasCaixaRepository,
   listarConferenciasTesourariaFechamentoRepository,
+  listarIndisponibilidadesCaixaRepository,
   listarLancamentosCaixaRepository,
   listarQuebrasCaixaRepository,
   listarTransferenciasCaixaRepository,
@@ -115,7 +116,8 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
     anexos,
     lancamentos,
     vendasCanceladas,
-    ajuste
+    ajuste,
+    indisponibilidades
   ] = await Promise.all([
     buscarResumoFechamentoCaixaRepository(caixa.id, caixa.empresaId),
     listarTransferenciasCaixaRepository(caixa.id),
@@ -127,7 +129,8 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
     listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId),
     listarLancamentosCaixaRepository(caixa.id),
     listarVendasCanceladasCaixaRepository(caixa.id),
-    buscarAjusteCaixaRepository(caixa.id)
+    buscarAjusteCaixaRepository(caixa.id),
+    listarIndisponibilidadesCaixaRepository(caixa.id, caixa.empresaId)
   ]);
 
   return {
@@ -192,6 +195,12 @@ export async function obterDossieFechamento(caixaId: string, perfil: PerfilUsuar
     anexos: anexos.map((item) => ({ ...item, criadoEm: iso(item.criadoEm) })),
     lancamentos,
     vendasCanceladas,
+    // Paradas do computador do PDV durante o caixa (motivos, inicio, retorno, quem registrou). Aditivo.
+    indisponibilidades: indisponibilidades.map((parada) => ({
+      ...parada,
+      iniciadoEm: iso(parada.iniciadoEm),
+      retornadoEm: iso(parada.retornadoEm)
+    })),
     ajuste: ajuste ? { ...ajuste, valorDiferenca: numero(ajuste.valorDiferenca), criadoEm: iso(ajuste.criadoEm) } : null
   };
 }
