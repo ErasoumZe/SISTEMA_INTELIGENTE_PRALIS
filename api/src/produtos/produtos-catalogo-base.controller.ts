@@ -43,7 +43,9 @@ const queryCatalogoBase = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(30),
   busca: z.string().trim().max(200).optional(),
-  status: z.enum(["ativo", "inativo"]).optional()
+  status: z.enum(["ativo", "inativo"]).optional(),
+  /** Loja de destino da importacao: liga o `jaImportado` de cada linha. */
+  empresaId: z.string().uuid().optional()
 });
 const produtoBaseParams = z.object({ produtoBaseId: z.string().uuid() });
 const corpoCopiaBase = z.object({ empresaId: z.string().uuid().optional() });
@@ -162,7 +164,8 @@ export async function registrarRotasCatalogoBase(app: FastifyInstance): Promise<
     { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
     async (request) => {
       const query = queryCatalogoBase.parse(request.query);
-      const resultado = await listarCatalogoBase(query);
+      const perfil = request.perfilUsuario;
+      const resultado = await listarCatalogoBase(query, perfil ? empresasPermitidas(perfil) : []);
       return ok({ ...resultado, page: query.page, pageSize: query.pageSize });
     }
   );

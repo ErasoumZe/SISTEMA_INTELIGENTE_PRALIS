@@ -9,6 +9,7 @@ import { dinheiro, itemPorTela } from "~/utils/domain";
 import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 import { limitarNotificacoesDoSino } from "~/utils/notificacoes";
+import { telasComSubmenuDeProdutos } from "~/utils/menu";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -208,12 +209,9 @@ onMounted(() => {
 
 <template>
   <v-layout class="padaria-shell shell-mobills">
-    <!-- A coluna de navegacao vive no AppSidebar.vue desde o VIS-E7a. O que ficou aqui e o que e
-         da CASCA: layout, breakpoints, topbar. O estado do drawer continua nascendo aqui porque o
-         botao de menu da topbar tambem o alterna — dois donos para um estado seria a origem de um
-         descompasso, e o 67 §13.1 documenta o preco disso. -->
+    <!-- Menu no AppSidebar (VIS-E7a); o drawer nasce aqui porque a topbar tambem o alterna (67 §13.1). -->
     <AppSidebar
-      :telas="telas"
+      :telas="telasComSubmenuDeProdutos(telas, sessao.perfil)"
       :estrutura-menu="estruturaMenuResolvida"
       :tela-ativa="telaAtiva"
       :telas-desabilitadas="telasDesabilitadas"

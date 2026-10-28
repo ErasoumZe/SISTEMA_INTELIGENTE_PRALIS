@@ -1,5 +1,6 @@
-import type { FiltrosDeProduto, OrdenacaoProdutos, ProdutoResumo } from "@padaria/shared";
+import type { FiltrosDeProduto, OrdenacaoProdutos, ProdutoResumo, RegraFiscalGrupo } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
+import { margensPorGrupo, precoCalculadoDoProduto } from "~/utils/produto-preco-card";
 
 /**
  * Estado da listagem de produtos. Busca, filtros, ordenacao e paginacao sao TODOS resolvidos no
@@ -100,6 +101,10 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     }
   }
 
+  /** Preco do card: a MESMA conta do formulario ("V. Venda (calculado)"). */
+  const margens = ref<Map<string, number>>(new Map());
+  const precoDe = (produto: ProdutoResumo) => precoCalculadoDoProduto(produto, margens.value);
+
   async function carregarOpcoesDeFiltro() {
     if (!empresaId.value) return;
     try {
@@ -107,6 +112,9 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     } catch {
       opcoesDeFiltro.value = { setores: [], grupos: [] };
     }
+    // Margem padrao por grupo (planilha): sem ela o card cai na margem 0, como o formulario.
+    const fonte = await apiGet<{ regras: RegraFiscalGrupo[] }>("/api/produtos/regras-fiscais").catch(() => null);
+    margens.value = margensPorGrupo(fonte?.regras ?? []);
   }
 
   /** Trocar filtro, ordem ou busca sempre volta para a pagina 1 — senao a pagina 3 de outro recorte. */
@@ -152,6 +160,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     temFiltroOuBusca,
     limparFiltros,
     carregar,
-    carregarOpcoesDeFiltro
+    carregarOpcoesDeFiltro,
+    precoDe
   };
 }

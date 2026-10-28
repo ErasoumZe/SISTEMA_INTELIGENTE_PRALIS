@@ -273,6 +273,11 @@ export interface ProdutoResumo {
   toleranciaQuantidadePercentual: string | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
+  /** Insumos do preco calculado do card (mesma conta do formulario). */
+  custo: string | null;
+  margem: string | null;
+  auto: boolean;
+  quantidadeCaixa: number;
   fotoUrl: string | null;
   criadoPorNome: string | null;
 }
@@ -437,3 +442,4 @@ export * from "./semelhanca-de-nome.js";
 export * from "./codigo-cadastro.js";
 export * from "./custo-mer.js";
 export * from "./grupo-id.js";
+export * from "./codigo-barras.js";

@@ -22,6 +22,62 @@ export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
 
 const categoriaPorId = new Map(CATEGORIAS_MENU.map((categoria) => [categoria.id, categoria] as const));
 
+/**
+ * Submenu "Produtos" (paralelo: "Importar da base" no menu da loja; as telas do catalogo para o
+ * administrador). As subtelas NAO entram no `itemPorTela`: elas nao tem permissao de menu propria
+ * (nenhuma chave `menu_*` nova) e seguem a tela "produtos" — so aparecem quando ela aparece. A
+ * permissao aqui e conveniencia; quem decide e o servidor (importar exige `cadastro_produtos_criar`,
+ * Manutencao e Central exigem administrador).
+ */
+export const ID_CATEGORIA_PRODUTOS = "produtos_categoria";
+export const ROTAS_SUBTELAS_DE_PRODUTOS: Record<string, string> = {
+  produtos_importar: "/produtos/base",
+  produtos_manutencao: "/produtos/manutencao",
+  produtos_central: "/produtos/central"
+};
+
+export function telasComSubmenuDeProdutos(
+  telas: readonly ItemMenu[],
+  perfil: { role?: string | null; permissoes?: readonly string[] | null } | null | undefined
+): ItemMenu[] {
+  const produtos = telas.find((tela) => tela.id === "produtos");
+  if (!produtos) return [...telas];
+  const ehAdmin = perfil?.role === "usuario_admin";
+  const subtelas: ItemMenu[] = [];
+  if (ehAdmin || perfil?.permissoes?.includes("cadastro_produtos_criar")) {
+    subtelas.push({
+      ...produtos,
+      id: "produtos_importar",
+      titulo: ehAdmin ? "Catálogo BASE" : "Importar da base",
+      icone: "mdi-database-import-outline"
+    });
+  }
+  if (ehAdmin) {
+    subtelas.push(
+      { ...produtos, id: "produtos_manutencao", titulo: "Manutenção", icone: "mdi-wrench-outline" },
+      { ...produtos, id: "produtos_central", titulo: "Central de produtos", icone: "mdi-merge" }
+    );
+  }
+  return [...telas, ...subtelas];
+}
+
+/** Com subtelas, "produtos" vira a categoria "Produtos" (a lista + as subtelas); sem, segue tela. */
+function categoriaDeProdutos<T extends ItemMenu>(restantes: Map<string, T>): NoMenu<T> | null {
+  const produtos = restantes.get("produtos");
+  const subtelas = Object.keys(ROTAS_SUBTELAS_DE_PRODUTOS)
+    .map((id) => restantes.get(id))
+    .filter((tela): tela is T => Boolean(tela));
+  if (!produtos || !subtelas.length) return null;
+  for (const tela of [produtos, ...subtelas]) restantes.delete(tela.id);
+  return {
+    tipo: "categoria",
+    id: ID_CATEGORIA_PRODUTOS,
+    titulo: produtos.titulo,
+    icone: produtos.icone,
+    itens: [{ ...produtos, titulo: "Lista de produtos" }, ...subtelas]
+  };
+}
+
 // Um no do menu: ou uma tela (folha, vira link) ou uma categoria (abre/fecha e revela as telas).
 export type NoMenu<T extends ItemMenu> =
   | ({ tipo: "tela" } & T)
@@ -161,6 +217,8 @@ export function agruparTelasMenu<T extends ItemMenu>(
   idsOcultos: readonly string[] = []
 ): GrupoMenu<T>[] {
   const ocultos = new Set(idsOcultos);
+  // As subtelas de Produtos seguem a tela "produtos": escondida ela, somem junto.
+  if (ocultos.has("produtos")) for (const id of Object.keys(ROTAS_SUBTELAS_DE_PRODUTOS)) ocultos.add(id);
   const restantes = new Map(telas.filter((tela) => !ocultos.has(tela.id)).map((tela) => [tela.id, tela] as const));
   const grupos: GrupoMenu<T>[] = [];
   for (const secao of estrutura) {
@@ -192,6 +250,11 @@ export function agruparTelasMenu<T extends ItemMenu>(
         }
         continue;
       }
+      const submenu = id === "produtos" ? categoriaDeProdutos(restantes) : null;
+      if (submenu) {
+        itens.push(submenu);
+        continue;
+      }
       const tela = restantes.get(id);
       if (tela) {
         itens.push(noTela(tela));
@@ -200,7 +263,8 @@ export function agruparTelasMenu<T extends ItemMenu>(
     }
     if (itens.length) grupos.push({ titulo: secao.titulo, cor: secao.cor, corRgb: secao.corRgb, itens });
   }
-  const outras = [...restantes.values()].map(noTela);
+  const submenuSemSecao = categoriaDeProdutos(restantes);
+  const outras: NoMenu<T>[] = [...(submenuSemSecao ? [submenuSemSecao] : []), ...[...restantes.values()].map(noTela)];
   if (outras.length) grupos.push({ titulo: "Geral", itens: outras });
   return grupos;
 }

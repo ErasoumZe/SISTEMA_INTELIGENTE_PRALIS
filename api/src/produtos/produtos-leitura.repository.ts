@@ -1,5 +1,21 @@
-import { and, asc, count, desc, eq, exists, ilike, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNotNull,
+  ne,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper
+} from "drizzle-orm";
 import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
+import { variantesDeCodigoDeBarras } from "@padaria/shared/produtos";
 import type { OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
 import {
   empresas,
@@ -24,6 +40,18 @@ const SEM_RESULTADO = "00000000-0000-0000-0000-000000000000";
 /** `%` e `_` sao curingas do LIKE: sem escapar, buscar "50%" varreria a tabela inteira. */
 function termoDeBusca(bruto: string): string {
   return `%${bruto.replace(/[\\%_]/g, (caractere) => `\\${caractere}`)}%`;
+}
+
+/**
+ * EAN por IGUALDADE com as variantes do oficial (`barcodeCandidates`): sem zeros a esquerda dos dois
+ * lados e etiqueta de balanca achando o PLU. Pedaco de EAN nao acha mais nada — codigo de barras e
+ * identidade, nao texto de busca. Busca com LETRA nao gera condicao de EAN: "item 03" viraria o EAN
+ * "403" e traria outro produto (o oficial tira os digitos de qualquer texto).
+ */
+export function codigoDeBarrasIgualA(coluna: SQLWrapper, busca: string): SQL | undefined {
+  if (/\p{L}/u.test(busca)) return undefined;
+  const variantes = variantesDeCodigoDeBarras(busca);
+  return variantes.length ? inArray(codigoBarrasSemZerosIniciais(coluna), variantes) : undefined;
 }
 
 export interface FiltroListaProdutos {
@@ -78,7 +106,7 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
         ilike(produtos.marca, termo),
         ilike(produtos.codigo, termo),
         ilike(produtos.codigoInterno, termo),
-        ilike(produtos.codigoBarras, termo)
+        codigoDeBarrasIgualA(produtos.codigoBarras, filtro.busca)
       )
     );
   }
@@ -146,6 +174,11 @@ export async function listarProdutosPaginadoRepository(
       quantidadeVariavel: produtos.quantidadeVariavel,
       toleranciaQuantidadePercentual: produtos.toleranciaQuantidadePercentual,
       precoVenda: produtos.precoVenda,
+      // O card mostra o preco com a MESMA funcao do formulario (`calcularPrecoVenda`): ela precisa disto.
+      custo: produtos.custo,
+      margem: produtos.margem,
+      auto: produtos.auto,
+      quantidadeCaixa: produtos.quantidadeCaixa,
       fotoUrl: produtos.fotoUrl,
       criadoPorNome: perfisUsuarios.nome
     })

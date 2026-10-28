@@ -347,4 +347,49 @@ describe("produtos - modelo BASE (igual ao app oficial)", () => {
     });
     expect(daLoja.statusCode).toBe(200);
   });
+
+  async function listarBase(parametros: Record<string, string>) {
+    const consulta = new URLSearchParams({ page: "1", pageSize: "100", ...parametros });
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/catalogo-base?${consulta.toString()}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    return json<{ data: { itens: Array<{ id: string; jaImportado: boolean | null }> } }>(resposta).data.itens;
+  }
+
+  it("Deve_BuscarNaBasePeloEAN_SemZerosEPelaEtiquetaDeBalanca_PorIgualdade", async () => {
+    const comZeros = await criarNaBase({
+      nomeCatalogo: "BASE EAN COM ZEROS",
+      descricao: "BASE EAN COM ZEROS",
+      codigoBarras: "0789100000017"
+    });
+    const pesavel = await criarNaBase({
+      nomeCatalogo: "BASE PLU BALANCA",
+      descricao: "BASE PLU BALANCA",
+      codigoBarras: "13579"
+    });
+
+    expect((await listarBase({ busca: "789100000017" })).map((item) => item.id)).toContain(comZeros);
+    expect((await listarBase({ busca: "000789100000017" })).map((item) => item.id)).toContain(comZeros);
+    // Pedaco de EAN nao acha: codigo de barras e identidade, nao texto (oficial).
+    expect((await listarBase({ busca: "78910000" })).map((item) => item.id)).not.toContain(comZeros);
+    // Etiqueta da balanca (2 + PLU 13579 + peso + digito) acha o produto do PLU.
+    expect((await listarBase({ busca: "2135790012345" })).map((item) => item.id)).toContain(pesavel);
+  });
+
+  it("Deve_MarcarNaListaDaBaseOQueJaFoiImportadoParaALojaPedida", async () => {
+    const importado = await criarNaBase({ nomeCatalogo: "BASE MARCA IMPORTADO", descricao: "BASE MARCA IMPORTADO" });
+    const novo = await criarNaBase({ nomeCatalogo: "BASE MARCA NOVO", descricao: "BASE MARCA NOVO" });
+    await importar(importado, idsTeste.empresaA);
+
+    const naLojaA = await listarBase({ busca: "BASE MARCA", empresaId: idsTeste.empresaA });
+    expect(naLojaA.find((item) => item.id === importado)?.jaImportado).toBe(true);
+    expect(naLojaA.find((item) => item.id === novo)?.jaImportado).toBe(false);
+
+    // Sem loja de destino nao ha marca (a tela nao rotula a linha).
+    const semLoja = await listarBase({ busca: "BASE MARCA" });
+    expect(semLoja.find((item) => item.id === importado)?.jaImportado).toBeNull();
+  });
 });

@@ -4,7 +4,7 @@
  * mesma regra do "excluir em lote" do app oficial — aqui o lote so inativa, nunca apaga.
  */
 const props = defineProps<{ quantidade: number; frase: string; processando: boolean }>();
-const emit = defineEmits<{ confirmar: [confirmacao: string]; limpar: [] }>();
+const emit = defineEmits<{ confirmar: [confirmacao: string]; limpar: []; "selecionar-pagina": [] }>();
 
 const aberto = ref(false);
 const digitado = ref("");
@@ -24,6 +24,7 @@ defineExpose({ fechar: () => (aberto.value = false) });
       <strong class="cx-num">{{ quantidade }}</strong> produto(s) selecionado(s)
     </span>
     <div class="inativar-lote__acoes">
+      <v-btn size="small" variant="text" @click="emit('selecionar-pagina')">Selecionar página atual</v-btn>
       <v-btn size="small" variant="text" @click="emit('limpar')">Limpar seleção</v-btn>
       <v-btn size="small" color="error" variant="flat" prepend-icon="mdi-archive-outline" @click="abrir">
         Inativar selecionados
