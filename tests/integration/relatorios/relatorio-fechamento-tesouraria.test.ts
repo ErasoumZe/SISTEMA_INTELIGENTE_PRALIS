@@ -149,4 +149,43 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
       { resultado: "divergente", observacao: "Diferença de R$ 7,50 conferida na folha física." }
     ]);
   });
+
+  it("altera o status da decisao com motivo, nos dois sentidos, sem apagar o historico", async () => {
+    const conferir = (caixaId: string, payload: Record<string, unknown>) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/relatorios/fechamentos/${caixaId}/conferir`,
+        headers: { cookie: cookieTesouraria },
+        payload
+      });
+
+    // caixaFechado ja foi CONFERIDO acima e nao tem divergencia registrada: revisar para divergente exige motivo.
+    expect((await conferir(idsTeste.caixaFechado, { resultado: "divergente" })).statusCode).toBe(400);
+    const paraDivergente = await conferir(idsTeste.caixaFechado, {
+      resultado: "divergente",
+      observacao: "Folha fisica conferida de novo: faltou um comprovante."
+    });
+    expect(paraDivergente.statusCode, paraDivergente.body).toBe(200);
+
+    // E de volta para conferido: tambem exige motivo (nao e a primeira decisao).
+    expect((await conferir(idsTeste.caixaFechado, { resultado: "conferido" })).statusCode).toBe(400);
+    const deVolta = await conferir(idsTeste.caixaFechado, {
+      resultado: "conferido",
+      observacao: "Comprovante entregue e anexado."
+    });
+    expect(deVolta.statusCode, deVolta.body).toBe(200);
+
+    const eventos = await consultarTodos<{ resultado: string }>(
+      "select resultado from fechamentos_caixa_conferencias_tesouraria where fechamento_caixa_id = $1 order by conferido_em, id",
+      [idsTeste.caixaFechado]
+    );
+    expect(eventos.map((evento) => evento.resultado)).toEqual(["conferido", "divergente", "conferido"]);
+
+    const dossie = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${idsTeste.caixaFechado}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(json<{ data: { situacaoTesouraria: string } }>(dossie).data.situacaoTesouraria).toBe("conferido_tesouraria");
+  });
 });
