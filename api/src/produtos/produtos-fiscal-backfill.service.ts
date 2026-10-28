@@ -4,6 +4,7 @@ import { elegiveisDoBackfillRepository } from "./produtos-fiscal-backfill.reposi
 import { contextoFiscalRepository } from "./produtos-fiscal.repository.js";
 import { classificarProdutoFiscal, lojaFiscalDaEmpresa, tabelasFiscais } from "./produtos-fiscal.service.js";
 import { regravarFiscalDoProdutoRepository, travarCadastroDeProdutos } from "./produtos-escrita.repository.js";
+import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
 
 /**
  * Backfill da carga fiscal — igual ao `BackfillFiscalService` do app oficial (R-222): mesmo caminho de
@@ -117,6 +118,7 @@ export async function executarBackfillFiscal(
       // O MESMO caminho do cadastro: o backfill nunca produz produto diferente do que a tela produz.
       const fiscal = carimbar(aplicarResultadoFiscal(contexto.atual?.fiscal ?? null, resultado).fiscal);
       await regravarFiscalDoProdutoRepository(tx, produto.id, paraGravar(fiscal));
+      await registrarNaFilaDaPlanilha(tx, { empresaId: produto.empresaId, produtoId: produto.id });
     });
   }
   return {

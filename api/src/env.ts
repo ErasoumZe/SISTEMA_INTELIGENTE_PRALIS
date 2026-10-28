@@ -82,6 +82,12 @@ const envSchema = z.object({
     .default("false")
     .transform((valor) => valor === "true"),
   CREARE_STORE_CONFIG_JSON: z.string().default(""),
+  // Espelho do cadastro na planilha (R-222): DESLIGADO ate a virada — o app de Produtos ainda escreve la.
+  GOOGLE_PRODUTOS_ESPELHO_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  GOOGLE_PRODUTOS_BASE_TAB: z.string().trim().min(1).default("(BASE) CADASTRO PRODUTOS"),
   // Download pelo robo da loja (Bearer). Menos de 32 caracteres = desligado, nunca enfraquecido.
   CREARE_EXPORT_TOKEN: z.string().default(""),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde

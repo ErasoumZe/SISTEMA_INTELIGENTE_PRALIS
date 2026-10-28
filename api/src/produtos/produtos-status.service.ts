@@ -1,5 +1,7 @@
 import { fraseDeInativacaoEmLote, type AlterarStatusProdutosPayload } from "@padaria/shared/produtos";
 import { alterarStatusDeProdutosRepository } from "./produtos-status.repository.js";
+import { banco } from "../banco/conexao.js";
+import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
 
 /** Lote de status fora da regra: mais de um produto sem ser administrador, ou para ativar. */
 export class StatusEmLoteNaoPermitidoError extends Error {
@@ -35,5 +37,7 @@ export async function alterarStatusDeProdutos(
     }
   }
   const alterados = await alterarStatusDeProdutosRepository(entrada.empresaId, ids, entrada.status);
+  for (const produtoId of alterados)
+    await registrarNaFilaDaPlanilha(banco, { empresaId: entrada.empresaId, produtoId });
   return { alterados, ignorados: ids.filter((id) => !alterados.includes(id)) };
 }

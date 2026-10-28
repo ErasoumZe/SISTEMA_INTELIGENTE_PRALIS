@@ -44,6 +44,7 @@ import {
   type FiltroListaProdutos
 } from "./produtos-leitura.repository.js";
 import { detalheProdutoRepository } from "./produtos.repository.js";
+import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
 import { contextoFiscalRepository } from "./produtos-fiscal.repository.js";
 import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
 import { lojaFiscalDaEmpresa, margemPadraoDoGrupo, tabelasFiscais } from "./produtos-fiscal.service.js";
@@ -355,6 +356,8 @@ export async function salvarProduto(
         alteradoPorNome: ator.nome ?? null
       });
     }
+    // Espelho na planilha (desligado ate a virada): entra na fila na mesma transacao.
+    await registrarNaFilaDaPlanilha(tx, { empresaId: salvo.empresaId, produtoId: salvo.id });
     return salvo;
   });
 }

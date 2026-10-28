@@ -426,3 +426,5 @@ export * from "./central-ingestao.js";
 export * from "./sia-depara.js";
 export * from "./creare-layout.js";
 export * from "./creare.js";
+export * from "./formato-creare.js";
+export * from "./planilha-mapa.js";

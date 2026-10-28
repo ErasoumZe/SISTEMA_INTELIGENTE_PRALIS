@@ -33,6 +33,7 @@ import {
   travarCadastroDeProdutos
 } from "./produtos-escrita.repository.js";
 import { resolverFiscalDaGravacao } from "./produtos-fiscal-gravacao.js";
+import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
 import {
   caminhoAbsolutoDaFoto,
   ehFotoDaBaseNoErp,
@@ -171,6 +172,7 @@ export async function criarProdutoBase(body: DadosExternos, ator: AtorDaEscrita)
       grupoIdOrigem: dados.grupoIdExterno ?? null,
       dadosOficiais
     });
+    await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
     return { id };
   });
 }
@@ -260,6 +262,7 @@ export async function editarProdutoBase(
     };
     await atualizarProdutoBaseRepository(tx, id, novaLinha);
     const lojasAtualizadas = await propagarParaLojas(tx, alvo, { ...alvo, ...novaLinha }, ator);
+    await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
     return { id, lojasAtualizadas };
   });
 }
@@ -306,6 +309,7 @@ async function propagarParaLojas(
     if (patch.grupoMercadoriaId === "") delete patch.grupoMercadoriaId;
     if (!Object.keys(patch).length) continue;
     await aplicarHerancaNaCopiaRepository(tx, copia.id, patch);
+    await registrarNaFilaDaPlanilha(tx, { empresaId: copia.empresaId, produtoId: copia.id });
     if (patch.nomeCatalogo !== undefined && patch.nomeCatalogo !== copia.valores.nomeCatalogo) {
       await registrarHistoricoNomeProdutoRepository(tx, {
         empresaId: copia.empresaId,
@@ -373,6 +377,7 @@ async function trocarFotoDaBase(id: string, fotoUrl: string | null): Promise<num
       grupoIdOrigem: alvo.grupoIdOrigem,
       dadosOficiais: depois.dadosOficiais
     });
+    await registrarNaFilaDaPlanilha(tx, { produtoBaseId: id });
     return propagarParaLojas(tx, alvo, depois);
   });
 }
