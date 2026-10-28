@@ -92,6 +92,11 @@ const envSchema = z.object({
   GOOGLE_PRODUTOS_DEFAULT_LOJAS: z.string().default("TNP,LI,HORA"),
   GOOGLE_PRODUTOS_LOJA_TABS: z.string().default(""),
   GOOGLE_PRODUTOS_TIMEOUT_MS: z.coerce.number().int().min(0).default(20_000),
+  // Custo pela discriminacao de mercadorias (DB-05; oficial `GOOGLE_SHEETS_MER_*`): SO LEITURA. Sem o ID a
+  // previa responde "sem destino" e nada e gravado. O cabecalho e PROCURADO; a linha final limita a leitura.
+  GOOGLE_PRODUTOS_MER_SPREADSHEET_ID: envOpcionalNaoVazio,
+  GOOGLE_PRODUTOS_MER_TAB: z.string().trim().min(1).default("TNP - DISCRIMINAÇÃO MERCADORIAS (MER)"),
+  GOOGLE_PRODUTOS_MER_LINHA_FINAL: z.coerce.number().int().min(2).default(20_000),
   // Publicacao do TXT do CREARE na pasta do Drive da loja (oficial `creare-drive`): DESLIGADA ate a virada.
   // `{"TNP":"<id da pasta>"}`, sem fallback: o destino e sempre decisao explicita de quem configura.
   CREARE_DRIVE_ENABLED: z

@@ -435,3 +435,4 @@ export * from "./pesaveis-backfill.js";
 export * from "./pesaveis-padronizar.js";
 export * from "./semelhanca-de-nome.js";
 export * from "./codigo-cadastro.js";
+export * from "./custo-mer.js";
