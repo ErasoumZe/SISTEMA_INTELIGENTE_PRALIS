@@ -48,6 +48,18 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
     expect(texto(wrapper)).toContain("CLIENTES (VND/TRANS): R$ 148,81");
   });
 
+  it("cada linha e um cartao que abre e fecha sozinho, com o selo da situacao", async () => {
+    const wrapper = mount(CaixaRelatorioFinalFolhaCreare, { props });
+    const credito = wrapper.get('[data-teste="final-linha-credito"]');
+    const total = wrapper.get('[data-teste="final-linha-total"]');
+    expect(credito.element.tagName).toBe("DETAILS");
+    expect(credito.get("summary").text()).toContain("Confere");
+    expect(total.get("summary").text()).toContain("Diferença");
+    expect(wrapper.get('[data-teste="final-linha-pix"]').get("summary").text()).toContain("Sem valor");
+    (total.element as HTMLDetailsElement).open = true;
+    expect((credito.element as HTMLDetailsElement).open).toBe(false);
+  });
+
   it("horario em datas, nunca em minutos", () => {
     const conteudo = texto(mount(CaixaRelatorioFinalFolhaCreare, { props }));
     expect(conteudo).toContain("Folha 26/10/2026 06:14:58");
