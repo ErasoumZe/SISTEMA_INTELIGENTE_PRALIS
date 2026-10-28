@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ProdutoDetalhe } from "@padaria/shared";
+import type { ProdutoDetalhe, ValoresHerdados } from "@padaria/shared";
 import {
+  aplicarValoresDaBase,
   descricaoPreviewDoProduto,
   formularioDoDetalhe,
   formularioVazio,
@@ -8,6 +9,34 @@ import {
 } from "./produto-formulario-mapa";
 
 describe("produto-formulario-mapa", () => {
+  it("voltar a herdar devolve tambem a foto da BASE (paralelo)", () => {
+    const form = { ...formularioVazio("e1"), fotoUrl: "produtos/p1/propria.jpg" };
+    aplicarValoresDaBase(form, {
+      descricao: "LEITE",
+      nomeCatalogo: "LEITE",
+      quantidadeIndividual: 1,
+      unidadeIndividualId: "u1",
+      pesavel: false,
+      teclaBalanca: null,
+      validadeBalanca: null,
+      codigoBarras: null,
+      marca: null,
+      embalagem: null,
+      cDe: null,
+      quantidadeCaixa: 1,
+      medidaCompra: null,
+      compraAproximada: false,
+      codigoInterno: null,
+      fotoUrl: "produtos-base/b1/foto.jpg",
+      grupoMercadoriaId: null,
+      grupoIdExterno: null,
+      tipo: "revenda",
+      habilitarAjuda: false,
+      transformacao: null
+    } satisfies ValoresHerdados);
+    expect(form.fotoUrl).toBe("produtos-base/b1/foto.jpg");
+  });
+
   it("so monta a descrição quando nome e medida existem e preserva descrição legada intacta", () => {
     expect(
       descricaoPreviewDoProduto({

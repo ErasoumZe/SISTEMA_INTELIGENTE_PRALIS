@@ -1,8 +1,6 @@
 import type { ProdutoDetalhe } from "@padaria/shared";
 import {
   calcularPrecoVenda,
-  normalizarGrupoFiscal,
-  type RegraFiscalGrupo,
   montarComoSeCompra,
   montarValidacaoQtd,
   validarBalanca,
@@ -11,12 +9,10 @@ import {
 } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import { ErroApiCliente } from "~/composables/useApi";
-import {
-  fracaoParaPercentual,
-  mensagemDeProdutoSalvo,
-  numeroDigitado,
-  percentualParaFracao
-} from "~/utils/produto-numeros";
+import { useGrupoFiscalDoProduto } from "~/composables/useGrupoFiscalDoProduto";
+import { useProdutoFotoPendente } from "~/composables/useProdutoFotoPendente";
+import { mensagemDeProdutoSalvo, numeroDigitado, percentualParaFracao } from "~/utils/produto-numeros";
+import { siglaCanonica } from "~/utils/produto-listas";
 import {
   aplicarValoresDaBase,
   formularioDoDetalhe,
@@ -28,6 +24,19 @@ import {
 
 /** Codigos de duplicidade da API: os dois oferecem "Cadastrar mesmo assim" (nome e EAN, oficial). */
 const CODIGOS_DE_DUPLICADO = new Set(["DUPLICATE_PRODUCT", "DUPLICATE_BARCODE"]);
+
+/** Mensagem do paralelo quando a planilha fiscal nao responde (cadastro novo fica bloqueado). */
+export const REGRAS_FISCAIS_INDISPONIVEIS =
+  "Regras fiscais indisponíveis. Não foi possível carregar os grupos e as regras fiscais. " +
+  "Você pode editar outros dados de um produto existente sem trocar grupo ou código de barras. " +
+  "Novos cadastros e reclassificações continuam bloqueados para evitar imposto incorreto.";
+
+/** Resultado de um salvamento: o aviso e de sucesso, ou de alerta quando so a foto falhou. */
+export interface ProdutoSalvo {
+  id: string;
+  mensagem: string;
+  tipo: "success" | "warning";
+}
 
 /**
  * Estado do formulario de produto. As previas (descricao, "como se compra", preco) usam as MESMAS
@@ -51,12 +60,17 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   const salvando = ref(false);
   const erro = ref("");
   const duplicado = ref("");
-  const alterado = ref(false);
-  /** Foto escolhida antes de o produto existir: sobe logo depois do POST. */
-  const fotoPendente = ref<File | null>(null);
+  const formAlterado = ref(false);
+  /** Foto escolhida/removida: so vai para o servidor ao salvar (ver `useProdutoFotoPendente`). */
+  const foto = useProdutoFotoPendente();
+  const { fotoPendente } = foto;
+  /** Foto escolhida tambem e alteracao: "Cancelar" pergunta antes de descartar. */
+  const alterado = computed(() => formAlterado.value || Boolean(fotoPendente.value));
   /** Grupo com que o produto chegou: quem ja tinha grupo nao pode ficar sem (oficial). */
   const grupoOriginal = ref<string | null>(null);
   const grupoObrigatorio = computed(() => !produtoId.value || Boolean(grupoOriginal.value));
+  /** Grupo trocado na tela: a classificacao gravada deixa de valer ate salvar (o servidor refaz). */
+  const grupoMudou = computed(() => (form.value.grupoMercadoriaId || null) !== grupoOriginal.value);
   /** Copia de um produto da BASE: so ela tem campos herdados (produto proprio da loja nao). */
   const produtoBaseId = ref<string | null>(null);
   /** Loja do produto (TNP/LI/HORA; "BASE" na base geral). Area de venda so na TNP. */
@@ -69,7 +83,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   watch(
     form,
     () => {
-      alterado.value = JSON.stringify(form.value) !== estadoOriginal;
+      formAlterado.value = JSON.stringify(form.value) !== estadoOriginal;
     },
     { deep: true }
   );
@@ -110,39 +124,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       : ""
   );
 
-  /** Regras fiscais por grupo da planilha oficial (com a margem padrao). Fora do ar = lista vazia. */
-  const regrasFiscais = ref<RegraFiscalGrupo[]>([]);
-  /** Planilha fiscal fora do ar: a previa do preco fica sem a margem do grupo (o servidor recalcula). */
-  const planilhaFiscalForaDoAr = ref(false);
-  /**
-   * Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial.
-   * `null` = o grupo nao tem margem padrao na planilha (hoje so poucos grupos tem).
-   */
-  const margemDoGrupo = computed<number | null>(() => {
-    const nome = grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.nome;
-    if (!nome) return null;
-    const chave = normalizarGrupoFiscal(nome);
-    return regrasFiscais.value.find((regra) => normalizarGrupoFiscal(regra.grupo) === chave)?.margemPadrao ?? null;
-  });
-  /** A mesma margem em % para a tela ("Padrão do grupo: 30%"), arredondada como no paralelo. */
-  const margemDoGrupoPct = computed(() =>
-    margemDoGrupo.value == null ? null : fracaoParaPercentual(margemDoGrupo.value)
-  );
-
-  /*
-   * Decisao D3 (Jose): TROCAR o grupo preenche a margem do produto com a padrao do grupo, quando ela
-   * existe (paralelo). E o que evita produto sem margem sair no TXT do PDV pelo preco de custo. So
-   * reage a TROCA feita na tela: `sync` + `carregando` deixam de fora a hidratacao do produto, senao
-   * abrir um produto sobrescreveria a margem gravada dele.
-   */
-  watch(
-    () => form.value.grupoMercadoriaId,
-    (novo, anterior) => {
-      if (carregando.value || !novo || novo === anterior) return;
-      if (margemDoGrupoPct.value != null) form.value.margemPercentual = margemDoGrupoPct.value;
-    },
-    { flush: "sync" }
-  );
+  const grupoFiscal = useGrupoFiscalDoProduto({ form, grupos, grupoOriginal, carregando });
+  const { margemDoGrupo, planilhaFiscalForaDoAr } = grupoFiscal;
 
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
@@ -221,12 +204,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     ]);
     unidades.value = listaUnidades;
     grupos.value = listaGrupos.gruposMercadorias;
-    // A planilha pode estar fora do ar: a tela segue, e a previa usa margem 0 ate ela voltar.
-    const fonte = await apiGet<{ disponivel: boolean; regras: RegraFiscalGrupo[] }>(
-      "/api/produtos/regras-fiscais"
-    ).catch(() => ({ disponivel: false, regras: [] }));
-    regrasFiscais.value = fonte.regras;
-    planilhaFiscalForaDoAr.value = !fonte.disponivel;
+    await grupoFiscal.carregarRegras();
   }
 
   async function carregar() {
@@ -248,11 +226,12 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
         loja.value = modo.value === "base" ? "BASE" : "";
         // Medida base KG por padrao (paralelo). Se a empresa nao tiver KG cadastrado, fica vazia.
         form.value.unidadeIndividualId =
-          unidades.value.find((unidade) => unidade.sigla.trim().toUpperCase() === "KG")?.id ?? "";
+          unidades.value.find((unidade) => siglaCanonica(unidade.sigla) === "KG")?.id ?? "";
       }
       grupoOriginal.value = form.value.grupoMercadoriaId || null;
+      foto.marcarSalva(form.value.fotoUrl);
       estadoOriginal = JSON.stringify(form.value);
-      alterado.value = false;
+      formAlterado.value = false;
     } catch (falha) {
       erro.value = mensagemErro(falha);
     } finally {
@@ -265,9 +244,14 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
    * pessoa digitou. O botao fica sempre ativo (paralelo): clicar com erro diz o MOTIVO em vez de um
    * botao cinza mudo. `salvando` bloqueia o duplo clique.
    */
-  async function salvar(forcar = false): Promise<{ id: string; mensagem: string } | null> {
+  async function salvar(forcar = false): Promise<ProdutoSalvo | null> {
     if (salvando.value) return null;
     duplicado.value = "";
+    // Paralelo: sem regra fiscal disponivel, cadastro NOVO fica bloqueado (imposto incorreto).
+    if (!produtoId.value && planilhaFiscalForaDoAr.value) {
+      erro.value = REGRAS_FISCAIS_INDISPONIVEIS;
+      return null;
+    }
     if (!valido.value) {
       erro.value = Object.values(erros.value)[0] ?? errosDePromocao.value[0] ?? "Confira os campos.";
       return null;
@@ -290,15 +274,21 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       } else {
         throw new Error("Produto novo é cadastrado na base geral e importado pela loja.");
       }
-      // Foto escolhida antes de o produto existir sobe agora. Se ELA falhar, o produto ja esta
-      // salvo — o erro aparece, mas ninguem recadastra o produto por causa disso.
-      if (id && fotoPendente.value) {
-        await enviarFotoPendente(id);
-        fotoPendente.value = null;
-      }
+      if (!id) return null;
+      // A foto vai DEPOIS do produto (precisa do id). Se ELA falhar, o produto ja esta salvo: sai com
+      // aviso, sem pedir para salvar de novo (no cadastro novo isso criaria outro produto).
+      const resultadoDaFoto = await foto.aplicarDepoisDeSalvar({
+        rota: modo.value === "base" ? "/api/produtos/base" : "/api/produtos",
+        id,
+        fotoUrlDoFormulario: form.value.fotoUrl
+      });
+      form.value.fotoUrl = resultadoDaFoto.fotoUrl;
       estadoOriginal = JSON.stringify(form.value);
-      alterado.value = false;
-      return id ? { id, mensagem: mensagemDeProdutoSalvo({ modo: modo.value, lojasAtualizadas }) } : null;
+      formAlterado.value = false;
+      const mensagem = mensagemDeProdutoSalvo({ modo: modo.value, lojasAtualizadas });
+      return resultadoDaFoto.falha
+        ? { id, mensagem: `${mensagem} ${resultadoDaFoto.falha}`, tipo: "warning" }
+        : { id, mensagem, tipo: "success" };
     } catch (falha) {
       const mensagem = mensagemErro(falha);
       // "Cadastrar mesmo assim" vale para nome e para codigo de barras repetidos (oficial). Decidido
@@ -314,23 +304,32 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     }
   }
 
-  /** Devolve ao formulario os valores da base nos campos herdados (oficial "Voltar a herdar da base"). */
+  /**
+   * "Voltar a herdar da base" (oficial): devolve ao formulario os valores da base nos campos
+   * herdados — inclusive a foto, como no paralelo. Foto escolhida e ainda nao salva e descartada.
+   */
   function voltarAHerdar() {
-    if (heranca.value) aplicarValoresDaBase(form.value, heranca.value.base);
+    if (!heranca.value) return;
+    aplicarValoresDaBase(form.value, heranca.value.base);
+    fotoPendente.value = null;
   }
 
-  const { apiUrl } = useApi();
-  async function enviarFotoPendente(id: string) {
-    const corpo = new FormData();
-    corpo.append("arquivo", fotoPendente.value as File);
-    const rota = modo.value === "base" ? "/api/produtos/base" : "/api/produtos";
-    const resposta = await fetch(`${apiUrl}${rota}/${id}/foto`, {
-      method: "POST",
-      credentials: "include",
-      body: corpo
-    });
-    if (!resposta.ok) throw new Error("Produto salvo, mas a foto não subiu. Abra o produto e envie de novo.");
-  }
+  /**
+   * De onde a tela mostra a foto. Arquivo escolhido: preview local. Foto como esta gravada: a rota
+   * do proprio produto. Foto da BASE trazida pelo "voltar a herdar" (ainda nao salva): a rota da BASE.
+   */
+  const origemDaFoto = computed<{ rota: string; id: string | null }>(() => {
+    const rotaPropria = modo.value === "base" ? "/api/produtos/base" : "/api/produtos";
+    const fotoDaBase = heranca.value?.base.fotoUrl ?? null;
+    const daBase =
+      Boolean(form.value.fotoUrl) &&
+      form.value.fotoUrl !== foto.fotoUrlSalva.value &&
+      form.value.fotoUrl === fotoDaBase &&
+      Boolean(produtoBaseId.value);
+    return daBase
+      ? { rota: "/api/produtos/base", id: produtoBaseId.value }
+      : { rota: rotaPropria, id: produtoId.value };
+  });
 
   return {
     form,
@@ -346,14 +345,18 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     errosDePromocao,
     valido,
     grupoObrigatorio,
+    grupoMudou,
     siglaDaUnidade,
     descricaoPreview,
     comoSeCompraPreview,
     validacaoQtdPreview,
     precoPreview,
     margemDoGrupo,
-    margemDoGrupoPct,
+    margemDoGrupoPct: grupoFiscal.margemDoGrupoPct,
+    gruposComRegra: grupoFiscal.gruposComRegra,
+    regraDoGrupo: grupoFiscal.regraDoGrupo,
     planilhaFiscalForaDoAr,
+    origemDaFoto,
     produtoBaseId,
     loja,
     heranca,

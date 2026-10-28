@@ -1,42 +1,50 @@
 <script setup lang="ts">
-/** Identificacao + "Como se compra". As duas previas usam a funcao de dominio, nunca copia local. */
+/**
+ * Cartao "Produto" — mesma ordem, rotulos e listas do cadastro paralelo (identificacao, balanca,
+ * descricao automatica e "Como se compra"). As previas usam a funcao de dominio, nunca copia local.
+ */
+import ProdutoCartao from "~/components/produtos/ProdutoCartao.vue";
+import ProdutoComoSeCompra from "~/components/produtos/ProdutoComoSeCompra.vue";
 import ProdutoFoto from "~/components/produtos/ProdutoFoto.vue";
 import ProdutoScanner from "~/components/produtos/ProdutoScanner.vue";
 import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
+import { MEDIDAS_BASE, unidadesDaLista } from "~/utils/produto-listas";
 
 const props = defineProps<{
   form: ProdutoForm;
   produtoId: string | null;
   unidades: Array<{ id: string; sigla: string; nome: string }>;
-  grupos: Array<{ id: string; nome: string }>;
   erros: Record<string, string>;
-  grupoObrigatorio: boolean;
   descricaoPreview: string;
   comoSeCompraPreview: string;
   somenteLeitura: boolean;
   /** Copia da loja: o que veio da BASE so o administrador altera, la na BASE (oficial). */
   herdadoTravado: boolean;
-  /** Onde a foto vive: "/api/produtos" (loja) ou "/api/produtos/base" (base geral). */
-  rotaFoto: string;
-  /** Area de venda so existe no cadastro da TNP (oficial). */
-  mostrarAreaVenda: boolean;
+  /** De onde a tela mostra a foto gravada (rota + id) e o arquivo escolhido ainda nao salvo. */
+  origemDaFoto: { rota: string; id: string | null };
+  fotoPendente: File | null;
   dica: (campo: string) => string | undefined;
 }>();
-const emit = defineEmits<{ "foto-escolhida": [arquivo: File | null] }>();
+const emit = defineEmits<{ "foto-escolher": [arquivo: File]; "foto-remover": [] }>();
+
+/*
+ * So na criacao: sem EAN, o codigo interno gerado ao salvar entra no codigo de barras (o servidor da
+ * BASE faz isso). Dizer ANTES de salvar evita que a pessoa invente um numero (paralelo).
+ */
+const AJUDA_BARRAS_NA_CRIACAO = "Sem EAN? Deixe vazio: ao salvar, o código interno gerado entra aqui.";
 
 /** Campos herdados da BASE: travados na copia da loja, alem do modo somente leitura. */
 const travado = computed(() => props.somenteLeitura || props.herdadoTravado);
-
+const medidasBase = computed(() => unidadesDaLista(props.unidades, MEDIDAS_BASE, props.form.unidadeIndividualId));
+const siglaMaiuscula = (unidade: { sigla: string }) => unidade.sigla.toUpperCase();
 const scannerAberto = ref(false);
-const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
 </script>
 
 <template>
-  <section class="secao">
-    <h2 class="secao__titulo">Identificação</h2>
-
-    <div class="secao__grade">
-      <div class="secao__coluna-foto">
+  <ProdutoCartao titulo="Produto" subtitulo="Identificação e apresentação no catálogo" icone="mdi-package-variant">
+    <v-row dense>
+      <v-col cols="12" sm="5">
+        <!-- O status e o unico campo do cadastro geral que a loja mexe (ativo numa, inativo noutra). -->
         <v-select
           v-model="form.status"
           :items="[
@@ -44,43 +52,56 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
             { value: 'inativo', title: 'Inativo' }
           ]"
           label="Status"
-          :hint="dica('status')"
-          :persistent-hint="Boolean(dica('status'))"
+          hide-details
+          class="mb-3"
           :disabled="somenteLeitura"
         />
+        <v-switch
+          v-model="form.habilitarAjuda"
+          label="Habilitar ajuda"
+          color="primary"
+          inset
+          hide-details
+          :disabled="travado"
+        />
+      </v-col>
+      <v-col cols="12" sm="7">
         <!-- Decisao D1 (paralelo): a loja troca a foto mesmo de produto herdado da BASE. -->
         <ProdutoFoto
-          :rota="rotaFoto"
-          :produto-id="produtoId"
+          :rota="origemDaFoto.rota"
+          :produto-id="origemDaFoto.id"
           :foto-url="form.fotoUrl"
+          :arquivo-pendente="fotoPendente"
           :somente-leitura="somenteLeitura"
-          @arquivo-escolhido="emit('foto-escolhida', $event)"
-          @alterada="form.fotoUrl = $event"
+          @escolher="emit('foto-escolher', $event)"
+          @remover="emit('foto-remover')"
         />
-      </div>
+      </v-col>
 
-      <div class="secao__campos">
-        <v-text-field
-          :model-value="form.codigoInterno || '—'"
-          label="Código interno"
-          readonly
-          class="cx-num"
-          hint="Gerado pelo sistema, sequencial no catálogo oficial."
-          persistent-hint
-        />
-
+      <v-col cols="12" sm="6">
         <v-text-field
           v-model="form.codigoBarras"
-          label="Código de barras (EAN)"
-          :hint="dica('codigoBarras')"
+          label="Código de barras"
+          :hint="produtoId ? dica('codigoBarras') : AJUDA_BARRAS_NA_CRIACAO"
+          :persistent-hint="!produtoId"
           :disabled="travado"
           append-inner-icon="mdi-barcode-scan"
           class="cx-num"
           @click:append-inner="scannerAberto = true"
         />
+      </v-col>
+      <v-col v-if="produtoId" cols="12" sm="6">
+        <v-text-field
+          :model-value="form.codigoInterno || '—'"
+          label="Código interno"
+          readonly
+          class="cx-num cartao__previa"
+        />
+      </v-col>
+      <v-col cols="12" sm="6">
         <v-text-field v-model="form.marca" label="Marca" :hint="dica('marca')" :disabled="travado" />
-        <v-checkbox v-model="form.habilitarAjuda" label="Habilitar ajuda" :disabled="travado" />
-
+      </v-col>
+      <v-col cols="12">
         <v-text-field
           v-model="form.nomeCatalogo"
           label="Nome do produto *"
@@ -88,48 +109,51 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :error-messages="erros['nomeCatalogo']"
           :hint="dica('nomeCatalogo')"
           :disabled="travado"
-          class="secao__campo-largo"
         />
-
+      </v-col>
+      <v-col cols="6">
         <v-text-field
           v-model="form.quantidadeIndividual"
           type="number"
           min="0"
-          label="Gramatura *"
+          label="Gramatura"
           data-campo="quantidadeIndividual"
           :error-messages="erros['quantidadeIndividual']"
           :hint="dica('quantidadeIndividual')"
           :disabled="travado"
         />
+      </v-col>
+      <v-col cols="6">
         <v-select
           v-model="form.unidadeIndividualId"
-          :items="unidades"
-          item-title="sigla"
+          :items="medidasBase"
+          :item-title="siglaMaiuscula"
           item-value="id"
-          label="Medida base *"
+          label="Medida base"
           data-campo="unidadeIndividualId"
           :error-messages="erros['unidadeIndividualId']"
           :hint="dica('unidadeIndividual')"
           :disabled="travado"
         />
-
+      </v-col>
+      <v-col cols="12" sm="6">
         <v-select
           v-model="form.pesavel"
           :items="[
             { title: 'Não', value: false },
             { title: 'Sim', value: true }
           ]"
-          label="Vai para balança? *"
+          label="Vai para balança?"
           data-campo="pesavel"
           :error-messages="erros['pesavel']"
           hint="Novos produtos começam em Não. Para produtos já existentes, confira o cadastro SIA; a medida KG não define este campo."
           persistent-hint
           :disabled="travado"
-          class="secao__campo-largo"
         />
-
-        <template v-if="form.pesavel === true">
-          <!-- Oficial: a tecla e fixa (000, confirmada para a TNP); o servidor grava o valor fixo. -->
+      </v-col>
+      <template v-if="form.pesavel === true">
+        <!-- Oficial: a tecla e fixa (000, confirmada para a TNP); o servidor grava o valor fixo. -->
+        <v-col cols="6" sm="3">
           <v-text-field
             model-value="000"
             label="Tecla da balança"
@@ -137,173 +161,29 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
             persistent-hint
             hint="Valor fixo 000 confirmado para a TNP."
           />
+        </v-col>
+        <v-col cols="6" sm="3">
           <v-text-field
             v-model="form.validadeBalanca"
             type="number"
             min="0"
             max="999"
-            label="Validade na balança (dias) *"
+            label="Validade na balança (dias)"
             data-campo="validadeBalanca"
             :error-messages="erros['validadeBalanca']"
+            persistent-hint
+            hint="Informe o número de dias definido para este produto."
             :disabled="travado"
           />
-        </template>
-        <v-select
-          v-if="mostrarAreaVenda"
-          v-model="form.areaVenda"
-          :items="[
-            { value: 'caixa', title: 'Caixa' },
-            { value: 'vitrine', title: 'Vitrine' },
-            { value: 'copa', title: 'Copa' },
-            { value: 'chapa', title: 'Chapa' },
-            { value: 'mesas', title: 'Mesas' },
-            { value: 'vasca_paes', title: 'Vasca de pães' },
-            { value: 'vitrine_paes', title: 'Vitrine de pães' },
-            { value: 'paes_empacotados', title: 'Pães empacotados' },
-            { value: 'mesa_paes', title: 'Mesa de pães' },
-            { value: 'frios', title: 'Frios' },
-            { value: 'bebidas', title: 'Bebidas' },
-            { value: 'laticinios', title: 'Laticínios' },
-            { value: 'mercearia', title: 'Mercearia' },
-            { value: 'estoque_bebidas', title: 'Estoque de bebidas' },
-            { value: 'biscoitos', title: 'Biscoitos' },
-            { value: 'dml_limpeza', title: 'DML / limpeza' }
-          ]"
-          label="Área de venda"
-          clearable
-          :disabled="somenteLeitura"
-        />
+        </v-col>
+      </template>
+      <v-col cols="12">
+        <v-text-field :model-value="descricaoPreview" label="Descrição (automática)" readonly class="cartao__previa" />
+      </v-col>
+    </v-row>
 
-        <v-select
-          v-model="form.grupoMercadoriaId"
-          :items="grupos"
-          item-title="nome"
-          item-value="id"
-          :label="grupoObrigatorio ? 'Grupo de mercadoria *' : 'Grupo de mercadoria'"
-          :clearable="!grupoObrigatorio"
-          data-campo="grupoMercadoriaId"
-          :error-messages="erros['grupoMercadoriaId']"
-          :hint="dica('grupoMercadoria')"
-          :disabled="travado"
-        />
-        <v-select
-          v-model="form.tipo"
-          :items="[
-            { value: 'revenda', title: 'Revenda' },
-            { value: 'transformacao', title: 'Transformação' }
-          ]"
-          label="Tipo"
-          :hint="dica('tipo')"
-          :disabled="travado"
-        />
-
-        <v-text-field
-          :model-value="descricaoPreview"
-          label="Descrição (automática)"
-          readonly
-          class="secao__campo-largo secao__previa"
-          hint="Nome + gramatura + medida base. A descrição é montada automaticamente."
-          persistent-hint
-        />
-      </div>
-    </div>
-
-    <h3 class="secao__subtitulo">Como se compra</h3>
-    <div class="secao__grade-compra">
-      <v-select
-        v-model="form.embalagem"
-        :items="siglas"
-        label="Embalagem"
-        clearable
-        :hint="dica('embalagem')"
-        :disabled="travado"
-      />
-      <v-select v-model="form.cDe" :items="['C/', 'DE']" label="C/ ou DE" :hint="dica('cDe')" :disabled="travado" />
-      <v-text-field
-        v-model="form.quantidadeCaixa"
-        type="number"
-        min="1"
-        label="Qtd. por embalagem"
-        :hint="dica('quantidadeCaixa')"
-        :disabled="travado"
-      />
-      <v-select
-        v-model="form.medidaCompra"
-        :items="siglas"
-        label="Medida de compra"
-        clearable
-        :hint="dica('medidaCompra')"
-        :disabled="travado"
-      />
-      <v-text-field
-        :model-value="comoSeCompraPreview"
-        label="Como se compra (prévia)"
-        readonly
-        placeholder="Preencha a embalagem para gerar"
-        class="secao__campo-largo secao__previa"
-      />
-      <v-checkbox v-model="form.compraAproximada" label="Quantidade de compra aproximada" :disabled="travado" />
-    </div>
+    <ProdutoComoSeCompra :form="form" :como-se-compra-preview="comoSeCompraPreview" :travado="travado" :dica="dica" />
 
     <ProdutoScanner v-model:aberto="scannerAberto" @lido="form.codigoBarras = $event" />
-  </section>
+  </ProdutoCartao>
 </template>
-
-<style scoped>
-.secao {
-  display: grid;
-  gap: var(--cx-sp-4);
-  padding: var(--cx-sp-5);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface);
-  box-shadow: var(--cx-e-1);
-}
-.secao__titulo {
-  font-size: var(--cx-fs-title);
-  font-weight: 700;
-  color: var(--cx-ink);
-}
-.secao__subtitulo {
-  padding-top: var(--cx-sp-2);
-  border-top: 1px solid var(--cx-line-soft);
-  font-size: var(--cx-fs-lead);
-  font-weight: 600;
-  color: var(--cx-ink);
-}
-.secao__grade {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: var(--cx-sp-5);
-  min-width: 0;
-}
-.secao__coluna-foto {
-  display: grid;
-  gap: var(--cx-sp-3);
-  align-content: start;
-}
-.secao__campos,
-.secao__grade-compra {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--cx-sp-3);
-  min-width: 0;
-}
-.secao__campo-largo {
-  grid-column: 1 / -1;
-}
-.secao__previa :deep(.v-field) {
-  background: var(--cx-surface-sunken);
-}
-
-@media (max-width: 900px) {
-  .secao__grade {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 600px) {
-  .secao__campos,
-  .secao__grade-compra {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>
