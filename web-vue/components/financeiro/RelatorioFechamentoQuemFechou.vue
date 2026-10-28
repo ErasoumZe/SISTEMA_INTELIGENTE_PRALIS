@@ -29,6 +29,8 @@ const duracao = computed(() => {
   return `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, "0")}`;
 });
 const fechadoPor = computed(() => nome(props.resumo?.fechadoPorNome));
+// O operador escreve (ou dita) a observacao ao fechar; ela fica em `fechamentos_caixa.observacao`.
+const observacao = computed(() => nome(props.resumo?.observacao) || nome(props.caixa.observacao));
 const abertura = computed(() => {
   const operador = nome(props.caixa.caixaResponsavelNomeAbertura);
   const supervisor = nome(props.caixa.supervisorResponsavelNomeAbertura);
@@ -87,6 +89,12 @@ const abertura = computed(() => {
         </dl>
       </section>
     </div>
+
+    <section class="qf__obs" aria-labelledby="qf-obs" data-teste="observacao-fechamento">
+      <h4 id="qf-obs">Observação do fechamento</h4>
+      <p v-if="observacao">{{ observacao }}</p>
+      <p v-else class="qf__obs-vazia">O operador não registrou observação.</p>
+    </section>
   </section>
 </template>
 
@@ -128,6 +136,28 @@ const abertura = computed(() => {
   padding: var(--cx-sp-3);
   border-radius: var(--cx-r-md);
   background: var(--cx-surface-sunken);
+}
+.qf__obs {
+  padding: var(--cx-sp-3);
+  border-left: 3px solid var(--cx-brand);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface-sunken);
+}
+.qf__obs h4 {
+  margin: 0 0 var(--cx-sp-1);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.qf__obs p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.qf__obs-vazia {
+  color: var(--cx-ink-soft);
 }
 .qf__bloco h4 {
   margin: 0 0 var(--cx-sp-2);

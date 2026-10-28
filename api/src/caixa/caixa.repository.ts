@@ -735,6 +735,37 @@ export async function buscarIndisponibilidadeAbertaCaixaRepository(
   return linha ?? null;
 }
 
+// Relatorio de fechamento: TODAS as paradas do computador do PDV neste caixa (abertas ou ja retornadas), da mais
+// antiga para a mais nova, com quem registrou e quem confirmou o retorno. So leitura; as linhas sao imutaveis.
+const perfilRegistrouParada = alias(perfisUsuarios, "perfil_registrou_parada");
+const perfilRetornouParada = alias(perfisUsuarios, "perfil_retornou_parada");
+export async function listarIndisponibilidadesCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: caixaIndisponibilidades.id,
+      motivos: caixaIndisponibilidades.motivos,
+      motivoOutro: caixaIndisponibilidades.motivoOutro,
+      iniciadoEm: caixaIndisponibilidades.iniciadoEm,
+      retornadoEm: caixaIndisponibilidades.retornadoEm,
+      registradoPorNome: perfilRegistrouParada.nome,
+      retornadoPorNome: perfilRetornouParada.nome
+    })
+    .from(caixaIndisponibilidades)
+    .leftJoin(perfilRegistrouParada, eq(perfilRegistrouParada.usuarioId, caixaIndisponibilidades.registradoPor))
+    .leftJoin(perfilRetornouParada, eq(perfilRetornouParada.usuarioId, caixaIndisponibilidades.retornadoPor))
+    .where(
+      and(
+        eq(caixaIndisponibilidades.fechamentoCaixaId, fechamentoCaixaId),
+        eq(caixaIndisponibilidades.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(caixaIndisponibilidades.iniciadoEm), asc(caixaIndisponibilidades.id));
+}
+
 export async function criarIndisponibilidadeCaixaRepository(
   input: {
     empresaId: string;

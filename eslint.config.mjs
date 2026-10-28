@@ -99,7 +99,9 @@ export default tseslint.config(
       "tests/**/*.ts",
       "api/src/env.ts",
       "web-vue/composables/useApi.ts",
-      "web-vue/utils/domain.ts"
+      "web-vue/utils/domain.ts",
+      // Le o dossie do fechamento como JSON cru da API (fronteira de dados externos), como domain.ts.
+      "web-vue/utils/relatorio-fechamento.ts"
     ],
     rules: {
       "@typescript-eslint/no-unsafe-argument": "off",

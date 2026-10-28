@@ -3,7 +3,7 @@ import { computed } from "vue";
 import VendasCanceladasBotao from "./VendasCanceladasBotao.vue";
 
 type Registro = Record<string, unknown>;
-type LinhaMaquininha = { forma: string; liquido: number | null };
+type LinhaMaquininha = { forma: string; inicial: number | null; acumulado: number | null; liquido: number | null };
 
 // Folha digital do fechamento: so VALORES (vendas, cartoes, gaveta e o Relatorio final). Quem abriu/fechou fica em
 // "Quem fechou"; lacres e sangrias ficam em "Lacres e sangrias" (sem repetir aqui).
@@ -11,6 +11,8 @@ const props = defineProps<{
   caixa: Registro;
   resumo: Registro | null;
   maquininha: LinhaMaquininha[];
+  // Turno do dia desta leitura: na tarde o liquido e o acumulado do dia MENOS a leitura da manha.
+  etapaMaquininha?: "manha" | "tarde" | null;
   relatorioVendas: Registro | null;
   ajuste: Registro | null;
   vendasCanceladas?: Registro[];
@@ -76,10 +78,23 @@ function rotuloPagamento(item: Registro) {
       </section>
 
       <section class="fd__bloco" aria-labelledby="fd-cartoes">
-        <h4 id="fd-cartoes">Cartões (líquido) · {{ dinheiro(totalCartoes) }}</h4>
+        <h4 id="fd-cartoes">
+          Cartões
+          {{ etapaMaquininha === "tarde" ? "da tarde" : etapaMaquininha === "manha" ? "da manhã" : "" }}(líquido) ·
+          {{ dinheiro(totalCartoes) }}
+        </h4>
+        <p v-if="etapaMaquininha === 'tarde'" class="fd__nota" data-teste="nota-tarde">
+          Líquido da tarde = acumulado do dia − leitura da manhã.
+        </p>
         <div v-if="maquininha.length" class="fd__linhas">
           <div v-for="linha in maquininha" :key="linha.forma">
-            <span>{{ linha.forma }}</span
+            <span
+              >{{ linha.forma }}
+              <small
+                v-if="etapaMaquininha === 'tarde' && linha.inicial !== null && linha.acumulado !== null"
+                class="cx-num"
+                >{{ dinheiro(linha.acumulado) }} − {{ dinheiro(linha.inicial) }}</small
+              ></span
             ><strong class="cx-num">{{ linha.liquido === null ? "Não informado" : dinheiro(linha.liquido) }}</strong>
           </div>
         </div>
@@ -203,6 +218,16 @@ function rotuloPagamento(item: Registro) {
 .fd__linhas strong {
   flex: none;
   text-align: right;
+}
+.fd__nota {
+  margin: 0 0 var(--cx-sp-2);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.fd__linhas small {
+  display: block;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
 }
 .fd__total {
   padding-top: var(--cx-sp-1);
