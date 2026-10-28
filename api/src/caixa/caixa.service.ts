@@ -790,7 +790,12 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
 
     // O CREARE pode importar uma venda depois da abertura. O refresh de um minuto
     // precisa anexar essas vendas ao caixa antes de calcular os cards de pagamento.
-    await revincularVendasAoCaixa(caixa, tx);
+    // Trava compartilhada antes de ler o inicio: o ajuste do inicio (R-224) muda esse horario sob trava
+    // exclusiva, e revincular com uma leitura antiga desanexaria as vendas que ele acabou de anexar.
+    if (!(await travarCaixaCompartilhadoRepository(caixa.id, tx))) throw new Error("Caixa aberto nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!travado) throw new Error("Caixa aberto nao encontrado");
+    await revincularVendasAoCaixa(travado, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
     return { ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador };
@@ -889,7 +894,7 @@ export async function ajustarInicioVendasCaixa(
       { empresaId: travado.empresaId, pdvId: travado.pdvId, caixaId: travado.id, abertoAte: oficial },
       tx
     );
-    if (fimAnterior && inicio.getTime() < fimAnterior.getTime()) {
+    if (fimAnterior && inicio.getTime() <= fimAnterior.getTime()) {
       throw new ErroDominio(
         "O inicio nao pode ser antes do fechamento do caixa anterior deste PDV.",
         422,
@@ -898,24 +903,33 @@ export async function ajustarInicioVendasCaixa(
     }
 
     await atualizarInicioVendasCaixaRepository(travado.id, inicio, tx);
+    const atualizado = await buscarCaixaPorIdRepository(travado.id, tx);
+    if (!atualizado) throw new Error("Caixa nao encontrado");
+    // Dentro da janela o operador tambem pode corrigir para mais tarde: as vendas que ficam antes do novo
+    // inicio voltam a ficar sem caixa, e a contagem vai para o log e para a resposta.
+    const { anexadas, desanexadas } = await revincularVendasAoCaixa(atualizado, tx);
+    // `dataHoraAbertura` e a chave que o historico do caixa ja mostra; a abertura oficial vai junto.
+    // Sem autorizador: e o proprio operador (ou o gerente) que ajusta, nao ha segunda pessoa.
     await registrarEdicaoCaixaRepository(
       {
         caixaId: travado.id,
         tokenUsado: null,
-        autorizadorId: perfil.usuarioId,
+        autorizadorId: null,
         observacao: dados.motivo.trim(),
         editadoPor: perfil.usuarioId,
         valoresAntigos: {
-          inicioVendas: new Date(travado.dataHoraAbertura).toISOString(),
+          dataHoraAbertura: new Date(travado.dataHoraAbertura).toISOString(),
           aberturaOficial: oficial.toISOString()
         },
-        valoresNovos: { inicioVendas: inicio.toISOString(), aberturaOficial: oficial.toISOString() }
+        valoresNovos: {
+          dataHoraAbertura: inicio.toISOString(),
+          aberturaOficial: oficial.toISOString(),
+          vendasAnexadas: anexadas,
+          vendasDesanexadas: desanexadas
+        }
       },
       tx
     );
-    const atualizado = await buscarCaixaPorIdRepository(travado.id, tx);
-    if (!atualizado) throw new Error("Caixa nao encontrado");
-    const { anexadas } = await revincularVendasAoCaixa(atualizado, tx);
     if (travado.status === "em_fechamento") {
       await invalidarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
     }
@@ -923,6 +937,7 @@ export async function ajustarInicioVendasCaixa(
       inicioVendas: inicio.toISOString(),
       aberturaOficial: oficial.toISOString(),
       vendasAnexadas: anexadas,
+      vendasDesanexadas: desanexadas,
       relatorioVendasInvalidado: travado.status === "em_fechamento"
     };
   });
@@ -2236,6 +2251,17 @@ export async function gerarRelatorioVendasFechamento(
       );
     }
     if (!travado.dataHoraAbertura) throw new Error("Caixa sem horario de abertura");
+    const instante = (valor: Date | string | null) => (valor ? new Date(valor).getTime() : null);
+    if (
+      instante(travado.dataHoraAbertura) !== instante(caixa.dataHoraAbertura) ||
+      instante(travado.dataHoraFechamento) !== instante(caixa.dataHoraFechamento)
+    ) {
+      throw new ErroDominio(
+        "O periodo do caixa mudou enquanto o relatorio era gerado. Gere de novo.",
+        409,
+        "RELATORIO_PERIODO_MUDOU"
+      );
+    }
     const anexo = await buscarAnexoFechamentoCaixaRepository(travado.id, leituraCreare.anexoId, travado.empresaId, tx);
     if (!anexo || anexo.tipo !== "relatorio_vendas_creare") {
       throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");

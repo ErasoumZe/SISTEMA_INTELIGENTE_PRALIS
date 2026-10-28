@@ -10,6 +10,7 @@ type Resultado = {
   inicioVendas: string;
   aberturaOficial: string;
   vendasAnexadas: number;
+  vendasDesanexadas: number;
   relatorioVendasInvalidado: boolean;
 };
 
@@ -37,9 +38,10 @@ function horaLocal(iso: string) {
   return `${String(data.getHours()).padStart(2, "0")}:${String(data.getMinutes()).padStart(2, "0")}`;
 }
 const oficial = computed(() => new Date(props.aberturaOficial));
-const horaMinima = computed(() =>
-  horaLocal(new Date(oficial.value.getTime() - RECUO_MAXIMO_MIN * 60_000).toISOString())
-);
+const horaMinima = computed(() => {
+  const limite = oficial.value.getTime() - RECUO_MAXIMO_MIN * 60_000;
+  return horaLocal(new Date(Math.ceil(limite / 60_000) * 60_000).toISOString());
+});
 const horaMaxima = computed(() => horaLocal(props.aberturaOficial));
 const ajustado = computed(() => new Date(inicioAtual.value).getTime() !== oficial.value.getTime());
 

@@ -34,6 +34,7 @@ type SugestaoCreare = Record<
 
 // `aberturaOficial`/`inicioVendas`: opcionais para nao quebrar quem ainda nao passa (o ajuste so aparece com eles).
 const props = defineProps<{ caixaId: string; aberturaOficial?: string; inicioVendas?: string }>();
+const emit = defineEmits<{ (event: "inicioAjustado"): void }>();
 const { apiUrl, apiGet, apiPost } = useApi();
 const cameraCreare = useTemplateRef<HTMLInputElement>("cameraCreare");
 const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(cameraCreare);
@@ -137,11 +138,20 @@ async function carregarRelatorioExistente() {
 }
 
 // R-224: depois de ajustar o inicio, o relatorio gerado antes vale para o periodo antigo e e descartado.
-function aoAjustarInicio(resultado: { vendasAnexadas: number; relatorioVendasInvalidado: boolean }) {
+function aoAjustarInicio(resultado: {
+  vendasAnexadas: number;
+  vendasDesanexadas: number;
+  relatorioVendasInvalidado: boolean;
+}) {
   totais.value = null;
   intervalo.value = null;
   gerado.value = false;
-  aviso.value = `Início ajustado (${resultado.vendasAnexadas} venda(s) entraram neste caixa). Gere o relatório de novo.`;
+  comparacaoCreare.value = null;
+  canceladas.value = [];
+  const saidas = resultado.vendasDesanexadas ? `, ${resultado.vendasDesanexadas} saíram` : "";
+  aviso.value = `Início ajustado (${resultado.vendasAnexadas} venda(s) entraram neste caixa${saidas}). Gere o relatório de novo.`;
+  // O saldo esperado e o cabecalho do caixa vem do status: o pai recarrega agora, nao no proximo minuto.
+  emit("inicioAjustado");
 }
 
 async function gerarRelatorio() {

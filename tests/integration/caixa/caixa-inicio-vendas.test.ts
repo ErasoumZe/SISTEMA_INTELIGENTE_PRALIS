@@ -21,6 +21,15 @@ describe("Caixa - ajustar o inicio das vendas (R-224)", () => {
 
   afterAll(async () => contexto.fechar());
 
+  // A abertura usa o relogio do servidor (R-184). Para o teste nao depender da hora em que roda (perto da
+  // meia-noite o recuo cairia no dia anterior), o horario oficial e fixado no meio do dia.
+  async function fixarAbertura(caixaId: string, instante: string) {
+    await executarSql("update fechamentos_caixa set aberto_em = $2, data_hora_abertura = $2 where id = $1", [
+      caixaId,
+      instante
+    ]);
+  }
+
   function ajustar(caixaId: string, payload: Record<string, unknown>) {
     return contexto.app.inject({
       method: "POST",
@@ -38,6 +47,7 @@ describe("Caixa - ajustar o inicio das vendas (R-224)", () => {
       nome: "Caixa inicio vendas",
       dataHoraAbertura: "2026-07-30T13:18"
     });
+    await fixarAbertura(caixa.caixaId, "2026-07-30T16:18:00.000Z");
     const linha = await consultarUm<{ aberto_em: Date; data_hora_abertura: Date; pdv_id: string; empresa_id: string }>(
       "select aberto_em, data_hora_abertura, pdv_id, empresa_id from fechamentos_caixa where id = $1",
       [caixa.caixaId]
@@ -116,9 +126,30 @@ describe("Caixa - ajustar o inicio das vendas (R-224)", () => {
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({
       observacao: "Abri o caixa no sistema depois de comecar a vender",
-      valores_antigos: { aberturaOficial: oficial.toISOString() },
-      valores_novos: { inicioVendas: novoInicio.toISOString() }
+      valores_antigos: { dataHoraAbertura: oficial.toISOString(), aberturaOficial: oficial.toISOString() },
+      valores_novos: { dataHoraAbertura: novoInicio.toISOString(), aberturaOficial: oficial.toISOString() }
     });
+    expect(Number(log[0]?.valores_novos["vendasAnexadas"])).toBeGreaterThanOrEqual(1);
+
+    // Corrigir para mais tarde dentro da janela: a venda que fica antes do novo inicio volta a ficar sem caixa,
+    // e a contagem vai para a resposta e para o log.
+    const avanca = await ajustar(caixa.caixaId, {
+      inicio: new Date(oficial.getTime() - 5 * 60_000).toISOString(),
+      motivo: "Errei a hora, era 13:13"
+    });
+    expect(avanca.statusCode, avanca.body).toBe(200);
+    expect(json<{ data: { vendasDesanexadas: number } }>(avanca).data.vendasDesanexadas).toBeGreaterThanOrEqual(1);
+    const vendaDepois = await consultarUm<{ caixa_id: string | null }>(
+      "select caixa_id from vendas where identificador_externo = 'CREARE:INICIO-1' and empresa_id = $1",
+      [linha.empresa_id]
+    );
+    expect(vendaDepois?.caixa_id).toBeNull();
+    const logs = await consultarTodos<{ valores_novos: Record<string, unknown> }>(
+      "select valores_novos from edicoes_caixa where caixa_id = $1 order by editado_em",
+      [caixa.caixaId]
+    );
+    expect(logs).toHaveLength(2);
+    expect(Number(logs[1]?.valores_novos["vendasDesanexadas"])).toBeGreaterThanOrEqual(1);
   });
 
   it("nao recua para dentro do caixa anterior do mesmo PDV", async () => {
@@ -129,6 +160,7 @@ describe("Caixa - ajustar o inicio das vendas (R-224)", () => {
       nome: "Caixa anterior",
       dataHoraAbertura: "2026-07-30T08:00"
     });
+    await fixarAbertura(primeiro.caixaId, "2026-07-30T11:00:00.000Z");
     const linha = await consultarUm<{ pdv_id: string; aberto_em: Date }>(
       "select pdv_id, aberto_em from fechamentos_caixa where id = $1",
       [primeiro.caixaId]
@@ -145,6 +177,12 @@ describe("Caixa - ajustar o inicio das vendas (R-224)", () => {
          from fechamentos_caixa where id = $1`,
       [primeiro.caixaId, oficial.toISOString()]
     );
+    // Exatamente no fechamento do anterior tambem nao: a venda daquele instante casaria com os dois caixas.
+    const encosta = await ajustar(primeiro.caixaId, {
+      inicio: new Date(oficial.getTime() - 5 * 60_000).toISOString(),
+      motivo: "No mesmo instante do fechamento anterior"
+    });
+    expect(encosta.statusCode, encosta.body).toBe(422);
     const invade = await ajustar(primeiro.caixaId, {
       inicio: new Date(oficial.getTime() - 20 * 60_000).toISOString(),
       motivo: "Tentando invadir o caixa anterior"
