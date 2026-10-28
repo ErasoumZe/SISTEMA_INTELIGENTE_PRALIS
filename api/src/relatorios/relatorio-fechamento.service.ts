@@ -226,14 +226,21 @@ export async function registrarConferenciaTesourariaFechamento(
     );
     const observacao = dados.observacao?.trim() || null;
     const ultima = conferenciasTesouraria.at(-1);
+    // Revisao: a Tesouraria JA decidiu e agora muda a decisao (conferido <-> divergente). Exige motivo nos dois
+    // sentidos e nao depende de haver quebra registrada; a decisao anterior fica no historico (so se acrescenta).
+    const ehRevisao = Boolean(ultima) && ultima?.resultado !== dados.resultado;
 
     if (dados.resultado === "conferido") {
       if (temPendencia) throw new Error("Há transferência pendente de conferência pela Tesouraria");
-      if (temDivergencia)
-        throw new Error("Há divergência registrada; use a conferência com divergência e informe a justificativa");
-      if (ultima?.resultado === "conferido") return ultima;
+      if (ehRevisao) {
+        if (!observacao) throw new Error("Informe o motivo da revisão da conferência");
+      } else {
+        if (temDivergencia)
+          throw new Error("Há divergência registrada; use a conferência com divergência e informe a justificativa");
+        if (ultima?.resultado === "conferido") return ultima;
+      }
     } else {
-      if (!temDivergencia) throw new Error("Não há divergência registrada neste caixa para confirmar");
+      // "Teve quebra": a Tesouraria pode apontar quebra mesmo quando o caixa fechou sem diferenca; o motivo e obrigatorio.
       if (!observacao) throw new Error("Informe a justificativa da conferência com divergência");
       if (
         ultima?.resultado === "divergente" &&

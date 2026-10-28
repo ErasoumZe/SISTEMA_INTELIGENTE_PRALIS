@@ -149,4 +149,79 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
       { resultado: "divergente", observacao: "Diferença de R$ 7,50 conferida na folha física." }
     ]);
   });
+
+  it("altera o status da decisao com motivo, nos dois sentidos, sem apagar o historico", async () => {
+    const conferir = (caixaId: string, payload: Record<string, unknown>) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/relatorios/fechamentos/${caixaId}/conferir`,
+        headers: { cookie: cookieTesouraria },
+        payload
+      });
+
+    // caixaFechado ja foi CONFERIDO acima e nao tem divergencia registrada: revisar para divergente exige motivo.
+    expect((await conferir(idsTeste.caixaFechado, { resultado: "divergente" })).statusCode).toBe(400);
+    const paraDivergente = await conferir(idsTeste.caixaFechado, {
+      resultado: "divergente",
+      observacao: "Folha fisica conferida de novo: faltou um comprovante."
+    });
+    expect(paraDivergente.statusCode, paraDivergente.body).toBe(200);
+
+    // E de volta para conferido: tambem exige motivo (nao e a primeira decisao).
+    expect((await conferir(idsTeste.caixaFechado, { resultado: "conferido" })).statusCode).toBe(400);
+    const deVolta = await conferir(idsTeste.caixaFechado, {
+      resultado: "conferido",
+      observacao: "Comprovante entregue e anexado."
+    });
+    expect(deVolta.statusCode, deVolta.body).toBe(200);
+
+    const eventos = await consultarTodos<{ resultado: string }>(
+      "select resultado from fechamentos_caixa_conferencias_tesouraria where fechamento_caixa_id = $1 order by conferido_em, id",
+      [idsTeste.caixaFechado]
+    );
+    expect(eventos.map((evento) => evento.resultado)).toEqual(["conferido", "divergente", "conferido"]);
+
+    const dossie = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${idsTeste.caixaFechado}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(json<{ data: { situacaoTesouraria: string } }>(dossie).data.situacaoTesouraria).toBe("conferido_tesouraria");
+  });
+
+  it("Teve quebra: a Tesouraria aponta quebra num caixa sem diferenca, com motivo obrigatorio", async () => {
+    const caixaLimpo = randomUUID();
+    await executarSql(
+      `insert into fechamentos_caixa (
+         id, empresa_id, pdv_id, usuario_id, usuario_caixa_id, colaborador_id,
+         data_movimento, data_hora_abertura, aberto_em, data_hora_fechamento, fechado_em,
+         token_edicao, status, criado_por
+       )
+       select $1, empresa_id, pdv_id, usuario_id, usuario_caixa_id, colaborador_id,
+              '2026-07-21', now(), now(), now(), now(), $2, 'fechado', criado_por
+         from fechamentos_caixa
+        where id = $3`,
+      [caixaLimpo, `TOKEN-QUEBRA-${caixaLimpo}`, idsTeste.caixaFechado]
+    );
+    const conferir = (payload: Record<string, unknown>) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/relatorios/fechamentos/${caixaLimpo}/conferir`,
+        headers: { cookie: cookieTesouraria },
+        payload
+      });
+
+    expect((await conferir({ resultado: "divergente" })).statusCode).toBe(400);
+    const resposta = await conferir({ resultado: "divergente", observacao: "Faltou uma nota de R$ 50 na contagem." });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+
+    const dossie = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${caixaLimpo}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(json<{ data: { situacaoTesouraria: string } }>(dossie).data.situacaoTesouraria).toBe(
+      "divergencia_confirmada_tesouraria"
+    );
+  });
 });
