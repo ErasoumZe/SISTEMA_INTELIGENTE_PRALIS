@@ -33,10 +33,13 @@ export interface ArquivoDoSia {
   bytes: Buffer;
 }
 
+/** U+FFFD: o que o Node poe no lugar de byte que nao e UTF-8. */
+const CARACTERE_INVALIDO = String.fromCharCode(0xfffd);
+
 /** CSV de exportacao pode vir em UTF-8 ou Latin-1 (Windows): sem caractere invalido, e UTF-8. */
 function textoDoCsv(bytes: Buffer): string {
   const utf8 = bytes.toString("utf8");
-  return utf8.includes("�") ? bytes.toString("latin1") : utf8;
+  return utf8.includes(CARACTERE_INVALIDO) ? bytes.toString("latin1") : utf8;
 }
 
 function tabelaDoArquivo(arquivo: ArquivoDoSia): string[][] {

@@ -61,7 +61,18 @@ export async function filaDaPlanilhaRepository(limite: number) {
     .limit(limite);
 }
 
-export async function marcarSincronizadoRepository(id: string, linha: number | null): Promise<void> {
+/**
+ * So conclui se a pendencia NAO mudou desde que foi lida: uma edicao no meio do reenvio volta a linha para
+ * `pendente` (novo `atualizado_em`) e ela precisa sair de novo na proxima rodada. `lidoEm` vem do banco em
+ * milissegundos; o `+1ms` cobre os microssegundos que o JS nao enxerga.
+ */
+const semMudancaDesde = (id: string, lidoEm: Date) =>
+  and(
+    eq(produtosPlanilhaSincronizacoes.id, id),
+    lt(produtosPlanilhaSincronizacoes.atualizadoEm, new Date(lidoEm.getTime() + 1))
+  );
+
+export async function marcarSincronizadoRepository(id: string, linha: number | null, lidoEm: Date): Promise<void> {
   await banco
     .update(produtosPlanilhaSincronizacoes)
     .set({
@@ -73,10 +84,15 @@ export async function marcarSincronizadoRepository(id: string, linha: number | n
       sincronizadoEm: new Date(),
       atualizadoEm: new Date()
     })
-    .where(eq(produtosPlanilhaSincronizacoes.id, id));
+    .where(semMudancaDesde(id, lidoEm));
 }
 
-export async function marcarFalhaRepository(id: string, tentativasAntes: number, erro: string): Promise<void> {
+export async function marcarFalhaRepository(
+  id: string,
+  tentativasAntes: number,
+  erro: string,
+  lidoEm: Date
+): Promise<void> {
   const tentativas = tentativasAntes + 1;
   await banco
     .update(produtosPlanilhaSincronizacoes)
@@ -87,7 +103,7 @@ export async function marcarFalhaRepository(id: string, tentativasAntes: number,
       proximaTentativaEm: new Date(Date.now() + esperaEmMinutos(tentativas) * 60_000),
       atualizadoEm: new Date()
     })
-    .where(eq(produtosPlanilhaSincronizacoes.id, id));
+    .where(semMudancaDesde(id, lidoEm));
 }
 
 /** Quem bateu no teto volta para a fila (acao manual do administrador). */

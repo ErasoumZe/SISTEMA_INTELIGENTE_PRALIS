@@ -309,6 +309,8 @@ export async function copiarProdutoBaseParaLoja(input: {
   produtoBaseId: string;
   empresaId: string;
   ator: AtorDaEscrita;
+  /** O lote publica o TXT uma vez no fim; a copia avulsa publica na hora. */
+  publicarNoDrive?: boolean;
 }) {
   const contexto = await carregarProdutoBaseParaLojaRepository(input.produtoBaseId, input.empresaId);
   if (!contexto) return { estado: "nao_encontrado" as const };
@@ -325,7 +327,8 @@ export async function copiarProdutoBaseParaLoja(input: {
     produtoBaseId: input.produtoBaseId,
     preservarPrecoImportado: true,
     // Oficial: a copia da loja herda o MESMO codigo interno da BASE (igual entre lojas).
-    codigoInterno: contexto.produto.codigoInterno
+    codigoInterno: contexto.produto.codigoInterno,
+    publicarNoDrive: input.publicarNoDrive ?? true
   });
   return { estado: "importado" as const, produtoId: salvo.id };
 }

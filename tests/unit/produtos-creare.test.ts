@@ -15,7 +15,8 @@ import {
 } from "@padaria/shared/produtos";
 
 // Porte literal de `creare.generator.test.ts` do app oficial (R-222): mesmos casos, mesmos valores.
-type ProductEntity = ProdutoCreare;
+// O fixture do oficial traz campos do produto inteiro (loja, ids...) que o gerador ignora: dai o `as`.
+type ProductEntity = ProdutoCreare & { id: string };
 
 const config: CreareStoreConfig = {
   groupCodes: { "PRODUTOS DA CASA": "0005" },
@@ -42,81 +43,82 @@ const config: CreareStoreConfig = {
   stockControlledByProductType: { revenda: "S", transformacao: "S" }
 };
 
-const bread = (overrides: Partial<ProductEntity> = {}): ProductEntity => ({
-  id: "019c1f58-472e-7000-8000-000000000001",
-  codigo: "PR-TEST-0001",
-  loja: "TNP",
-  compraAproximada: false,
-  baseProductId: null,
-  createdByName: "Teste",
-  createdAt: "2026-08-25T12:00:00.000Z",
-  nome: "PÃO DE SAL PRALIS",
-  quantidade: 0,
-  medidaBase: "KG",
-  pesavel: "S",
-  teclaBalanca: 0,
-  validadeBalanca: 0,
-  codigoBarras: null,
-  marca: null,
-  embalagem: null,
-  cDe: null,
-  qtCad: 1,
-  medidaCompra: null,
-  codigoInterno: "100000",
-  fotoUrl: null,
-  grupo: "PRODUTOS DA CASA",
-  tipo: "transformacao",
-  status: "ativo",
-  habilitarAjuda: false,
-  estoqueMin: 0,
-  estoqueMax: 0,
-  setorEstoque: null,
-  setorVenda1: null,
-  setorVenda2: null,
-  custo: 0.1,
-  margemPontual: null,
-  vVendaPontual: 21.99,
-  auto: false,
-  localVenda1: null,
-  localVenda2: null,
-  promocoes: [],
-  transformacao: {
-    precisao: "EXATOS",
-    qtd: 1,
-    unidade: "UN",
-    produtoReceituario: null,
-    refReceituario: null
-  },
-  fiscal: {
-    ncm: "1905.90.90",
-    cest: "17.062.03",
-    categoria: "3",
-    cstPisCofins: "99",
-    aliquotaCheia: 0,
-    aliquotaFcp: 0,
-    aliquotaPis: 0,
-    aliquotaCofins: 0,
-    reducaoIcms: 0,
-    icms: 18,
-    tributacaoSimples: null,
-    aliquotaSimples: null,
-    icmsRe: null,
-    baseFiscal: null,
-    codigoFiscal: null,
-    produtoFiscal: null,
-    cstReforma: null,
-    cClassTrib: null,
-    aliquotaIbs: null,
-    aliquotaCbs: null,
-    origemFiscal: null,
-    aliquotaEcf: null,
-    aliquotaEcfId: null,
-    estado: null,
-    motivo: null,
-    pctNcm: null
-  },
-  ...overrides
-});
+const bread = (overrides: Partial<ProductEntity> = {}): ProductEntity =>
+  ({
+    id: "019c1f58-472e-7000-8000-000000000001",
+    codigo: "PR-TEST-0001",
+    loja: "TNP",
+    compraAproximada: false,
+    baseProductId: null,
+    createdByName: "Teste",
+    createdAt: "2026-08-25T12:00:00.000Z",
+    nome: "PÃO DE SAL PRALIS",
+    quantidade: 0,
+    medidaBase: "KG",
+    pesavel: "S",
+    teclaBalanca: 0,
+    validadeBalanca: 0,
+    codigoBarras: null,
+    marca: null,
+    embalagem: null,
+    cDe: null,
+    qtCad: 1,
+    medidaCompra: null,
+    codigoInterno: "100000",
+    fotoUrl: null,
+    grupo: "PRODUTOS DA CASA",
+    tipo: "transformacao",
+    status: "ativo",
+    habilitarAjuda: false,
+    estoqueMin: 0,
+    estoqueMax: 0,
+    setorEstoque: null,
+    setorVenda1: null,
+    setorVenda2: null,
+    custo: 0.1,
+    margemPontual: null,
+    vVendaPontual: 21.99,
+    auto: false,
+    localVenda1: null,
+    localVenda2: null,
+    promocoes: [],
+    transformacao: {
+      precisao: "EXATOS",
+      qtd: 1,
+      unidade: "UN",
+      produtoReceituario: null,
+      refReceituario: null
+    },
+    fiscal: {
+      ncm: "1905.90.90",
+      cest: "17.062.03",
+      categoria: "3",
+      cstPisCofins: "99",
+      aliquotaCheia: 0,
+      aliquotaFcp: 0,
+      aliquotaPis: 0,
+      aliquotaCofins: 0,
+      reducaoIcms: 0,
+      icms: 18,
+      tributacaoSimples: null,
+      aliquotaSimples: null,
+      icmsRe: null,
+      baseFiscal: null,
+      codigoFiscal: null,
+      produtoFiscal: null,
+      cstReforma: null,
+      cClassTrib: null,
+      aliquotaIbs: null,
+      aliquotaCbs: null,
+      origemFiscal: null,
+      aliquotaEcf: null,
+      aliquotaEcfId: null,
+      estado: null,
+      motivo: null,
+      pctNcm: null
+    },
+    ...overrides
+  }) as ProductEntity;
 
 describe("layout Criare de produto", () => {
   it("tem 40 campos e fecha exatamente em 363 posicoes", () => {
@@ -125,10 +127,10 @@ describe("layout Criare de produto", () => {
     const positions = Object.fromEntries(
       creareProductPositions().map((field) => [field.name, [field.start, field.end]])
     );
-    expect(positions.internalCode).toEqual([66, 71]);
-    expect(positions.supplierManufacturer).toEqual([72, 111]);
-    expect(positions.reserved).toEqual([245, 248]);
-    expect(positions.categoryCode).toEqual([355, 363]);
+    expect(positions["internalCode"]).toEqual([66, 71]);
+    expect(positions["supplierManufacturer"]).toEqual([72, 111]);
+    expect(positions["reserved"]).toEqual([245, 248]);
+    expect(positions["categoryCode"]).toEqual([355, 363]);
   });
 
   it("decodifica sem deslocamento o primeiro registro real fornecido", () => {
@@ -622,7 +624,7 @@ describe("casamento no SIA manda no coditem, no grupo e na aliquota", () => {
       ["b", { ...sia, coditem: "067890", aliqSaidaEcf: "03" }]
     ]);
 
-    const linhas = generateCreareFile([a, b], config, (p) => porId.get(p.id)).split(
+    const linhas = generateCreareFile([a, b], config, (p) => porId.get((p as ProductEntity).id)).split(
       String.fromCharCode(13) + String.fromCharCode(10)
     );
 

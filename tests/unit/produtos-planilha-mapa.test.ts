@@ -84,39 +84,39 @@ describe("mapper: colunas do cadastro geral", () => {
 
   it("mapeia identidade, embalagem e preço nas colunas certas", () => {
     const c = mapProductToCells(produto(), OPTS);
-    expect(valor(c.C)).toBe("ATIVO");
-    expect(valor(c.D)).toBe("TNP,LI,HORA");
-    expect(valor(c.E)).toBe("SNICKERS");
-    expect(valor(c.F)).toBe("45,000"); // coluna TEXTO em pt-BR com 3 casas
-    expect(valor(c.G)).toBe("G");
-    expect(valor(c.J)).toBe(7896423420180);
-    expect(valor(c.K)).toBe("MARS");
-    expect(valor(c.L)).toBe("CX");
-    expect(valor(c.M)).toBe("C/");
-    expect(valor(c.N)).toBe(20);
-    expect(valor(c.O)).toBe("UN");
+    expect(valor(c["C"])).toBe("ATIVO");
+    expect(valor(c["D"])).toBe("TNP,LI,HORA");
+    expect(valor(c["E"])).toBe("SNICKERS");
+    expect(valor(c["F"])).toBe("45,000"); // coluna TEXTO em pt-BR com 3 casas
+    expect(valor(c["G"])).toBe("G");
+    expect(valor(c["J"])).toBe(7896423420180);
+    expect(valor(c["K"])).toBe("MARS");
+    expect(valor(c["L"])).toBe("CX");
+    expect(valor(c["M"])).toBe("C/");
+    expect(valor(c["N"])).toBe(20);
+    expect(valor(c["O"])).toBe("UN");
     // formato novo (09/09/2026): a frase se le em voz alta e diz a medida de compra
-    expect(valor(c.P)).toBe("SNICKERS 45 G - CAIXA COM SNICKERS 45 G 20UN");
-    expect(valor(c.AC)).toBe("00007");
-    expect(valor(c.AE)).toBe(20);
-    expect(valor(c.AG)).toBe(100);
-    expect(valor(c.AI)).toBe("LJ - CAIXAS");
-    expect(valor(c.AJ)).toBe(84.9);
-    expect(valor(c.AM)).toBe(6.5);
-    expect(valor(c.AQ)).toBe('CAIXA C/3 LADOS "U" 3P');
-    expect(vazia(c.AS)).toBe(true);
-    expect(valor(c.CO)).toBe("https://res.cloudinary.com/demo/snickers.jpg");
-    expect(valor(c.CP)).toBe("0197d7c4-2c9a-7000-8000-000000000001");
+    expect(valor(c["P"])).toBe("SNICKERS 45 G - CAIXA COM SNICKERS 45 G 20UN");
+    expect(valor(c["AC"])).toBe("00007");
+    expect(valor(c["AE"])).toBe(20);
+    expect(valor(c["AG"])).toBe(100);
+    expect(valor(c["AI"])).toBe("LJ - CAIXAS");
+    expect(valor(c["AJ"])).toBe(84.9);
+    expect(valor(c["AM"])).toBe(6.5);
+    expect(valor(c["AQ"])).toBe('CAIXA C/3 LADOS "U" 3P');
+    expect(vazia(c["AS"])).toBe(true);
+    expect(valor(c["CO"])).toBe("https://res.cloudinary.com/demo/snickers.jpg");
+    expect(valor(c["CP"])).toBe("0197d7c4-2c9a-7000-8000-000000000001");
   });
 
   it("margem vai como FRAÇÃO (coluna AL tem formato 0%)", () => {
     const c = mapProductToCells(produto({ margemPontual: 0.7 }), OPTS);
-    expect(c.AL).toEqual({ kind: "number", value: 0.7 });
+    expect(c["AL"]).toEqual({ kind: "number", value: 0.7 });
   });
 
   it("status inativo vira INATIVO", () => {
     const c = mapProductToCells(produto({ status: "inativo" }), OPTS);
-    expect(valor(c.C)).toBe("INATIVO");
+    expect(valor(c["C"])).toBe("INATIVO");
   });
 
   it("quantidade sempre com 3 casas e vírgula", () => {
@@ -135,20 +135,20 @@ describe("mapper: conversão SIM/NÃO", () => {
 
   it("AN (auto) e CN (habilitar ajuda) usam SIM/NÃO", () => {
     const sim = mapProductToCells(produto({ auto: true, habilitarAjuda: true }), OPTS);
-    expect(valor(sim.AN)).toBe("SIM");
-    expect(valor(sim.CN)).toBe("SIM");
+    expect(valor(sim["AN"])).toBe("SIM");
+    expect(valor(sim["CN"])).toBe("SIM");
 
     const nao = mapProductToCells(produto({ auto: false, habilitarAjuda: false }), OPTS);
-    expect(valor(nao.AN)).toBe("NÃO");
-    expect(valor(nao.CN)).toBe("NÃO");
+    expect(valor(nao["AN"])).toBe("NÃO");
+    expect(valor(nao["CN"])).toBe("NÃO");
   });
 });
 
 describe("mapper: revenda x transformação", () => {
   it("revenda põe o grupo em R e deixa T e o bloco de transformação vazios", () => {
     const c = mapProductToCells(produto(), OPTS);
-    expect(valor(c.R)).toBe("MER BOMBONIERI - CHOCOLATES");
-    expect(vazia(c.T)).toBe(true);
+    expect(valor(c["R"])).toBe("MER BOMBONIERI - CHOCOLATES");
+    expect(vazia(c["T"])).toBe(true);
     for (const col of ["V", "W", "X", "Y", "Z"]) expect(vazia(c[col])).toBe(true);
   });
 
@@ -167,13 +167,13 @@ describe("mapper: revenda x transformação", () => {
       }),
       OPTS
     );
-    expect(vazia(c.R)).toBe(true);
-    expect(valor(c.T)).toBe("MER MAT. PRIMA - FARINHAS");
-    expect(valor(c.V)).toBe("EXATOS");
-    expect(valor(c.W)).toBe(25000);
-    expect(valor(c.X)).toBe("G");
-    expect(valor(c.Y)).toBe("FARINHA DE TRIGO EXTRA CLARA (000)");
-    expect(valor(c.Z)).toBe("REF-1");
+    expect(vazia(c["R"])).toBe(true);
+    expect(valor(c["T"])).toBe("MER MAT. PRIMA - FARINHAS");
+    expect(valor(c["V"])).toBe("EXATOS");
+    expect(valor(c["W"])).toBe(25000);
+    expect(valor(c["X"])).toBe("G");
+    expect(valor(c["Y"])).toBe("FARINHA DE TRIGO EXTRA CLARA (000)");
+    expect(valor(c["Z"])).toBe("REF-1");
   });
 });
 
@@ -197,16 +197,16 @@ describe("mapper: fiscal", () => {
       OPTS
     );
     // grafia do Creare: inteiro de largura fixa, casas implícitas (a coluna é NUMBER #0)
-    expect(c.BS).toEqual({ kind: "text", value: "3333" }); // 33,33% com 2 casas
-    expect(c.BT).toEqual({ kind: "text", value: "07000" }); // 7,000% com 3 casas
-    expect(c.BU).toEqual({ kind: "text", value: "0200" }); // FCP 2,00% com 2 casas
-    expect(valor(c.BV)).toBe("01");
-    expect(c.BW).toEqual({ kind: "text", value: "00016500" }); // PIS 1,65 com 4 casas
-    expect(c.BX).toEqual({ kind: "text", value: "00076000" }); // COFINS 7,60 com 4 casas
-    expect(valor(c.CA)).toBe("19059090");
-    expect(valor(c.CB)).toBe("PADARIA");
-    expect(valor(c.CD)).toBe(7);
-    expect(valor(c.CE)).toBe("1704000");
+    expect(c["BS"]).toEqual({ kind: "text", value: "3333" }); // 33,33% com 2 casas
+    expect(c["BT"]).toEqual({ kind: "text", value: "07000" }); // 7,000% com 3 casas
+    expect(c["BU"]).toEqual({ kind: "text", value: "0200" }); // FCP 2,00% com 2 casas
+    expect(valor(c["BV"])).toBe("01");
+    expect(c["BW"]).toEqual({ kind: "text", value: "00016500" }); // PIS 1,65 com 4 casas
+    expect(c["BX"]).toEqual({ kind: "text", value: "00076000" }); // COFINS 7,60 com 4 casas
+    expect(valor(c["CA"])).toBe("19059090");
+    expect(valor(c["CB"])).toBe("PADARIA");
+    expect(valor(c["CD"])).toBe(7);
+    expect(valor(c["CE"])).toBe("1704000");
   });
 
   it("CST, NCM e CEST são TEXTO — zero à esquerda não some", () => {
@@ -227,9 +227,9 @@ describe("mapper: fiscal", () => {
       }),
       OPTS
     );
-    expect(c.CA).toEqual({ kind: "text", value: "01012100" });
-    expect(c.CE).toEqual({ kind: "text", value: "0100100" });
-    expect(c.BV).toEqual({ kind: "text", value: "01" });
+    expect(c["CA"]).toEqual({ kind: "text", value: "01012100" });
+    expect(c["CE"]).toEqual({ kind: "text", value: "0100100" });
+    expect(c["BV"]).toEqual({ kind: "text", value: "01" });
   });
 
   it("sem fiscal, todas as colunas fiscais ficam vazias", () => {
@@ -260,11 +260,11 @@ describe("mapper: promoção", () => {
       }),
       OPTS
     );
-    expect(vazia(c.AW)).toBe(true);
+    expect(vazia(c["AW"])).toBe(true);
     // AY = (AZ*AO)+AO -> só resulta em 0,8×AO se AZ for -0,20
-    expect(c.AZ).toEqual({ kind: "number", value: -0.2 });
-    expect(c.BL).toEqual({ kind: "entered", value: "12:00" });
-    expect(c.BO).toEqual({ kind: "entered", value: "15:00" });
+    expect(c["AZ"]).toEqual({ kind: "number", value: -0.2 });
+    expect(c["BL"]).toEqual({ kind: "entered", value: "12:00" });
+    expect(c["BO"]).toEqual({ kind: "entered", value: "15:00" });
   });
 
   it("o desconto gravado reproduz o preço promocional da fórmula AY", () => {
@@ -286,7 +286,7 @@ describe("mapper: promoção", () => {
         }),
         OPTS
       );
-      const az = (c.AZ as { value: number }).value;
+      const az = (c["AZ"] as { value: number }).value;
       const ay = az * precoNormal + precoNormal; // fórmula real da coluna AY
       expect(ay).toBeCloseTo(precoNormal * (1 - pct), 10);
       expect(az).toBeLessThan(0);
@@ -317,8 +317,8 @@ describe("mapper: promoção", () => {
       }),
       OPTS
     );
-    expect(c.AW).toEqual({ kind: "number", value: 4.99 });
-    expect(vazia(c.AZ)).toBe(true);
+    expect(c["AW"]).toEqual({ kind: "number", value: 4.99 });
+    expect(vazia(c["AZ"])).toBe(true);
   });
 
   it("dia ATIVO grava o RÓTULO do dia; dia inativo fica VAZIO (nunca SIM/NÃO)", () => {
@@ -401,7 +401,7 @@ describe("mapper: promoção", () => {
     for (const col of ["AW", "AZ", "BA", ...DIAS_COLS, "BL", "BO"]) {
       expect(vazia(c[col]), `coluna ${col} deveria estar vazia`).toBe(true);
     }
-    expect(valor(c.AU)).toBe("NÃO"); // flag da promoção acompanha
+    expect(valor(c["AU"])).toBe("NÃO"); // flag da promoção acompanha
   });
 
   it("AU sinaliza SIM quando existe promoção", () => {
@@ -421,7 +421,7 @@ describe("mapper: promoção", () => {
       }),
       OPTS
     );
-    expect(valor(c.AU)).toBe("SIM");
+    expect(valor(c["AU"])).toBe("SIM");
   });
 
   it("usa a PRIMEIRA promoção quando o produto tem mais de uma", () => {
@@ -451,12 +451,12 @@ describe("mapper: promoção", () => {
       }),
       OPTS
     );
-    expect(c.AW).toEqual({ kind: "number", value: 4.99 }); // da primeira
-    expect(vazia(c.AZ)).toBe(true); // a segunda foi ignorada
-    expect(valor(c.BL)).toBe("08:00");
-    expect(valor(c.BB)).toBe("SEG");
-    expect(vazia(c.BH)).toBe(true);
-    expect(vazia(c.BA)).toBe(true);
+    expect(c["AW"]).toEqual({ kind: "number", value: 4.99 }); // da primeira
+    expect(vazia(c["AZ"])).toBe(true); // a segunda foi ignorada
+    expect(valor(c["BL"])).toBe("08:00");
+    expect(valor(c["BB"])).toBe("SEG");
+    expect(vazia(c["BH"])).toBe(true);
+    expect(vazia(c["BA"])).toBe(true);
   });
 
   it("BA vai como TEXTO, no rótulo aceito pela validação da coluna", () => {
@@ -477,15 +477,15 @@ describe("mapper: promoção", () => {
       OPTS
     );
     // a lista DESCONTOATE aceita "ATÉ 5%".."ATÉ 50%" — é rótulo, não número
-    expect(c.BA).toEqual({ kind: "text", value: "ATÉ 20%" });
+    expect(c["BA"]).toEqual({ kind: "text", value: "ATÉ 20%" });
   });
 });
 
 describe("mapper: colunas operacionais da planilha", () => {
   it("revenda marca Q=SIM e S=NÃO", () => {
     const c = mapProductToCells(produto({ tipo: "revenda" }), OPTS);
-    expect(valor(c.Q)).toBe("SIM");
-    expect(valor(c.S)).toBe("NÃO");
+    expect(valor(c["Q"])).toBe("SIM");
+    expect(valor(c["S"])).toBe("NÃO");
   });
 
   it("transformação marca Q=NÃO e S=SIM (a coluna U depende de S)", () => {
@@ -502,8 +502,8 @@ describe("mapper: colunas operacionais da planilha", () => {
       }),
       OPTS
     );
-    expect(valor(c.Q)).toBe("NÃO");
-    expect(valor(c.S)).toBe("SIM");
+    expect(valor(c["Q"])).toBe("NÃO");
+    expect(valor(c["S"])).toBe("SIM");
   });
 
   it("Q e S são SEMPRE complementares — nunca combinação incoerente", () => {
@@ -518,8 +518,8 @@ describe("mapper: colunas operacionais da planilha", () => {
         }),
         OPTS
       );
-      const q = valor(c.Q);
-      const s = valor(c.S);
+      const q = valor(c["Q"]);
+      const s = valor(c["S"]);
       expect([q, s]).not.toEqual(["SIM", "SIM"]);
       expect([q, s]).not.toEqual(["NÃO", "NÃO"]);
       expect(q === "SIM" ? s : q).toBe("NÃO");
@@ -527,18 +527,18 @@ describe("mapper: colunas operacionais da planilha", () => {
   });
 
   it("AB espelha o status (a coluna AD só mostra a descrição se AB estiver preenchida)", () => {
-    expect(valor(mapProductToCells(produto({ status: "ativo" }), OPTS).AB)).toBe("ATIVO");
-    expect(valor(mapProductToCells(produto({ status: "inativo" }), OPTS).AB)).toBe("INATIVO");
+    expect(valor(mapProductToCells(produto({ status: "ativo" }), OPTS)["AB"])).toBe("ATIVO");
+    expect(valor(mapProductToCells(produto({ status: "inativo" }), OPTS)["AB"])).toBe("INATIVO");
     // AB acompanha C
     const c = mapProductToCells(produto({ status: "inativo" }), OPTS);
-    expect(valor(c.AB)).toBe(valor(c.C));
+    expect(valor(c["AB"])).toBe(valor(c["C"]));
   });
 
   it("rótulos fixos: BK, BM e BP", () => {
     const c = mapProductToCells(produto(), OPTS);
-    expect(valor(c.BK)).toBe("DE:");
-    expect(valor(c.BM)).toBe("ATÉ:");
-    expect(valor(c.BP)).toBe("NÃO REVISADO");
+    expect(valor(c["BK"])).toBe("DE:");
+    expect(valor(c["BM"])).toBe("ATÉ:");
+    expect(valor(c["BP"])).toBe("NÃO REVISADO");
   });
 
   it("as colunas operacionais nunca ficam vazias, mesmo no produto mínimo", () => {
@@ -606,14 +606,14 @@ describe("mapper: campos ausentes viram célula vazia", () => {
       expect(vazia(c[col]), `coluna ${col} deveria estar vazia`).toBe(true);
     }
     // o que nunca fica vazio
-    expect(valor(c.E)).toBe("SNICKERS");
-    expect(valor(c.CP)).toBe("0197d7c4-2c9a-7000-8000-000000000001");
-    expect(valor(c.F)).toBe("45,000");
+    expect(valor(c["E"])).toBe("SNICKERS");
+    expect(valor(c["CP"])).toBe("0197d7c4-2c9a-7000-8000-000000000001");
+    expect(valor(c["F"])).toBe("45,000");
   });
 
   it('string em branco também vira célula vazia (não grava " ")', () => {
     const c = mapProductToCells(produto({ marca: "   " }), OPTS);
-    expect(vazia(c.K)).toBe(true);
+    expect(vazia(c["K"])).toBe(true);
   });
 });
 

@@ -91,13 +91,14 @@ export async function reprocessarFilaDaPlanilha(
       : { empresaId: item.empresaId ?? "", produtoId: item.produtoId ?? "" };
     try {
       const { linha } = await escritor().escrever(alvo);
-      await marcarSincronizadoRepository(item.id, linha);
+      await marcarSincronizadoRepository(item.id, linha, item.atualizadoEm);
       sincronizados += 1;
     } catch (erro) {
       await marcarFalhaRepository(
         item.id,
         item.tentativas,
-        erro instanceof Error ? sanitizeError(erro) : "Falha ao escrever"
+        erro instanceof Error ? sanitizeError(erro) : "Falha ao escrever",
+        item.atualizadoEm
       );
       falharam += 1;
     }

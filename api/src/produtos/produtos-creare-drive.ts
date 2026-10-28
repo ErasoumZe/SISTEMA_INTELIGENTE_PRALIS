@@ -55,8 +55,14 @@ export class CreareDriveSobTesteError extends Error {
 export class GoogleDriveCreareGateway implements DriveGateway {
   constructor(
     private readonly fetcher: GoogleFetcher = (input, init) => fetch(input, init),
-    private readonly tokenProvider: () => Promise<string> = obterTokenGoogle
+    private readonly tokenProvider: () => Promise<string> = obterTokenGoogle,
+    private readonly prazoMs = env.GOOGLE_PRODUTOS_TIMEOUT_MS
   ) {}
+
+  /** Mesmo prazo do Sheets: o salvamento espera a publicacao e nao pode ficar pendurado no Google. */
+  private prazo(): { signal?: AbortSignal } {
+    return this.prazoMs > 0 ? { signal: AbortSignal.timeout(this.prazoMs) } : {};
+  }
 
   private async token(operacao: string): Promise<string> {
     // A mesma trava do Sheets: aqui o estrago seria entregar um arquivo de teste na pasta do PDV.
@@ -71,7 +77,7 @@ export class GoogleDriveCreareGateway implements DriveGateway {
     const res = await executarGoogleJson<{ files?: Array<{ id?: string }> }>(
       this.fetcher,
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=2&supportsAllDrives=true&includeItemsFromAllDrives=true`,
-      { headers: cabecalhoGoogle(token) },
+      { headers: cabecalhoGoogle(token), ...this.prazo() },
       "buscar o arquivo do CREARE no Drive"
     );
     return res.files?.[0]?.id ?? null;
@@ -82,7 +88,12 @@ export class GoogleDriveCreareGateway implements DriveGateway {
     await executarGoogle(
       this.fetcher,
       `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(arquivoId)}?uploadType=media&supportsAllDrives=true`,
-      { method: "PATCH", headers: cabecalhoGoogle(token, "text/plain"), body: new Uint8Array(conteudo) },
+      {
+        method: "PATCH",
+        headers: cabecalhoGoogle(token, "text/plain"),
+        body: new Uint8Array(conteudo),
+        ...this.prazo()
+      },
       "atualizar o arquivo do CREARE no Drive"
     );
   }

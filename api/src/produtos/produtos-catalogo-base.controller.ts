@@ -8,6 +8,7 @@ import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas } from "../auth/empresa.js";
 import { CodigoBarrasDuplicadoError, ProdutoDuplicadoError, ProdutoNaoEncontradoError } from "./produtos.service.js";
 import { copiarProdutoBaseParaLoja, listarCatalogoBase } from "./produtos-catalogo-base.service.js";
+import { publicarCreareDaEmpresaAposSalvar } from "./produtos-creare-drive.js";
 import {
   BaseSemCorrespondenciaError,
   criarProdutoBase,
@@ -184,7 +185,8 @@ export async function registrarRotasCatalogoBase(app: FastifyInstance): Promise<
           const resultado = await copiarProdutoBaseParaLoja({
             produtoBaseId,
             empresaId,
-            ator: { usuarioId: request.usuarioId, nome: perfil?.nome, empresasPermitidas: permitidas }
+            ator: { usuarioId: request.usuarioId, nome: perfil?.nome, empresasPermitidas: permitidas },
+            publicarNoDrive: false
           });
           itens.push({
             produtoBaseId,
@@ -205,6 +207,8 @@ export async function registrarRotasCatalogoBase(app: FastifyInstance): Promise<
         }
       }
 
+      // O arquivo do PDV e o catalogo inteiro: o lote publica UMA vez no fim (oficial `importFromBase`).
+      if (itens.some((item) => item.estado === "importado")) await publicarCreareDaEmpresaAposSalvar(empresaId);
       const contagem = (estado: string) => itens.filter((item) => item.estado === estado).length;
       return ok({
         total: itens.length,

@@ -282,5 +282,78 @@ describe("produtos - escritor da planilha e publicacao no Drive", () => {
     expect(await publicarCreareNoDrive("TNP")).toBe("publicado");
     expect(enviados).toEqual([{ id: "arquivo-1", tamanho: expect.any(Number) }]);
     expect(enviados[0]!.tamanho % 365).toBe(0);
+
+    // Importacao em lote: o catalogo inteiro e publicado UMA vez no fim, nao uma por produto.
+    const baseIds: string[] = [];
+    for (const descricao of ["DRIVE LOTE UM", "DRIVE LOTE DOIS"]) {
+      const base = await contexto.app.inject({
+        method: "POST",
+        url: "/api/produtos/base",
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+          unidadeIndividualId: idsTeste.unidade,
+          quantidadeIndividual: 1,
+          descricao,
+          auto: false,
+          precoVenda: 3
+        }
+      });
+      expect(base.statusCode, base.body).toBe(201);
+      baseIds.push(json<{ data: { id: string } }>(base).data.id);
+    }
+    enviados.length = 0;
+    const lote = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos/catalogo-base/importar",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, produtoBaseIds: baseIds }
+    });
+    expect(json<{ data: { importados: number } }>(lote).data.importados, lote.body).toBe(2);
+    expect(enviados).toHaveLength(1);
+  });
+
+  it("Deve_DeixarACopiaNaFila_QuandoOGoogleCaiComOCacheFrio", async () => {
+    const criado = await criar("PLANILHA GOOGLE FORA");
+    expect(criado.statusCode, criado.body).toBe(201);
+    const produtoId = json<{ data: { id: string } }>(criado).data.id;
+    const fora = montarPlanilha();
+    fora.getSheets = () => Promise.reject(new Error("Google fora do ar"));
+    definirEscritorDaPlanilhaParaTeste(new EscritorPlanilhaGoogle(fora, "planilha-teste"));
+    await executarSql("update produtos_planilha_sincronizacoes set status = 'sincronizado' where produto_id <> $1", [
+      produtoId
+    ]);
+    await reenviar();
+    const copia = await consultarUm<{ status: string }>(
+      "select status from produtos_planilha_sincronizacoes where produto_id = $1",
+      [produtoId]
+    );
+    // Antes: o erro era engolido, a copia saia como "sincronizada" e nunca mais era tentada.
+    expect(copia?.status).toBe("falhou");
+    definirEscritorDaPlanilhaParaTeste(new EscritorPlanilhaGoogle(planilha, "planilha-teste"));
+  });
+
+  it("Deve_RecusarLinhaNova_QuandoOCodigoInternoJaEstaNaPlanilhaSemId", async () => {
+    const criado = await criar("PLANILHA JA ESTA LA");
+    expect(criado.statusCode, criado.body).toBe(201);
+    const base = (await vinculo(json<{ data: { id: string } }>(criado).data.id))!;
+    await executarSql("update produtos_catalogo_base set codigo_interno = '0077777' where id = $1", [base.base_id]);
+    const comCarga = montarPlanilha();
+    comCarga.abas.get(BASE)!.celulas.set("11:7", "77777"); // H11: CODIGO INT. da TNP, linha sem o nosso ID
+    definirEscritorDaPlanilhaParaTeste(new EscritorPlanilhaGoogle(comCarga, "planilha-teste"));
+    await executarSql("update produtos_planilha_sincronizacoes set status = 'sincronizado'");
+    await executarSql("update produtos_planilha_sincronizacoes set status = 'pendente' where produto_base_id = $1", [
+      base.base_id
+    ]);
+    await reenviar();
+    const linha = await consultarUm<{ status: string; ultimo_erro: string }>(
+      "select status, ultimo_erro from produtos_planilha_sincronizacoes where produto_base_id = $1",
+      [base.base_id]
+    );
+    expect(linha?.status).toBe("falhou");
+    expect(linha?.ultimo_erro).toContain("já está na linha 11");
+    expect(comCarga.abas.get(BASE)!.meta.rowCount).toBe(12);
+    definirEscritorDaPlanilhaParaTeste(new EscritorPlanilhaGoogle(planilha, "planilha-teste"));
   });
 });

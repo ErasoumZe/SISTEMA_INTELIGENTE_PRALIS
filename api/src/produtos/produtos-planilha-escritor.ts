@@ -39,6 +39,9 @@ import {
  * Copia de loja NUNCA cria linha (regra do oficial de 25/09/2026, `syncStoreProducts`): ela escreve a faixa
  * da loja na linha do produto da BASE; sem essa linha, falha com o motivo e nao recadastra o produto.
  */
+/** Lojas do app oficial; "SEM LOJA (...)" nao entra na planilha. */
+const LOJAS_COM_FAIXA = new Set(["TNP", "LI", "HORA"]);
+
 const isEmpty = (v: string | undefined): boolean => (v ?? "").trim() === "";
 const ehFormula = (v: string | undefined) => typeof v === "string" && v.startsWith("=");
 
@@ -62,7 +65,11 @@ export class EscritorPlanilhaGoogle {
     const ehBase = item.loja === "BASE";
     // Copia de loja sem vinculo com a BASE nao tem linha a que pertencer (oficial: `skipped`).
     if (!ehBase && !item.baseProductId) return { linha: null };
-    if (!ehBase && !(await this.leiauteEhNovo())) return { linha: null };
+    // Empresa sem loja de PDV nao tem faixa: escreveria so as colunas gerais por cima da BASE.
+    if (!ehBase && !LOJAS_COM_FAIXA.has(item.loja)) return { linha: null };
+    // Cache frio e Google fora: o erro SOBE (a fila tenta de novo). O oficial devolvia `skipped` aqui, mas
+    // la o espelho roda a cada salvamento; na fila do ERP isso marcaria a copia como sincronizada.
+    if (!ehBase && !(await this.layoutValido()).layout.novo) return { linha: null };
 
     const linha = await this.enfileirar(() => (ehBase ? this.escreverBase(item, alvo) : this.escreverLoja(item)));
     // As abas (TNP)/(LI) recebem a MESMA linha; nunca derruba o que a combinada ja recebeu.
@@ -130,11 +137,28 @@ export class EscritorPlanilhaGoogle {
     return { aba, layout };
   }
 
-  private async leiauteEhNovo(): Promise<boolean> {
-    try {
-      return (await this.resolverLayout(await this.resolverAba())).novo !== null;
-    } catch {
-      return false; // sem conseguir olhar, mantem o comportamento antigo
+  /**
+   * Antes de reservar linha nova: o produto ja esta na aba SEM o ID (carga que entrou lendo a planilha)?
+   * Reservar duplicaria o cadastro — o defeito de 25/09 do oficial. Recusa com o motivo; ligar a linha ao
+   * produto e decisao de gente, nao do espelho.
+   */
+  private async recusarSeJaEstaSemId(item: ProdutoParaPlanilha, layout: SheetLayout): Promise<void> {
+    const codigo = item.produto.codigoInterno?.trim();
+    if (!codigo || layout.colunasCodigoInterno.length === 0) return;
+    const semZeros = (v: string) => v.trim().replace(/^0+(?=\d)/u, "");
+    const lido = await this.sheets.batchGetValues(
+      this.spreadsheetId,
+      layout.colunasCodigoInterno.map((c) => a1(this.sheetName, `${c}${FIRST_DATA_ROW}:${c}`)),
+      "FORMATTED_VALUE"
+    );
+    for (const coluna of lido) {
+      const indice = coluna.findIndex((r) => semZeros(r?.[0] ?? "") === semZeros(codigo));
+      if (indice >= 0) {
+        throw new Error(
+          `O código interno ${codigo} já está na linha ${FIRST_DATA_ROW + indice} da planilha, sem o ID do ` +
+            "sistema. Nada foi escrito para não duplicar o produto; preencha o ID dessa linha."
+        );
+      }
     }
   }
 
@@ -157,6 +181,7 @@ export class EscritorPlanilhaGoogle {
     const linha = linhaExistente ?? this.primeiraLinhaLivre(colunaNomes, colunaIds);
 
     if (linhaExistente === null) {
+      await this.recusarSeJaEstaSemId(item, layout);
       // A ordem e o contrato: capacidade -> reserva so do ID -> registra a linha -> formato da linha-modelo.
       await this.garantirCapacidade(aba, linha);
       await this.sheets.batchUpdateValues(

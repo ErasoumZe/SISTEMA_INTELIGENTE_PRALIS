@@ -86,7 +86,7 @@ describe("traducao entre abas", () => {
     const r = traduzirCelulas(celulas, comAuxiliar, destino);
 
     expect(r.semCabecalho).toEqual(["B"]);
-    expect(r.celulas.B).toBeUndefined();
+    expect(r.celulas["B"]).toBeUndefined();
   });
 
   it("aba que ganhar a coluna depois passa a receber, sem mexer em codigo", () => {

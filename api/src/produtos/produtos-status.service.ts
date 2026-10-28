@@ -2,6 +2,7 @@ import { fraseDeInativacaoEmLote, type AlterarStatusProdutosPayload } from "@pad
 import { alterarStatusDeProdutosRepository } from "./produtos-status.repository.js";
 import { banco } from "../banco/conexao.js";
 import { registrarNaFilaDaPlanilha } from "./produtos-planilha.service.js";
+import { publicarCreareDaEmpresaAposSalvar } from "./produtos-creare-drive.js";
 
 /** Lote de status fora da regra: mais de um produto sem ser administrador, ou para ativar. */
 export class StatusEmLoteNaoPermitidoError extends Error {
@@ -39,5 +40,7 @@ export async function alterarStatusDeProdutos(
   const alterados = await alterarStatusDeProdutosRepository(entrada.empresaId, ids, entrada.status);
   for (const produtoId of alterados)
     await registrarNaFilaDaPlanilha(banco, { empresaId: entrada.empresaId, produtoId });
+  // O TXT carrega se o produto esta ativo: o PDV precisa do arquivo novo (desligado ate a virada).
+  if (alterados.length) await publicarCreareDaEmpresaAposSalvar(entrada.empresaId);
   return { alterados, ignorados: ids.filter((id) => !alterados.includes(id)) };
 }

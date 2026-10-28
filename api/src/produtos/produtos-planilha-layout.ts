@@ -44,6 +44,8 @@ export interface SheetLayout {
   novo: LeiauteNovo | null;
   /** Coluna do nome do produto, que muda de lugar entre os dois leiautes. */
   colunaNome: string;
+  /** Toda coluna `CODIGO INT.` da aba (na nova, uma por loja): guarda contra linha duplicada. */
+  colunasCodigoInterno: string[];
 }
 
 /** Compara cabecalho ignorando acento, caixa, espaco extra e ponto final (oficial `normalizeHeader`). */
@@ -93,7 +95,10 @@ export function montarLayout(headers: readonly string[], linhaFaixas: readonly s
     footer: { id: id ?? "", photo: photo ?? "", help },
     cabecalhos,
     novo,
-    colunaNome: (novo ? nomeNaNova : "E") ?? "E"
+    colunaNome: (novo ? nomeNaNova : "E") ?? "E",
+    colunasCodigoInterno: headers.flatMap((h, i) =>
+      normalizeHeader(h) === normalizeHeader("CODIGO INT.") ? [indexToCol(i)] : []
+    )
   };
 }
 

@@ -112,7 +112,8 @@ export async function linhaConhecidaDaBaseRepository(produtoBaseId: string): Pro
 export async function registrarLinhaDaPlanilhaRepository(alvo: AlvoDaPlanilha, linha: number): Promise<void> {
   await banco
     .update(produtosPlanilhaSincronizacoes)
-    .set({ linha, atualizadoEm: new Date() })
+    // Sem mexer em `atualizado_em`: ele e a versao da pendencia (uma edicao no meio do reenvio a muda).
+    .set({ linha })
     .where(
       "produtoBaseId" in alvo
         ? eq(produtosPlanilhaSincronizacoes.produtoBaseId, alvo.produtoBaseId)

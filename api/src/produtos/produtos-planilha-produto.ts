@@ -67,7 +67,8 @@ export function planilhaDaBase(linha: LinhaBase): ProdutoParaPlanilha {
       setorEstoque: txt(d["setor_estoque"]),
       custo: num(d["custo"]),
       margemPontual: num(d["margem_pontual"]),
-      vVendaPontual: num(d["venda_pontual"]),
+      // Oficial: V. VENDA PONTUAL e o preco DIGITADO; com calculo automatico fica vazio e a planilha calcula.
+      vVendaPontual: bool(d["calculo_automatico"]) ? null : num(d["venda_pontual"]),
       auto: bool(d["calculo_automatico"]),
       localVenda1: txt(d["local_venda_1"]),
       localVenda2: txt(d["local_venda_2"]),
@@ -148,7 +149,7 @@ export function planilhaDaLoja(linha: LinhaLoja): ProdutoParaPlanilha {
       setorEstoque: linha.setorEstoque,
       custo: num(linha.custo),
       margemPontual: num(linha.margem),
-      vVendaPontual: num(linha.precoVenda),
+      vVendaPontual: linha.auto ? null : num(linha.precoVenda),
       auto: linha.auto,
       localVenda1: linha.localVenda1,
       localVenda2: linha.localVenda2,

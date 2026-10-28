@@ -778,6 +778,22 @@ José autorizou ("Sim, segue") portar o escritor real e a publicação no Drive,
   - Não foram portados o espelho legado por posição das abas de loja (`espelharVarios`), a limpeza da
     linha na exclusão (o ERP não exclui produto) nem o health da planilha.
   - O ERP não guarda o rótulo "ATÉ x%" da promoção: a coluna `DESCONTO ATÉ` fica vazia.
+- **Correções da revisão independente (mesmo dia):**
+  - **Edição durante o reenvio:** uma edição feita enquanto o reenvio escreve não é mais marcada como
+    sincronizada. A fila só conclui se `atualizado_em` não mudou desde a leitura.
+  - **Google fora do ar com o cache frio:** a cópia da loja fica na fila com falha, em vez de sair como
+    sincronizada.
+  - **Produto da BASE que já está na aba sem o ID** (carga que entrou lendo a planilha):
+    - o escritor recusa reservar linha nova quando o `CODIGO INT.` já aparece na aba, e diz em que linha;
+    - ligar essa linha ao produto continua sendo decisão de gente.
+    - **Antes de ligar o espelho, conferir se a coluna ID da planilha de produção está preenchida.**
+  - **Drive:**
+    - a importação em lote publica uma vez no fim, não uma vez por produto;
+    - o cliente do Drive tem prazo (`GOOGLE_PRODUTOS_TIMEOUT_MS`);
+    - ativar ou inativar produto também republica o arquivo.
+  - **Escritor:**
+    - empresa "SEM LOJA" não escreve na planilha;
+    - `V. VENDA PONTUAL` fica vazio com cálculo automático, como no oficial, onde é o preço digitado.
 - **Clientes reais:** os dois clientes Google recusam rodar sob teste, como no oficial. Os testes usam uma
   planilha em memória (`tests/setup/planilha-falsa.ts`).
 - **Flags, todas `false`/vazias por padrão:**

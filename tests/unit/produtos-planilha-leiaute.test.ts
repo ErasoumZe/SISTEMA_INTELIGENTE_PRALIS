@@ -46,8 +46,8 @@ describe("traducao para a planilha nova", () => {
 
     const { celulas: r } = traduzirParaPlanilhaNova(celulas, leiaute, null, letra);
 
-    expect(r.D).toEqual(texto("PAO FRANCES KG")); // NOME -> CADASTRO PRODUTOS ATUALIZADO NOVO
-    expect(r.C).toEqual(texto("ATIVO")); // A/I -> V
+    expect(r["D"]).toEqual(texto("PAO FRANCES KG")); // NOME -> CADASTRO PRODUTOS ATUALIZADO NOVO
+    expect(r["C"]).toEqual(texto("ATIVO")); // A/I -> V
   });
 
   /* O caso que motivou o tradutor por faixa. */
@@ -56,15 +56,15 @@ describe("traducao para a planilha nova", () => {
 
     const { celulas: r } = traduzirParaPlanilhaNova(celulas, leiaute, null, letra);
 
-    expect(r.G).toEqual(texto("20")); // QT_CAD -> faixa geral
-    expect(r.I).toEqual(texto("500")); // QT_TR -> faixa de transformacao
+    expect(r["G"]).toEqual(texto("20")); // QT_CAD -> faixa geral
+    expect(r["I"]).toEqual(texto("500")); // QT_TR -> faixa de transformacao
   });
 
   it("CUSTO vai para a faixa da loja pedida", () => {
     const celulas: CellMap = { AJ: texto("12,90") };
 
-    expect(traduzirParaPlanilhaNova(celulas, leiaute, "TNP", letra).celulas.J).toEqual(texto("12,90"));
-    expect(traduzirParaPlanilhaNova(celulas, leiaute, "LI", letra).celulas.K).toEqual(texto("12,90"));
+    expect(traduzirParaPlanilhaNova(celulas, leiaute, "TNP", letra).celulas["J"]).toEqual(texto("12,90"));
+    expect(traduzirParaPlanilhaNova(celulas, leiaute, "LI", letra).celulas["K"]).toEqual(texto("12,90"));
   });
 
   /* A BASE cadastra ate o grupo; quem preenche custo e a loja, ao importar. */
@@ -73,9 +73,9 @@ describe("traducao para a planilha nova", () => {
 
     const { celulas: r, semDestino, adiadosParaALoja } = traduzirParaPlanilhaNova(celulas, leiaute, null, letra);
 
-    expect(r.J).toBeUndefined();
-    expect(r.K).toBeUndefined();
-    expect(r.D).toEqual(texto("PAO")); // o que e da base continua indo
+    expect(r["J"]).toBeUndefined();
+    expect(r["K"]).toBeUndefined();
+    expect(r["D"]).toEqual(texto("PAO")); // o que e da base continua indo
 
     // ADIADO, nao "sem destino": a coluna existe, quem preenche e a loja
     expect(adiadosParaALoja).toContain("CUSTO");
@@ -119,15 +119,15 @@ describe("faixa fiscal da planilha nova", () => {
 
     const { celulas: r } = traduzirParaPlanilhaNova(celulas, leiauteFiscal, null, letra);
 
-    expect(r.B).toEqual(texto("SUBST TRIB"));
+    expect(r["B"]).toEqual(texto("SUBST TRIB"));
     // TEXTO: "10" e "03" são códigos; virar número comeria o zero à esquerda
-    expect(r.C).toEqual(texto("10"));
+    expect(r["C"]).toEqual(texto("10"));
   });
 
   it("não confunde ALIQUOTA ECF com ALIQUOTA ECF ID, que é prefixo dela", () => {
     const { celulas: r } = traduzirParaPlanilhaNova({ CF: texto("18,00%") }, leiauteFiscal, null, letra);
 
-    expect(r.B).toEqual(texto("18,00%"));
-    expect(r.C).toBeUndefined();
+    expect(r["B"]).toEqual(texto("18,00%"));
+    expect(r["C"]).toBeUndefined();
   });
 });

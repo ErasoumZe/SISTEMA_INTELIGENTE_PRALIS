@@ -246,7 +246,12 @@ export async function salvarProduto(
   id: string | null,
   body: DadosExternos,
   ator: AtorDaEscrita,
-  opcoes: { produtoBaseId?: string; preservarPrecoImportado?: boolean; codigoInterno?: string | null } = {}
+  opcoes: {
+    produtoBaseId?: string;
+    preservarPrecoImportado?: boolean;
+    codigoInterno?: string | null;
+    publicarNoDrive?: boolean;
+  } = {}
 ) {
   const entradaDaPessoa = opcoes.produtoBaseId === undefined;
   const lido = produtoPayloadSchema.parse(body);
@@ -362,7 +367,7 @@ export async function salvarProduto(
     return salvo;
   });
   // TXT do PDV no Drive da loja (desligado ate a virada), DEPOIS do commit: nunca derruba o salvamento.
-  await publicarCreareDaEmpresaAposSalvar(salvo.empresaId);
+  if (opcoes.publicarNoDrive !== false) await publicarCreareDaEmpresaAposSalvar(salvo.empresaId);
   return salvo;
 }
 

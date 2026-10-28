@@ -95,6 +95,22 @@ describe("produtos - fila do espelho na planilha", () => {
     await reenviar();
     expect(await linhaDa(produtoId)).toMatchObject({ status: "sincronizado", tentativas: 0, ultimo_erro: null });
 
+    // Edicao no MEIO do reenvio: a escrita termina, mas a pendencia nova nao pode virar "sincronizado".
+    await executarSql("update produtos_planilha_sincronizacoes set status = 'pendente' where produto_id = $1", [
+      produtoId
+    ]);
+    definirEscritorDaPlanilhaParaTeste({
+      async escrever() {
+        await executarSql(
+          "update produtos_planilha_sincronizacoes set status = 'pendente', atualizado_em = now() + interval '1 second' where produto_id = $1",
+          [produtoId]
+        );
+        return { linha: 12 };
+      }
+    });
+    await reenviar();
+    expect((await linhaDa(produtoId))?.status).toBe("pendente");
+
     const fila = await contexto.app.inject({
       method: "GET",
       url: "/api/produtos/planilha/fila",
