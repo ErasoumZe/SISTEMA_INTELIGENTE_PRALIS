@@ -2,6 +2,7 @@
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoPanoramaFiscal from "~/components/produtos/ProdutoPanoramaFiscal.vue";
+import ProdutoVinculoBase from "~/components/produtos/ProdutoVinculoBase.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 
 const router = useRouter();
@@ -152,6 +153,12 @@ onMounted(async () => {
           </v-col>
         </v-row>
 
+        <ProdutoVinculoBase
+          v-if="sessao.perfil?.role === 'usuario_admin'"
+          class="mb-4"
+          :empresas="empresas"
+          :empresa-inicial="sessao.perfil?.empresaId ?? empresas[0]?.id ?? ''"
+        />
         <ProdutoPanoramaFiscal />
       </template>
     </main>

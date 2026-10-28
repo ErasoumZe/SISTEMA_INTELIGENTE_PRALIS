@@ -70,6 +70,7 @@ import { registrarRotasDeParaSia } from "./produtos/produtos-sia-depara.controll
 import { registrarRotasPesaveis } from "./produtos/produtos-pesaveis.controller.js";
 import { registrarRotasCodigoCadastro } from "./produtos/produtos-codigo-cadastro.controller.js";
 import { registrarRotasCustoMer } from "./produtos/produtos-custo-mer.controller.js";
+import { registrarRotasVinculoBase } from "./produtos/produtos-vinculo-base.controller.js";
 import { registrarRotasCreare } from "./produtos/produtos-creare.controller.js";
 import { registrarRotasPlanilhaProdutos } from "./produtos/produtos-planilha.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
@@ -340,6 +341,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasPesaveis(app);
   await registrarRotasCodigoCadastro(app);
   await registrarRotasCustoMer(app);
+  await registrarRotasVinculoBase(app);
   await registrarRotasCreare(app);
   await registrarRotasPlanilhaProdutos(app);
   await registrarRotasProdutos(app);
