@@ -433,3 +433,5 @@ export * from "./planilha-leiaute.js";
 export * from "./pesaveis.js";
 export * from "./pesaveis-backfill.js";
 export * from "./pesaveis-padronizar.js";
+export * from "./semelhanca-de-nome.js";
+export * from "./codigo-cadastro.js";
