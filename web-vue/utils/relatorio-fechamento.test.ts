@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   conferenciaMaquininhaDoRelatorio,
   duracaoDaParada,
+  etapaDoRelatorioMaquininha,
   corDaSituacao,
   numero,
   rotuloMotivoParada,
@@ -71,5 +72,32 @@ describe("parada do computador do PDV", () => {
     expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T12:00:20Z")).toBe("menos de 1 min");
     expect(duracaoDaParada("2026-10-27T12:00:00Z", null)).toBe("Sem retorno registrado");
     expect(duracaoDaParada("2026-10-27T12:00:00Z", "2026-10-27T11:00:00Z")).toBe("Duração indisponível");
+  });
+});
+
+describe("liquido da maquininha manha e tarde", () => {
+  it("manha (sem leitura inicial) mostra o acumulado como liquido, em vez de Nao informado", () => {
+    const linhas = conferenciaMaquininhaDoRelatorio({ creditoInicial: null, creditoFinal: 100, pixFinal: 20 });
+    expect(linhas.find((item) => item.forma === "Credito")?.liquido).toBe(100);
+    expect(linhas.find((item) => item.forma === "Pix")?.liquido).toBe(20);
+    expect(linhas.find((item) => item.forma === "Debito")?.liquido).toBeNull();
+  });
+
+  it("tarde usa o liquido que o servidor gravou (acumulado do dia menos a manha)", () => {
+    const linhas = conferenciaMaquininhaDoRelatorio({
+      creditoInicial: 100,
+      creditoFinal: 160,
+      dadosRevisados: { etapaDia: "tarde", liquidos: { credito: 60, pix: 25 } }
+    });
+    const credito = linhas.find((item) => item.forma === "Credito");
+    expect(credito).toMatchObject({ inicial: 100, acumulado: 160, liquido: 60 });
+    expect(linhas.find((item) => item.forma === "Pix")?.liquido).toBe(25);
+  });
+
+  it("identifica o turno do relatorio", () => {
+    expect(etapaDoRelatorioMaquininha({ dadosRevisados: { etapaDia: "tarde" } })).toBe("tarde");
+    expect(etapaDoRelatorioMaquininha({ dadosRevisados: { etapaDia: "manha" } })).toBe("manha");
+    expect(etapaDoRelatorioMaquininha({})).toBeNull();
+    expect(etapaDoRelatorioMaquininha(null)).toBeNull();
   });
 });
