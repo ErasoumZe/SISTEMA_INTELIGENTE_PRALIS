@@ -5,6 +5,7 @@
  * depois quem ainda não respondeu, quem não tem oferta e o que já foi comprado. As ações da cotação inteira
  * (encerrar, Pedido urgente com o que sobrou) ficam no rodapé.
  */
+import { useDisplay } from "vuetify";
 import type { OfertaDoProdutoDto } from "@padaria/shared";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
 import CotacaoOfertaLinha from "~/components/cotacao/CotacaoOfertaLinha.vue";
@@ -77,10 +78,12 @@ async function aoContrapropor(oferta: OfertaDoProdutoDto, valor: number) {
   sucesso.value = "";
   await aposAcao(await contrapropor(oferta, valor), `Contraproposta enviada para ${oferta.fornecedorNome}.`);
 }
+// Celular: o dialogo ocupa a tela inteira (`$vuetify` no template nao e tipado no typecheck do Nuxt).
+const telaPequena = useDisplay().xs;
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="820" scrollable :fullscreen="$vuetify.display.xs">
+  <v-dialog v-model="aberto" max-width="820" scrollable :fullscreen="telaPequena">
     <v-card class="cotacao" data-dialogo="cotacao-produto">
       <header class="cotacao__topo">
         <div class="cotacao__titulos">

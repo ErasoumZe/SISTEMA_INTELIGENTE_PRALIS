@@ -4,6 +4,7 @@
  * sistema e o campo da quantidade contada. Salvar guarda o que já foi contado; Concluir fecha a conferência.
  * Nada aqui mexe no estoque: só registra.
  */
+import { useDisplay } from "vuetify";
 import { ROTULO_RANKING_CONFERENCIA, type ConferenciaDetalheDto } from "@padaria/shared";
 import { formatarQuantidade } from "~/utils/formatacao";
 
@@ -53,10 +54,12 @@ function payload() {
       return (antes === null || antes === undefined ? null : Number(antes)) !== item.quantidadeContada;
     });
 }
+// Celular: o dialogo ocupa a tela inteira (`$vuetify` no template nao e tipado no typecheck do Nuxt).
+const telaPequena = useDisplay().xs;
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="860" scrollable :fullscreen="$vuetify.display.xs">
+  <v-dialog v-model="aberto" max-width="860" scrollable :fullscreen="telaPequena">
     <v-card v-if="conferencia" data-dialogo="contagem">
       <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2">
         <span>Conferência de {{ DATA_HORA.format(new Date(conferencia.data)) }}</span>

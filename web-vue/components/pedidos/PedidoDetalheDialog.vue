@@ -4,6 +4,7 @@
  * quantidade ao estoque dele (aparece no histórico). Daqui se confere o recebimento ou se cancela. A trilha no topo
  * mostra onde o pedido está; a coluna "Devolvido" só aparece quando houve devolução.
  */
+import { useDisplay } from "vuetify";
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
 import ComprasSituacao from "~/components/compras/base/ComprasSituacao.vue";
 import { formatarQuantidade } from "~/utils/formatacao";
@@ -46,10 +47,12 @@ function etapaFeita(etapa: PedidoStatus) {
   if (!props.pedido || props.pedido.status === "cancelado") return false;
   return etapas.value.indexOf(etapa) <= etapas.value.indexOf(props.pedido.status);
 }
+// Celular: o dialogo ocupa a tela inteira (`$vuetify` no template nao e tipado no typecheck do Nuxt).
+const telaPequena = useDisplay().xs;
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="860" scrollable :fullscreen="$vuetify.display.xs">
+  <v-dialog v-model="aberto" max-width="860" scrollable :fullscreen="telaPequena">
     <v-card v-if="pedido" class="pedido-detalhe">
       <header class="pedido-detalhe__topo">
         <div class="pedido-detalhe__titulos">

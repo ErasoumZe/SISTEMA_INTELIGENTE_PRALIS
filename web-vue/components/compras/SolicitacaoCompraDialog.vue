@@ -5,6 +5,7 @@
  * os seus produtos. Produto sem fornecedor: escolhe-se aqui, e o vínculo vai para o catálogo. Quantidade vazia = o
  * produto não vai neste pedido.
  */
+import { useDisplay } from "vuetify";
 import { podeConvidar, type EnviarSolicitacaoCompraPayload, type SolicitacaoCompraDetalheDto } from "@padaria/shared";
 import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
@@ -73,10 +74,12 @@ function enviar() {
     }))
   );
 }
+// Celular: o dialogo ocupa a tela inteira (`$vuetify` no template nao e tipado no typecheck do Nuxt).
+const telaPequena = useDisplay().xs;
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="1000" scrollable :fullscreen="$vuetify.display.xs">
+  <v-dialog v-model="aberto" max-width="1000" scrollable :fullscreen="telaPequena">
     <v-card v-if="detalhe" class="solicitacao" data-dialogo="solicitacao-compra">
       <header class="solicitacao__topo">
         <div class="solicitacao__titulos">
