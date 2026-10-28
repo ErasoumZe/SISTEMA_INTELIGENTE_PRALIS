@@ -129,6 +129,17 @@ export const fecharCaixaPayloadSchema = z.object({
 
 // Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
 // no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
+// Correcao manual do que a IA leu: os numeros lidos ficam travados na tela; para mudar algum, o operador
+// toca em "Corrigir manualmente" e justifica. Fica gravado quais campos mudaram e por que.
+export const correcaoManualLeituraSchema = z
+  .object({
+    justificativa: z.string().trim().min(5, "Explique a correcao").max(300),
+    campos: z.array(z.string().trim().max(40)).min(1).max(20)
+  })
+  .nullable()
+  .default(null);
+export type CorrecaoManualLeitura = z.infer<typeof correcaoManualLeituraSchema>;
+
 const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable();
 const detalheRelatorioMaquininhaSchema = z.object({
   nome: z.string().trim().min(1).max(160),
@@ -151,7 +162,8 @@ export const relatorioMaquininhaIaSchema = z.object({
   voucher: valorRelatorioMaquininhaSchema,
   detalhes: detalhesRelatorioMaquininhaSchema.default({ credito: [], debito: [], pix: [], voucher: [] }),
   camposDuvidosos: z.array(z.string().trim().max(100)).max(30).default([]),
-  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([]),
+  correcaoManual: correcaoManualLeituraSchema
 });
 export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 
