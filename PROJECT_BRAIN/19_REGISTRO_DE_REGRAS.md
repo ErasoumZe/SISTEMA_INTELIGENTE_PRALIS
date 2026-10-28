@@ -1383,6 +1383,14 @@ corte do fechamento.
 
 Rota `POST /api/caixa/:caixaId/inicio-vendas`; tela `CaixaInicioVendasAjuste.vue`.
 
+### R-226 — Responsável pelo caixa no fechamento é quem abriu (Marco, 28/10/2026)
+
+**Supera** o comportamento anterior em que o fechamento aceitava outro nome de responsável pelo caixa. Na
+identificação do fechamento, **Responsável pelo caixa** vem travado com o nome de quem abriu o caixa e não pode
+ser alterado. No encerramento, só o **Supervisor responsável** é informado: o gerente que fecha o malote. O
+servidor grava como responsável do fechamento o responsável da abertura, mesmo que a tela envie outro nome. Caixa
+antigo sem nome na abertura: o campo fica livre na tela e o servidor usa o nome enviado.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
