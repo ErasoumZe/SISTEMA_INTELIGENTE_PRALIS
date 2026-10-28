@@ -833,12 +833,33 @@ oficiais.
   - `giulia-sia`: depende de produto da BASE criado por uma pessoa específica (`created_by_name`), do histórico
     de código interno e da BASE como linha de `products`. Nada disso existe no ERP.
 
-**Aguardam decisão:**
+**Código de cadastro: portado em 28/10/2026.** José aprovou a migration 0089 (histórico de código interno), aplicada
+só no banco local.
 
-- **Código de cadastro** (alinhar o `codigo_interno` ao `coditem` do SIA, em lote ou por decisão):
-  - o motor é puro, mas a gravação precisa de uma tabela de **histórico de código interno**, que o ERP não
-    tem. É migration nova: mostrar o SQL antes;
-  - o lote troca até 200 códigos por vez, na BASE e nas cópias.
+- **Tela:** `/produtos/codigo-cadastro`, com link na Manutenção, só para administrador.
+- **Motor:** o motor e a semelhança de nome do app foram copiados literalmente, com os 37 testes oficiais.
+- **Mesmo comportamento do app:**
+  - baldes: exato, código nas barras, conflito, disputado, falta no PDV, sem código da rede, já certo;
+  - lote de até 200 só nos baldes de certeza, um balde por clique;
+  - decisão item a item;
+  - cunhar só no balde "sem código da rede";
+  - frase `RECONCILIAR CODIGO DE CADASTRO`;
+  - guarda pelo código que a tela mostrava (409 se mudou).
+- **Diferenças conscientes:**
+  - **BASE:** é `produtos_catalogo_base`. A coluna e `dados_oficiais.codigo_interno` andam juntas. A troca desce
+    para as cópias das lojas, com histórico por cópia.
+  - **Código repetido na loja:** o ERP tem código único por loja. Se uma loja já usa o código em outro produto,
+    a troca inteira é recusada (409). O app gravava duplicado. "123" e "00123" contam como o mesmo código.
+  - **Cunhagem:** usa a mesma regra do cadastro normal (piso 13129, sempre abaixo de 700000) e a mesma trava.
+    No app, um código de entrega já gravado (700000 ou mais) puxava o número cunhado para a faixa reservada.
+  - **Teto da numeração:** vem do de-para do SIA e do banco. A planilha MIX não entra, porque o ERP não a lê.
+  - **Lista longa:** paginada de 50 em 50.
+- **Decisão registrada (mesma regra da herança da BASE):** a troca na BASE desce para as cópias de **todas** as
+  lojas, inclusive as que o administrador não tem no escopo. A BASE é da rede inteira. Os órfãos (produto de loja
+  sem BASE) aparecem só para as empresas permitidas.
+
+**Ainda aguardam decisão:**
+
 - **Custo pela discriminação (DB-05):**
   - **fórmula de dinheiro**: custo = custo unitário da nota mais recente × `qtCad`, arredondado;
   - no ERP o custo é por empresa e a BASE não tem custo; é preciso decidir onde gravar;
