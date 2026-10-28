@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, ne, or } from "drizzle-orm";
 import { sqlConsultaMaiorCodigoInterno, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
 import { codigoBarrasNaCriacao } from "@padaria/shared/produtos";
 import {
@@ -193,11 +193,15 @@ export async function buscarProdutoPorCodigoBarrasRepository(
   return linha ?? null;
 }
 
-/** Nome/descricao repetidos na MESMA empresa. Gera confirmacao ("cadastrar mesmo assim"), nao bloqueio. */
+/**
+ * Nome repetido na MESMA empresa. Gera confirmacao ("cadastrar mesmo assim"), nao bloqueio.
+ * Compara pelo nome do CATALOGO, como o `nome` do paralelo; produto legado sem nome de catalogo
+ * continua comparado pela descricao.
+ */
 export async function buscarProdutoPorDescricaoRepository(
   tx: ExecutorBanco,
   empresaId: string,
-  descricao: string,
+  nome: string,
   ignorarId?: string
 ): Promise<{ descricao: string; criadoPorNome: string | null } | null> {
   const [linha] = await tx
@@ -207,7 +211,7 @@ export async function buscarProdutoPorDescricaoRepository(
     .where(
       and(
         eq(produtos.empresaId, empresaId),
-        ilike(produtos.descricao, descricao),
+        or(ilike(produtos.nomeCatalogo, nome), and(isNull(produtos.nomeCatalogo), ilike(produtos.descricao, nome))),
         ignorarId ? ne(produtos.id, ignorarId) : undefined
       )
     )
