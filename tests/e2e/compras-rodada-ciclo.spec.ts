@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { entrar, observarConsole, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import {
   abrirContextoCompras,
+  codigoDeTeste,
   criarFornecedor,
   criarProdutoDeEstoque,
   dialogoAberto,
@@ -43,9 +44,9 @@ test.describe("ciclo de compra pela cotacao", () => {
     browser
   }) => {
     const problemas = observarConsole(page);
-    const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const nomeProduto = `E2E Rodada ${sufixo}`;
-    const fornecedorNome = `E2E Fornecedor ${sufixo}`;
+    const sufixo = codigoDeTeste();
+    const nomeProduto = `Abacaxi pérola (teste ${sufixo})`;
+    const fornecedorNome = `Hortifruti Bahamas (teste ${sufixo})`;
 
     const produtoId = await criarProdutoDeEstoque(contexto, {
       descricao: nomeProduto,
@@ -111,13 +112,14 @@ test.describe("ciclo de compra pela cotacao", () => {
       return page.locator('[data-dialogo="cotacao-produto"]');
     };
     let cotacao = await abrirCotacao();
-    await expect(cotacao).toContainText("Referência não cadastrada");
-    const oferta = cotacao.locator(`[data-grupo="com_aumento"] [data-fornecedor="${fornecedorNome}"]`);
-    await expect(oferta).toContainText(/custo\s+R\$\s*12,50/u);
-    await oferta.getByLabel(/Contraproposta/u).fill("11");
+    await expect(cotacao.locator('[data-campo="referencia"]')).toContainText("Sem referência");
+    const oferta = cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="com_aumento"]`);
+    await expect(oferta).toContainText(/R\$\s*12,50/u);
     await oferta.getByRole("button", { name: "Contrapropor" }).click();
+    await oferta.getByLabel(/Seu valor/u).fill("11");
+    await oferta.getByRole("button", { name: "Enviar contraproposta" }).click();
     await expect(cotacao.locator('[data-estado="aceite-feito"]')).toContainText("Contraproposta enviada");
-    await expect(oferta).toContainText(/contraproposta\s+R\$\s*11,00/u);
+    await expect(oferta).toContainText(/contrapropôs\s+R\$\s*11,00/u);
 
     // 5) O fornecedor ve a contraproposta no MESMO link e aceita.
     const reaberta = await navegadorFornecedor.newPage();
@@ -129,13 +131,14 @@ test.describe("ciclo de compra pela cotacao", () => {
 
     // 6) Com a cotacao ABERTA, o comprador aceita e reajusta a referencia: vira Comprado na hora.
     cotacao = await abrirCotacao();
-    const aceitar = cotacao.locator(`[data-grupo="com_aumento"] [data-fornecedor="${fornecedorNome}"]`);
-    await expect(aceitar).toContainText(/custo\s+R\$\s*11,00/u);
-    await aceitar.getByRole("button", { name: "Aceitar e reajustar a referência" }).click();
-    await aceitar.getByRole("button", { name: "Confirmar", exact: true }).click();
+    const aceitar = cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="com_aumento"]`);
+    await expect(aceitar).toContainText(/R\$\s*11,00/u);
+    await aceitar.getByRole("button", { name: "Aceitar" }).click();
+    await aceitar.getByRole("radio", { name: /Reajustar a referência/u }).check();
+    await aceitar.getByRole("button", { name: "Confirmar compra" }).click();
     await expect(cotacao.locator('[data-estado="aceite-feito"]')).toContainText("A referência foi reajustada");
     await expect(cotacao).toContainText(/Referência\s+R\$\s*11,00/u);
-    await expect(cotacao.locator(`[data-grupo="comprado"] [data-fornecedor="${fornecedorNome}"]`)).toBeVisible();
+    await expect(cotacao.locator(`[data-fornecedor="${fornecedorNome}"][data-situacao="comprado"]`)).toBeVisible();
     expect(await saldoDoProduto(contexto, produtoId), "comprar nao move estoque (R-213)").toBe(0);
     await page.keyboard.press("Escape");
 
@@ -155,7 +158,7 @@ test.describe("ciclo de compra pela cotacao", () => {
     await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
     await page.locator(`[data-pedido="${fornecedorNome}"]`).click();
     const detalhe = page.locator(".pedido-detalhe");
-    await expect(detalhe.locator(".v-card-title .v-chip")).toContainText("Comprado");
+    await expect(detalhe.locator('[data-campo="situacao-pedido"]')).toContainText("Comprado");
     await expect(detalhe.locator(".pedido-detalhe__tabela tbody tr").filter({ hasText: nomeProduto })).toContainText(
       "10,5"
     );
@@ -179,7 +182,7 @@ test.describe("ciclo de compra pela cotacao", () => {
     await conferencia.getByRole("button", { name: "Confirmar recebimento" }).click();
     await expect(page.locator(".v-snackbar__content")).toContainText(/concluido/iu);
     expect(await saldoDoProduto(contexto, produtoId), "devolvido nao entra no estoque").toBe(9.5);
-    await expect(detalhe.locator(".v-card-title .v-chip")).toContainText("Recebido");
+    await expect(detalhe.locator('[data-campo="situacao-pedido"]')).toContainText("Recebido");
     await semRolagemHorizontal(page);
 
     expect(problemas, problemas.join("\n")).toEqual([]);

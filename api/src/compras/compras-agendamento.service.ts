@@ -128,10 +128,7 @@ async function validarPayload(payload: AgendamentoPayload, perfil: PerfilUsuario
     margemVariacaoPercentual: payload.margemVariacaoPercentual,
     recebimentoInicio: payload.recebimentoInicio || null,
     recebimentoFim: payload.recebimentoFim || null,
-    produtos: payload.produtos.map((produto) => ({
-      produtoId: produto.produtoId,
-      quantidadePadrao: produto.quantidadePadrao ?? null
-    }))
+    produtos: payload.produtos.map((produto) => ({ produtoId: produto.produtoId }))
   };
   return entrada;
 }
@@ -304,11 +301,7 @@ export async function listarAgendamentos(empresaId: string, perfil: PerfilUsuari
       status: agenda.status,
       produtos: produtos
         .filter((produto) => produto.agendaId === agenda.id)
-        .map((produto) => ({
-          produtoId: produto.produtoId,
-          descricao: produto.descricao ?? "Produto",
-          quantidadePadrao: produto.quantidadePadrao
-        })),
+        .map((produto) => ({ produtoId: produto.produtoId, descricao: produto.descricao ?? "Produto" })),
       proximas
     };
   });

@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { OfertaDoProdutoDto } from "@padaria/shared";
 import {
   cotacoesDoProduto,
+  grupoDaOferta,
   itensComprados,
-  ofertasPorSituacao,
+  ofertasAgrupadas,
   podeAceitarOferta,
   podeContraproporOferta
 } from "./cotacao-produto";
@@ -15,6 +16,7 @@ const oferta = (sobrescrita: Partial<OfertaDoProdutoDto> = {}): OfertaDoProdutoD
   rodadaNumero: 1,
   solicitacaoId: "s1",
   rodadaAberta: true,
+  abertaEm: "2026-10-23T12:00:00.000Z",
   expiraEm: "2026-10-24T12:00:00.000Z",
   fornecedorId: "f1",
   fornecedorNome: "Moinho",
@@ -56,21 +58,32 @@ describe("cotacao-produto", () => {
     expect([...itensComprados(ofertas)]).toEqual(["i1"]);
   });
 
-  it("agrupa com o que pede decisao primeiro e some com grupo vazio", () => {
-    const grupos = ofertasPorSituacao([
-      oferta({ situacao: "enviado", fornecedorId: "f3" }),
-      oferta({ situacao: "comprado", fornecedorId: "f2" }),
-      oferta()
-    ]);
-    expect(grupos.map((grupo) => grupo.situacao)).toEqual(["com_aumento", "enviado", "comprado"]);
+  it("agrupa pelo que o comprador faz: decidir, aguardando, sem oferta, comprado", () => {
+    const vazio = new Set<string>();
+    expect(grupoDaOferta(oferta(), vazio)).toBe("decidir");
+    expect(grupoDaOferta(oferta({ situacao: "cotado", propostaItemId: null }), vazio)).toBe("aguardando");
+    expect(grupoDaOferta(oferta({ situacao: "retornado", indisponivel: true }), vazio)).toBe("sem_oferta");
+    // Perdeu: o item ja foi comprado de outro.
+    expect(grupoDaOferta(oferta({ situacao: "retornado" }), new Set(["i1"]))).toBe("sem_oferta");
+    expect(grupoDaOferta(oferta({ situacao: "comprado" }), vazio)).toBe("comprado");
   });
 
-  it("lista cada cotacao uma vez", () => {
+  it("o grupo de decisao vem primeiro, com a oferta mais barata no topo; grupo vazio some", () => {
+    const grupos = ofertasAgrupadas([
+      oferta({ situacao: "enviado", fornecedorId: "f3", propostaItemId: null, custoFinalUnitario: null }),
+      oferta({ fornecedorId: "f4", fornecedorNome: "Caro", custoFinalUnitario: "15.0000" }),
+      oferta({ fornecedorId: "f5", fornecedorNome: "Barato", custoFinalUnitario: "11.0000" })
+    ]);
+    expect(grupos.map((grupo) => grupo.grupo)).toEqual(["decidir", "aguardando"]);
+    expect(grupos[0]!.ofertas.map((linha) => linha.fornecedorNome)).toEqual(["Barato", "Caro"]);
+  });
+
+  it("lista cada cotacao uma vez, da mais nova para a mais antiga", () => {
     const cotacoes = cotacoesDoProduto([
       oferta(),
       oferta({ fornecedorId: "f2" }),
-      oferta({ rodadaId: "r2", rodadaNumero: 2 })
+      oferta({ rodadaId: "r2", abertaEm: "2026-10-23T15:00:00.000Z" })
     ]);
-    expect(cotacoes.map((cotacao) => cotacao.rodadaNumero)).toEqual([1, 2]);
+    expect(cotacoes.map((cotacao) => cotacao.rodadaId)).toEqual(["r2", "r1"]);
   });
 });

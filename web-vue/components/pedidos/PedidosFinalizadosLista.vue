@@ -4,7 +4,10 @@
  * continua aqui até fechar); "Recebidos" já entraram no estoque. Cada linha abre o pedido.
  */
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";
-import { corStatusPedido, rotuloDoTipoDePedido, rotuloStatusPedido } from "~/utils/pedido-origem";
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
+import ComprasSituacao from "~/components/compras/base/ComprasSituacao.vue";
+import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
+import { rotuloDoTipoDePedido, rotuloStatusPedido, tomStatusPedido } from "~/utils/pedido-origem";
 
 const props = defineProps<{ pedidos: PedidoDto[]; carregando: boolean }>();
 const emit = defineEmits<{ abrir: [id: string] }>();
@@ -38,38 +41,48 @@ const linhas = computed(() =>
       daAba(pedido, aba.value) && (fornecedorFiltro.value === null || pedido.fornecedorId === fornecedorFiltro.value)
   )
 );
-const VAZIO: Record<Aba, string> = {
-  a_caminho: "Nenhum pedido a caminho. O que for comprado na cotação aparece aqui.",
-  recebidos: "Nenhum pedido recebido ainda.",
-  cancelados: "Nenhum pedido cancelado."
+const VAZIO: Record<Aba, { titulo: string; texto: string }> = {
+  a_caminho: { titulo: "Nada a caminho.", texto: "O que for comprado na Cotação por fornecedor aparece aqui." },
+  recebidos: { titulo: "Nenhum pedido recebido ainda.", texto: "Os pedidos conferidos por completo ficam aqui." },
+  cancelados: { titulo: "Nenhum pedido cancelado.", texto: "" }
 };
 </script>
 
 <template>
-  <v-card class="finalizados" data-secao="pedidos-finalizados">
-    <div class="finalizados__topo">
-      <v-tabs v-model="aba" density="compact" color="primary">
-        <v-tab value="a_caminho" data-aba="a_caminho">A caminho ({{ contagem.a_caminho }})</v-tab>
-        <v-tab value="recebidos" data-aba="recebidos">Recebidos ({{ contagem.recebidos }})</v-tab>
-        <v-tab value="cancelados" data-aba="cancelados">Cancelados ({{ contagem.cancelados }})</v-tab>
+  <ComprasSecao rente data-secao="pedidos-finalizados">
+    <template #filtros>
+      <v-tabs v-model="aba" density="compact" color="primary" class="finalizados__abas">
+        <v-tab value="a_caminho" data-aba="a_caminho"
+          >A caminho <span class="finalizados__conta">{{ contagem.a_caminho }}</span></v-tab
+        >
+        <v-tab value="recebidos" data-aba="recebidos"
+          >Recebidos <span class="finalizados__conta">{{ contagem.recebidos }}</span></v-tab
+        >
+        <v-tab value="cancelados" data-aba="cancelados"
+          >Cancelados <span class="finalizados__conta">{{ contagem.cancelados }}</span></v-tab
+        >
       </v-tabs>
       <v-autocomplete
         v-model="fornecedorFiltro"
         :items="opcoes"
-        label="Fornecedor"
-        placeholder="Todos"
+        placeholder="Todos os fornecedores"
+        prepend-inner-icon="mdi-filter-variant"
         clearable
         density="compact"
         hide-details
+        aria-label="Fornecedor"
         class="finalizados__filtro"
         data-campo="filtro-fornecedor"
       />
-    </div>
-    <v-progress-linear v-if="carregando" indeterminate />
-    <div v-if="!linhas.length && !carregando" class="finalizados__vazio">
-      <v-icon icon="mdi-truck-outline" size="32" />
-      <p>{{ VAZIO[aba] }}</p>
-    </div>
+    </template>
+
+    <v-progress-linear v-if="carregando" indeterminate height="2" />
+    <ComprasVazio
+      v-if="!linhas.length && !carregando"
+      icone="mdi-truck-outline"
+      :titulo="VAZIO[aba].titulo"
+      :texto="VAZIO[aba].texto || undefined"
+    />
     <ul v-else class="finalizados__lista">
       <li v-for="pedido in linhas" :key="pedido.id">
         <button
@@ -80,36 +93,28 @@ const VAZIO: Record<Aba, string> = {
         >
           <span class="finalizados__dados">
             <strong>{{ pedido.fornecedorNome ?? "Pedido histórico" }}</strong>
-            <span class="text-caption text-medium-emphasis"
+            <span class="finalizados__sub"
               >{{ pedido.totalItens }} item(ns) · {{ rotuloDoTipoDePedido(pedido.tipo) }} · comprado em
               {{ DATA_HORA.format(new Date(pedido.aprovadoEm ?? pedido.criadoEm)) }}</span
             >
           </span>
-          <v-chip size="small" variant="tonal" :color="corStatusPedido(pedido.status)">{{
-            rotuloStatusPedido(pedido.status)
-          }}</v-chip>
+          <ComprasSituacao :rotulo="rotuloStatusPedido(pedido.status)" :tom="tomStatusPedido(pedido.status)" />
+          <v-icon icon="mdi-chevron-right" size="18" class="finalizados__seta" />
         </button>
       </li>
     </ul>
-  </v-card>
+  </ComprasSecao>
 </template>
 
 <style scoped>
-.finalizados {
-  overflow: hidden;
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-xl);
-  background: var(--cx-surface-raised);
+.finalizados__abas {
+  flex: 1 1 auto;
 }
 
-.finalizados__topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cx-sp-3);
-  padding: var(--cx-sp-3) var(--cx-sp-5);
-  border-bottom: 1px solid var(--cx-line-soft);
+.finalizados__conta {
+  margin-left: 6px;
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 .finalizados__filtro {
@@ -124,25 +129,29 @@ const VAZIO: Record<Aba, string> = {
 }
 
 .finalizados__linha {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--cx-sp-2);
+  gap: var(--cx-sp-3);
   width: 100%;
-  padding: var(--cx-sp-3) var(--cx-sp-5);
+  padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-3) var(--cx-sp-5);
   border: 0;
-  border-bottom: 1px solid var(--cx-line-soft);
+  border-top: 1px solid var(--cx-line-soft);
   background: none;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--cx-dur-1) var(--cx-ease);
 }
 
-.finalizados__linha:hover,
+.finalizados__linha:hover {
+  background: var(--cx-hover);
+}
+
 .finalizados__linha:focus-visible {
-  background: var(--cx-surface-sunken);
+  outline: 2px solid var(--cx-focus);
+  outline-offset: -2px;
 }
 
 .finalizados__dados {
@@ -151,12 +160,27 @@ const VAZIO: Record<Aba, string> = {
   min-width: 0;
 }
 
-.finalizados__vazio {
-  display: grid;
-  justify-items: center;
-  gap: var(--cx-sp-2);
-  padding: var(--cx-sp-8) var(--cx-sp-6);
+.finalizados__dados strong {
+  overflow-wrap: anywhere;
+}
+
+.finalizados__sub {
   color: var(--cx-ink-soft);
-  text-align: center;
+  font-size: var(--cx-fs-caption);
+}
+
+.finalizados__seta {
+  color: var(--cx-ink-soft);
+}
+
+@media (max-width: 599px) {
+  .finalizados__linha {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: var(--cx-sp-4);
+  }
+
+  .finalizados__seta {
+    display: none;
+  }
 }
 </style>

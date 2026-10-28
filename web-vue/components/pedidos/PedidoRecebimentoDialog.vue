@@ -214,10 +214,8 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
 <style scoped>
 .recebimento {
   overflow: hidden;
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-xl);
-  background: var(--cx-surface-raised);
-  box-shadow: var(--cx-e-3);
+  border-radius: var(--cx-r-lg) !important;
+  background: var(--cx-surface);
 }
 
 .recebimento__topo {
@@ -240,7 +238,6 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
   display: grid;
   gap: var(--cx-sp-3);
   padding: var(--cx-sp-5) var(--cx-sp-6);
-  background: var(--cx-surface-sunken);
 }
 
 .recebimento__atalhos {
@@ -253,11 +250,10 @@ function progresso(item: { quantidade: string; quantidadeRecebida: string }) {
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--cx-sp-4);
   align-items: center;
-  padding: var(--cx-sp-4);
+  padding: var(--cx-sp-3) var(--cx-sp-4);
   border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface-raised);
-  box-shadow: var(--cx-e-1);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface);
 }
 
 .recebimento__produto {

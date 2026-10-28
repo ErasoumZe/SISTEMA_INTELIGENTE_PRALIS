@@ -7,6 +7,9 @@ import type {
 } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
+import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 import ComprasRodadaConvitesDialog from "~/components/compras/ComprasRodadaConvitesDialog.vue";
 import SolicitacaoCompraDialog from "~/components/compras/SolicitacaoCompraDialog.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
@@ -33,7 +36,12 @@ const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesab
 const podeEnviar = computed(() => temPermissao("pedidos_editar"));
 const dados = useSolicitacaoCompra(empresaId);
 const { cards, fornecedores, carregando } = dados;
-const paraEnviar = computed(() => cards.value.filter((card) => card.pendentes.length));
+// Uma linha por data pendente (um agendamento pode ter mais de uma data esperando).
+const pendentes = computed(() =>
+  cards.value.flatMap((card) => card.pendentes.map((pendente) => ({ ...pendente, card })))
+);
+const nomeDoGrupo = (card: { grupoPaiNome: string | null; grupoNome: string }) =>
+  card.grupoPaiNome ? `${card.grupoPaiNome} › ${card.grupoNome}` : card.grupoNome;
 const agendados = computed(() => cards.value.filter((card) => !card.pendentes.length));
 
 const dialog = ref(false);
@@ -103,102 +111,190 @@ onMounted(async () => {
     :carregando-empresa="carregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-4">
+    <ComprasTela>
       <AppCabecalhoTela
         titulo="Solicitação de compra"
         subtitulo="Os pedidos agendados que você executa. Na data, confira as quantidades e envie aos fornecedores."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-      <v-progress-linear v-if="carregando" indeterminate />
 
-      <section class="d-grid ga-2" data-secao="para-enviar">
-        <h2 class="text-subtitle-1 font-weight-bold">Para enviar ({{ paraEnviar.length }})</h2>
-        <p v-if="!carregando && !paraEnviar.length" class="text-medium-emphasis mb-0">
-          Nenhum pedido esperando você agora.
-        </p>
-        <article
-          v-for="card in paraEnviar"
-          :key="card.agendaId"
-          class="card card--pendente"
-          :data-agenda="card.agendaId"
-        >
-          <div class="card__texto">
-            <strong>{{ card.grupoPaiNome ? `${card.grupoPaiNome} › ${card.grupoNome}` : card.grupoNome }}</strong>
-            <span class="text-caption text-medium-emphasis"
-              >{{ card.totalProdutos }} produto(s) · {{ card.resumo }} · responsável {{ card.responsavelNome }}</span
-            >
-          </div>
-          <div class="d-flex flex-wrap ga-2">
+      <ComprasSecao rente data-secao="para-enviar">
+        <template #titulo>
+          Para enviar <span class="conta" :class="{ 'conta--ativa': pendentes.length }">{{ pendentes.length }}</span>
+        </template>
+        <v-progress-linear v-if="carregando" indeterminate height="2" />
+        <ComprasVazio
+          v-if="!carregando && !pendentes.length"
+          icone="mdi-check-circle-outline"
+          titulo="Nada esperando você agora."
+          texto="Quando chegar a data de um pedido agendado, ele aparece aqui e o sino avisa."
+        />
+        <ul v-else class="lista">
+          <li
+            v-for="item in pendentes"
+            :key="item.ocorrenciaId"
+            class="linha linha--pendente"
+            :data-agenda="item.card.agendaId"
+          >
+            <span class="linha__icone" aria-hidden="true"><v-icon icon="mdi-cart-arrow-right" size="20" /></span>
+            <span class="linha__texto">
+              <strong>{{ nomeDoGrupo(item.card) }}</strong>
+              <span class="linha__sub"
+                >Pedido de {{ DATA_HORA.format(new Date(item.dataAtual)) }} · {{ item.card.totalProdutos }} produto(s) ·
+                {{ item.card.responsavelNome }}</span
+              >
+            </span>
             <v-btn
-              v-for="pendente in card.pendentes"
-              :key="pendente.ocorrenciaId"
               color="primary"
               variant="flat"
-              size="small"
               :disabled="!podeEnviar"
-              prepend-icon="mdi-clipboard-check-outline"
-              @click="abrir(pendente.ocorrenciaId)"
-              >Conferir e enviar · {{ DATA_HORA.format(new Date(pendente.dataAtual)) }}</v-btn
+              append-icon="mdi-arrow-right"
+              @click="abrir(item.ocorrenciaId)"
+              >Conferir e enviar</v-btn
             >
-          </div>
-        </article>
-      </section>
+          </li>
+        </ul>
+      </ComprasSecao>
 
-      <section class="d-grid ga-2" data-secao="agendados">
-        <h2 class="text-subtitle-1 font-weight-bold">Agendados ({{ agendados.length }})</h2>
-        <p v-if="!carregando && !agendados.length" class="text-medium-emphasis mb-0">
-          Nenhum outro pedido agendado para você.
-        </p>
-        <article v-for="card in agendados" :key="card.agendaId" class="card" :data-agenda="card.agendaId">
-          <div class="card__texto">
-            <strong>{{ card.grupoPaiNome ? `${card.grupoPaiNome} › ${card.grupoNome}` : card.grupoNome }}</strong>
-            <span class="text-caption text-medium-emphasis"
-              >{{ card.totalProdutos }} produto(s) · {{ card.resumo }} · responsável {{ card.responsavelNome }}</span
-            >
-          </div>
-          <v-chip size="small" variant="outlined" label>{{
-            card.proximaData ? `Próximo: ${DATA_HORA.format(new Date(card.proximaData))}` : "Sem próximas datas"
-          }}</v-chip>
-        </article>
-      </section>
-    </div>
+      <ComprasSecao rente data-secao="agendados">
+        <template #titulo>
+          Agendados <span class="conta">{{ agendados.length }}</span>
+        </template>
+        <ComprasVazio
+          v-if="!carregando && !agendados.length"
+          icone="mdi-calendar-blank-outline"
+          titulo="Nenhum outro pedido agendado para você."
+          texto="Os agendamentos são criados em Agendamento de pedidos."
+        />
+        <ul v-else class="lista">
+          <li v-for="card in agendados" :key="card.agendaId" class="linha" :data-agenda="card.agendaId">
+            <span class="linha__icone linha__icone--neutro" aria-hidden="true"
+              ><v-icon icon="mdi-calendar-clock-outline" size="20"
+            /></span>
+            <span class="linha__texto">
+              <strong>{{ nomeDoGrupo(card) }}</strong>
+              <span class="linha__sub"
+                >{{ card.totalProdutos }} produto(s) · {{ card.resumo }} · {{ card.responsavelNome }}</span
+              >
+            </span>
+            <span class="linha__proxima">
+              <template v-if="card.proximaData">
+                <span class="linha__rotulo">Próximo</span>
+                {{ DATA_HORA.format(new Date(card.proximaData)) }}
+              </template>
+              <template v-else>Sem próximas datas</template>
+            </span>
+          </li>
+        </ul>
+      </ComprasSecao>
 
-    <SolicitacaoCompraDialog
-      v-model="dialog"
-      :detalhe="detalhe"
-      :fornecedores="fornecedores"
-      :enviando="enviando"
-      :erro="erroEnvio"
-      @enviar="enviar"
-    />
-    <ComprasRodadaConvitesDialog
-      :model-value="rodada !== null"
-      :rodada="rodada"
-      :empresa-id="empresaId"
-      @update:model-value="(valor: boolean) => !valor && (rodada = null)"
-    />
+      <SolicitacaoCompraDialog
+        v-model="dialog"
+        :detalhe="detalhe"
+        :fornecedores="fornecedores"
+        :enviando="enviando"
+        :erro="erroEnvio"
+        @enviar="enviar"
+      />
+      <ComprasRodadaConvitesDialog
+        :model-value="rodada !== null"
+        :rodada="rodada"
+        :empresa-id="empresaId"
+        @update:model-value="(valor: boolean) => !valor && (rodada = null)"
+      />
+    </ComprasTela>
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
 
 <style scoped>
-.card {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cx-sp-2);
-  padding: var(--cx-sp-3) var(--cx-sp-4);
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface-raised);
+.conta {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  line-height: 20px;
+  text-align: center;
 }
 
-.card--pendente {
-  border-color: var(--cx-brand);
+.conta--ativa {
+  background: var(--cx-brand);
+  color: var(--cx-brand-on);
 }
 
-.card__texto {
+.lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linha {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--cx-sp-3);
+  padding: var(--cx-sp-3) var(--cx-sp-5);
+  border-top: 1px solid var(--cx-line-soft);
+}
+
+.linha__icone {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--cx-r-md);
+  background: var(--cx-brand-wash);
+  color: var(--cx-brand-text);
+}
+
+.linha__icone--neutro {
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+}
+
+.linha__texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.linha__texto strong {
+  overflow-wrap: anywhere;
+}
+
+.linha__sub {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
+.linha__proxima {
+  display: grid;
+  justify-items: end;
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.linha__rotulo {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+}
+
+@media (max-width: 599px) {
+  .linha {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-left: var(--cx-sp-4);
+    padding-right: var(--cx-sp-4);
+  }
+
+  .linha > .v-btn,
+  .linha__proxima {
+    grid-column: 2;
+    justify-self: start;
+    justify-items: start;
+  }
 }
 </style>

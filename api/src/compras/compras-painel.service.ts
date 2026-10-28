@@ -69,6 +69,7 @@ async function ofertasEmCotacao(empresaId: string, produtoId?: string) {
       rodadaNumero: item.rodadaNumero,
       solicitacaoId: item.solicitacaoId,
       rodadaAberta: item.rodadaStatus === "aberta",
+      abertaEm: item.abertaEm.toISOString(),
       expiraEm: item.expiraEm.toISOString(),
       fornecedorId: convite.fornecedorId,
       fornecedorNome: convite.fornecedorNome,

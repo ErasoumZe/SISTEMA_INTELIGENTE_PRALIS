@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { entrar, observarConsole, USUARIOS } from "./apoio.js";
-import { acharLinhaPaginando, irParaTela } from "./apoio-compras.js";
+import { acharLinhaPaginando, codigoDeTeste, irParaTela } from "./apoio-compras.js";
 
 test.setTimeout(120_000);
 
 test("Compras cria e edita fornecedor com WhatsApp persistido", async ({ page }) => {
   const problemas = observarConsole(page);
-  const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const nome = `E2E Fornecedor ${sufixo}`;
-  const nomeEditado = `${nome} Editado`;
+  const sufixo = codigoDeTeste();
+  const nome = `Mercearia do Zé (teste ${sufixo})`;
+  const nomeEditado = `Mercearia do Zé e Filhos (teste ${sufixo})`;
 
   await entrar(page, USUARIOS.compras);
   await irParaTela(page, "/fornecedores", "Fornecedores");

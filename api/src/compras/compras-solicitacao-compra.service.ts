@@ -119,14 +119,13 @@ export async function detalharSolicitacaoCompra(
 ): Promise<SolicitacaoCompraDetalheDto> {
   validarEmpresa(perfil, empresaId);
   const ocorrencia = await ocorrenciaParaEnviar(id, empresaId, perfil);
-  const [produtosDaAgenda, itensSolicitacao, estoque, rankings] = await Promise.all([
+  const [produtosDaAgenda, estoque, rankings] = await Promise.all([
     produtosDasAgendasRepository([ocorrencia.agendaId]),
-    itensDaSolicitacaoRepository(ocorrencia.solicitacaoId),
     listarEstoqueProdutosRepository({ empresaId }),
     rankingsDaEmpresa(empresaId)
   ]);
-  const sugerida = new Map(itensSolicitacao.map((item) => [item.produtoId, item.quantidade]));
-  const produtoIds = [...new Set([...produtosDaAgenda.map((produto) => produto.produtoId), ...sugerida.keys()])];
+  // Doc 58 §2: os produtos do agendamento chegam sem quantidade; o responsavel decide quanto pedir.
+  const produtoIds = [...new Set(produtosDaAgenda.map((produto) => produto.produtoId))];
   const fornecedores = await fornecedoresQuePodemReceber(empresaId, produtoIds);
   const estoquePorId = new Map(estoque.map((produto) => [produto.id, produto]));
   return {
@@ -146,7 +145,6 @@ export async function detalharSolicitacaoCompra(
           unidade: produto?.unidade ?? null,
           estoqueAtual: produto?.quantidadeEstoque ?? null,
           estoqueMax: produto?.estoqueMax ?? null,
-          quantidadeSugerida: sugerida.get(produtoId) ?? null,
           fornecedores: fornecedores.get(produtoId) ?? [],
           maisVende: rankings.maisVende.has(produtoId),
           maisCompra: rankings.maisCompra.has(produtoId),

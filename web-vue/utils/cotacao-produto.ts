@@ -1,26 +1,35 @@
 import type { ColunaCotacao, OfertaDoProdutoDto } from "@padaria/shared";
+import type { TomSituacao } from "~/utils/compras-visual";
 import { podeAprovarProposta } from "~/utils/decisao-compras";
 
 // Apresentacao da Cotacao por fornecedor (doc 58 §4). Pura: nao conhece API nem componente.
 
-export const COR_SITUACAO: Record<ColunaCotacao, string> = {
-  enviado: "secondary",
+export const TOM_SITUACAO: Record<ColunaCotacao, TomSituacao> = {
+  enviado: "neutro",
   cotado: "info",
-  retornado: "primary",
-  com_aumento: "warning",
-  comprado: "success"
+  retornado: "marca",
+  com_aumento: "atencao",
+  comprado: "positivo"
 };
 
-// Na cotacao do produto, o que pede decisao vem primeiro.
-export const ORDEM_DAS_SITUACOES: ColunaCotacao[] = ["com_aumento", "retornado", "cotado", "enviado", "comprado"];
+/** A cotacao do produto e organizada pelo que o comprador faz com cada oferta, nao pela coluna da matriz. */
+export type GrupoDaCotacao = "decidir" | "aguardando" | "sem_oferta" | "comprado";
 
-export const TITULO_DA_SITUACAO: Record<ColunaCotacao, string> = {
-  com_aumento: "Com aumento — acima da referência",
-  retornado: "Retornado",
-  cotado: "Cotado — salvou, ainda não enviou",
-  enviado: "Enviado — ainda não respondeu",
+export const TITULO_DO_GRUPO: Record<GrupoDaCotacao, string> = {
+  decidir: "Para você decidir",
+  aguardando: "Aguardando o fornecedor",
+  sem_oferta: "Sem oferta",
   comprado: "Comprado"
 };
+
+export const AJUDA_DO_GRUPO: Record<GrupoDaCotacao, string> = {
+  decidir: "Não compraram sozinhas. Aceite, contraproponha ou espere as outras respostas.",
+  aguardando: "Ainda não responderam ou salvaram sem enviar.",
+  sem_oferta: "Não têm o produto ou o produto já foi comprado de outro.",
+  comprado: "Já é pedido: acompanhe em Pedidos finalizados."
+};
+
+const ORDEM_DOS_GRUPOS: GrupoDaCotacao[] = ["decidir", "aguardando", "sem_oferta", "comprado"];
 
 /** Itens (da cotacao) que ja tem vencedor: as outras ofertas deles nao se aceitam mais. */
 export function itensComprados(ofertas: OfertaDoProdutoDto[]): Set<string> {
@@ -44,24 +53,35 @@ export function podeContraproporOferta(oferta: OfertaDoProdutoDto, comprados: Se
   );
 }
 
-/** As ofertas por situacao, na ordem de decisao; situacao vazia nao aparece. */
-export function ofertasPorSituacao(ofertas: OfertaDoProdutoDto[]) {
-  return ORDEM_DAS_SITUACOES.map((situacao) => ({
-    situacao,
-    ofertas: ofertas.filter((oferta) => oferta.situacao === situacao)
-  })).filter((grupo) => grupo.ofertas.length);
+export function grupoDaOferta(oferta: OfertaDoProdutoDto, comprados: Set<string>): GrupoDaCotacao {
+  if (oferta.situacao === "comprado") return "comprado";
+  if (oferta.situacao === "enviado" || oferta.situacao === "cotado") return "aguardando";
+  return podeAceitarOferta(oferta, comprados) ? "decidir" : "sem_oferta";
 }
 
-/** As cotacoes (rodadas) em que o produto esta, uma vez cada. */
+/** As ofertas por grupo, na ordem de decisao; dentro do grupo, a mais barata primeiro. Grupo vazio nao aparece. */
+export function ofertasAgrupadas(ofertas: OfertaDoProdutoDto[]) {
+  const comprados = itensComprados(ofertas);
+  const custo = (oferta: OfertaDoProdutoDto) =>
+    oferta.custoFinalUnitario === null ? Number.POSITIVE_INFINITY : Number(oferta.custoFinalUnitario);
+  return ORDEM_DOS_GRUPOS.map((grupo) => ({
+    grupo,
+    ofertas: ofertas
+      .filter((oferta) => grupoDaOferta(oferta, comprados) === grupo)
+      .sort((a, b) => custo(a) - custo(b) || a.fornecedorNome.localeCompare(b.fornecedorNome))
+  })).filter((linha) => linha.ofertas.length);
+}
+
+/** As cotacoes (rodadas) em que o produto esta, uma vez cada, da mais nova para a mais antiga. */
 export function cotacoesDoProduto(ofertas: OfertaDoProdutoDto[]) {
-  const vistas = new Map<string, { rodadaId: string; rodadaNumero: number; rodadaAberta: boolean; expiraEm: string }>();
+  const vistas = new Map<string, { rodadaId: string; abertaEm: string; rodadaAberta: boolean; expiraEm: string }>();
   for (const oferta of ofertas)
     if (!vistas.has(oferta.rodadaId))
       vistas.set(oferta.rodadaId, {
         rodadaId: oferta.rodadaId,
-        rodadaNumero: oferta.rodadaNumero,
+        abertaEm: oferta.abertaEm,
         rodadaAberta: oferta.rodadaAberta,
         expiraEm: oferta.expiraEm
       });
-  return [...vistas.values()];
+  return [...vistas.values()].sort((a, b) => b.abertaEm.localeCompare(a.abertaEm));
 }

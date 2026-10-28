@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { CaixaOperacional } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
+import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
+import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
 type Forma = "credito" | "debito" | "pix" | "voucher";
 type Leitura = Record<Forma, number | null> & {
@@ -26,6 +28,7 @@ const paineis = [
   { chave: "tarde", titulo: "Relatório da tarde", subtitulo: "Leitura final", icone: "mdi-weather-sunset" }
 ] as const;
 const camera = useTemplateRef<HTMLInputElement>("camera");
+const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(camera);
 const galeria = useTemplateRef<HTMLInputElement>("galeria");
 const etapa = ref<"manha" | "tarde">("manha");
 const paineisAbertos = ref<string[]>(["manha"]);
@@ -211,18 +214,10 @@ watch(
                 ><span>Envie uma foto pela câmera ou escolha uma imagem/PDF da galeria.</span>
               </div>
               <div class="maquininha__botoes">
-                <v-btn prepend-icon="mdi-camera" :loading="enviando" @click="camera?.click()">Câmera</v-btn
+                <v-btn prepend-icon="mdi-camera" :loading="enviando" @click="abrirCamera()">Câmera</v-btn
                 ><v-btn prepend-icon="mdi-image" :loading="enviando" @click="galeria?.click()">Galeria</v-btn>
               </div>
             </section>
-            <input
-              ref="camera"
-              class="d-none"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              @change="enviar"
-            /><input ref="galeria" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar" />
             <div class="maquininha__campos">
               <v-text-field
                 v-for="campo in campos"
@@ -257,6 +252,12 @@ watch(
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
+    <!-- Os dois inputs ficam FORA do v-for dos paineis: dentro dele `useTemplateRef` devolve um ARRAY e
+         `camera?.click()` estourava "is not a function" (Camera e Galeria nao abriam). So o painel do turno
+         atual usa os botoes, entao um unico par de inputs basta. -->
+    <input ref="camera" class="d-none" type="file" accept="image/*" capture="environment" @change="enviar" />
+    <input ref="galeria" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar" />
+    <CapturaCameraDialog v-model="cameraAberta" @capturada="aoCapturar" @indisponivel="aoIndisponivel" />
   </section>
 </template>
 

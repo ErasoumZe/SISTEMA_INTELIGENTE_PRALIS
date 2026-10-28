@@ -2,10 +2,13 @@
 import type { AuthSession, ProdutoEstoqueDto } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
+import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
+import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import EstoqueExtratoDialog from "~/components/compras/EstoqueExtratoDialog.vue";
 import EstoqueIndicadores from "~/components/compras/EstoqueIndicadores.vue";
 import EstoqueLista from "~/components/compras/EstoqueLista.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
+import type { FiltroSituacaoEstoque } from "~/utils/compras-visual";
 import { mensagemErro } from "~/utils/domain";
 
 const router = useRouter();
@@ -39,13 +42,29 @@ const grupos = computed(() => {
 const areas = computed(() => valoresUnicos(catalogoFiltros.value.map((produto) => produto.areaEstoque)));
 const locaisVenda = computed(() => valoresUnicos(catalogoFiltros.value.flatMap((produto) => produto.localVenda)));
 const locaisEstoque = computed(() => valoresUnicos(catalogoFiltros.value.map((produto) => produto.localEstoque)));
-const produtosExibidos = computed(() => {
-  const termo = busca.value.trim().toLocaleLowerCase("pt-BR");
+// A busca vale para a faixa de numeros e para a lista; o filtro de situacao (tocar na faixa) so para a lista.
+const situacao = ref<FiltroSituacaoEstoque>(null);
+// Constante: um array escrito no template nasce de novo a cada render e o menu do select fecha sozinho.
+const CURVAS_ABC = ["A", "B", "C"];
+const produtosBuscados = computed(() => {
+  const termo = (busca.value ?? "").trim().toLocaleLowerCase("pt-BR");
   if (!termo) return produtos.value;
   return produtos.value.filter((produto) =>
     `${produto.descricao} ${produto.grupo ?? ""}`.toLocaleLowerCase("pt-BR").includes(termo)
   );
 });
+const produtosExibidos = computed(() => {
+  if (situacao.value === "minimo")
+    return produtosBuscados.value.filter(
+      (produto) => produto.estoqueMin !== null && Number(produto.quantidadeEstoque) <= Number(produto.estoqueMin)
+    );
+  if (situacao.value === "sem_faixa")
+    return produtosBuscados.value.filter((produto) => produto.estoqueMin === null || produto.estoqueMax === null);
+  return produtosBuscados.value;
+});
+const temFiltro = computed(
+  () => Boolean(busca.value) || Boolean(situacao.value) || Object.values(filtros).some(Boolean)
+);
 
 function valoresUnicos(valores: Array<string | null>) {
   return [...new Set(valores.filter((valor): valor is string => Boolean(valor)))].sort((a, b) => a.localeCompare(b));
@@ -83,6 +102,7 @@ async function carregarEmpresa() {
 function limparFiltros() {
   Object.assign(filtros, { grupoMercadoriaId: "", areaEstoque: "", localVenda: "", localEstoque: "", curvaAbc: "" });
   busca.value = "";
+  situacao.value = null;
   void carregarEstoque();
 }
 async function trocarEmpresa(id: string) {
@@ -128,92 +148,97 @@ onMounted(async () => {
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="trocarEmpresa"
   >
-    <div class="d-grid ga-4">
+    <ComprasTela>
       <AppCabecalhoTela
         titulo="Estoque"
-        subtitulo="Saldo disponível por produto. Somente recebimento físico conferido altera este saldo."
-      />
+        subtitulo="Saldo por produto. Só o recebimento conferido altera o saldo; produto no mínimo pede revisão do comprador."
+      >
+        <template #acoes>
+          <v-btn variant="tonal" prepend-icon="mdi-history" @click="abrirExtrato()">Extrato completo</v-btn>
+        </template>
+      </AppCabecalhoTela>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-      <v-alert type="info" variant="tonal" density="comfortable" icon="mdi-shield-check-outline"
-        >Esta é uma leitura operacional: produto no mínimo pede revisão; a sugestão de pedido continua sob decisão do
-        comprador.</v-alert
-      >
-      <EstoqueIndicadores :produtos="produtosExibidos" />
-      <v-card variant="outlined"
-        ><v-card-text
-          ><v-row dense>
-            <v-col cols="12" md="4"
-              ><v-text-field
-                v-model="busca"
-                prepend-inner-icon="mdi-magnify"
-                label="Buscar produto ou grupo"
-                clearable
-                hide-details
-            /></v-col>
-            <v-col cols="12" sm="6" md="2"
-              ><v-select
-                v-model="filtros.grupoMercadoriaId"
-                :items="grupos"
-                item-title="nome"
-                item-value="id"
-                label="Grupo"
-                clearable
-                hide-details
-                @update:model-value="carregarEstoque"
-            /></v-col>
-            <v-col cols="12" sm="6" md="2"
-              ><v-select
-                v-model="filtros.areaEstoque"
-                :items="areas"
-                label="Área"
-                clearable
-                hide-details
-                @update:model-value="carregarEstoque"
-            /></v-col>
-            <v-col cols="12" sm="6" md="2"
-              ><v-select
-                v-model="filtros.localVenda"
-                :items="locaisVenda"
-                label="Local de venda"
-                clearable
-                hide-details
-                @update:model-value="carregarEstoque"
-            /></v-col>
-            <v-col cols="12" sm="6" md="2"
-              ><v-select
-                v-model="filtros.localEstoque"
-                :items="locaisEstoque"
-                label="Local de estoque"
-                clearable
-                hide-details
-                @update:model-value="carregarEstoque"
-            /></v-col>
-            <v-col cols="9" sm="6" md="2"
-              ><v-select
-                v-model="filtros.curvaAbc"
-                :items="['A', 'B', 'C']"
-                label="Curva ABC"
-                clearable
-                hide-details
-                @update:model-value="carregarEstoque"
-            /></v-col>
-            <v-col cols="3" sm="6" md="2" class="d-flex align-center justify-end"
-              ><v-btn prepend-icon="mdi-filter-remove" variant="text" @click="limparFiltros">Limpar</v-btn></v-col
-            >
-          </v-row></v-card-text
-        ></v-card
-      >
-      <v-card
-        ><v-card-title class="d-flex flex-wrap align-center justify-space-between ga-2"
-          ><span>Posição de estoque</span
-          ><v-btn size="small" variant="tonal" prepend-icon="mdi-history" @click="abrirExtrato()"
-            >Extrato completo</v-btn
-          ><span class="text-body-2 text-medium-emphasis"
-            >{{ produtosExibidos.length }} produto(s) exibido(s)</span
-          ></v-card-title
-        ><v-card-text><EstoqueLista :produtos="produtosExibidos" @extrato="abrirExtrato" /></v-card-text
-      ></v-card>
-    </div>
+      <EstoqueIndicadores v-model:filtro="situacao" :produtos="produtosBuscados" />
+
+      <ComprasSecao rente data-secao="posicao-estoque">
+        <template #titulo>
+          Posição de estoque <span class="conta">{{ produtosExibidos.length }}</span>
+        </template>
+        <template v-if="temFiltro" #acoes>
+          <v-btn size="small" variant="text" prepend-icon="mdi-filter-remove-outline" @click="limparFiltros"
+            >Limpar filtros</v-btn
+          >
+        </template>
+        <template #filtros>
+          <div class="grade">
+            <v-text-field
+              v-model="busca"
+              placeholder="Buscar produto ou grupo"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              density="compact"
+              hide-details
+              aria-label="Buscar produto ou grupo"
+              class="filtro filtro--busca"
+            />
+            <v-select
+              v-model="filtros.grupoMercadoriaId"
+              :items="grupos"
+              item-title="nome"
+              item-value="id"
+              label="Grupo"
+              clearable
+              density="compact"
+              hide-details
+              class="filtro"
+              @update:model-value="carregarEstoque"
+            />
+            <v-select
+              v-model="filtros.areaEstoque"
+              :items="areas"
+              label="Área"
+              clearable
+              density="compact"
+              hide-details
+              class="filtro"
+              @update:model-value="carregarEstoque"
+            />
+            <v-select
+              v-model="filtros.localVenda"
+              :items="locaisVenda"
+              label="Local de venda"
+              clearable
+              density="compact"
+              hide-details
+              class="filtro"
+              @update:model-value="carregarEstoque"
+            />
+            <v-select
+              v-model="filtros.localEstoque"
+              :items="locaisEstoque"
+              label="Local de estoque"
+              clearable
+              density="compact"
+              hide-details
+              class="filtro"
+              @update:model-value="carregarEstoque"
+            />
+            <v-select
+              v-model="filtros.curvaAbc"
+              :items="CURVAS_ABC"
+              label="Curva ABC"
+              clearable
+              density="compact"
+              hide-details
+              class="filtro"
+              @update:model-value="carregarEstoque"
+            />
+          </div>
+        </template>
+        <v-progress-linear :active="empresaCarregando" indeterminate height="2" />
+        <EstoqueLista :produtos="produtosExibidos" @extrato="abrirExtrato" />
+      </ComprasSecao>
+    </ComprasTela>
     <EstoqueExtratoDialog
       v-model="dialogExtrato"
       :empresa-id="empresaId"
@@ -222,3 +247,34 @@ onMounted(async () => {
     />
   </AppShell>
 </template>
+
+<style scoped>
+.conta {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Grade com largura minima igual para todos: o select do Vuetify estreito demais abre o menu sem itens. */
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--cx-sp-3);
+  width: 100%;
+}
+
+.filtro--busca {
+  grid-column: span 2;
+}
+
+@media (max-width: 599px) {
+  .filtro--busca {
+    grid-column: 1 / -1;
+  }
+}
+</style>
