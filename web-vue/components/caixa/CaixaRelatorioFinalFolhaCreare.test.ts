@@ -4,45 +4,63 @@ import CaixaRelatorioFinalFolhaCreare from "./CaixaRelatorioFinalFolhaCreare.vue
 import { leituraFolhaCreareVazia } from "~/utils/folha-creare";
 
 const creare = {
-  leitura: { credito: 947.05, total: 3674.28, clientes: 148.81, sangria: 600, saldoFinalDinheiro: 840.21 },
-  comparacao: { credito: "ok", total: "divergente", sangria: "ok" } as const,
-  pralis: { credito: 947.05, total: 3674.27, sangria: 600 },
+  leitura: {
+    periodoInicio: "26/10/2026 06:14:58",
+    dataEmissao: "26/10/2026 13:58:46",
+    credito: 947.05,
+    debito: 779.72,
+    total: 3674.28,
+    clientes: 148.81,
+    sangria: 600,
+    saldoFinalDinheiro: 840.21
+  },
+  comparacao: { credito: "ok", debito: "ok", total: "divergente", sangria: "ok" } as const,
+  pralis: { credito: 947.05, debito: 779.72, total: 3674.27, sangria: 600 },
   somaFormasConfereTotal: false,
   horario: {
     inicio: { situacao: "divergente", diferencaMinutos: -15, sugestaoInicio: null, motivoSemSugestao: null },
-    emissao: { situacao: "antes_do_corte", diferencaMinutos: -20 }
+    emissao: { situacao: "ok", diferencaMinutos: 0 }
   } as const
 };
+const props = {
+  creare,
+  versao: 4,
+  maquininha: { credito: 947.05, debito: 770, pix: null, voucher: null },
+  periodo: { inicio: "2026-10-26T09:30:00.000Z", fim: "2026-10-26T17:00:00.000Z" }
+};
 
-describe("CaixaRelatorioFinalFolhaCreare", () => {
-  it("compara linha a linha na ordem do cupom, com folha, Pralis e situacao", () => {
-    const wrapper = mount(CaixaRelatorioFinalFolhaCreare, { props: { creare, versao: 4 } });
-    const texto = wrapper.text();
-    const ordem = ["Troco Inicial", "CLIENTES (VND/TRANS)", "CREDITO (VND/TRANS)", "Total", "Sangria"].map((rotulo) =>
-      texto.indexOf(rotulo)
+// O formato de moeda usa espaco nao separavel ("R$ 0,01"): normaliza para comparar o texto.
+const texto = (elemento: { text(): string }) => elemento.text().replace(/\s/gu, " ");
+
+describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
+  it("uma tabela: folha, Pralis e maquininha por linha, com o sentido da diferenca", () => {
+    const wrapper = mount(CaixaRelatorioFinalFolhaCreare, { props });
+    expect(texto(wrapper.get('[data-teste="final-linha-credito"]'))).toContain("Confere");
+    expect(texto(wrapper.get('[data-teste="final-linha-total"]'))).toContain("Folha R$ 0,01 a mais que o Pralis");
+    expect(texto(wrapper.get('[data-teste="final-linha-debito"]'))).toContain(
+      "Maquininha R$ 9,72 a menos que o Pralis"
     );
-    expect([...ordem].sort((a, b) => a - b)).toEqual(ordem);
-    expect(wrapper.get('[data-teste="final-linha-credito"]').text()).toContain("Confere");
-    const total = wrapper.get('[data-teste="final-linha-total"]');
-    expect(total.text()).toContain("Diferença");
-    expect(total.text()).toContain("0,01");
-    expect(wrapper.get('[data-teste="final-linha-clientes"]').text()).toContain("Só na folha");
-    expect(wrapper.get('[data-teste="final-linha-sangria"]').text()).toContain("-R$");
-    expect(texto).toContain("1 linha(s) com diferença");
+    expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Sem valor na folha");
+    expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Maquininha sem leitura");
+    expect(texto(wrapper.get('[data-teste="final-linha-sangria"]'))).toContain("-R$");
+    // So na folha (sem comparar) vai para o rodape, nao vira linha.
+    expect(wrapper.find('[data-teste="final-linha-clientes"]').exists()).toBe(false);
+    expect(texto(wrapper)).toContain("CLIENTES (VND/TRANS): R$ 148,81");
   });
 
-  it("avisa formas que nao somam o Total e o horario da folha", () => {
-    const texto = mount(CaixaRelatorioFinalFolhaCreare, { props: { creare, versao: 4 } }).text();
-    expect(texto).toContain("não dá o Total impresso");
-    expect(texto).toContain("difere 15 min");
-    expect(texto).toContain("20 min antes do corte");
+  it("horario em datas, nunca em minutos", () => {
+    const conteudo = texto(mount(CaixaRelatorioFinalFolhaCreare, { props }));
+    expect(conteudo).toContain("Folha 26/10/2026 06:14:58");
+    expect(conteudo).toContain("Não bate");
+    expect(conteudo).not.toContain(" min ");
+    expect(conteudo).toContain("não dá o Total impresso");
   });
 
   it("relatorio do modelo antigo pede para gerar de novo", () => {
     const wrapper = mount(CaixaRelatorioFinalFolhaCreare, {
-      props: { creare: { comparacao: { total: "ok" } }, versao: 3 }
+      props: { ...props, creare: { comparacao: { total: "ok" } }, versao: 3 }
     });
-    expect(wrapper.text()).toContain("modelo antigo");
+    expect(texto(wrapper)).toContain("modelo antigo");
     expect(wrapper.find('[data-teste="final-linha-total"]').exists()).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CaixaOperacional } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
+import { formatarCampoDinheiro, numeroDoCampo } from "~/utils/campo-dinheiro";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
@@ -43,9 +44,22 @@ const enviando = ref(false),
 const podeSalvar = computed(
   () => Boolean(anexoId.value) && campos.every(({ chave }) => valorMonetario(leitura.value[chave]) !== null)
 );
+// "947,05", "2.552,61" (digitado) e "947.05" (payload) valem; vazio, lixo ou negativo nao.
 function valorMonetario(valor: unknown) {
-  const numero = Number(String(valor).replace(",", "."));
-  return String(valor).trim() && Number.isFinite(numero) && numero >= 0 ? numero : null;
+  const numero = numeroDoCampo(typeof valor === "number" || typeof valor === "string" ? valor : null);
+  return numero !== null && numero >= 0 ? numero : null;
+}
+// O campo mostra o valor como o cupom: com virgula ("947,05"), nunca "947.05".
+function textoMonetario(valor: unknown) {
+  return typeof valor === "number" && Number.isFinite(valor) ? formatarCampoDinheiro(valor) : "";
+}
+// Valor lido pela IA fica travado; so o que ela nao leu (ou marcou como duvidoso) e digitado.
+function travado(chave: Forma) {
+  return (
+    leitura.value.documentoLegivel &&
+    Boolean(leitura.value[chave].trim()) &&
+    !leitura.value.camposDuvidosos.includes(chave)
+  );
 }
 function novaLeitura(valor: unknown): Editavel {
   const dados = valor && typeof valor === "object" ? (valor as Record<string, unknown>) : {};
@@ -54,12 +68,14 @@ function novaLeitura(valor: unknown): Editavel {
     numeroMaquininha: typeof dados.numeroMaquininha === "string" ? dados.numeroMaquininha : null,
     dataEmissao: typeof dados.dataEmissao === "string" ? dados.dataEmissao : null,
     acumulador: typeof dados.acumulador === "number" ? dados.acumulador : null,
-    credito: dados.credito == null ? "" : String(dados.credito),
-    debito: dados.debito == null ? "" : String(dados.debito),
-    pix: dados.pix == null ? "" : String(dados.pix),
-    voucher: dados.voucher == null ? "" : String(dados.voucher),
+    credito: textoMonetario(dados.credito),
+    debito: textoMonetario(dados.debito),
+    pix: textoMonetario(dados.pix),
+    voucher: textoMonetario(dados.voucher),
     detalhes: { credito: [], debito: [], pix: [], voucher: [] },
-    camposDuvidosos: [],
+    camposDuvidosos: Array.isArray(dados.camposDuvidosos)
+      ? dados.camposDuvidosos.filter((campo): campo is string => typeof campo === "string")
+      : [],
     observacoes: []
   };
 }
@@ -123,13 +139,21 @@ async function enviar(evento: Event) {
     const json = (await resposta.json()) as { data?: { id: string }; detail?: string };
     if (!resposta.ok || !json.data) throw new Error(json.detail || "Não foi possível anexar o comprovante.");
     anexoId.value = json.data.id;
-    const leituraIa = await apiPost<{ sugestao: Leitura }>(
-      `/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha/analisar`,
-      { anexoId: json.data.id }
-    );
-    leitura.value = novaLeitura(leituraIa.sugestao);
-    aviso.value = "A IA sugeriu os valores. Revise cada campo antes de salvar.";
     salvo.value = false;
+    try {
+      const leituraIa = await apiPost<{ sugestao: Leitura }>(
+        `/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha/analisar`,
+        { anexoId: json.data.id }
+      );
+      leitura.value = novaLeitura(leituraIa.sugestao);
+      aviso.value =
+        "A IA leu o comprovante. Os valores lidos ficam travados; preencha só os que ela não conseguiu ler e salve.";
+    } catch {
+      // IA fora do ar (ou sem resposta): a foto continua anexada como prova e todos os campos ficam livres.
+      leitura.value = novaLeitura(null);
+      aviso.value =
+        "A leitura automática não funcionou. A foto ficou anexada: preencha os valores do comprovante manualmente e salve.";
+    }
   } catch (falha) {
     erro.value = mensagemErro(falha);
   } finally {
@@ -226,6 +250,11 @@ watch(
                 :label="campo.titulo"
                 prefix="R$"
                 inputmode="decimal"
+                :readonly="travado(campo.chave)"
+                :append-inner-icon="travado(campo.chave) ? 'mdi-lock-outline' : undefined"
+                :hint="travado(campo.chave) ? 'Lido pela IA' : ''"
+                :persistent-hint="travado(campo.chave)"
+                :data-teste="`maquininha-campo-${campo.chave}`"
               />
             </div>
             <section class="maquininha__liquidos">

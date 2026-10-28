@@ -56,7 +56,13 @@ function horaNegocio(instante: Date): string {
  */
 export function instanteNegocio(dia: string, hora: string): Date {
   const [h = 0, m = 0, s = 0] = hora.split(":").map(Number);
-  return new Date(inicioDoDiaNegocio(dia).getTime() + ((h * 60 + m) * 60 + s) * 1000);
+  const relogio = [h, m, s].map((parte) => String(parte).padStart(2, "0")).join(":");
+  const comoUtc = new Date(`${dia}T${relogio}Z`).getTime();
+  // Duas passadas pelo offset que o fuso aplica NAQUELE instante: cobre deslocamento fixo e horario de verao.
+  const lidoNoFuso = (ms: number) => new Date(`${diaNegocio(new Date(ms))}T${horaNegocio(new Date(ms))}Z`).getTime();
+  let instante = comoUtc - (lidoNoFuso(comoUtc) - comoUtc);
+  instante = comoUtc - (lidoNoFuso(instante) - instante);
+  return new Date(instante);
 }
 
 export function somarDias(dia: string, dias: number): string {

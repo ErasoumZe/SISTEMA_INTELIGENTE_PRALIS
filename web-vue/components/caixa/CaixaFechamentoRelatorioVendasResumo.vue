@@ -33,10 +33,6 @@ const totaisPorForma = computed(() => props.totais.porFormaPagamento ?? []);
         <strong>Pagamentos aprovados</strong>
         <span>Toque para mostrar ou ocultar</span>
       </summary>
-      <div class="d-flex align-center justify-space-between ga-3 flex-wrap mb-3">
-        <h4>Pagamentos aprovados</h4>
-        <span class="text-caption text-medium-emphasis">Por forma de pagamento</span>
-      </div>
       <div v-if="totaisPorForma.length" class="relatorio-vendas__formas-lista">
         <div
           v-for="forma in totaisPorForma"

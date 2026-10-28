@@ -1,4 +1,8 @@
-import type { ConferenciaEmissaoFolhaCreare, ConferenciaInicioFolhaCreare } from "@padaria/shared";
+import {
+  conferirInicioFolhaCreare,
+  type ConferenciaEmissaoFolhaCreare,
+  type ConferenciaInicioFolhaCreare
+} from "@padaria/shared";
 
 // R-225 · a folha "Relatorio de Venda Geral" do CREARE, na ordem e com os rotulos impressos no cupom.
 // `compara`: a linha tem equivalente no Pralis e e conferida em centavos; as outras so sao exibidas.
@@ -61,6 +65,13 @@ export const GRUPOS_FOLHA_CREARE: ReadonlyArray<{
 ];
 
 export const CAMPOS_VALOR_FOLHA_CREARE = GRUPOS_FOLHA_CREARE.flatMap((grupo) => grupo.campos.map((c) => c.chave));
+
+// Leitura (e correcoes do operador) por anexo, enquanto a pagina estiver aberta: voltar para a etapa Vendas
+// nao chama a IA de novo nem apaga o que o operador corrigiu.
+export const leiturasFolhaCreareEmMemoria = new Map<
+  string,
+  { leitura: LeituraFolhaCreare; sugestao: SugestaoFolhaCreare | null }
+>();
 
 export function leituraFolhaCreareVazia(): LeituraFolhaCreare {
   const leitura = { dataEmissao: "", periodoInicio: "" } as LeituraFolhaCreare;
@@ -145,4 +156,23 @@ const ROTULOS_DATAS: Record<string, string> = {
 export function rotuloCampoFolha(chave: string) {
   const campo = GRUPOS_FOLHA_CREARE.flatMap((grupo) => grupo.campos).find((item) => item.chave === chave);
   return campo?.rotulo ?? ROTULOS_DATAS[chave] ?? chave;
+}
+
+/** Etapa Vendas: sugestao para o "Ajustar inicio" e aviso quando a folha nao bate e o ajuste nao cabe. */
+export function conferenciaInicioDaFolha(periodoInicio: string, aberturaOficial?: string, inicioVendas?: string) {
+  const texto = periodoInicio.trim();
+  if (!texto || !aberturaOficial || !inicioVendas) return { sugestao: null, aviso: "" };
+  const conferencia = conferirInicioFolhaCreare({ periodoInicio: texto, inicioVendas, aberturaOficial });
+  return {
+    sugestao: conferencia.sugestaoInicio ? { inicio: conferencia.sugestaoInicio, periodoTexto: texto } : null,
+    aviso: avisoInicioFolhaCreare(conferencia)
+  };
+}
+
+/** Numeros que a IA leu com seguranca: ficam travados na tela (o resto o operador digita). */
+export function numerosTravados(sugestao: SugestaoFolhaCreare | null): CampoValorFolhaCreare[] {
+  if (!sugestao?.documentoLegivel) return [];
+  return CAMPOS_VALOR_FOLHA_CREARE.filter(
+    (chave) => sugestao[chave] !== null && sugestao[chave] !== undefined && !sugestao.camposDuvidosos.includes(chave)
+  );
 }

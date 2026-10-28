@@ -10,11 +10,15 @@ const campo = {
     '<label>{{ label }}<input :value="modelValue" :readonly="readonly" :data-teste="$attrs[\'data-teste\']" /><small>{{ hint }}</small></label>'
 };
 
-function montar() {
+function montar(nomeAbertura: string | null = "Maria da abertura") {
   return mount(CaixaFechamentoResumo, {
     props: {
-      caixa: { pdvNome: "PDV 1", dataHoraAbertura: "2026-10-28T09:00:00.000Z" } as CaixaOperacional,
-      fechamento: { caixaResponsavelNome: "Maria da abertura", supervisorResponsavelNome: "" },
+      caixa: {
+        pdvNome: "PDV 1",
+        dataHoraAbertura: "2026-10-28T09:00:00.000Z",
+        caixaResponsavelNomeAbertura: nomeAbertura
+      } as CaixaOperacional,
+      fechamento: { caixaResponsavelNome: nomeAbertura ?? "", supervisorResponsavelNome: "" },
       responsaveisPendentes: true
     },
     global: {
@@ -38,5 +42,11 @@ describe("CaixaFechamentoResumo", () => {
     expect(wrapper.get('[data-teste="supervisor-fechamento-wizard"]').attributes("readonly")).toBeUndefined();
     expect(wrapper.text()).toContain("Quem abriu o caixa. Não muda no fechamento.");
     expect(wrapper.text()).toContain("Informe o supervisor responsável para continuar.");
+  });
+
+  it("caixa antigo sem nome na abertura deixa o responsavel livre para preencher", () => {
+    const wrapper = montar(null);
+    expect(wrapper.get('[data-teste="responsavel-fechamento-wizard"]').attributes("readonly")).toBeUndefined();
+    expect(wrapper.text()).toContain("Este caixa não registrou quem abriu");
   });
 });

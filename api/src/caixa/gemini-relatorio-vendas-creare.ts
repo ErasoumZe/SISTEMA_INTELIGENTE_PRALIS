@@ -52,7 +52,8 @@ const prompt = [
   '"Saldo Final Dinheiro" nunca preenche o campo dinheiro: dinheiro e somente a linha "DINHEIRO (VND)".',
   "Nao converta fuso, nao some, nao estime e nao complete valor cortado.",
   "Forma de pagamento que nao aparece no cupom fica null. Use null para valor ausente ou ambiguo e liste o campo em camposDuvidosos.",
-  "Valor deve ser numero puro, sem R$, pontos de milhar ou virgulas. Responda somente JSON."
+  "Valor em reais como numero JSON com PONTO decimal e os centavos: R$ 3.674,27 vira 3674.27; R$ 243,20 vira 243.2.",
+  "Nunca descarte os centavos (nunca 367427). Responda somente JSON."
 ].join("\n");
 
 type RespostaGemini = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -108,7 +109,8 @@ export async function extrairRelatorioVendasCreareDePdf(arquivo: Buffer): Promis
 /** Le o texto do cupom "Relatorio de Venda Geral" (rotulos na ordem impressa). */
 export function lerTextoRelatorioVendasCreare(bruto: string): RelatorioVendasCreare | null {
   const texto = normalizarTexto(bruto);
-  if (!texto || !/venda geral|forma pagamento|compilart|creare/i.test(texto)) return null;
+  // So o cupom "Relatorio de Venda Geral": outro relatorio do CREARE tem "Total" em outras secoes.
+  if (!texto || !/venda geral/i.test(texto)) return null;
   const emissao = texto.match(new RegExp(`Data da emissao\\s*:?\\s*${DATA_HORA}`, "i"));
   const periodo = texto.match(new RegExp(`Periodo de\\s*${DATA_HORA}\\s*ate\\s*${DATA_HORA}`, "i"));
   const positivo = (numero: number | null) => (numero === null ? null : Math.abs(numero));

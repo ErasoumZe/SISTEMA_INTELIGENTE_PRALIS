@@ -175,7 +175,31 @@ export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquin
 
 // R-225 · folha "Relatorio de Venda Geral" do CREARE (cupom termico), campo a campo na ordem impressa.
 // Valores ausentes ou ilegiveis ficam null ("pendente"); nada e estimado.
-const valorRelatorioCreareSchema = z.coerce.number().nonnegative().nullable().default(null);
+// "" (campo apagado) e pendente, nunca zero. Ate R$ 10 milhoes e no maximo centavos.
+const LIMITE_FOLHA = 10_000_000;
+const valorFolhaCreare = (sinal: "positivo" | "livre" | "absoluto") =>
+  z
+    .preprocess(
+      (valor) => {
+        if (typeof valor === "string" && !valor.trim()) return null;
+        if (valor === null || valor === undefined) return valor;
+        const numero = Number(valor);
+        if (!Number.isFinite(numero)) return valor;
+        // A sangria sai impressa como "-R$ 600,00": guarda o valor positivo, venha numero ou texto.
+        return sinal === "absoluto" ? Math.abs(numero) : numero;
+      },
+      z
+        .number()
+        .min(sinal === "livre" ? -LIMITE_FOLHA : 0)
+        .max(LIMITE_FOLHA)
+        .multipleOf(0.01)
+        .nullable()
+    )
+    .default(null);
+const valorRelatorioCreareSchema = valorFolhaCreare("positivo");
+// Chave do modelo antigo (A4): a tela antiga em cache depois do deploy e recusada, em vez de gravar uma
+// comparacao vazia em silencio.
+const campoModeloAntigoCreare = z.never({ error: "Folha no modelo antigo. Recarregue a pagina." }).optional();
 const dataHoraRelatorioCreareSchema = z
   .preprocess(
     (valor) => (typeof valor === "string" ? normalizarDataHoraFolhaCreare(valor) : null),
@@ -199,18 +223,19 @@ export const relatorioVendasCreareSchema = z.object({
   total: valorRelatorioCreareSchema,
   despesas: valorRelatorioCreareSchema,
   // A folha imprime "-R$ 600,00": guarda o valor positivo da sangria.
-  sangria: z
-    .preprocess((valor) => (typeof valor === "number" ? Math.abs(valor) : valor), z.coerce.number().nullable())
-    .default(null),
+  sangria: valorFolhaCreare("absoluto"),
   // Pode ser negativo; so exibido (a conta do CREARE soma voucher, a do Pralis nao — R-225).
-  saldoFinalDinheiro: z.coerce.number().nullable().default(null),
+  saldoFinalDinheiro: valorFolhaCreare("livre"),
   camposDuvidosos: z.array(z.string().trim().max(120)).max(30).default([]),
   observacoes: z.array(z.string().trim().max(300)).max(20).default([])
 });
 export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
 export const gerarRelatorioVendasFechamentoSchema = z.object({
   anexoId: uuidSchema,
+  // Recusa o modelo antigo na entrada e devolve a leitura sem essas chaves.
   leituraCreare: relatorioVendasCreareSchema
+    .extend({ totalBruto: campoModeloAntigoCreare, resultadoFinal: campoModeloAntigoCreare })
+    .transform((dados) => relatorioVendasCreareSchema.parse(dados))
 });
 export type GerarRelatorioVendasFechamento = z.infer<typeof gerarRelatorioVendasFechamentoSchema>;
 

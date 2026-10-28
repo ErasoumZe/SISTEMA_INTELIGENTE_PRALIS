@@ -34,7 +34,8 @@ export function instanteDaFolhaCreare(texto: string | null | undefined): Date | 
   const [, dia, mes, ano, hora, minuto, segundo] = partes;
   if (Number(mes) < 1 || Number(mes) > 12 || Number(dia) < 1 || Number(dia) > 31) return null;
   if (Number(hora) > 23 || Number(minuto) > 59 || Number(segundo) > 59) return null;
-  return instanteNegocio(`${ano}-${mes}-${dia}`, `${hora}:${minuto}:${segundo}`);
+  const instante = instanteNegocio(`${ano}-${mes}-${dia}`, `${hora}:${minuto}:${segundo}`);
+  return diaNegocio(instante) === `${ano}-${mes}-${dia}` ? instante : null;
 }
 
 export type ConferenciaInicioFolhaCreare = {

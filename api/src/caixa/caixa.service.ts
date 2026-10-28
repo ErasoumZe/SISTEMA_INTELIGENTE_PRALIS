@@ -288,6 +288,10 @@ export async function salvarAnexoFechamentoCaixa(
       if (tipo === "comprovante_cartao") {
         await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
       }
+      // Folha nova do CREARE: o relatorio de vendas gerado com a folha anterior deixa de valer.
+      if (tipo === "relatorio_vendas_creare") {
+        await invalidarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx);
+      }
       return anexo;
     } catch (error) {
       await unlink(absoluto).catch(() => undefined);
@@ -2279,12 +2283,16 @@ export async function gerarRelatorioVendasFechamento(
       totaisOperacionais.despesas + totaisOperacionais.mercadorias + totaisOperacionais.retiradas
     );
     const leitura = leituraCreare.leituraCreare;
+    // Soma e compara em centavos ARREDONDADOS: 0,07 + 2,34 em reais da 2,4099999... e truncar daria 240.
+    const centavos = (valor: number) => Math.round(valor * 100);
     const comparar = (creare: number | null, pralis: number) =>
-      creare === null ? "pendente" : paraCentavos(creare) === paraCentavos(pralis) ? "ok" : "divergente";
+      creare === null ? "pendente" : centavos(creare) === centavos(pralis) ? "ok" : "divergente";
     const porCategoria = (categoria: string) =>
-      primeiraPagina.totais.porFormaPagamento
-        .filter((item) => item.categoriaFechamentoCaixa === categoria)
-        .reduce((soma, item) => soma + item.total, 0);
+      deCentavos(
+        primeiraPagina.totais.porFormaPagamento
+          .filter((item) => item.categoriaFechamentoCaixa === categoria)
+          .reduce((soma, item) => soma + centavos(item.total), 0)
+      );
     // R-225 · folha "Relatorio de Venda Geral": cada linha com equivalente no Pralis e comparada em
     // centavos. CLIENTES, Saldo Inicial e Saldo Final Dinheiro (que soma voucher) so sao exibidos.
     const pralis = {
@@ -2317,11 +2325,11 @@ export async function gerarRelatorioVendasFechamento(
       leitura.pix,
       leitura.voucher
     ];
+    // Forma ilegivel (null) deixa a conferencia pendente, nunca "nao confere".
     const somaFormasConfereTotal =
-      leitura.total === null
+      leitura.total === null || formasDaFolha.some((item) => item === null)
         ? null
-        : paraCentavos(formasDaFolha.reduce<number>((soma, item) => soma + (item ?? 0), 0)) ===
-          paraCentavos(leitura.total);
+        : formasDaFolha.reduce<number>((soma, item) => soma + centavos(item ?? 0), 0) === centavos(leitura.total);
     const horario = {
       inicio: conferirInicioFolhaCreare({
         periodoInicio: leitura.periodoInicio,

@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { GRUPOS_FOLHA_CREARE, type LeituraFolhaCreare } from "~/utils/folha-creare";
+import { GRUPOS_FOLHA_CREARE, numeroDoCampoFolha, type LeituraFolhaCreare } from "~/utils/folha-creare";
 
 // R-225 · o que a leitura tirou da folha do CREARE, compacto e editavel, com os rotulos do cupom. So aparece
 // depois que a folha e anexada e lida. A comparacao com o Pralis fica no Relatorio final.
 // No celular a lista comeca fechada (abre e fecha no cabecalho); o resumo mostra Periodo e Total.
 const leitura = defineModel<LeituraFolhaCreare>({ required: true });
 const CAMPOS = GRUPOS_FOLHA_CREARE.flatMap((grupo) => grupo.campos);
+// Numeros lidos pela IA ficam travados; so o que ela nao leu (ou marcou como duvidoso) e digitado.
+const props = defineProps<{ travados?: readonly string[] }>();
+const travado = (chave: string) => Boolean(props.travados?.includes(chave));
+// Texto digitado que nao vira numero fica marcado (antes ia como "sem valor" em silencio).
+const invalido = (chave: (typeof CAMPOS)[number]["chave"]) =>
+  Boolean(leitura.value[chave].trim()) &&
+  numeroDoCampoFolha(leitura.value[chave], chave === "sangria" || chave === "saldoFinalDinheiro") === null;
 
 const aberto = ref(true);
 onMounted(() => {
@@ -31,7 +38,7 @@ const resumo = computed(() =>
     <summary class="folha-leitura__cabecalho">
       <span class="folha-leitura__titulo">
         <strong>Valores lidos da folha</strong>
-        <small>{{ resumo || "Confira com o cupom e corrija se precisar." }}</small>
+        <small>{{ resumo || "Confira com o cupom." }}</small>
       </span>
       <span class="folha-leitura__alternar" aria-hidden="true">{{ aberto ? "Ocultar" : "Mostrar" }}</span>
     </summary>
@@ -61,6 +68,9 @@ const resumo = computed(() =>
         inputmode="decimal"
         density="compact"
         hide-details
+        :readonly="travado(campo.chave)"
+        :error="invalido(campo.chave)"
+        :append-inner-icon="travado(campo.chave) ? 'mdi-lock-outline' : undefined"
         :data-teste="`folha-campo-${campo.chave}`"
       />
     </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { CaixaOperacional } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
 
@@ -7,7 +8,9 @@ type Fechamento = {
   supervisorResponsavelNome: string;
 };
 
-defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPendentes: boolean }>();
+const props = defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPendentes: boolean }>();
+// R-226: travado com quem abriu. So fica livre em caixa antigo, sem nome registrado na abertura.
+const responsavelTravado = computed(() => Boolean(props.caixa.caixaResponsavelNomeAbertura?.trim()));
 </script>
 
 <template>
@@ -27,13 +30,17 @@ defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPende
       <v-row dense>
         <v-col cols="12" md="6">
           <v-text-field
-            :model-value="fechamento.caixaResponsavelNome"
+            v-model="fechamento.caixaResponsavelNome"
             data-teste="responsavel-fechamento-wizard"
             label="Responsável pelo caixa"
             prepend-inner-icon="mdi-account-cash-outline"
-            append-inner-icon="mdi-lock-outline"
-            readonly
-            hint="Quem abriu o caixa. Não muda no fechamento."
+            :append-inner-icon="responsavelTravado ? 'mdi-lock-outline' : undefined"
+            :readonly="responsavelTravado"
+            :hint="
+              responsavelTravado
+                ? 'Quem abriu o caixa. Não muda no fechamento.'
+                : 'Este caixa não registrou quem abriu: informe o responsável.'
+            "
             persistent-hint
           />
         </v-col>
@@ -49,7 +56,11 @@ defineProps<{ caixa: CaixaOperacional; fechamento: Fechamento; responsaveisPende
         </v-col>
       </v-row>
       <p v-if="responsaveisPendentes" class="fechamento-resumo__ajuda mb-0">
-        Informe o supervisor responsável para continuar.
+        {{
+          responsavelTravado
+            ? "Informe o supervisor responsável para continuar."
+            : "Preencha os dois responsáveis para continuar."
+        }}
       </p>
     </section>
 
