@@ -68,11 +68,11 @@ const etapas = [
     titulo: "Resumo",
     resumo: "Confirme responsáveis e dados do turno.",
     passos: [
-      "Informe quem operou o caixa e quem supervisiona este fechamento.",
+      "O responsável pelo caixa é quem abriu (não muda). Informe o supervisor: o gerente que fecha o malote.",
       "Confira o PDV, o turno, o horário de abertura e a maquininha vinculada.",
-      "Os dois responsáveis são obrigatórios e permanecem preenchidos ao voltar de etapa."
+      "Os responsáveis permanecem preenchidos ao voltar de etapa."
     ],
-    quandoAvancar: "os dois responsáveis estiverem informados.",
+    quandoAvancar: "o supervisor responsável estiver informado.",
     cor: "var(--cx-positive)"
   },
   {
@@ -248,7 +248,6 @@ function formatarHora(dataHora: string | null | undefined) {
       :motivo-travado="motivoTravado"
       :folha-fechamento-enviada="folhaFechamentoEnviada"
       modo-wizard
-      :mostrar-responsaveis="false"
       :salvando="salvando"
       @solicitar-fechamento="emit('solicitarFechamento')"
       @executar-planejamento="emit('executarPlanejamento', $event)"
