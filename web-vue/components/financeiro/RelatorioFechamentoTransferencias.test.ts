@@ -74,6 +74,19 @@ describe("RelatorioFechamentoTransferencias", () => {
     expect(sem.emitted("estado")?.at(-1)?.[0]).toMatchObject({ pendentes: 0, lacreDiferente: false });
   });
 
+  it("mostra a observacao de cada movimento (sangria, retorno) na linha", async () => {
+    apiGetPaginado.mockResolvedValue({
+      itens: [{ ...itens[0], observacao: "falta 10 simulada" }, itens[1]],
+      total: 2
+    });
+    const wrapper = montar(false);
+    await flushPromises();
+    expect(wrapper.get('[data-transferencia-id="t-2"]').text()).toContain("Obs.: falta 10 simulada");
+    expect(wrapper.get('[data-transferencia-id="t-1"]').find('[data-teste="observacao-transferencia"]').exists()).toBe(
+      false
+    );
+  });
+
   it("receberComoDeclarado confirma cada pendente com os valores e o lacre do proprio registro", async () => {
     apiGetPaginado.mockResolvedValue({
       itens: [{ ...itens[0], ehCaixaParaCofre: true, contaDestinoId: "c-cofre", nLacreDoc: "S-9" }, itens[1]],

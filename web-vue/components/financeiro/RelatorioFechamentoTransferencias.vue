@@ -213,6 +213,9 @@ watch(() => props.caixaId, carregar, { immediate: true });
       <li v-for="item in itens" :key="item.id" class="rft__item" :data-transferencia-id="item.id">
         <div class="rft__quando">
           <strong>{{ nomeDaLinha(item) }}</strong>
+          <small v-if="item.observacao?.trim()" class="rft__obs" data-teste="observacao-transferencia"
+            >Obs.: {{ item.observacao }}</small
+          >
           <small>{{ item.criadoEm ? formatarDataHora(item.criadoEm) : "-" }}</small>
         </div>
         <div class="rft__valor cx-num">
@@ -299,6 +302,10 @@ watch(() => props.caixaId, carregar, { immediate: true });
 .rft__valor {
   display: grid;
   min-width: 0;
+}
+.rft__obs {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 .rft__quando small,
 .rft__valor small,

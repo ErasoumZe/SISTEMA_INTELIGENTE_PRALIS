@@ -42,4 +42,14 @@ describe("RelatorioFechamentoQuemFechou", () => {
     expect(wrapper.get('[data-teste="qf-operador"]').text()).toBe("Não informado");
     expect(wrapper.text()).not.toContain("Turno de");
   });
+
+  it("mostra a observacao que o operador escreveu ao fechar", () => {
+    const wrapper = montar(caixa, { observacao: "falta 10 simulada" });
+    expect(wrapper.get('[data-teste="observacao-fechamento"]').text()).toContain("falta 10 simulada");
+  });
+
+  it("sem observacao diz que o operador nao registrou, em vez de sumir", () => {
+    const wrapper = montar(caixa, { observacao: "  " });
+    expect(wrapper.get('[data-teste="observacao-fechamento"]').text()).toContain("não registrou observação");
+  });
 });
