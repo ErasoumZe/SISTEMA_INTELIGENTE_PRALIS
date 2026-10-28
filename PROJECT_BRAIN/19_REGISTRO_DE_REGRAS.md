@@ -1350,6 +1350,22 @@ o fechamento, a fila e a exceção; o detalhe está no documento 54, §"E6":
 - A revisão do E6 levantou 11 perguntas que o código decidiu em silêncio; estão no documento 54, ao fim
   de "Ainda sem decisão", para José confirmar.
 
+### R-223 — Lacre de fechamento reservado é SELECIONADO, não digitado (Marco, 28/10/2026)
+
+Quando a Tesouraria reservou um lacre de fechamento para o malote do caixa, o operador **seleciona** esse
+lacre na tela de fechamento em vez de digitá-lo; só o **lacre de abertura** continua digitado (R-021).
+Sem lacre reservado não há de onde selecionar: o campo segue digitado e obrigatório (R-200). O campo
+nasce vazio (a escolha é um ato do operador), e um número digitado antes de a reserva aparecer é
+descartado.
+
+O servidor **não mudou**: continua recusando lacre diferente do reservado (`caixa.service.ts`, "O lacre
+informado nao corresponde ao lacre de fechamento reservado no malote"). Sem migration e sem tocar dinheiro.
+Supera a R-021 **somente** para o lacre de fechamento reservado.
+
+Custo aceito por Marco: o operador deixa de provar que tem o lacre físico na mão pela digitação; a
+conferência final da Tesouraria (lacre de fechamento informado contra o reservado) continua existindo no
+Relatório de fechamento. Tela: `CampoLacreFechamento.vue`.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
