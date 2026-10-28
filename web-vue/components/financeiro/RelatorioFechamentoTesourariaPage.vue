@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, inject, reactive, ref, watch } from "vue";
 import type { LinhaHistoricoCaixa } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
+import { CONFIRMAR_ACAO_KEY, type ConfirmarAcao } from "~/utils/confirmacao-acao";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
+import RelatorioFechamentoPainelConferencia from "./RelatorioFechamentoPainelConferencia.vue";
+import RelatorioFechamentoQuemFechou from "./RelatorioFechamentoQuemFechou.vue";
 import RelatorioFechamentoTransferencias from "./RelatorioFechamentoTransferencias.vue";
 
 const props = defineProps<{
@@ -75,14 +78,21 @@ const pagina = ref(1);
 const itensPorPagina = 20;
 const total = ref(0);
 const dossie = ref<Dossie | null>(null);
+const blocoTransferencias = ref<InstanceType<typeof RelatorioFechamentoTransferencias> | null>(null);
+const transferenciasPendentes = ref(0);
+const lacreFechamentoDiferente = ref(false);
+const enviandoFechouCerto = ref(false);
+const erroFechouCerto = ref("");
+const confirmarAcao = inject<ConfirmarAcao>(CONFIRMAR_ACAO_KEY, async () => false);
 const caixaSelecionado = ref<LinhaRelatorio | null>(null);
 const carregandoDossie = ref(false);
 const erroDossie = ref("");
 const dialogoAberto = ref(false);
 const dialogoConferencia = ref(false);
 const dialogoAcaoFutura = ref(false);
-const acaoFutura = ref<"planilha" | "status">("planilha");
 const resultadoConferencia = ref<"conferido" | "divergente">("conferido");
+// Revisao = a Tesouraria muda uma decisao que ja tinha tomado; o motivo e obrigatorio nos dois sentidos.
+const revisandoConferencia = ref(false);
 const observacaoConferencia = ref("");
 const confirmandoConferencia = ref(false);
 const erroConferencia = ref("");
@@ -133,8 +143,6 @@ const conferenciaMaquininha = computed<LinhaMaquininha[]>(() => {
   });
 });
 const ultimaConferenciaTesouraria = computed(() => dossie.value?.conferenciasTesouraria.at(-1) ?? null);
-const podeConfirmarSemDivergencia = computed(() => dossie.value?.situacaoTesouraria === "fechado_sem_pendencias");
-const podeRegistrarDivergencia = computed(() => dossie.value?.situacaoTesouraria === "com_quebra");
 
 function parametros() {
   const params = new URLSearchParams({
@@ -173,6 +181,7 @@ function limparFiltros() {
 }
 
 async function abrirDossie(linha: LinhaRelatorio) {
+  erroFechouCerto.value = "";
   caixaSelecionado.value = linha;
   dossie.value = null;
   erroDossie.value = "";
@@ -212,22 +221,66 @@ function aoAlterarDossie(aberto: boolean) {
   if (!aberto) fecharDossie();
 }
 
-function abrirConferencia(resultado: "conferido" | "divergente") {
+function abrirConferencia(resultado: "conferido" | "divergente", revisao = false) {
   resultadoConferencia.value = resultado;
+  revisandoConferencia.value = revisao;
   observacaoConferencia.value = "";
   erroConferencia.value = "";
   dialogoConferencia.value = true;
 }
 
-function abrirAcaoFutura(acao: "planilha" | "status") {
-  acaoFutura.value = acao;
+// "Fechou certo": recebe o retorno pendente como o caixa declarou e registra a conferencia da Tesouraria.
+// Cada passo e o mesmo ato de antes (`/confirmar` da transferencia + `/conferir` do fechamento), so que num clique.
+async function fecharCerto() {
+  const caixa = caixaSelecionado.value;
+  if (!caixa || enviandoFechouCerto.value) return;
+  const confirmou = await confirmarAcao(
+    "O retorno do caixa entra como o caixa declarou (valor, lacre e conta) e o fechamento fica registrado como conferido pela Tesouraria.",
+    "Fechou certo?",
+    "Fechou certo"
+  );
+  if (!confirmou) return;
+  enviandoFechouCerto.value = true;
+  erroFechouCerto.value = "";
+  try {
+    const falha = await blocoTransferencias.value?.receberComoDeclarado();
+    if (falha) {
+      erroFechouCerto.value = falha;
+      return;
+    }
+    await carregarDossie(caixa.id, true);
+    if (dossie.value?.situacaoTesouraria !== "fechado_sem_pendencias") {
+      erroFechouCerto.value =
+        "Há diferença ou pendência neste caixa. Confira os dados abaixo e use Registrar divergência se for o caso.";
+      return;
+    }
+    await apiPost(`/api/relatorios/fechamentos/${caixa.id}/conferir`, { resultado: "conferido", observacao: null });
+    await Promise.all([carregarDossie(caixa.id, true), buscar()]);
+  } catch (error) {
+    erroFechouCerto.value = mensagemErro(error);
+  } finally {
+    enviandoFechouCerto.value = false;
+  }
+}
+
+function aoMudarEstadoTransferencias(estado: { pendentes: number; lacreDiferente: boolean }) {
+  transferenciasPendentes.value = estado.pendentes;
+  lacreFechamentoDiferente.value = estado.lacreDiferente;
+}
+
+function abrirAcaoFutura() {
   dialogoAcaoFutura.value = true;
 }
 
 async function registrarConferencia() {
   if (!caixaSelecionado.value) return;
-  if (resultadoConferencia.value === "divergente" && !observacaoConferencia.value.trim()) {
-    erroConferencia.value = "Informe a justificativa da divergência.";
+  if (
+    (resultadoConferencia.value === "divergente" || revisandoConferencia.value) &&
+    !observacaoConferencia.value.trim()
+  ) {
+    erroConferencia.value = revisandoConferencia.value
+      ? "Informe o motivo da alteração de status."
+      : "Informe a justificativa da divergência.";
     return;
   }
   confirmandoConferencia.value = true;
@@ -489,85 +542,46 @@ watch(
             ><strong>{{ textoSituacao(dossie.situacaoTesouraria) }}</strong> · confira os fatos abaixo; a decisão da
             Tesouraria não recalcula valores nem altera lacres.</v-alert
           >
+          <RelatorioFechamentoQuemFechou
+            class="mb-3"
+            :caixa="dossie.caixa"
+            :resumo="dossie.resumo"
+            :texto="texto"
+            :data-hora="formatarDataHoraOuTraco"
+          />
+          <RelatorioFechamentoPainelConferencia
+            class="mb-3"
+            :situacao="dossie.situacaoTesouraria"
+            :pode-conferir-transferencia="props.podeConferirTransferencia === true"
+            :pode-conferir-final="props.podeConferir"
+            :retorno-visivel="props.podeVerTransferencias === true"
+            :pendentes="transferenciasPendentes"
+            :lacre-diferente="lacreFechamentoDiferente"
+            :ultima="ultimaConferenciaTesouraria"
+            :enviando="enviandoFechouCerto"
+            :erro="erroFechouCerto"
+            :data-hora="formatarDataHoraOuTraco"
+            @fechou-certo="fecharCerto"
+            @registrar-divergencia="abrirConferencia('divergente')"
+            @revisar-final="abrirConferencia($event, true)"
+          />
           <div class="dossie-acoes-futuras mb-3" aria-label="Ações futuras do fechamento">
-            <v-btn
-              variant="outlined"
-              color="primary"
-              prepend-icon="mdi-file-excel-outline"
-              @click="abrirAcaoFutura('planilha')"
+            <v-btn variant="outlined" color="primary" prepend-icon="mdi-file-excel-outline" @click="abrirAcaoFutura()"
               >Exportar para planilha</v-btn
-            >
-            <v-btn
-              variant="outlined"
-              color="primary"
-              prepend-icon="mdi-swap-horizontal-circle-outline"
-              @click="abrirAcaoFutura('status')"
-              >Alteração de status</v-btn
             >
           </div>
           <RelatorioFechamentoTransferencias
             v-if="caixaSelecionado && props.podeVerTransferencias"
+            ref="blocoTransferencias"
             :empresa-id="props.empresaId"
             :caixa-id="caixaSelecionado.id"
             :pode-conferir="props.podeConferirTransferencia === true"
             :lacre-fechamento-informado="
               typeof dossie.resumo?.lacreFechamento === 'string' ? dossie.resumo.lacreFechamento : null
             "
+            @estado="aoMudarEstadoTransferencias"
             @alterado="aoAlterarTransferencias"
           />
-          <v-card class="conferencia-tesouraria mb-3" variant="outlined">
-            <v-card-text class="d-flex flex-wrap align-center justify-space-between ga-3">
-              <div>
-                <div class="text-overline">TESOURARIA</div>
-                <div class="text-subtitle-1 font-weight-bold">Conferência final do caixa</div>
-                <div v-if="ultimaConferenciaTesouraria" class="text-body-2 text-medium-emphasis">
-                  {{
-                    ultimaConferenciaTesouraria.resultado === "conferido"
-                      ? "Conferido sem pendências"
-                      : ultimaConferenciaTesouraria.observacao
-                  }}
-                  · {{ ultimaConferenciaTesouraria.conferidoPorNome || ultimaConferenciaTesouraria.conferidoPor }} ·
-                  {{
-                    ultimaConferenciaTesouraria.conferidoEm
-                      ? formatarDataHora(ultimaConferenciaTesouraria.conferidoEm)
-                      : "--"
-                  }}
-                </div>
-                <div v-else class="text-body-2 text-medium-emphasis">
-                  Revise a folha, lacres, sangrias e anexos antes de registrar o resultado.
-                </div>
-              </div>
-              <v-chip
-                v-if="ultimaConferenciaTesouraria"
-                :color="ultimaConferenciaTesouraria.resultado === 'conferido' ? 'success' : 'deep-orange'"
-                variant="tonal"
-                >{{
-                  ultimaConferenciaTesouraria.resultado === "conferido" ? "Conferido" : "Divergência registrada"
-                }}</v-chip
-              >
-              <v-btn
-                v-else-if="props.podeConferir && podeConfirmarSemDivergencia"
-                color="success"
-                variant="flat"
-                prepend-icon="mdi-check-decagram-outline"
-                @click="abrirConferencia('conferido')"
-                >Confirmar conferência</v-btn
-              >
-              <v-btn
-                v-else-if="props.podeConferir && podeRegistrarDivergencia"
-                color="deep-orange"
-                variant="flat"
-                prepend-icon="mdi-alert-outline"
-                @click="abrirConferencia('divergente')"
-                >Registrar divergência</v-btn
-              >
-              <v-chip v-else-if="!props.podeConferir" color="secondary" variant="tonal"
-                >Sem permissão para conferir</v-chip
-              >
-              <v-chip v-else color="warning" variant="tonal">Aguardando pendências do caixa</v-chip>
-            </v-card-text>
-          </v-card>
-
           <RelatorioFechamentoFolhaDigital
             :caixa="dossie.caixa"
             :resumo="dossie.resumo"
@@ -720,12 +734,27 @@ watch(
   <v-dialog v-model="dialogoConferencia" max-width="520">
     <v-card>
       <v-card-title>{{
-        resultadoConferencia === "conferido"
-          ? "Confirmar conferência da Tesouraria"
-          : "Registrar conferência com divergência"
+        revisandoConferencia
+          ? "Alterar status da conferência"
+          : resultadoConferencia === "conferido"
+            ? "Confirmar conferência da Tesouraria"
+            : "Registrar conferência com divergência"
       }}</v-card-title>
       <v-card-text>
-        <p v-if="resultadoConferencia === 'conferido'">
+        <template v-if="revisandoConferencia"
+          ><p>
+            O status passa para
+            <strong>{{ resultadoConferencia === "conferido" ? "Conferido" : "Divergência confirmada" }}</strong
+            >. A decisão anterior continua no histórico e os valores financeiros não mudam.
+          </p>
+          <v-textarea
+            v-model="observacaoConferencia"
+            label="Motivo da alteração"
+            auto-grow
+            counter="1000"
+            :error-messages="erroConferencia"
+        /></template>
+        <p v-else-if="resultadoConferencia === 'conferido'">
           Você confirma que a folha, os lacres, os valores e os anexos deste caixa foram conferidos e estão sem
           pendências?
         </p>
@@ -741,9 +770,12 @@ watch(
             counter="1000"
             :error-messages="erroConferencia"
         /></template>
-        <v-alert v-if="resultadoConferencia === 'conferido' && erroConferencia" type="error" variant="tonal">{{
-          erroConferencia
-        }}</v-alert>
+        <v-alert
+          v-if="resultadoConferencia === 'conferido' && !revisandoConferencia && erroConferencia"
+          type="error"
+          variant="tonal"
+          >{{ erroConferencia }}</v-alert
+        >
       </v-card-text>
       <v-card-actions class="pa-4 pt-0"
         ><v-spacer /><v-btn variant="text" :disabled="confirmandoConferencia" @click="dialogoConferencia = false"
@@ -753,7 +785,13 @@ watch(
           variant="flat"
           :loading="confirmandoConferencia"
           @click="registrarConferencia"
-          >{{ resultadoConferencia === "conferido" ? "Confirmar" : "Registrar divergência" }}</v-btn
+          >{{
+            revisandoConferencia
+              ? "Alterar status"
+              : resultadoConferencia === "conferido"
+                ? "Confirmar"
+                : "Registrar divergência"
+          }}</v-btn
         ></v-card-actions
       >
     </v-card>
@@ -761,19 +799,10 @@ watch(
 
   <v-dialog v-model="dialogoAcaoFutura" max-width="480">
     <v-card>
-      <v-card-title>{{ acaoFutura === "planilha" ? "Exportar para planilha" : "Alteração de status" }}</v-card-title>
+      <v-card-title>Exportar para planilha</v-card-title>
       <v-card-text>
-        <template v-if="acaoFutura === 'planilha'">
-          <p>A exportação será disponibilizada em uma próxima entrega.</p>
-          <v-alert type="info" variant="tonal">Nenhum arquivo foi gerado e nenhum dado foi alterado.</v-alert>
-        </template>
-        <template v-else>
-          <p>Esta é apenas uma prévia visual. A alteração ainda não grava nem muda o status deste fechamento.</p>
-          <v-list density="compact" aria-label="Status que serão suportados">
-            <v-list-item title="Conferido" prepend-icon="mdi-check-decagram-outline" />
-            <v-list-item title="Quebra de caixa" prepend-icon="mdi-alert-outline" />
-          </v-list>
-        </template>
+        <p>A exportação será disponibilizada em uma próxima entrega.</p>
+        <v-alert type="info" variant="tonal">Nenhum arquivo foi gerado e nenhum dado foi alterado.</v-alert>
       </v-card-text>
       <v-card-actions class="pa-4 pt-0"
         ><v-spacer /><v-btn color="primary" variant="flat" @click="dialogoAcaoFutura = false"
@@ -805,10 +834,6 @@ watch(
 }
 .dialogo-dossie__card > .v-card-text {
   overflow-y: auto;
-}
-.conferencia-tesouraria {
-  border-left: 4px solid #22c55e;
-  background: rgba(34, 197, 94, 0.07);
 }
 .dossie-acoes-futuras {
   display: flex;

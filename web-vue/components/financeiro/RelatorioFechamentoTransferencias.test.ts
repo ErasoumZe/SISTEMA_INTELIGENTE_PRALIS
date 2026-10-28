@@ -27,11 +27,14 @@ const itens = [
   }
 ];
 const apiGetPaginado = vi.fn();
+const apiPost = vi.fn();
 
 beforeEach(() => {
   apiGetPaginado.mockReset();
+  apiPost.mockReset();
+  apiPost.mockResolvedValue({});
   apiGetPaginado.mockResolvedValue({ itens, total: 2 });
-  vi.stubGlobal("useApi", () => ({ apiGetPaginado }));
+  vi.stubGlobal("useApi", () => ({ apiGetPaginado, apiPost }));
 });
 
 function montar(podeConferir: boolean, lacreFechamentoInformado: string | null = null) {
@@ -40,7 +43,6 @@ function montar(podeConferir: boolean, lacreFechamentoInformado: string | null =
     global: {
       stubs: {
         SituacaoMalote: true,
-        TransferenciaConferenciaDialog: { props: ["operacao"], template: '<i :data-op="operacao?.id" />' },
         "v-chip": { template: "<span><slot /></span>" },
         "v-btn": { template: '<button v-bind="$attrs"><slot /></button>' },
         "v-alert": { template: "<div><slot /></div>" },
@@ -57,25 +59,65 @@ describe("RelatorioFechamentoTransferencias", () => {
     expect(apiGetPaginado).toHaveBeenCalledWith(expect.stringContaining("caixaId=cx-1"));
     const ids = wrapper.findAll("[data-transferencia-id]").map((linha) => linha.attributes("data-transferencia-id"));
     expect(ids).toEqual(["t-1", "t-2"]);
-    expect(wrapper.text()).toContain("1 para conferir");
+    expect(wrapper.emitted("estado")?.at(-1)).toEqual([{ pendentes: 1, lacreDiferente: false }]);
   });
 
-  it("so oferece Conferir para pendente e para quem tem a permissao", async () => {
-    const com = montar(true);
-    await com.vm.$nextTick();
-    await flushPromises();
-    expect(com.findAll('[data-teste="botao-conferir-transferencia"]')).toHaveLength(1);
-
-    const sem = montar(false);
-    await flushPromises();
-    expect(sem.find('[data-teste="botao-conferir-transferencia"]').exists()).toBe(false);
-  });
-
-  it("clicar em Conferir entrega a transferencia ao dialogo", async () => {
+  it("nao tem botao Conferir na linha: a acao fica no painel unico", async () => {
     const wrapper = montar(true);
     await flushPromises();
-    await wrapper.get('[data-teste="botao-conferir-transferencia"]').trigger("click");
-    expect(wrapper.get("[data-op]").attributes("data-op")).toBe("t-2");
+    expect(wrapper.find('[data-teste="botao-conferir-transferencia"]').exists()).toBe(false);
+  });
+
+  it("so conta como pendente para conferir quem tem a permissao", async () => {
+    const sem = montar(false);
+    await flushPromises();
+    expect(sem.emitted("estado")?.at(-1)).toEqual([{ pendentes: 0, lacreDiferente: false }]);
+  });
+
+  it("receberComoDeclarado confirma cada pendente com os valores e o lacre do proprio registro", async () => {
+    apiGetPaginado.mockResolvedValue({
+      itens: [{ ...itens[0], ehCaixaParaCofre: true, contaDestinoId: "c-cofre", nLacreDoc: "S-9" }, itens[1]],
+      total: 2
+    });
+    const wrapper = montar(true);
+    await flushPromises();
+    const resultado = await (
+      wrapper.vm as unknown as { receberComoDeclarado: () => Promise<string | null> }
+    ).receberComoDeclarado();
+    expect(resultado).toBeNull();
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(apiPost).toHaveBeenCalledWith("/api/transferencias/t-2/confirmar", {
+      contaDestinoId: "c-cofre",
+      nLacreDoc: "S-9",
+      valorRecebido: 180,
+      valorEspecieContado: 150,
+      valorMoedasContado: 30
+    });
+  });
+
+  it("receberComoDeclarado para no primeiro erro e devolve a mensagem do servidor", async () => {
+    apiPost.mockRejectedValueOnce(new Error("Lacre nao confere"));
+    const wrapper = montar(true);
+    await flushPromises();
+    const resultado = await (
+      wrapper.vm as unknown as { receberComoDeclarado: () => Promise<string | null> }
+    ).receberComoDeclarado();
+    expect(resultado).toContain("Lacre não confere");
+  });
+
+  it("avisa o painel quando o lacre de fechamento difere do reservado", async () => {
+    apiGetPaginado.mockResolvedValue({
+      itens: [
+        {
+          ...itens[1],
+          lacres: [{ tipo: "fechamento", numero: "F-1001", situacao: "usado", usadoEmTransferenciaId: null }]
+        }
+      ],
+      total: 1
+    });
+    const wrapper = montar(false, "F-9999");
+    await flushPromises();
+    expect(wrapper.emitted("estado")?.at(-1)).toEqual([{ pendentes: 0, lacreDiferente: true }]);
   });
 
   describe("fatos do caixa", () => {
@@ -143,11 +185,5 @@ describe("RelatorioFechamentoTransferencias", () => {
     expect(
       wrapper.findAll("[data-transferencia-id]").map((linha) => linha.attributes("data-transferencia-id"))
     ).toEqual(["t-1"]);
-  });
-
-  it("o botao Conferir diz qual transferencia vai conferir", async () => {
-    const wrapper = montar(true);
-    await flushPromises();
-    expect(wrapper.get('[data-teste="botao-conferir-transferencia"]').attributes("aria-label")).toContain("180,00");
   });
 });

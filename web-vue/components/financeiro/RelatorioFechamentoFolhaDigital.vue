@@ -70,25 +70,6 @@ function rotuloPagamento(item: Registro) {
 <template>
   <section class="folha-kaylane" aria-label="Dados do fechamento">
     <section class="folha-kaylane__bloco">
-      <h4>Identificação</h4>
-      <div class="identificacao">
-        <strong>{{ texto(caixa.pdvNome) }}</strong>
-        <span>{{ dataHora(caixa.dataHoraAbertura) }} · {{ texto(caixa.turnoNome) }}</span>
-        <span>Responsável: {{ texto(resumo?.caixaResponsavelNomeFechamento || caixa.usuarioCaixaNome) }}</span>
-        <span v-if="resumo?.supervisorResponsavelNomeFechamento">
-          Supervisor: {{ texto(resumo.supervisorResponsavelNomeFechamento) }}
-        </span>
-        <span v-if="caixa.caixaResponsavelNomeAbertura">
-          Abertura: {{ texto(caixa.caixaResponsavelNomeAbertura) }}
-          <template v-if="caixa.supervisorResponsavelNomeAbertura">
-            · supervisor {{ texto(caixa.supervisorResponsavelNomeAbertura) }}
-          </template>
-        </span>
-        <span v-if="caixa.usuarioCaixaNome">Conta do posto: {{ texto(caixa.usuarioCaixaNome) }}</span>
-      </div>
-    </section>
-
-    <section class="folha-kaylane__bloco">
       <h4>Transferência de entrada — Total: {{ dinheiro(numero(resumo?.totalTransferenciasEntrada)) }}</h4>
       <div v-if="entradas.length" class="linhas">
         <div v-for="item in entradas" :key="String(item.id)">

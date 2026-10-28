@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import type { OperacaoResumo } from "~/types/padaria";
+import { camposConferenciaVazios, montarPayloadConfirmacao } from "~/utils/conferencia-transferencia";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import { resumirSangrias, textoSangrias } from "~/utils/transferencias-relatorio";
 import SituacaoMalote from "./SituacaoMalote.vue";
-import TransferenciaConferenciaDialog from "./TransferenciaConferenciaDialog.vue";
 
 // Transferencias DESTE caixa (abertura, sangrias e retorno final) dentro do Relatorio de fechamento:
 // e aqui que a Tesouraria confere o que o caixa devolveu. A tela de Transferencias e so
@@ -18,16 +18,15 @@ const props = defineProps<{
   // Lacre de fechamento que o operador DIGITOU ao fechar (vem do resumo do fechamento).
   lacreFechamentoInformado?: string | null;
 }>();
-const emit = defineEmits<{ (event: "alterado"): void }>();
+const emit = defineEmits<{
+  (event: "alterado"): void;
+  (event: "estado", valor: { pendentes: number; lacreDiferente: boolean }): void;
+}>();
 
-const { apiGetPaginado } = useApi();
+const { apiGetPaginado, apiPost } = useApi();
 const itens = ref<OperacaoResumo[]>([]);
 const carregando = ref(false);
 const erro = ref("");
-const aviso = ref<{ texto: string; tipo: "success" | "warning" } | null>(null);
-const emConferencia = ref<OperacaoResumo | null>(null);
-
-const pendentes = computed(() => itens.value.filter((item) => item.status === "pendente"));
 
 // Fatos do turno, todos derivados do que a API ja devolve (nada recalcula dinheiro): quantas sangrias,
 // qual o estado das bolsas do malote e se o lacre usado no fechamento e o que a Tesouraria reservou.
@@ -77,6 +76,50 @@ function cabecalhoLacre(numero: string | null | undefined) {
 function podeConferirItem(item: OperacaoResumo) {
   return Boolean(props.podeConferir && item.status === "pendente" && !item.possuiPlanejamentoRetorno);
 }
+// Transferencias que ainda faltam receber (mesma regra de antes: pendente, sem planejamento de retorno e com
+// a permissao `transferencias_conferir`).
+const conferiveis = computed(() => itens.value.filter(podeConferirItem));
+watch(
+  [conferiveis, conferenciaFechamento],
+  () =>
+    emit("estado", {
+      pendentes: conferiveis.value.length,
+      lacreDiferente: conferenciaFechamento.value.chave === "diferente"
+    }),
+  { immediate: true }
+);
+
+// "Fechou certo": recebe cada retorno pendente EXATAMENTE como o caixa declarou (mesma rota `/confirmar`, com
+// valor, composicao, lacre e conta do proprio registro). O servidor continua conferindo tudo e recusa o que nao
+// bater; devolve a mensagem do primeiro erro, ou null quando recebeu todos.
+async function receberComoDeclarado(): Promise<string | null> {
+  for (const item of conferiveis.value) {
+    const cofre = item.ehCaixaParaCofre === true;
+    const campos = {
+      ...camposConferenciaVazios(),
+      lacre: item.nLacreDoc?.trim() ?? "",
+      ...(cofre
+        ? {
+            valorRecebido: String(Number(item.valorOriginal)),
+            valorEspecieContado: String(Number(item.valorEspecieDeclarado ?? 0)),
+            valorMoedasContado: String(Number(item.valorMoedasDeclarado ?? 0))
+          }
+        : {})
+    };
+    try {
+      await apiPost(
+        `/api/transferencias/${item.id}/confirmar`,
+        montarPayloadConfirmacao(campos, item.contaDestinoId ?? "", cofre)
+      );
+    } catch (error) {
+      await carregar();
+      return mensagemErro(error);
+    }
+  }
+  await carregar();
+  return null;
+}
+defineExpose({ receberComoDeclarado });
 
 // Cada busca ganha um numero; so a ULTIMA grava o resultado. Sem isto, trocar de caixa depressa deixava a
 // resposta antiga sobrescrever a nova e a conferencia abria a transferencia do caixa errado.
@@ -106,15 +149,6 @@ async function carregar() {
   }
 }
 
-function avisar(texto: string, tipo?: string) {
-  aviso.value = { texto, tipo: tipo === "warning" ? "warning" : "success" };
-}
-
-async function aoRecarregar() {
-  await carregar();
-  emit("alterado");
-}
-
 watch(() => props.caixaId, carregar, { immediate: true });
 </script>
 
@@ -122,17 +156,11 @@ watch(() => props.caixaId, carregar, { immediate: true });
   <section class="rft" aria-labelledby="rft-titulo" data-teste="transferencias-do-caixa">
     <div class="rft__topo">
       <div>
-        <div class="text-overline">TRANSFERÊNCIAS DO CAIXA</div>
-        <h3 id="rft-titulo" class="rft__titulo">Lacres, sangrias e conferência</h3>
+        <div class="text-overline">LACRES E SANGRIAS</div>
+        <h3 id="rft-titulo" class="rft__titulo">Movimentos do caixa</h3>
       </div>
-      <v-chip v-if="pendentes.length" color="warning" variant="tonal" size="small" prepend-icon="mdi-clock-outline">
-        {{ pendentes.length }} para conferir
-      </v-chip>
     </div>
 
-    <v-alert v-if="aviso" :type="aviso.tipo" variant="tonal" density="compact" closable @click:close="aviso = null">{{
-      aviso.texto
-    }}</v-alert>
     <v-alert v-if="truncada" type="warning" variant="tonal" density="compact" data-teste="aviso-truncada">
       Mostrando {{ itens.length }} de {{ total }} transferências deste caixa: sangrias e bolsas abaixo podem estar
       incompletas.
@@ -178,25 +206,8 @@ watch(() => props.caixaId, carregar, { immediate: true });
         </div>
         <div class="rft__lacre">{{ lacreDaLinha(item) }}</div>
         <SituacaoMalote :operacao="item" />
-        <v-btn
-          v-if="podeConferirItem(item)"
-          size="small"
-          variant="tonal"
-          class="rft__acao"
-          :aria-label="`Conferir ${nomeDaLinha(item).toLowerCase()} de ${dinheiro(Number(item.valorOriginal))}`"
-          data-teste="botao-conferir-transferencia"
-          @click="emConferencia = item"
-          >Conferir</v-btn
-        >
       </li>
     </ul>
-
-    <TransferenciaConferenciaDialog
-      :operacao="emConferencia"
-      @fechar="emConferencia = null"
-      @notificar="avisar"
-      @recarregar="aoRecarregar"
-    />
   </section>
 </template>
 
@@ -257,7 +268,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
 }
 .rft__item {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1fr) minmax(90px, auto) auto auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(150px, 1fr) minmax(90px, auto) auto;
   align-items: center;
   gap: var(--cx-sp-3);
   padding: var(--cx-sp-2) var(--cx-sp-3);
@@ -275,10 +286,6 @@ watch(() => props.caixaId, carregar, { immediate: true });
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
 }
-.rft__acao {
-  min-width: 44px;
-  min-height: 44px;
-}
 @media (width <= 760px) {
   .rft__item {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -287,9 +294,6 @@ watch(() => props.caixaId, carregar, { immediate: true });
   .rft__item :deep(.situacao-malote) {
     grid-column: 1 / -1;
     justify-self: start;
-  }
-  .rft__acao {
-    grid-column: 1 / -1;
   }
 }
 </style>
