@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
@@ -20,23 +21,18 @@ describe("produtos preco autoritativo integration", () => {
   it("Deve_IgnorarPrecoDoCliente_Quando_CalculoAutomatico", async () => {
     // ADR-002: com auto=true o cliente pode "mentir" o preco a vontade —
     // o servidor recalcula pela regra oficial: (50 / 10) * (1 + 0.3) = 6.50.
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto preco automatico",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: [],
-        auto: true,
-        custo: 50,
-        quantidadeCaixa: 10,
-        margem: 0.3,
-        precoVenda: 999.99
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto preco automatico",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: [],
+      auto: true,
+      custo: 50,
+      quantidadeCaixa: 10,
+      margem: 0.3,
+      precoVenda: 999.99
     });
     expect(criado.statusCode, criado.body).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -48,23 +44,18 @@ describe("produtos preco autoritativo integration", () => {
   });
 
   it("Deve_AceitarPrecoManual_Quando_AutoDesligado", async () => {
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto preco manual",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: [],
-        auto: false,
-        custo: 50,
-        quantidadeCaixa: 10,
-        margem: 0.3,
-        precoVenda: 12.34
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto preco manual",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: [],
+      auto: false,
+      custo: 50,
+      quantidadeCaixa: 10,
+      margem: 0.3,
+      precoVenda: 12.34
     });
     expect(criado.statusCode, criado.body).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -76,20 +67,15 @@ describe("produtos preco autoritativo integration", () => {
   });
 
   it("Deve_GravarPrecoNulo_Quando_AutomaticoSemCusto", async () => {
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto sem custo",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: [],
-        auto: true,
-        precoVenda: 999.99
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto sem custo",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: [],
+      auto: true,
+      precoVenda: 999.99
     });
     expect(criado.statusCode, criado.body).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -102,41 +88,31 @@ describe("produtos preco autoritativo integration", () => {
 
   it("Deve_DerivarPrecoVendaAtualNoServidor_Quando_PromocaoAtiva", async () => {
     // ADR-003: o preco vigente e derivado na LEITURA pelo servidor (nunca persistido).
-    const comPromocao = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto com promocao sempre ativa",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: [],
-        auto: false,
-        precoVenda: 10,
-        promocoes: [
-          { tipo: "valor", valor: 8, seg: true, ter: true, qua: true, qui: true, sex: true, sab: true, dom: true }
-        ]
-      }
+    const comPromocao = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto com promocao sempre ativa",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: [],
+      auto: false,
+      precoVenda: 10,
+      promocoes: [
+        { tipo: "valor", valor: 8, seg: true, ter: true, qua: true, qui: true, sex: true, sab: true, dom: true }
+      ]
     });
     expect(comPromocao.statusCode, comPromocao.body).toBe(201);
     const comPromocaoId = json<{ data: { id: string } }>(comPromocao).data.id;
 
-    const semPromocao = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto sem promocao",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: [],
-        auto: false,
-        precoVenda: 10
-      }
+    const semPromocao = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto sem promocao",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: [],
+      auto: false,
+      precoVenda: 10
     });
     expect(semPromocao.statusCode, semPromocao.body).toBe(201);
     const semPromocaoId = json<{ data: { id: string } }>(semPromocao).data.id;

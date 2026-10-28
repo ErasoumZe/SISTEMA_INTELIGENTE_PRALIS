@@ -47,6 +47,12 @@ const envSchema = z.object({
   GOOGLE_REFRESH_TOKEN: envOpcionalNaoVazio,
   GOOGLE_DRIVE_FOLDER_ID: envOpcionalNaoVazio,
   GOOGLE_SPREADSHEET_ID: envOpcionalNaoVazio,
+  // Cadastro de Produtos (R-222): a MESMA planilha que o app oficial da loja le, so leitura. Sem o ID
+  // o fiscal fica "fonte_indisponivel" e o produto e salvo assim mesmo (igual ao oficial sem Sheets).
+  // As abas tem os mesmos padroes do oficial (stack/api/src/config/env.ts).
+  GOOGLE_PRODUTOS_SPREADSHEET_ID: envOpcionalNaoVazio,
+  GOOGLE_PRODUTOS_FISCAL_TAB: z.string().trim().min(1).default("(TNP) FISCAL - DE PARA PRODUTOS"),
+  GOOGLE_PRODUTOS_GRUPOS_TAB: z.string().trim().min(1).default("(TNP/LI/HORA - EXP.) GRUPOS/REF. - VLD SAIDA"),
   // A sincronizacao da admissao so pode ser habilitada explicitamente depois de a migration de
   // controle Google ser aplicada e o destino real ser validado. O default seguro e desligado.
   GOOGLE_ADMISSAO_SYNC_ENABLED: z
@@ -69,6 +75,37 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((valor) => valor === "true"),
+  // TXT do PDV CREARE (R-222): DESLIGADO ate a virada combinada — enquanto o app de Produtos estiver no
+  // ar, ele e quem publica o cadastro para o PDV. Mesmo JSON de configuracao do app (`CREARE_STORE_CONFIG_JSON`).
+  CREARE_EXPORT_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  CREARE_STORE_CONFIG_JSON: z.string().default(""),
+  // Espelho do cadastro na planilha (R-222): DESLIGADO ate a virada — o app de Produtos ainda escreve la.
+  GOOGLE_PRODUTOS_ESPELHO_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  GOOGLE_PRODUTOS_BASE_TAB: z.string().trim().min(1).default("(BASE) CADASTRO PRODUTOS"),
+  // Mesmos padroes do oficial: coluna LOJAS, abas de loja (JSON {"TNP":"..."}; vazio = abas padrao) e prazo.
+  GOOGLE_PRODUTOS_DEFAULT_LOJAS: z.string().default("TNP,LI,HORA"),
+  GOOGLE_PRODUTOS_LOJA_TABS: z.string().default(""),
+  GOOGLE_PRODUTOS_TIMEOUT_MS: z.coerce.number().int().min(0).default(20_000),
+  // Custo pela discriminacao de mercadorias (DB-05; oficial `GOOGLE_SHEETS_MER_*`): SO LEITURA. Sem o ID a
+  // previa responde "sem destino" e nada e gravado. O cabecalho e PROCURADO; a linha final limita a leitura.
+  GOOGLE_PRODUTOS_MER_SPREADSHEET_ID: envOpcionalNaoVazio,
+  GOOGLE_PRODUTOS_MER_TAB: z.string().trim().min(1).default("TNP - DISCRIMINAÇÃO MERCADORIAS (MER)"),
+  GOOGLE_PRODUTOS_MER_LINHA_FINAL: z.coerce.number().int().min(2).default(20_000),
+  // Publicacao do TXT do CREARE na pasta do Drive da loja (oficial `creare-drive`): DESLIGADA ate a virada.
+  // `{"TNP":"<id da pasta>"}`, sem fallback: o destino e sempre decisao explicita de quem configura.
+  CREARE_DRIVE_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((valor) => valor === "true"),
+  CREARE_DRIVE_FOLDERS_JSON: z.string().default(""),
+  // Download pelo robo da loja (Bearer). Menos de 32 caracteres = desligado, nunca enfraquecido.
+  CREARE_EXPORT_TOKEN: z.string().default(""),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde
   // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
   GEMINI_API_KEY: envOpcionalNaoVazio,

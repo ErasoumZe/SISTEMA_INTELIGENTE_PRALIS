@@ -1,4 +1,5 @@
-import type { ProdutoDetalhe } from "@padaria/shared";
+import type { ProdutoDetalhe, ValoresHerdados } from "@padaria/shared";
+import { montarDescricao } from "@padaria/shared";
 
 /**
  * Mapeamento PURO entre o detalhe da API e o formulario de produto, nos dois sentidos. Fica fora do
@@ -42,7 +43,18 @@ export function formularioVazio(empresaId: string) {
     codigoInterno: "",
     codigoBarras: "",
     marca: "",
+    compraAproximada: false,
+    habilitarAjuda: false,
+    setorVenda1: "",
+    setorVenda2: "",
     descricao: "",
+    nomeCatalogo: "",
+    nomeCatalogoOriginal: null as string | null,
+    pesavel: false as boolean | null,
+    teclaBalanca: "",
+    validadeBalanca: "",
+    grupoIdExterno: "",
+    areaVenda: "",
     quantidadeIndividual: "1",
     unidadeIndividualId: "",
     grupoMercadoriaId: "" as string | null,
@@ -70,6 +82,7 @@ export function formularioVazio(empresaId: string) {
     quantidadeTransformacao: "",
     unidadeTransformacao: "",
     produtoReceituario: "",
+    refReceituario: "",
     fiscal: {
       ncm: "",
       cest: "",
@@ -80,7 +93,24 @@ export function formularioVazio(empresaId: string) {
       aliquotaPis: "",
       aliquotaCofins: "",
       reducaoIcms: "",
-      icms: ""
+      icms: "",
+      tributacaoSimples: "",
+      aliquotaSimples: "",
+      icmsRe: "",
+      baseFiscal: "",
+      codigoFiscal: "",
+      produtoFiscal: "",
+      cstReforma: "",
+      cClassTrib: "",
+      aliquotaIbs: "",
+      aliquotaCbs: "",
+      origemFiscal: "",
+      aliquotaEcf: "",
+      aliquotaEcfId: "",
+      estado: "",
+      motivo: "",
+      conferidoEm: "",
+      pctNcm: ""
     },
     promocoes: [] as PromocaoForm[],
     conversoes: [] as ConversaoForm[]
@@ -94,6 +124,19 @@ export const numero = (texto: string) => {
   return Number.isFinite(valor) ? valor : null;
 };
 
+export function descricaoPreviewDoProduto(entrada: {
+  nome: string;
+  nomeOriginal: string | null;
+  descricaoAtual: string;
+  quantidade: string;
+  siglaUnidade: string;
+}): string {
+  const descricaoLegadaIntacta = entrada.nomeOriginal === null && entrada.nome === entrada.descricaoAtual;
+  if (descricaoLegadaIntacta) return entrada.descricaoAtual;
+  if (!entrada.nome.trim() || !entrada.siglaUnidade) return "";
+  return montarDescricao(entrada.nome, entrada.quantidade, entrada.siglaUnidade);
+}
+
 export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
   const { fiscal, transformacao } = detalhe;
 
@@ -104,7 +147,18 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     codigoInterno: detalhe.codigoInterno ?? "",
     codigoBarras: detalhe.codigoBarras ?? "",
     marca: detalhe.marca ?? "",
+    compraAproximada: detalhe.compraAproximada,
+    habilitarAjuda: detalhe.habilitarAjuda,
+    setorVenda1: detalhe.setorVenda1 ?? "",
+    setorVenda2: detalhe.setorVenda2 ?? "",
     descricao: detalhe.descricao,
+    nomeCatalogo: detalhe.nomeCatalogo ?? detalhe.descricao ?? "",
+    nomeCatalogoOriginal: detalhe.nomeCatalogo,
+    pesavel: detalhe.pesavel,
+    teclaBalanca: detalhe.teclaBalanca == null ? "" : String(detalhe.teclaBalanca),
+    validadeBalanca: detalhe.validadeBalanca == null ? "" : String(detalhe.validadeBalanca),
+    grupoIdExterno: detalhe.grupoIdExterno ?? "",
+    areaVenda: detalhe.areaVenda ?? "",
     quantidadeIndividual: detalhe.quantidadeIndividual || "1",
     unidadeIndividualId: detalhe.unidadeIndividualId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId,
@@ -132,6 +186,7 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     quantidadeTransformacao: transformacao?.quantidade ?? "",
     unidadeTransformacao: transformacao?.unidade ?? "",
     produtoReceituario: transformacao?.produtoReceituario ?? "",
+    refReceituario: transformacao?.refReceituario ?? "",
     fiscal: {
       ncm: fiscal?.ncm ?? "",
       cest: fiscal?.cest ?? "",
@@ -142,7 +197,24 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
       aliquotaPis: fiscal?.aliquotaPis ?? "",
       aliquotaCofins: fiscal?.aliquotaCofins ?? "",
       reducaoIcms: fiscal?.reducaoIcms ?? "",
-      icms: fiscal?.icms ?? ""
+      icms: fiscal?.icms ?? "",
+      tributacaoSimples: fiscal?.tributacaoSimples ?? "",
+      aliquotaSimples: fiscal?.aliquotaSimples ?? "",
+      icmsRe: fiscal?.icmsRe ?? "",
+      baseFiscal: fiscal?.baseFiscal ?? "",
+      codigoFiscal: fiscal?.codigoFiscal ?? "",
+      produtoFiscal: fiscal?.produtoFiscal ?? "",
+      cstReforma: fiscal?.cstReforma ?? "",
+      cClassTrib: fiscal?.cClassTrib ?? "",
+      aliquotaIbs: fiscal?.aliquotaIbs ?? "",
+      aliquotaCbs: fiscal?.aliquotaCbs ?? "",
+      origemFiscal: fiscal?.origemFiscal ?? "",
+      aliquotaEcf: fiscal?.aliquotaEcf ?? "",
+      aliquotaEcfId: fiscal?.aliquotaEcfId ?? "",
+      estado: fiscal?.estado ?? "",
+      motivo: fiscal?.motivo ?? "",
+      conferidoEm: fiscal?.conferidoEm ?? "",
+      pctNcm: fiscal?.pctNcm ?? ""
     },
     promocoes: (detalhe.promocoes ?? []).map((promo) => ({
       tipo: promo.tipo === "valor" ? "valor" : "desconto",
@@ -161,17 +233,66 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
   };
 }
 
-export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar: boolean) {
+/**
+ * "Voltar a herdar da base" (oficial): devolve ao formulario os valores ATUAIS da BASE nos campos
+ * herdados. Promocoes, estoque, preco e fiscal sao da loja e nao sao tocados.
+ */
+export function aplicarValoresDaBase(form: ProdutoForm, base: ValoresHerdados): void {
+  Object.assign(form, {
+    descricao: base.descricao,
+    nomeCatalogo: base.nomeCatalogo ?? base.descricao,
+    quantidadeIndividual: String(base.quantidadeIndividual),
+    unidadeIndividualId: base.unidadeIndividualId,
+    pesavel: base.pesavel,
+    teclaBalanca: base.teclaBalanca == null ? "" : String(base.teclaBalanca),
+    validadeBalanca: base.validadeBalanca == null ? "" : String(base.validadeBalanca),
+    codigoBarras: base.codigoBarras ?? "",
+    marca: base.marca ?? "",
+    embalagem: base.embalagem,
+    cDe: base.cDe === "C/" ? "C/" : "DE",
+    quantidadeCaixa: String(base.quantidadeCaixa || 1),
+    medidaCompra: base.medidaCompra,
+    compraAproximada: base.compraAproximada,
+    grupoMercadoriaId: base.grupoMercadoriaId,
+    grupoIdExterno: base.grupoIdExterno ?? "",
+    tipo: base.tipo,
+    habilitarAjuda: base.habilitarAjuda,
+    precisao: base.transformacao?.precisao ?? "EXATOS",
+    quantidadeTransformacao: base.transformacao?.quantidade == null ? "" : String(base.transformacao.quantidade),
+    unidadeTransformacao: base.transformacao?.unidade ?? "",
+    produtoReceituario: base.transformacao?.produtoReceituario ?? "",
+    refReceituario: base.transformacao?.refReceituario ?? ""
+  });
+}
+
+export function payloadDoFormulario(
+  form: ProdutoForm,
+  empresaId: string,
+  forcar: boolean,
+  descricaoAutomatica?: string
+) {
   const ehRevenda = form.tipo === "revenda";
   const fiscalPreenchido = Object.values(form.fiscal).some((valor) => String(valor).trim());
+  const preservarDescricaoLegada = form.nomeCatalogoOriginal === null && form.nomeCatalogo === form.descricao;
   return {
     empresaId,
     codigo: form.codigo || null,
     codigoBarras: form.codigoBarras || null,
-    descricao: form.descricao.trim(),
+    descricao: (preservarDescricaoLegada ? form.descricao : (descricaoAutomatica ?? form.descricao)).trim(),
+    nomeCatalogo: preservarDescricaoLegada ? null : form.nomeCatalogo.trim() || null,
+    pesavel: form.pesavel,
+    // Tecla fixa 000 para quem vai a balanca; quem nao vai fica sem tecla e sem validade (oficial).
+    teclaBalanca: form.pesavel === true ? 0 : form.pesavel === false ? null : numero(form.teclaBalanca),
+    validadeBalanca: form.pesavel === false ? null : form.validadeBalanca === "" ? null : numero(form.validadeBalanca),
+    grupoIdExterno: form.grupoIdExterno || null,
+    areaVenda: form.areaVenda || null,
     marca: form.marca || null,
+    compraAproximada: form.compraAproximada,
+    habilitarAjuda: form.habilitarAjuda,
+    setorVenda1: form.setorVenda1 || null,
+    setorVenda2: form.setorVenda2 || null,
     unidadeIndividualId: form.unidadeIndividualId,
-    quantidadeIndividual: numero(form.quantidadeIndividual) ?? 1,
+    quantidadeIndividual: numero(form.quantidadeIndividual) ?? 0,
     grupoMercadoriaId: form.grupoMercadoriaId || null,
     embalagem: form.embalagem || null,
     cDe: form.embalagem ? form.cDe : null,
@@ -204,7 +325,24 @@ export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar
           aliquotaPis: numero(form.fiscal.aliquotaPis),
           aliquotaCofins: numero(form.fiscal.aliquotaCofins),
           reducaoIcms: numero(form.fiscal.reducaoIcms),
-          icms: numero(form.fiscal.icms)
+          icms: numero(form.fiscal.icms),
+          tributacaoSimples: form.fiscal.tributacaoSimples || null,
+          aliquotaSimples: numero(form.fiscal.aliquotaSimples),
+          icmsRe: numero(form.fiscal.icmsRe),
+          baseFiscal: form.fiscal.baseFiscal || null,
+          codigoFiscal: form.fiscal.codigoFiscal || null,
+          produtoFiscal: form.fiscal.produtoFiscal || null,
+          cstReforma: form.fiscal.cstReforma || null,
+          cClassTrib: form.fiscal.cClassTrib || null,
+          aliquotaIbs: numero(form.fiscal.aliquotaIbs),
+          aliquotaCbs: numero(form.fiscal.aliquotaCbs),
+          origemFiscal: form.fiscal.origemFiscal || null,
+          aliquotaEcf: form.fiscal.aliquotaEcf || null,
+          aliquotaEcfId: form.fiscal.aliquotaEcfId || null,
+          estado: form.fiscal.estado || null,
+          motivo: form.fiscal.motivo || null,
+          conferidoEm: form.fiscal.conferidoEm || null,
+          pctNcm: numero(form.fiscal.pctNcm)
         }
       : null,
     // Payload coerente com o tipo: o servidor recusa o contrario, e a tela nao manda o que ele recusa.
@@ -214,7 +352,8 @@ export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar
           precisao: form.precisao,
           quantidade: numero(form.quantidadeTransformacao),
           unidade: form.unidadeTransformacao || null,
-          produtoReceituario: form.produtoReceituario || null
+          produtoReceituario: form.produtoReceituario || null,
+          refReceituario: form.refReceituario || null
         },
     promocoes: ehRevenda
       ? form.promocoes.map((promo) => ({

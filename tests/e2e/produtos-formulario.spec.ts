@@ -3,7 +3,6 @@ import {
   entrar,
   escolherNoSelect,
   escolherPrimeiraOpcao,
-  esperarListagem,
   LARGURAS,
   mensagemDoCampo,
   observarConsole,
@@ -11,20 +10,25 @@ import {
   semRolagemHorizontal,
   USUARIOS
 } from "./apoio.js";
+import { criarProdutoPelaBase } from "./apoio-compras.js";
 
 /**
- * Formulario de produto em pagina dedicada: criacao, edicao, previas, validacao, foto e scanner.
+ * Formulario de produto em pagina dedicada, nos DOIS cadastros do app oficial (R-222):
+ *  - BASE (`/produtos/novo`, `/produtos/base/:id`): so o administrador cria e altera; sem fiscal e
+ *    sem promocao, que sao da loja;
+ *  - LOJA (`/produtos/:id`): a copia importada; o que veio da base fica em leitura.
  *
  * Cada teste cria o proprio produto com nome unico — nenhum depende do que o anterior deixou.
  */
 
 const nomeUnico = () => `${PREFIXO} ${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-/** Preenche o minimo obrigatorio: descricao, quantidade e unidade. */
+/** Preenche o minimo obrigatorio: nome, quantidade, unidade e grupo (oficial: produto novo exige grupo). */
 async function preencherObrigatorios(page: Page, descricao: string, quantidade = "25") {
-  await page.locator('[data-campo="descricao"] input').fill(descricao);
+  await page.locator('[data-campo="nomeCatalogo"] input').fill(descricao);
   await page.locator('[data-campo="quantidadeIndividual"] input').fill(quantidade);
   await escolherPrimeiraOpcao(page, '[data-campo="unidadeIndividualId"]');
+  await escolherPrimeiraOpcao(page, '[data-campo="grupoMercadoriaId"]');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -45,7 +49,7 @@ test("a previa da descricao automatica e NOME + QUANTIDADE + UNIDADE", async ({ 
   const descricao = nomeUnico();
   await preencherObrigatorios(page, descricao, "25");
 
-  const previa = page.getByLabel("Descrição automática (prévia)");
+  const previa = page.getByLabel("Descrição (automática)");
   // A unidade do seed de desenvolvimento e "un"; a regra sobe tudo para maiuscula.
   await expect(previa).toHaveValue(new RegExp(`^${descricao.toUpperCase()} 25 [A-Z]+$`));
 });
@@ -57,63 +61,58 @@ test('a previa "como se compra" usa o formato oficial', async ({ page }) => {
   await escolherPrimeiraOpcao(page, ".secao__grade-compra .v-select");
   await page.getByLabel("Qtd. por embalagem").fill("25");
 
-  // "<Rotulo> de 25 <MEDIDA> — <DESCRICAO>" — uma implementacao so, a do shared.
-  await expect(page.getByLabel("Como se compra (prévia)")).toHaveValue(/\sde\s25\b.*—/);
+  // Formato oficial "<DESCRICAO> - <EMBALAGEM> DE <DESCRICAO> 25<MEDIDA>" — uma implementacao so, a do shared.
+  await expect(page.getByLabel("Como se compra (prévia)")).toHaveValue(/ - [A-Z]+ (DE|COM) .+ 25[A-Z]*$/);
 });
 
-test("cria o produto, volta para a listagem e recebe codigo interno sequencial", async ({ page }) => {
+test("cria o produto NA BASE, volta ao catalogo BASE e recebe codigo interno sequencial", async ({ page }) => {
   const problemas = observarConsole(page);
   const descricao = nomeUnico();
 
   await page.goto("/produtos/novo");
+  await expect(page.getByRole("heading", { name: "Novo produto na base" })).toBeVisible();
   await preencherObrigatorios(page, descricao);
   await page.getByRole("button", { name: "Salvar produto" }).click();
 
-  await page.waitForURL("**/produtos");
-  await esperarListagem(page);
-  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
-  await expect(page.locator(".produto-card h3").first()).toHaveText(descricao);
+  await page.waitForURL("**/produtos/base");
+  await page.getByRole("textbox", { name: "Buscar por nome, código interno ou EAN" }).fill(descricao);
+  const linha = page.locator(".catalogo-base__linha").filter({ hasText: descricao });
+  await expect(linha).toBeVisible();
   // Codigo interno de 5 digitos, atribuido pelo SERVIDOR (o campo e somente leitura na tela).
-  await expect(page.locator(".produto-card__titulo p").first()).toHaveText(/^\d{5}$/);
+  await expect(linha.locator("td.cx-num").first()).toHaveText(/^\d{5}$/);
   expect(problemas).toEqual([]);
 });
 
-test("editar hidrata o formulario e o codigo interno fica somente leitura", async ({ page }) => {
+test("editar a BASE hidrata o formulario e o codigo interno fica somente leitura", async ({ page }) => {
   const descricao = nomeUnico();
-  await page.goto("/produtos/novo");
-  await preencherObrigatorios(page, descricao);
-  await page.getByRole("button", { name: "Salvar produto" }).click();
-  await page.waitForURL("**/produtos");
+  const { baseId } = await criarProdutoPelaBase({ descricao });
 
-  await esperarListagem(page);
-  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
-  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
-
-  await expect(page.getByRole("heading", { name: "Editar produto" })).toBeVisible();
-  await expect(page.locator('[data-campo="descricao"] input')).toHaveValue(descricao);
+  await page.goto(`/produtos/base/${baseId}`);
+  await expect(page.getByRole("heading", { name: "Editar produto da base" })).toBeVisible();
+  await expect(page.locator('[data-campo="nomeCatalogo"] input')).toHaveValue(descricao.toUpperCase());
   await expect(page.getByLabel("Código interno")).toHaveValue(/^\d{5}$/);
   await expect(page.getByLabel("Código interno")).toHaveAttribute("readonly", "");
 });
 
-test("locais de venda salvam e reaparecem na edicao", async ({ page }) => {
+test("na copia da loja o que veio da base fica em leitura e os locais de venda salvam", async ({ page }) => {
   const descricao = nomeUnico();
-  await page.goto("/produtos/novo");
-  await preencherObrigatorios(page, descricao);
-  await page.getByRole("button", { name: "Salvar produto" }).click();
-  await page.waitForURL("**/produtos");
+  const { produtoId } = await criarProdutoPelaBase({ descricao });
 
-  await esperarListagem(page);
-  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
-  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
+  await page.goto(`/produtos/${produtoId}`);
+  await expect(page.getByRole("heading", { name: "Editar produto" })).toBeVisible();
+  await expect(page.getByText("segue a base")).toBeVisible();
+  await expect(page.locator('[data-campo="nomeCatalogo"] input')).toBeDisabled();
+  await expect(page.locator('[data-campo="grupoMercadoriaId"] input')).toBeDisabled();
+
   await page.getByLabel("Local de venda 1").fill("Gôndola 01");
   await page.getByLabel("Local de venda 2").fill("Ponta de gôndola");
   await page.getByRole("button", { name: "Salvar produto" }).click();
   await page.waitForURL("**/produtos");
 
-  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
-  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
-  await expect(page.getByLabel("Local de venda 1")).toHaveValue("Gôndola 01");
-  await expect(page.getByLabel("Local de venda 2")).toHaveValue("Ponta de gôndola");
+  await page.goto(`/produtos/${produtoId}`);
+  // Texto descritivo e gravado em maiusculas (regra do app oficial).
+  await expect(page.getByLabel("Local de venda 1")).toHaveValue("GÔNDOLA 01");
+  await expect(page.getByLabel("Local de venda 2")).toHaveValue("PONTA DE GÔNDOLA");
 });
 
 test("estoque maximo menor que o minimo bloqueia o salvar com mensagem no campo", async ({ page }) => {
@@ -130,21 +129,52 @@ test("estoque maximo menor que o minimo bloqueia o salvar com mensagem no campo"
   await expect(page.getByRole("button", { name: "Salvar produto" })).toBeEnabled();
 });
 
-test("promocao so existe para revenda e some no tipo transformacao", async ({ page }) => {
+test("vai para balanca: tecla fixa 000 e validade obrigatoria de 0 a 999", async ({ page }) => {
   await page.goto("/produtos/novo");
   await preencherObrigatorios(page, nomeUnico());
+  const salvar = page.getByRole("button", { name: "Salvar produto" });
 
-  await expect(page.getByRole("heading", { name: "Promoções" })).toBeVisible();
+  await escolherNoSelect(page, "Vai para balança? *", "Sim");
+  await expect(page.getByLabel("Tecla da balança")).toHaveValue("000");
+  await expect(mensagemDoCampo(page, "validadeBalanca")).toContainText("validade da balança");
+  await expect(salvar).toBeDisabled();
 
-  await escolherNoSelect(page, "Tipo", "Transformação");
+  await page.locator('[data-campo="validadeBalanca"] input').fill("1000");
+  await expect(salvar).toBeDisabled();
+  await page.locator('[data-campo="validadeBalanca"] input').fill("5");
+  await expect(salvar).toBeEnabled();
+});
 
+test("estoque minimo fora do multiplo da embalagem bloqueia o salvar", async ({ page }) => {
+  await page.goto("/produtos/novo");
+  await preencherObrigatorios(page, nomeUnico());
+  await page.getByLabel("Qtd. por embalagem").fill("10");
+  await page.getByLabel("Estoque mínimo").fill("15");
+
+  await expect(mensagemDoCampo(page, "estoqueMin")).toContainText("múltiplo da Qt. embalagem (10)");
+  await expect(page.getByRole("button", { name: "Salvar produto" })).toBeDisabled();
+});
+
+test("a base nao tem fiscal nem promocao; a copia da loja tem os dois", async ({ page }) => {
+  await page.goto("/produtos/novo");
+  await preencherObrigatorios(page, nomeUnico());
   await expect(page.getByRole("heading", { name: "Promoções" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Fiscal" })).toHaveCount(0);
+
+  // Transformacao mostra a ficha (o bloco que a loja herda inteiro).
+  await escolherNoSelect(page, "Tipo", "Transformação");
   await expect(page.getByRole("heading", { name: "Transformação" })).toBeVisible();
+
+  const { produtoId } = await criarProdutoPelaBase({ descricao: nomeUnico() });
+  await page.goto(`/produtos/${produtoId}`);
+  await expect(page.getByRole("heading", { name: "Promoções" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fiscal" })).toBeVisible();
 });
 
 test("duas promocoes sobrepostas sao recusadas na tela", async ({ page }) => {
-  await page.goto("/produtos/novo");
-  await preencherObrigatorios(page, nomeUnico());
+  const { produtoId } = await criarProdutoPelaBase({ descricao: nomeUnico() });
+  await page.goto(`/produtos/${produtoId}`);
+  await expect(page.getByRole("heading", { name: "Promoções" })).toBeVisible();
 
   const adicionar = page.getByRole("button", { name: "Adicionar" }).first();
   await adicionar.click();
@@ -159,19 +189,12 @@ test("duas promocoes sobrepostas sao recusadas na tela", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Salvar produto" })).toBeDisabled();
 });
 
-test("upload de foto exibe a imagem e sobrevive ao recarregar", async ({ page }) => {
+test("foto na base: exibe a imagem e sobrevive ao recarregar", async ({ page }) => {
   const problemas = observarConsole(page);
-  const descricao = nomeUnico();
+  const { baseId } = await criarProdutoPelaBase({ descricao: nomeUnico() });
 
-  await page.goto("/produtos/novo");
-  await preencherObrigatorios(page, descricao);
-  await page.getByRole("button", { name: "Salvar produto" }).click();
-  await page.waitForURL("**/produtos");
-
-  await esperarListagem(page);
-  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
-  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
-  await expect(page.getByRole("heading", { name: "Editar produto" })).toBeVisible();
+  await page.goto(`/produtos/base/${baseId}`);
+  await expect(page.getByRole("heading", { name: "Editar produto da base" })).toBeVisible();
 
   await page.locator('.produto-foto input[type="file"]').setInputFiles("tests/e2e/fixtures/foto-produto.png");
   await expect(page.locator(".produto-foto__imagem")).toBeVisible();
@@ -230,7 +253,7 @@ for (const { nome, largura, altura } of LARGURAS) {
   test(`formulario sem rolagem horizontal em ${largura}px (${nome})`, async ({ page }) => {
     await page.setViewportSize({ width: largura, height: altura });
     await page.goto("/produtos/novo");
-    await expect(page.getByRole("heading", { name: "Novo produto" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Novo produto na base" })).toBeVisible();
 
     await semRolagemHorizontal(page);
 
@@ -247,5 +270,13 @@ for (const { nome, largura, altura } of LARGURAS) {
         `alvo de toque abaixo de 44px: ${alturas.join(", ")}`
       ).toBe(true);
     }
+  });
+
+  test(`copia da loja sem rolagem horizontal em ${largura}px (${nome})`, async ({ page }) => {
+    const { produtoId } = await criarProdutoPelaBase({ descricao: nomeUnico() });
+    await page.setViewportSize({ width: largura, height: altura });
+    await page.goto(`/produtos/${produtoId}`);
+    await expect(page.getByText("segue a base")).toBeVisible();
+    await semRolagemHorizontal(page);
   });
 }

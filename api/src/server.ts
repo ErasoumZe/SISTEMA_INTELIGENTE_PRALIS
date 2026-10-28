@@ -5,11 +5,14 @@ import { materializarAgendamentos } from "./compras/compras-agendamento-agendado
 import { materializarConferencias } from "./compras/conferencias-estoque-agendador.js";
 import { processarFilaWhatsapp } from "./compras/compras-whatsapp.service.js";
 import { processarTransferenciasTemporais } from "./transferencias/transferencias.service.js";
+import { iniciarReenvioDaPlanilha } from "./produtos/produtos-planilha.service.js";
 
 const app = await buildApp();
 
 try {
   const address = await app.listen({ port: env.PORT, host: env.HOST });
+  // Reenvio do espelho na planilha: so com o espelho ligado (virada) e em producao.
+  iniciarReenvioDaPlanilha();
   console.info("[api] OK API Padaria v2 pronta");
   console.info(`[api] Host: ${env.HOST}`);
   console.info(`[api] Porta: ${env.PORT}`);

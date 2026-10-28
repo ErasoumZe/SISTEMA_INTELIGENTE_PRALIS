@@ -57,10 +57,18 @@ export {
   permissoesTabela,
   permissoesUsuarios,
   produtos,
+  produtosCatalogoBase,
   produtosConversoes,
   produtosFiscal,
+  produtosHistoricoNomes,
+  produtosHistoricoCodigoInterno,
   produtosPromocoes,
   produtosTransformacao,
+  siaProdutoDepara,
+  creareExportacaoLotes,
+  creareExportacaoEntregas,
+  creareExportacaoConfirmacoes,
+  produtosPlanilhaSincronizacoes,
   produtosPrecosBase,
   pedidosAgendas,
   comprasWhatsappEnvios,
@@ -76,3 +84,5 @@ export {
   unidadesMedida,
   usuariosEmpresas
 } from "../app.schema.js";
+
+export * from "./produtos-central.schema.js";

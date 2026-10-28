@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./expressions": {
+      "types": "./dist/src/expressions.d.ts",
+      "development": "./src/expressions.ts",
+      "default": "./dist/src/expressions.js"
+    },
     "./referencia-permissoes": {
       "types": "./dist/src/referencia-permissoes.d.ts",
       "development": "./src/referencia-permissoes.ts",

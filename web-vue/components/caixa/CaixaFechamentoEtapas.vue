@@ -6,6 +6,7 @@ import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardando
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
+import CampoLacreFechamento from "~/components/caixa/CampoLacreFechamento.vue";
 
 type Fechamento = {
   observacao: string;
@@ -221,27 +222,10 @@ function solicitarFechamento() {
           />
         </v-col>
         <v-col cols="12" md="5">
-          <v-text-field
+          <CampoLacreFechamento
             v-model="fechamento.lacreFechamento"
-            :label="
-              lacreFechamentoReservado
-                ? 'Lacre reservado para fechamento (obrigatório)'
-                : 'Lacre de fechamento (obrigatório)'
-            "
-            placeholder="Ex.: FCH-001"
-            :hint="
-              lacreFechamentoReservado
-                ? 'Digite manualmente o número físico reservado no malote. Ele precisa ser exatamente igual ao informado pela Tesouraria.'
-                : 'Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento.'
-            "
-            persistent-hint
-            :color="lacreFechamentoPendente ? 'error' : 'primary'"
-            :base-color="lacreFechamentoPendente ? 'error' : undefined"
-            :error="lacreFechamentoPendente"
-            :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
-            prepend-inner-icon="mdi-lock-alert-outline"
-            required
-            data-teste="lacre-fechamento"
+            :reservado="lacreFechamentoReservado"
+            :pendente="lacreFechamentoPendente"
           />
         </v-col>
         <v-col v-if="mostrarResponsaveis !== false" cols="12" md="6">

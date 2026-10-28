@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { json } from "../../setup/integracao.js";
+import { executarSql, json } from "../../setup/integracao.js";
 
 /**
  * Listagem, busca, filtros, ordenacao, detalhe e projecao reduzida (P-04, ETAPA 3).
@@ -40,6 +42,7 @@ describe("produtos - listagem paginada no banco", () => {
   let unidadeId: string;
   let grupoId: string;
   const criados: string[] = [];
+  const linhasDeVendaTeste: string[] = [];
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -63,29 +66,50 @@ describe("produtos - listagem paginada no banco", () => {
 
     // 14 produtos: mais do que o `pageSize` default de 10, que era exatamente o teto do defeito.
     for (let indice = 0; indice < TOTAL; indice += 1) {
-      const resposta = await contexto.app.inject({
-        method: "POST",
-        url: "/api/produtos",
-        headers: { cookie: cookieAdmin },
-        payload: {
-          empresaId: idsTeste.empresaA,
-          descricao: `Listagem P04 item ${String(indice).padStart(2, "0")}`,
-          marca: MARCA,
-          unidadeIndividualId: unidadeId,
-          quantidadeIndividual: 1,
-          grupoMercadoriaId: grupoId,
-          setorEstoque: indice % 2 === 0 ? "LJ - CAIXAS" : "PROD. - PANIFICACAO",
-          status: indice % 3 === 0 ? "inativo" : "ativo",
-          tipo: indice % 4 === 0 ? "transformacao" : "revenda",
-          conversoes: []
-        }
+      const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+        empresaId: idsTeste.empresaA,
+        descricao: `Listagem P04 item ${String(indice).padStart(2, "0")}`,
+        marca: MARCA,
+        unidadeIndividualId: unidadeId,
+        quantidadeIndividual: 1,
+        grupoMercadoriaId: grupoId,
+        setorEstoque: indice % 2 === 0 ? "LJ - CAIXAS" : "PROD. - PANIFICACAO",
+        status: indice % 3 === 0 ? "inativo" : "ativo",
+        tipo: indice % 4 === 0 ? "transformacao" : "revenda",
+        conversoes: []
       });
       expect(resposta.statusCode).toBe(201);
       criados.push(json<RespostaId>(resposta).data.id);
     }
+
+    // Reproduz os dois vínculos reconhecidos pela fonte oficial: produto_id e EAN do PDV,
+    // incluindo zeros à esquerda. A linha cancelada não deve contar como venda.
+    const linhaProduto = randomUUID();
+    const linhaEan = randomUUID();
+    const linhaCancelada = randomUUID();
+    linhasDeVendaTeste.push(linhaProduto, linhaEan, linhaCancelada);
+    await executarSql("UPDATE produtos SET codigo_barras = $2 WHERE id = $1", [criados[1], "0009876543210"]);
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_id, descricao_produto)
+       VALUES ($1, $2, $3, 'Listagem produto vinculado')`,
+      [linhaProduto, idsTeste.vendaSeed, criados[4]]
+    );
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_automacao_codigo, descricao_produto)
+       VALUES ($1, $2, '9876543210', 'Listagem por EAN do PDV')`,
+      [linhaEan, idsTeste.vendaSeed]
+    );
+    await executarSql(
+      `INSERT INTO vendas_produtos (id, venda_id, produto_id, descricao_produto, cancelado)
+       VALUES ($1, $2, $3, 'Listagem item cancelado', true)`,
+      [linhaCancelada, idsTeste.vendaSeed, criados[2]]
+    );
   }, 240_000);
 
   afterAll(async () => {
+    if (linhasDeVendaTeste.length) {
+      await executarSql("DELETE FROM vendas_produtos WHERE id = ANY($1::uuid[])", [linhasDeVendaTeste]);
+    }
     await contexto.fechar();
   });
 
@@ -118,7 +142,8 @@ describe("produtos - listagem paginada no banco", () => {
   it("Deve_BuscarPorDescricaoCodigoInternoEMarca", async () => {
     const porDescricao = await listar({ busca: "Listagem P04 item 03", pageSize: 50 });
     expect(porDescricao.data).toHaveLength(1);
-    expect(porDescricao.data[0]?.descricao).toBe("Listagem P04 item 03");
+    // O cadastro grava a descricao em maiusculas (oficial); a busca continua sem diferenciar caixa.
+    expect(porDescricao.data[0]?.descricao).toBe("LISTAGEM P04 ITEM 03");
 
     const codigo = porDescricao.data[0]?.codigoInterno ?? "";
     expect(codigo).toMatch(/^\d{5}$/);
@@ -145,11 +170,24 @@ describe("produtos - listagem paginada no banco", () => {
     expect(porSetor.meta.pagination.total).toBe(Math.ceil(TOTAL / 2));
   });
 
+  it("Deve_FiltrarProdutosJaVendidosPorVinculoOuEAN_EIgnorarCancelados", async () => {
+    const vendidos = await listar({ somenteVendidos: "true", status: "ativo", pageSize: 50 });
+    const idsVendidos = new Set(vendidos.data.map((item) => item.id));
+
+    expect(idsVendidos.has(criados[4] ?? "")).toBe(true);
+    expect(idsVendidos.has(criados[1] ?? "")).toBe(true);
+    expect(idsVendidos.has(criados[2] ?? "")).toBe(false);
+    expect(vendidos.meta.pagination.total).toBe(2);
+
+    const todos = await listar({ somenteVendidos: "false", status: "ativo", pageSize: 50 });
+    expect(todos.meta.pagination.total).toBeGreaterThan(vendidos.meta.pagination.total);
+  });
+
   it("Deve_AplicarAsSeisOrdenacoes", async () => {
     const az = await listar({ ordenar: "az", pageSize: 50 });
     const za = await listar({ ordenar: "za", pageSize: 50 });
-    expect(az.data[0]?.descricao).toBe("Listagem P04 item 00");
-    expect(za.data[0]?.descricao).toBe(`Listagem P04 item ${String(TOTAL - 1).padStart(2, "0")}`);
+    expect(az.data[0]?.descricao).toBe("LISTAGEM P04 ITEM 00");
+    expect(za.data[0]?.descricao).toBe(`LISTAGEM P04 ITEM ${String(TOTAL - 1).padStart(2, "0")}`);
 
     const codigoAsc = await listar({ ordenar: "codigo_asc", pageSize: 50 });
     const codigoDesc = await listar({ ordenar: "codigo_desc", pageSize: 50 });
@@ -246,17 +284,13 @@ describe("produtos - listagem e isolamento entre empresas", () => {
       headers: { cookie: cookieMultiempresa },
       payload: { empresaId: idsTeste.empresaB, nome: "Unidade Listagem B", sigla: "ulb" }
     });
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieMultiempresa },
-      payload: {
-        empresaId: idsTeste.empresaB,
-        descricao: "SO DA EMPRESA B P04",
-        unidadeIndividualId: json<RespostaId>(unidadeB).data.id,
-        quantidadeIndividual: 1,
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieMultiempresa, {
+      empresaId: idsTeste.empresaB,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaB,
+      descricao: "SO DA EMPRESA B P04",
+      unidadeIndividualId: json<RespostaId>(unidadeB).data.id,
+      quantidadeIndividual: 1,
+      conversoes: []
     });
     produtoDaB = json<RespostaId>(criado).data.id;
   }, 180_000);

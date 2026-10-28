@@ -64,6 +64,15 @@ import { registrarRotasPatrimonio } from "./patrimonio/patrimonio.controller.js"
 import { registrarRotasPdvs } from "./pdvs/pdvs.controller.js";
 import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js";
 import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
+import { registrarRotasProdutosCentral } from "./produtos/produtos-central.controller.js";
+import { registrarRotasCatalogoBase } from "./produtos/produtos-catalogo-base.controller.js";
+import { registrarRotasDeParaSia } from "./produtos/produtos-sia-depara.controller.js";
+import { registrarRotasPesaveis } from "./produtos/produtos-pesaveis.controller.js";
+import { registrarRotasCodigoCadastro } from "./produtos/produtos-codigo-cadastro.controller.js";
+import { registrarRotasCustoMer } from "./produtos/produtos-custo-mer.controller.js";
+import { registrarRotasVinculoBase } from "./produtos/produtos-vinculo-base.controller.js";
+import { registrarRotasCreare } from "./produtos/produtos-creare.controller.js";
+import { registrarRotasPlanilhaProdutos } from "./produtos/produtos-planilha.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
 import { registrarRotasMensagensAdmin } from "./mensagens-admin/mensagens-admin.controller.js";
@@ -114,7 +123,13 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/rodada/separacao",
   "/api/rodada/produtos",
   // Doc 58 §4: o fornecedor salva sem enviar (Cotado).
-  "/api/rodada/rascunho"
+  "/api/rodada/rascunho",
+  // R-222: o robo da loja baixa o TXT do PDV CREARE e registra a entrega com Bearer proprio (sem sessao);
+  // sem bearer, a rota exige a sessao ela mesma. Ver produtos-creare.controller.ts.
+  "/api/creare/produtos.txt",
+  "/api/creare/lotes/pendente",
+  "/api/creare/lotes/:id/entrega",
+  "/api/creare/lotes/:id/confirmar"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -321,7 +336,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasCampanhas(app);
   await registrarRotasTurnos(app);
   await registrarRotasFuncoesOperacionais(app);
+  await registrarRotasCatalogoBase(app);
+  await registrarRotasDeParaSia(app);
+  await registrarRotasPesaveis(app);
+  await registrarRotasCodigoCadastro(app);
+  await registrarRotasCustoMer(app);
+  await registrarRotasVinculoBase(app);
+  await registrarRotasCreare(app);
+  await registrarRotasPlanilhaProdutos(app);
   await registrarRotasProdutos(app);
+  await registrarRotasProdutosCentral(app);
   await registrarRotasUsuarios(app);
   await registrarRotasPermissoes(app);
   await registrarRotasProdutosMaisVendidos(app);

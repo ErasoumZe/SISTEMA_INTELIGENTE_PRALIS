@@ -481,9 +481,10 @@ export async function aplicarSeedIntegracao() {
     { id: idsTeste.grupoDespesaOperacional, empresaId: idsTeste.empresaA, nome: "Operacional" },
     { id: idsTeste.grupoDespesaQuebra, empresaId: idsTeste.empresaA, nome: "Quebra de caixa" }
   ]);
-  await banco
-    .insert(gruposMercadorias)
-    .values({ id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" });
+  await banco.insert(gruposMercadorias).values([
+    { id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" },
+    { id: idsTeste.grupoMercadoriaB, empresaId: idsTeste.empresaB, nome: "Mercearia B" }
+  ]);
   // Sigla UTS (utensilios) de proposito: grupos_patrimonio tem unique(empresa_id, sig) e o teste de
   // cadastro (cadastros/patrimonio.test.ts) cria MAQ e MOB na empresa A. Um seed com MAQ faria
   // aquele POST falhar por sigla duplicada — o seed nao pode ocupar as siglas que os testes criam.
