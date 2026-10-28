@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { nextTick } from "vue";
 import type { VendaCanceladaCaixa } from "@padaria/shared";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { mensagemErro } from "~/utils/domain";
@@ -7,18 +6,11 @@ import { formatarDataHora } from "~/utils/formatacao";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
 import CaixaInicioVendasAjuste from "~/components/caixa/CaixaInicioVendasAjuste.vue";
 import CaixaFolhaCreareLeitura from "~/components/caixa/CaixaFolhaCreareLeitura.vue";
+import CaixaCorrecaoManual from "~/components/caixa/CaixaCorrecaoManual.vue";
 import CaixaFechamentoRelatorioVendasResumo from "~/components/caixa/CaixaFechamentoRelatorioVendasResumo.vue";
-import {
-  conferenciaInicioDaFolha,
-  leituraDaSugestao,
-  leituraFolhaCreareVazia,
-  leituraParaEnvio,
-  leiturasFolhaCreareEmMemoria,
-  numerosTravados,
-  rotuloCampoFolha,
-  type SugestaoFolhaCreare
-} from "~/utils/folha-creare";
+import { conferenciaInicioDaFolha, numerosTravados, type SugestaoFolhaCreare } from "~/utils/folha-creare";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
+import { useLeituraFolhaCreare } from "~/composables/useLeituraFolhaCreare";
 
 type DadosRelatorioVendas = {
   versao?: number;
@@ -52,76 +44,44 @@ const canceladas = ref<VendaCanceladaCaixa[]>([]);
 const anexoCreareEnviado = ref(false);
 const enviandoCreare = ref(false);
 const anexoCreareId = ref("");
-const leituraCreare = ref(leituraFolhaCreareVazia());
-const sugestaoCreare = ref<SugestaoFolhaCreare | null>(null);
-// Os campos da folha so aparecem depois de anexar E ler (ou quando a leitura falha e o operador preenche).
-const leituraPronta = ref(false);
-// Valor da folha corrigido depois de gerar: o relatorio (e a comparacao do Relatorio final) ficou velho.
-const leituraAlterada = ref(false);
-let aplicandoLeitura = false;
 let consultaAtual = 0;
-
-function definirLeitura(leitura: typeof leituraCreare.value, sugestao: SugestaoFolhaCreare | null) {
-  aplicandoLeitura = true;
-  leituraCreare.value = leitura;
-  sugestaoCreare.value = sugestao;
-  leituraPronta.value = true;
-  leituraAlterada.value = false;
-  void nextTick(() => {
-    aplicandoLeitura = false;
-  });
-}
-
-watch(
-  leituraCreare,
-  (leitura) => {
-    if (aplicandoLeitura || !leituraPronta.value) return;
-    if (anexoCreareId.value) {
-      leiturasFolhaCreareEmMemoria.set(anexoCreareId.value, { leitura, sugestao: sugestaoCreare.value });
-    }
-    if (gerado.value) leituraAlterada.value = true;
-  },
-  { deep: true }
-);
+const {
+  leitura: leituraCreare,
+  sugestao: sugestaoCreare,
+  pronta: leituraPronta,
+  alterada: leituraAlterada,
+  corrigindo,
+  justificativa,
+  alteradosPelaCorrecao,
+  faltaJustificativa,
+  ler: analisarAnexoCreare,
+  indisponivel: leituraIndisponivel,
+  restaurarDoRelatorio,
+  reiniciar: reiniciarLeitura,
+  paraEnvio
+} = useLeituraFolhaCreare({
+  anexoId: anexoCreareId,
+  gerado,
+  aviso,
+  lerComIa: async (anexoId) =>
+    (
+      await apiPost<{ sugestao: SugestaoFolhaCreare }>(
+        "/api/caixa/" + encodeURIComponent(props.caixaId) + "/relatorio-vendas/analisar",
+        { anexoId }
+      )
+    ).sugestao
+});
 
 // R-225: o "Periodo de" da folha comparado com o inicio das vendas do caixa, ja na leitura (antes de gerar).
 const inicioFolha = computed(() =>
   conferenciaInicioDaFolha(leituraCreare.value.periodoInicio, props.aberturaOficial, props.inicioVendas)
 );
 
-function aplicarSugestaoCreare(sugestao: SugestaoFolhaCreare) {
-  definirLeitura(leituraDaSugestao(sugestao), sugestao);
-  leiturasFolhaCreareEmMemoria.set(anexoCreareId.value, { leitura: leituraCreare.value, sugestao });
-  const pendentes = sugestao.camposDuvidosos.length
-    ? " Revise: " + sugestao.camposDuvidosos.map(rotuloCampoFolha).join(", ") + "."
-    : "";
-  aviso.value = sugestao.documentoLegivel
-    ? "A leitura preencheu os valores visíveis da folha. Confira antes de gerar." + pendentes
-    : "A leitura não confirmou a legibilidade da folha. Confira e preencha os campos visíveis." + pendentes;
-}
-
-async function analisarAnexoCreare(anexoId: string) {
-  const guardada = leiturasFolhaCreareEmMemoria.get(anexoId);
-  if (guardada) {
-    definirLeitura(guardada.leitura, guardada.sugestao);
-    return;
-  }
-  const leitura = await apiPost<{ sugestao: SugestaoFolhaCreare }>(
-    "/api/caixa/" + encodeURIComponent(props.caixaId) + "/relatorio-vendas/analisar",
-    { anexoId }
-  );
-  aplicarSugestaoCreare(leitura.sugestao);
-}
-
 function aplicarRelatorio(relatorio: RelatorioGerado) {
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
   canceladas.value = relatorio.dados.canceladas;
-  // Ao voltar para a etapa, a leitura revisada que gerou o relatorio reaparece (so no modelo atual, v4).
-  const lida = relatorio.dados.creare?.leitura;
-  if (lida && (relatorio.dados.versao ?? 0) >= 4 && !leituraPronta.value) {
-    definirLeitura(leituraDaSugestao(lida), lida);
-  }
+  restaurarDoRelatorio(relatorio.dados.creare?.leitura, relatorio.dados.versao ?? 0);
   gerado.value = true;
   leituraAlterada.value = false;
 }
@@ -132,11 +92,6 @@ function limparRelatorio() {
   gerado.value = false;
   canceladas.value = [];
   leituraAlterada.value = false;
-}
-
-function leituraIndisponivel() {
-  leituraPronta.value = true;
-  aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha os valores do cupom.";
 }
 
 async function carregarRelatorioExistente() {
@@ -191,7 +146,7 @@ async function gerarRelatorio() {
       anexoCreareId.value
         ? {
             anexoId: anexoCreareId.value,
-            leituraCreare: leituraParaEnvio(leituraCreare.value, sugestaoCreare.value)
+            leituraCreare: paraEnvio()
           }
         : {}
     );
@@ -224,8 +179,7 @@ async function enviarRelatorioCreare(evento: Event) {
     if (!resposta.ok) throw new Error(json.detail || "Não foi possível anexar o relatório do CREARE.");
     anexoCreareEnviado.value = true;
     anexoCreareId.value = json.data?.id ?? "";
-    sugestaoCreare.value = null;
-    leituraPronta.value = false;
+    reiniciarLeitura();
     // O servidor descarta o relatorio gerado com a folha anterior; a tela tambem.
     limparRelatorio();
     try {
@@ -295,8 +249,16 @@ watch(
     <CaixaFolhaCreareLeitura
       v-if="anexoCreareEnviado && leituraPronta"
       v-model="leituraCreare"
-      :travados="numerosTravados(sugestaoCreare)"
+      :travados="corrigindo ? [] : numerosTravados(sugestaoCreare)"
       class="mt-4"
+    />
+    <CaixaCorrecaoManual
+      v-if="anexoCreareEnviado && leituraPronta"
+      v-model:corrigindo="corrigindo"
+      v-model:justificativa="justificativa"
+      :tem-travados="numerosTravados(sugestaoCreare).length > 0"
+      :alterados="alteradosPelaCorrecao"
+      :salva="sugestaoCreare?.correcaoManual ?? null"
     />
     <v-alert v-if="leituraAlterada" type="warning" variant="tonal" density="compact" class="mt-4" role="status">
       Valores da folha alterados depois de gerar. Gere o relatório de novo para atualizar a comparação.
@@ -320,7 +282,7 @@ watch(
       color="primary"
       prepend-icon="mdi-file-chart-outline"
       :loading="carregando"
-      :disabled="!anexoCreareEnviado || enviandoCreare || !leituraPronta"
+      :disabled="!anexoCreareEnviado || enviandoCreare || !leituraPronta || faltaJustificativa"
       data-teste="gerar-relatorio-vendas"
       @click="gerarRelatorio"
       >Gerar relatório de vendas</v-btn

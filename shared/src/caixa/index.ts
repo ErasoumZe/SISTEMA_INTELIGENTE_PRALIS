@@ -139,6 +139,17 @@ export const fecharCaixaPayloadSchema = z.object({
 
 // Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
 // no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
+// Correcao manual do que a IA leu: os numeros lidos ficam travados na tela; para mudar algum, o operador
+// toca em "Corrigir manualmente" e justifica. Fica gravado quais campos mudaram e por que.
+export const correcaoManualLeituraSchema = z
+  .object({
+    justificativa: z.string().trim().min(5, "Explique a correcao").max(300),
+    campos: z.array(z.string().trim().max(40)).min(1).max(20)
+  })
+  .nullable()
+  .default(null);
+export type CorrecaoManualLeitura = z.infer<typeof correcaoManualLeituraSchema>;
+
 const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable();
 const detalheRelatorioMaquininhaSchema = z.object({
   nome: z.string().trim().min(1).max(160),
@@ -227,7 +238,8 @@ export const relatorioVendasCreareSchema = z.object({
   // Pode ser negativo; so exibido (a conta do CREARE soma voucher, a do Pralis nao — R-225).
   saldoFinalDinheiro: valorFolhaCreare("livre"),
   camposDuvidosos: z.array(z.string().trim().max(120)).max(30).default([]),
-  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([]),
+  correcaoManual: correcaoManualLeituraSchema
 });
 export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
 export const gerarRelatorioVendasFechamentoSchema = z.object({

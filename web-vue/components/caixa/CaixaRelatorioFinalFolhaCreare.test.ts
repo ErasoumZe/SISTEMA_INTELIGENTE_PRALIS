@@ -83,6 +83,31 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
   });
 });
 
+describe("CaixaRelatorioFinalFolhaCreare · correcoes manuais", () => {
+  it("mostra o que foi corrigido na folha e na maquininha, com a justificativa", () => {
+    const wrapper = mount(CaixaRelatorioFinalFolhaCreare, {
+      props: {
+        ...props,
+        creare: {
+          ...creare,
+          leitura: { ...creare.leitura, correcaoManual: { justificativa: "Foto cortada", campos: ["Total"] } }
+        },
+        correcaoMaquininha: { justificativa: "IA leu 947,05; cupom 947,50", campos: ["Crédito"] }
+      }
+    });
+    const cartao = texto(wrapper.get('[data-teste="final-correcoes-manuais"]'));
+    expect(cartao).toContain("2 corrigida(s)");
+    expect(cartao).toContain("Folha do CREARE (Total): Foto cortada");
+    expect(cartao).toContain("Maquininha (Crédito): IA leu 947,05; cupom 947,50");
+  });
+
+  it("sem correcao nao mostra o cartao", () => {
+    expect(
+      mount(CaixaRelatorioFinalFolhaCreare, { props }).find('[data-teste="final-correcoes-manuais"]').exists()
+    ).toBe(false);
+  });
+});
+
 describe("leitura vazia da folha", () => {
   it("tem todos os campos do cupom em branco", () => {
     const leitura = leituraFolhaCreareVazia();

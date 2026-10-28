@@ -29,6 +29,7 @@ export type SugestaoFolhaCreare = Record<CampoValorFolhaCreare, number | null> &
     documentoLegivel: boolean;
     camposDuvidosos: string[];
     observacoes: string[];
+    correcaoManual?: { justificativa: string; campos: string[] } | null;
   };
 
 export const GRUPOS_FOLHA_CREARE: ReadonlyArray<{
@@ -102,7 +103,11 @@ export function numeroDoCampoFolha(valor: string, aceitaNegativo = false) {
 }
 
 /** Corpo `leituraCreare` do POST do relatorio, a partir do que o operador revisou na tela. */
-export function leituraParaEnvio(leitura: LeituraFolhaCreare, sugestao: SugestaoFolhaCreare | null) {
+export function leituraParaEnvio(
+  leitura: LeituraFolhaCreare,
+  sugestao: SugestaoFolhaCreare | null,
+  correcao: { justificativa: string; campos: string[] } | null = null
+) {
   const valores = Object.fromEntries(
     CAMPOS_VALOR_FOLHA_CREARE.map((chave) => {
       // A sangria sai impressa como "-R$ 600,00": o operador pode digitar com ou sem o sinal.
@@ -121,8 +126,26 @@ export function leituraParaEnvio(leitura: LeituraFolhaCreare, sugestao: Sugestao
     periodoFim: sugestao?.periodoFim ?? null,
     ...valores,
     camposDuvidosos: sugestao?.camposDuvidosos ?? [],
-    observacoes: sugestao?.observacoes ?? []
+    observacoes: sugestao?.observacoes ?? [],
+    // Mudou numero lido pela IA: vai a justificativa; senao mantem a correcao ja registrada.
+    correcaoManual: correcao ?? sugestao?.correcaoManual ?? null
   };
+}
+
+/** Rotulos dos numeros travados (lidos pela IA) que o operador mudou depois de "Corrigir manualmente". */
+export function camposAlteradosFolha(leitura: LeituraFolhaCreare, sugestao: SugestaoFolhaCreare | null): string[] {
+  if (!sugestao) return [];
+  const lida = leituraDaSugestao(sugestao);
+  return numerosTravados(sugestao)
+    .filter((chave) => {
+      const negativo = chave === "sangria" || chave === "saldoFinalDinheiro";
+      const atual = numeroDoCampoFolha(leitura[chave], negativo);
+      const original = numeroDoCampoFolha(lida[chave], negativo);
+      // A sangria vale com ou sem o sinal ("-600,00" e "600,00" sao o mesmo valor).
+      if (chave === "sangria") return Math.abs(atual ?? Number.NaN) !== Math.abs(original ?? Number.NaN);
+      return atual !== original;
+    })
+    .map(rotuloCampoFolha);
 }
 
 /** Quando a folha nao bate com o inicio e o ajuste nao cabe na janela, o que dizer ao operador. */

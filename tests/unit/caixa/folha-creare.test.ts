@@ -85,6 +85,21 @@ describe("contrato da folha do CREARE", () => {
     });
   });
 
+  it("correcao manual: guarda justificativa e campos; justificativa curta e recusada", () => {
+    const comCorrecao = relatorioVendasCreareSchema.parse({
+      documentoLegivel: true,
+      correcaoManual: { justificativa: "Foto cortada no total", campos: ["Total"] }
+    });
+    expect(comCorrecao.correcaoManual).toEqual({ justificativa: "Foto cortada no total", campos: ["Total"] });
+    expect(relatorioVendasCreareSchema.parse({ documentoLegivel: true }).correcaoManual).toBeNull();
+    expect(
+      relatorioVendasCreareSchema.safeParse({
+        documentoLegivel: true,
+        correcaoManual: { justificativa: "ok", campos: ["Total"] }
+      }).success
+    ).toBe(false);
+  });
+
   it("recusa valor negativo onde o cupom nao imprime sinal", () => {
     expect(relatorioVendasCreareSchema.safeParse({ documentoLegivel: true, credito: -1 }).success).toBe(false);
   });

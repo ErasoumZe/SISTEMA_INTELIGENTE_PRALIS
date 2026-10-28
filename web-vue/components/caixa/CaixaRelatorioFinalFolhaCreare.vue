@@ -15,7 +15,15 @@ const props = defineProps<{
   periodo: { inicio: string; fim: string } | null;
   // O que o Pralis registrou e o que o PDV vendeu: o operador reconhece pelo nome do PDV, nao "Pralis".
   pdvNome?: string | null;
+  // Correcao manual da leitura da maquininha (a da folha vem em creare.leitura.correcaoManual).
+  correcaoMaquininha?: { justificativa: string; campos: readonly string[] } | null;
 }>();
+const correcoes = computed(() =>
+  [
+    { origem: "Folha do CREARE", correcao: props.creare.leitura?.correcaoManual ?? null },
+    { origem: "Maquininha", correcao: props.correcaoMaquininha ?? null }
+  ].flatMap((item) => (item.correcao ? [{ origem: item.origem, ...item.correcao }] : []))
+);
 const nomePdv = computed(() => props.pdvNome?.trim() || "PDV");
 
 const FORMAS_MAQUININHA: readonly string[] = ["credito", "debito", "pix", "voucher"];
@@ -181,6 +189,22 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
             </dd>
           </div>
         </dl>
+      </details>
+
+      <details
+        v-if="correcoes.length"
+        class="conferencia__cartao"
+        :style="{ '--cor': 'var(--cx-attention)' }"
+        open
+        data-teste="final-correcoes-manuais"
+      >
+        <summary>
+          <span class="conferencia__nome">Correções manuais</span>
+          <span class="conferencia__selo conferencia__selo--divergente">{{ correcoes.length }} corrigida(s)</span>
+        </summary>
+        <p v-for="item in correcoes" :key="item.origem" class="conferencia__explicacao">
+          {{ item.origem }} ({{ item.campos.join(", ") }}): {{ item.justificativa }}
+        </p>
       </details>
 
       <details class="conferencia__cartao" :style="{ '--cor': 'var(--cx-ink-soft)' }">

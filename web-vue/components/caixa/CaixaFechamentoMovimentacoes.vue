@@ -37,6 +37,7 @@ const transferencias = ref<Transferencia[]>([]);
 const lancamentos = ref<DetalheCaixaResponse["lancamentos"]>([]);
 const folhaCreare = ref<{ creare: FolhaCreareGerada; versao: number } | null>(null);
 const periodoVendas = ref<{ inicio: string; fim: string } | null>(null);
+const correcaoMaquininha = ref<{ justificativa: string; campos: string[] } | null>(null);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
   { chave: "debito", titulo: "Débito" },
@@ -73,6 +74,11 @@ async function carregar() {
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
     leituraMaquininha.value = leitura(revisado.liquidos);
+    const acumulada = revisado.leituraAcumulada;
+    const correcao =
+      acumulada && typeof acumulada === "object" ? (acumulada as Record<string, unknown>).correcaoManual : null;
+    correcaoMaquininha.value =
+      correcao && typeof correcao === "object" ? (correcao as { justificativa: string; campos: string[] }) : null;
     transferencias.value = movimentos.itens.filter((item) => item.tipo === "sangria" || item.tipo === "retorno");
     lancamentos.value = detalhe.lancamentos.filter((grupo) =>
       ["despesas", "mercadorias", "retiradas"].includes(grupo.categoria)
@@ -115,6 +121,7 @@ watch(
         :maquininha="leituraMaquininha"
         :periodo="periodoVendas"
         :pdv-nome="pdvNome"
+        :correcao-maquininha="correcaoMaquininha"
       />
       <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
         <article class="fechamento-movimentacoes__vendas">
