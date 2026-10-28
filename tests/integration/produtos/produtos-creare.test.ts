@@ -103,6 +103,19 @@ describe("produtos - TXT do PDV CREARE", () => {
       ...(opcoes.corpo ? { payload: opcoes.corpo } : {})
     });
 
+  it("Deve_ExigirSessaoOuToken_NasRotasDoRobo", async () => {
+    // Fora do default-deny: sem bearer e sem sessao, a propria rota responde 401.
+    for (const url of ["/api/creare/produtos.txt?loja=TNP", "/api/creare/lotes/pendente?loja=TNP"]) {
+      expect((await contexto.app.inject({ method: "GET", url })).statusCode).toBe(401);
+    }
+    const entrega = await contexto.app.inject({
+      method: "POST",
+      url: "/api/creare/lotes/00000000-0000-4000-8000-000000000001/entrega?loja=TNP",
+      payload: { sha256: "0".repeat(64) }
+    });
+    expect(entrega.statusCode).toBe(401);
+  });
+
   it("Deve_FicarDesligadoAteAVirada", async () => {
     env.CREARE_EXPORT_ENABLED = false;
     assertProblem(await pedir(`/api/creare/produtos.txt?empresaId=${idsTeste.empresaA}`), 503, "CREARE_DISABLED");
