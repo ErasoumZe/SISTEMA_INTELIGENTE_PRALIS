@@ -1405,6 +1405,17 @@ exatos do cupom, e a tela mostra os campos na ordem impressa.
 
 "Bate" = igual em centavos. Turno da tarde é outra folha começando do zero (diferente da maquininha, R-210).
 
+**Respostas registradas (28/10/2026):**
+
+- **Sangria** = sangrias **e** entregas ao cofre do meio do turno (o dinheiro físico sai do caixa para os
+  malotes de sangria, sobe ao cofre e depois tudo vai no malote de fechamento). Confirmado por Marco.
+- **Troco Inicial** = o valor **contado** na abertura, porque pela R-205 o caixa abre com o total efetivamente
+  contado (o declarado nunca é reescrito). Se o operador digitar no PDV o valor declarado e houve divergência
+  na abertura, a linha mostra a diferença, o que é desejado.
+- **Suprimento (reforço no meio do turno)**: pela R6 e pela R-190, é dinheiro do caixa e entra no saldo físico.
+  Mas o cupom não tem linha de suprimento, então ele **não é comparado**, e o Troco Inicial compara só a
+  transferência de abertura. Pendente com o Rodrigo: confirmar se o CREARE soma o reforço no "Troco Inicial".
+
 **Horário:** o "Período de" (início) da folha é comparado com o início das vendas do caixa, com tolerância de
 **2 min**. Se não bate e cabe na janela da R-224, a tela destaca o **Ajustar início** já com a hora da folha
 (minuto cheio, para baixo) e o motivo preenchido; fora da janela, só avisa. A "Data da emissão" é comparada com
