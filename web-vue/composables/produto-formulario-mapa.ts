@@ -1,5 +1,6 @@
 import type { ProdutoDetalhe, ValoresHerdados } from "@padaria/shared";
 import { montarDescricao } from "@padaria/shared";
+import { fracaoParaPercentual, numeroDigitado, percentualParaFracao, textoDeNumero } from "~/utils/produto-numeros";
 
 /**
  * Mapeamento PURO entre o detalhe da API e o formulario de produto, nos dois sentidos. Fica fora do
@@ -53,9 +54,10 @@ export function formularioVazio(empresaId: string) {
     pesavel: false as boolean | null,
     teclaBalanca: "",
     validadeBalanca: "",
-    grupoIdExterno: "",
     areaVenda: "",
-    quantidadeIndividual: "1",
+    // Cadastro novo igual ao paralelo: gramatura 0 e medida base KG (o id do KG da empresa e
+    // resolvido no `useProdutoFormulario`, depois de carregar as unidades).
+    quantidadeIndividual: "0",
     unidadeIndividualId: "",
     grupoMercadoriaId: "" as string | null,
     tipo: "revenda" as "revenda" | "transformacao",
@@ -119,11 +121,6 @@ export function formularioVazio(empresaId: string) {
 
 export type ProdutoForm = ReturnType<typeof formularioVazio>;
 
-export const numero = (texto: string) => {
-  const valor = Number(String(texto).replace(",", "."));
-  return Number.isFinite(valor) ? valor : null;
-};
-
 export function descricaoPreviewDoProduto(entrada: {
   nome: string;
   nomeOriginal: string | null;
@@ -157,9 +154,9 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     pesavel: detalhe.pesavel,
     teclaBalanca: detalhe.teclaBalanca == null ? "" : String(detalhe.teclaBalanca),
     validadeBalanca: detalhe.validadeBalanca == null ? "" : String(detalhe.validadeBalanca),
-    grupoIdExterno: detalhe.grupoIdExterno ?? "",
     areaVenda: detalhe.areaVenda ?? "",
-    quantidadeIndividual: detalhe.quantidadeIndividual || "1",
+    // Numeros sem as casas do banco ("25.000" -> "25") e margem sem lixo de ponto flutuante.
+    quantidadeIndividual: textoDeNumero(detalhe.quantidadeIndividual) || "0",
     unidadeIndividualId: detalhe.unidadeIndividualId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId,
     tipo: detalhe.tipo === "transformacao" ? "transformacao" : "revenda",
@@ -167,23 +164,23 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     cDe: detalhe.cDe === "C/" ? "C/" : "DE",
     quantidadeCaixa: String(detalhe.quantidadeCaixa || 1),
     medidaCompra: detalhe.medidaCompra,
-    custo: detalhe.custo ?? "",
-    margemPercentual: detalhe.margem == null ? "" : String(Number(detalhe.margem) * 100),
+    custo: textoDeNumero(detalhe.custo),
+    margemPercentual: fracaoParaPercentual(detalhe.margem),
     auto: detalhe.auto,
-    precoVenda: detalhe.precoVenda ?? "",
-    quantidadeEstoque: detalhe.quantidadeEstoque || "0",
-    estoqueMin: detalhe.estoqueMin ?? "",
-    estoqueMax: detalhe.estoqueMax ?? "",
+    precoVenda: textoDeNumero(detalhe.precoVenda),
+    quantidadeEstoque: textoDeNumero(detalhe.quantidadeEstoque) || "0",
+    estoqueMin: textoDeNumero(detalhe.estoqueMin),
+    estoqueMax: textoDeNumero(detalhe.estoqueMax),
     areaEstoque: detalhe.areaEstoque ?? "",
     setorEstoque: detalhe.setorEstoque ?? "",
     curvaAbc: detalhe.curvaAbc ?? "",
     quantidadeVariavel: detalhe.quantidadeVariavel,
-    toleranciaQuantidadePercentual: detalhe.toleranciaQuantidadePercentual ?? "",
+    toleranciaQuantidadePercentual: textoDeNumero(detalhe.toleranciaQuantidadePercentual),
     localVenda1: detalhe.localVenda1 ?? "",
     localVenda2: detalhe.localVenda2 ?? "",
     fotoUrl: detalhe.fotoUrl,
     precisao: transformacao?.precisao ?? "EXATOS",
-    quantidadeTransformacao: transformacao?.quantidade ?? "",
+    quantidadeTransformacao: textoDeNumero(transformacao?.quantidade),
     unidadeTransformacao: transformacao?.unidade ?? "",
     produtoReceituario: transformacao?.produtoReceituario ?? "",
     refReceituario: transformacao?.refReceituario ?? "",
@@ -218,8 +215,8 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     },
     promocoes: (detalhe.promocoes ?? []).map((promo) => ({
       tipo: promo.tipo === "valor" ? "valor" : "desconto",
-      valor: promo.valor ?? "",
-      descontoPercentual: promo.descontoFracao == null ? "" : String(Number(promo.descontoFracao) * 100),
+      valor: textoDeNumero(promo.valor),
+      descontoPercentual: fracaoParaPercentual(promo.descontoFracao),
       horaInicio: (promo.horaInicio ?? "").slice(0, 5),
       horaFim: (promo.horaFim ?? "").slice(0, 5),
       dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom],
@@ -227,8 +224,8 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     })),
     conversoes: (detalhe.conversoes ?? []).map((conversao) => ({
       unidadeMedidaId: conversao.unidadeMedidaId,
-      quantidade: conversao.quantidade,
-      unidadesIndividuais: conversao.unidadesIndividuais
+      quantidade: textoDeNumero(conversao.quantidade),
+      unidadesIndividuais: textoDeNumero(conversao.unidadesIndividuais)
     }))
   };
 }
@@ -254,7 +251,6 @@ export function aplicarValoresDaBase(form: ProdutoForm, base: ValoresHerdados): 
     medidaCompra: base.medidaCompra,
     compraAproximada: base.compraAproximada,
     grupoMercadoriaId: base.grupoMercadoriaId,
-    grupoIdExterno: base.grupoIdExterno ?? "",
     tipo: base.tipo,
     habilitarAjuda: base.habilitarAjuda,
     precisao: base.transformacao?.precisao ?? "EXATOS",
@@ -282,9 +278,10 @@ export function payloadDoFormulario(
     nomeCatalogo: preservarDescricaoLegada ? null : form.nomeCatalogo.trim() || null,
     pesavel: form.pesavel,
     // Tecla fixa 000 para quem vai a balanca; quem nao vai fica sem tecla e sem validade (oficial).
-    teclaBalanca: form.pesavel === true ? 0 : form.pesavel === false ? null : numero(form.teclaBalanca),
-    validadeBalanca: form.pesavel === false ? null : form.validadeBalanca === "" ? null : numero(form.validadeBalanca),
-    grupoIdExterno: form.grupoIdExterno || null,
+    teclaBalanca: form.pesavel === true ? 0 : form.pesavel === false ? null : numeroDigitado(form.teclaBalanca),
+    validadeBalanca:
+      form.pesavel === false ? null : form.validadeBalanca === "" ? null : numeroDigitado(form.validadeBalanca),
+    // Sem `grupoIdExterno`: o ID do grupo no PDV nao e digitado, o servidor resolve pelo NOME do grupo.
     areaVenda: form.areaVenda || null,
     marca: form.marca || null,
     compraAproximada: form.compraAproximada,
@@ -292,25 +289,28 @@ export function payloadDoFormulario(
     setorVenda1: form.setorVenda1 || null,
     setorVenda2: form.setorVenda2 || null,
     unidadeIndividualId: form.unidadeIndividualId,
-    quantidadeIndividual: numero(form.quantidadeIndividual) ?? 0,
+    quantidadeIndividual: numeroDigitado(form.quantidadeIndividual) ?? 0,
     grupoMercadoriaId: form.grupoMercadoriaId || null,
     embalagem: form.embalagem || null,
     cDe: form.embalagem ? form.cDe : null,
-    quantidadeCaixa: numero(form.quantidadeCaixa) ?? 1,
+    quantidadeCaixa: numeroDigitado(form.quantidadeCaixa) ?? 1,
     medidaCompra: form.medidaCompra || null,
-    custo: numero(form.custo),
-    margem: form.margemPercentual ? (numero(form.margemPercentual) ?? 0) / 100 : null,
-    precoVenda: numero(form.precoVenda),
+    // Vazio vai como null, nunca 0: custo, preco e estoque zerados sao afirmacao, nao ausencia.
+    custo: numeroDigitado(form.custo),
+    margem: percentualParaFracao(form.margemPercentual),
+    precoVenda: numeroDigitado(form.precoVenda),
     auto: form.auto,
     status: form.status,
     tipo: form.tipo,
-    estoqueMin: numero(form.estoqueMin),
-    estoqueMax: numero(form.estoqueMax),
+    estoqueMin: numeroDigitado(form.estoqueMin),
+    estoqueMax: numeroDigitado(form.estoqueMax),
     areaEstoque: form.areaEstoque || null,
     setorEstoque: form.setorEstoque || null,
     curvaAbc: form.curvaAbc || null,
     quantidadeVariavel: form.quantidadeVariavel,
-    toleranciaQuantidadePercentual: form.quantidadeVariavel ? (numero(form.toleranciaQuantidadePercentual) ?? 0) : null,
+    toleranciaQuantidadePercentual: form.quantidadeVariavel
+      ? (numeroDigitado(form.toleranciaQuantidadePercentual) ?? 0)
+      : null,
     localVenda1: form.localVenda1 || null,
     localVenda2: form.localVenda2 || null,
     fotoUrl: form.fotoUrl,
@@ -320,29 +320,29 @@ export function payloadDoFormulario(
           cest: form.fiscal.cest || null,
           categoriaFiscal: form.fiscal.categoriaFiscal || null,
           cstPisCofins: form.fiscal.cstPisCofins || null,
-          aliquotaCheia: numero(form.fiscal.aliquotaCheia),
-          aliquotaFcp: numero(form.fiscal.aliquotaFcp),
-          aliquotaPis: numero(form.fiscal.aliquotaPis),
-          aliquotaCofins: numero(form.fiscal.aliquotaCofins),
-          reducaoIcms: numero(form.fiscal.reducaoIcms),
-          icms: numero(form.fiscal.icms),
+          aliquotaCheia: numeroDigitado(form.fiscal.aliquotaCheia),
+          aliquotaFcp: numeroDigitado(form.fiscal.aliquotaFcp),
+          aliquotaPis: numeroDigitado(form.fiscal.aliquotaPis),
+          aliquotaCofins: numeroDigitado(form.fiscal.aliquotaCofins),
+          reducaoIcms: numeroDigitado(form.fiscal.reducaoIcms),
+          icms: numeroDigitado(form.fiscal.icms),
           tributacaoSimples: form.fiscal.tributacaoSimples || null,
-          aliquotaSimples: numero(form.fiscal.aliquotaSimples),
-          icmsRe: numero(form.fiscal.icmsRe),
+          aliquotaSimples: numeroDigitado(form.fiscal.aliquotaSimples),
+          icmsRe: numeroDigitado(form.fiscal.icmsRe),
           baseFiscal: form.fiscal.baseFiscal || null,
           codigoFiscal: form.fiscal.codigoFiscal || null,
           produtoFiscal: form.fiscal.produtoFiscal || null,
           cstReforma: form.fiscal.cstReforma || null,
           cClassTrib: form.fiscal.cClassTrib || null,
-          aliquotaIbs: numero(form.fiscal.aliquotaIbs),
-          aliquotaCbs: numero(form.fiscal.aliquotaCbs),
+          aliquotaIbs: numeroDigitado(form.fiscal.aliquotaIbs),
+          aliquotaCbs: numeroDigitado(form.fiscal.aliquotaCbs),
           origemFiscal: form.fiscal.origemFiscal || null,
           aliquotaEcf: form.fiscal.aliquotaEcf || null,
           aliquotaEcfId: form.fiscal.aliquotaEcfId || null,
           estado: form.fiscal.estado || null,
           motivo: form.fiscal.motivo || null,
           conferidoEm: form.fiscal.conferidoEm || null,
-          pctNcm: numero(form.fiscal.pctNcm)
+          pctNcm: numeroDigitado(form.fiscal.pctNcm)
         }
       : null,
     // Payload coerente com o tipo: o servidor recusa o contrario, e a tela nao manda o que ele recusa.
@@ -350,7 +350,7 @@ export function payloadDoFormulario(
       ? null
       : {
           precisao: form.precisao,
-          quantidade: numero(form.quantidadeTransformacao),
+          quantidade: numeroDigitado(form.quantidadeTransformacao),
           unidade: form.unidadeTransformacao || null,
           produtoReceituario: form.produtoReceituario || null,
           refReceituario: form.refReceituario || null
@@ -358,11 +358,8 @@ export function payloadDoFormulario(
     promocoes: ehRevenda
       ? form.promocoes.map((promo) => ({
           tipo: promo.tipo,
-          valor: promo.tipo === "valor" ? numero(promo.valor) : null,
-          descontoFracao:
-            promo.tipo === "desconto" && promo.descontoPercentual
-              ? (numero(promo.descontoPercentual) ?? 0) / 100
-              : null,
+          valor: promo.tipo === "valor" ? numeroDigitado(promo.valor) : null,
+          descontoFracao: promo.tipo === "desconto" ? percentualParaFracao(promo.descontoPercentual) : null,
           horaInicio: promo.horaInicio || null,
           horaFim: promo.horaFim || null,
           seg: promo.dias[0],
@@ -379,8 +376,8 @@ export function payloadDoFormulario(
       .filter((conversao) => conversao.unidadeMedidaId)
       .map((conversao) => ({
         unidadeMedidaId: conversao.unidadeMedidaId,
-        quantidade: numero(conversao.quantidade) ?? 1,
-        unidadesIndividuais: numero(conversao.unidadesIndividuais) ?? 1
+        quantidade: numeroDigitado(conversao.quantidade) ?? 1,
+        unidadesIndividuais: numeroDigitado(conversao.unidadesIndividuais) ?? 1
       })),
     forcar
   };

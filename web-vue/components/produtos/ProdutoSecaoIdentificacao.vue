@@ -48,11 +48,12 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           :persistent-hint="Boolean(dica('status'))"
           :disabled="somenteLeitura"
         />
+        <!-- Decisao D1 (paralelo): a loja troca a foto mesmo de produto herdado da BASE. -->
         <ProdutoFoto
           :rota="rotaFoto"
           :produto-id="produtoId"
           :foto-url="form.fotoUrl"
-          :somente-leitura="travado"
+          :somente-leitura="somenteLeitura"
           @arquivo-escolhido="emit('foto-escolhida', $event)"
           @alterada="form.fotoUrl = $event"
         />
@@ -67,7 +68,6 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
           hint="Gerado pelo sistema, sequencial no catálogo oficial."
           persistent-hint
         />
-        <v-text-field v-model="form.codigo" label="Código externo" :hint="dica('codigo')" :disabled="somenteLeitura" />
 
         <v-text-field
           v-model="form.codigoBarras"
@@ -116,18 +116,14 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
         <v-select
           v-model="form.pesavel"
           :items="[
-            { title: 'Não informado — conferir no SIA', value: null },
             { title: 'Não', value: false },
             { title: 'Sim', value: true }
           ]"
           label="Vai para balança? *"
           data-campo="pesavel"
           :error-messages="erros['pesavel']"
-          :hint="
-            form.pesavel === null
-              ? 'Para produtos existentes, confira o cadastro SIA. KG não define este campo.'
-              : dica('pesavel')
-          "
+          hint="Novos produtos começam em Não. Para produtos já existentes, confira o cadastro SIA; a medida KG não define este campo."
+          persistent-hint
           :disabled="travado"
           class="secao__campo-largo"
         />
@@ -150,10 +146,8 @@ const siglas = computed(() => props.unidades.map((unidade) => unidade.sigla));
             data-campo="validadeBalanca"
             :error-messages="erros['validadeBalanca']"
             :disabled="travado"
-            @wheel.prevent
           />
         </template>
-        <v-text-field v-model="form.grupoIdExterno" label="Grupo oficial (ID externo)" :disabled="travado" />
         <v-select
           v-if="mostrarAreaVenda"
           v-model="form.areaVenda"

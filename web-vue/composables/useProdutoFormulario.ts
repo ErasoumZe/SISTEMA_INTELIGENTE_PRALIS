@@ -10,15 +10,24 @@ import {
   validarPromocoesDoProduto
 } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
+import { ErroApiCliente } from "~/composables/useApi";
+import {
+  fracaoParaPercentual,
+  mensagemDeProdutoSalvo,
+  numeroDigitado,
+  percentualParaFracao
+} from "~/utils/produto-numeros";
 import {
   aplicarValoresDaBase,
   formularioDoDetalhe,
   formularioVazio,
   descricaoPreviewDoProduto,
-  numero,
   payloadDoFormulario,
   type ProdutoForm
 } from "~/composables/produto-formulario-mapa";
+
+/** Codigos de duplicidade da API: os dois oferecem "Cadastrar mesmo assim" (nome e EAN, oficial). */
+const CODIGOS_DE_DUPLICADO = new Set(["DUPLICATE_PRODUCT", "DUPLICATE_BARCODE"]);
 
 /**
  * Estado do formulario de produto. As previas (descricao, "como se compra", preco) usam as MESMAS
@@ -83,7 +92,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     montarComoSeCompra({
       embalagem: form.value.embalagem,
       cDe: form.value.cDe,
-      quantidadeCaixa: numero(form.value.quantidadeCaixa),
+      quantidadeCaixa: numeroDigitado(form.value.quantidadeCaixa),
       medidaCompra: form.value.medidaCompra,
       descricao: descricaoPreview.value || form.value.descricao,
       aproximado: form.value.compraAproximada
@@ -95,7 +104,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       ? montarValidacaoQtd(
           descricaoPreview.value || form.value.descricao,
           form.value.precisao,
-          numero(form.value.quantidadeTransformacao) ?? 0,
+          numeroDigitado(form.value.quantidadeTransformacao) ?? 0,
           form.value.unidadeTransformacao
         )
       : ""
@@ -105,13 +114,35 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   const regrasFiscais = ref<RegraFiscalGrupo[]>([]);
   /** Planilha fiscal fora do ar: a previa do preco fica sem a margem do grupo (o servidor recalcula). */
   const planilhaFiscalForaDoAr = ref(false);
-  /** Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial. */
-  const margemDoGrupo = computed(() => {
+  /**
+   * Margem padrao (fracao) do grupo escolhido, casada pelo NOME normalizado, como no app oficial.
+   * `null` = o grupo nao tem margem padrao na planilha (hoje so poucos grupos tem).
+   */
+  const margemDoGrupo = computed<number | null>(() => {
     const nome = grupos.value.find((grupo) => grupo.id === form.value.grupoMercadoriaId)?.nome;
-    if (!nome) return 0;
+    if (!nome) return null;
     const chave = normalizarGrupoFiscal(nome);
-    return regrasFiscais.value.find((regra) => normalizarGrupoFiscal(regra.grupo) === chave)?.margemPadrao ?? 0;
+    return regrasFiscais.value.find((regra) => normalizarGrupoFiscal(regra.grupo) === chave)?.margemPadrao ?? null;
   });
+  /** A mesma margem em % para a tela ("Padrão do grupo: 30%"), arredondada como no paralelo. */
+  const margemDoGrupoPct = computed(() =>
+    margemDoGrupo.value == null ? null : fracaoParaPercentual(margemDoGrupo.value)
+  );
+
+  /*
+   * Decisao D3 (Jose): TROCAR o grupo preenche a margem do produto com a padrao do grupo, quando ela
+   * existe (paralelo). E o que evita produto sem margem sair no TXT do PDV pelo preco de custo. So
+   * reage a TROCA feita na tela: `sync` + `carregando` deixam de fora a hidratacao do produto, senao
+   * abrir um produto sobrescreveria a margem gravada dele.
+   */
+  watch(
+    () => form.value.grupoMercadoriaId,
+    (novo, anterior) => {
+      if (carregando.value || !novo || novo === anterior) return;
+      if (margemDoGrupoPct.value != null) form.value.margemPercentual = margemDoGrupoPct.value;
+    },
+    { flush: "sync" }
+  );
 
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
@@ -120,11 +151,11 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   const precoPreview = computed(() =>
     calcularPrecoVenda({
       auto: form.value.auto,
-      custo: numero(form.value.custo) ?? 0,
-      quantidadeCaixa: numero(form.value.quantidadeCaixa) ?? 1,
-      margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
-      margemGrupo: margemDoGrupo.value,
-      precoManual: numero(form.value.precoVenda) ?? 0,
+      custo: numeroDigitado(form.value.custo) ?? 0,
+      quantidadeCaixa: numeroDigitado(form.value.quantidadeCaixa) ?? 1,
+      margem: percentualParaFracao(form.value.margemPercentual),
+      margemGrupo: margemDoGrupo.value ?? 0,
+      precoManual: numeroDigitado(form.value.precoVenda) ?? 0,
       temProduto: Boolean(form.value.nomeCatalogo.trim())
     })
   );
@@ -134,24 +165,25 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     const lista: Record<string, string> = {};
     if (!form.value.nomeCatalogo.trim()) lista["nomeCatalogo"] = "Informe o nome do produto.";
     if (!form.value.unidadeIndividualId) lista["unidadeIndividualId"] = "Escolha a unidade individual.";
-    const quantidade = numero(form.value.quantidadeIndividual);
-    if (quantidade == null || quantidade < 0) lista["quantidadeIndividual"] = "Informe a quantidade (0 ou mais).";
+    // Gramatura vazia vale 0, como no paralelo (produto sem peso por unidade); so negativo e erro.
+    const quantidade = numeroDigitado(form.value.quantidadeIndividual);
+    if (quantidade != null && quantidade < 0) lista["quantidadeIndividual"] = "Informe a quantidade (0 ou mais).";
     if (grupoObrigatorio.value && !form.value.grupoMercadoriaId) {
       lista["grupoMercadoriaId"] = "Selecione o grupo de mercadorias para aplicar os impostos.";
     }
     if (form.value.pesavel === null) lista["pesavel"] = "Escolha Sim ou Não para o campo Vai para balança.";
     const [erroDeBalanca] = validarBalanca({
       pesavel: form.value.pesavel,
-      validadeBalanca: form.value.validadeBalanca === "" ? null : numero(form.value.validadeBalanca)
+      validadeBalanca: form.value.validadeBalanca === "" ? null : numeroDigitado(form.value.validadeBalanca)
     });
     if (erroDeBalanca) lista["validadeBalanca"] = erroDeBalanca;
-    const minimo = numero(form.value.estoqueMin);
-    const maximo = numero(form.value.estoqueMax);
+    const minimo = numeroDigitado(form.value.estoqueMin);
+    const maximo = numeroDigitado(form.value.estoqueMax);
     if (minimo != null && maximo != null && maximo < minimo) {
       lista["estoqueMax"] = "O máximo não pode ser menor que o mínimo.";
     }
     for (const item of validarEstoquePorEmbalagem({
-      quantidadeCaixa: numero(form.value.quantidadeCaixa),
+      quantidadeCaixa: numeroDigitado(form.value.quantidadeCaixa),
       estoqueMin: form.value.estoqueMin === "" ? null : minimo,
       estoqueMax: form.value.estoqueMax === "" ? null : maximo
     })) {
@@ -168,8 +200,8 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     validarPromocoesDoProduto(
       form.value.promocoes.map((promo) => ({
         tipo: promo.tipo,
-        valor: numero(promo.valor),
-        descontoFracao: promo.descontoPercentual ? (numero(promo.descontoPercentual) ?? 0) / 100 : null,
+        valor: numeroDigitado(promo.valor),
+        descontoFracao: promo.descontoPercentual ? (numeroDigitado(promo.descontoPercentual) ?? 0) / 100 : null,
         horaInicio: promo.horaInicio || null,
         horaFim: promo.horaFim || null,
         dias: promo.dias,
@@ -214,6 +246,9 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
         heranca.value = detalhe.heranca;
       } else {
         loja.value = modo.value === "base" ? "BASE" : "";
+        // Medida base KG por padrao (paralelo). Se a empresa nao tiver KG cadastrado, fica vazia.
+        form.value.unidadeIndividualId =
+          unidades.value.find((unidade) => unidade.sigla.trim().toUpperCase() === "KG")?.id ?? "";
       }
       grupoOriginal.value = form.value.grupoMercadoriaId || null;
       estadoOriginal = JSON.stringify(form.value);
@@ -226,21 +261,30 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   }
 
   /**
-   * Salva. Devolve o id em caso de sucesso, ou `null` — e o formulario CONSERVA tudo o que a pessoa
-   * digitou. `salvando` bloqueia o duplo clique.
+   * Salva. Devolve o id e a mensagem de sucesso, ou `null` — e o formulario CONSERVA tudo o que a
+   * pessoa digitou. O botao fica sempre ativo (paralelo): clicar com erro diz o MOTIVO em vez de um
+   * botao cinza mudo. `salvando` bloqueia o duplo clique.
    */
-  async function salvar(forcar = false): Promise<string | null> {
-    if (salvando.value || !valido.value) return null;
+  async function salvar(forcar = false): Promise<{ id: string; mensagem: string } | null> {
+    if (salvando.value) return null;
+    duplicado.value = "";
+    if (!valido.value) {
+      erro.value = Object.values(erros.value)[0] ?? errosDePromocao.value[0] ?? "Confira os campos.";
+      return null;
+    }
     salvando.value = true;
     erro.value = "";
-    duplicado.value = "";
     try {
       const payload = payloadDoFormulario(form.value, empresaId.value, forcar, descricaoPreview.value);
       let id = produtoId.value;
+      let lojasAtualizadas: number | null = null;
       if (modo.value === "base") {
-        // Produto novo so nasce na BASE (oficial); a loja recebe por importacao.
-        if (id) await apiPut(`/api/produtos/base/${id}`, payload);
-        else id = (await apiPost<{ id: string }>("/api/produtos/base", payload)).id;
+        // Produto novo so nasce na BASE (oficial); a loja recebe por importacao. A edicao da BASE
+        // responde quantas lojas receberam a mudanca.
+        if (id) {
+          const resposta = await apiPut<{ id: string; lojasAtualizadas?: number }>(`/api/produtos/base/${id}`, payload);
+          lojasAtualizadas = resposta?.lojasAtualizadas ?? null;
+        } else id = (await apiPost<{ id: string }>("/api/produtos/base", payload)).id;
       } else if (id) {
         await apiPut(`/api/produtos/${id}`, payload);
       } else {
@@ -254,11 +298,12 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
       }
       estadoOriginal = JSON.stringify(form.value);
       alterado.value = false;
-      return id;
+      return id ? { id, mensagem: mensagemDeProdutoSalvo({ modo: modo.value, lojasAtualizadas }) } : null;
     } catch (falha) {
       const mensagem = mensagemErro(falha);
-      // "Cadastrar mesmo assim" vale para nome e para codigo de barras repetidos (oficial).
-      if (mensagem.includes("Ja existe o produto")) {
+      // "Cadastrar mesmo assim" vale para nome e para codigo de barras repetidos (oficial). Decidido
+      // pelo CODIGO do erro, nunca pelo texto: o texto muda (acento, redacao) e o codigo e contrato.
+      if (falha instanceof ErroApiCliente && falha.codigo && CODIGOS_DE_DUPLICADO.has(falha.codigo)) {
         duplicado.value = mensagem;
       } else {
         erro.value = mensagem;
@@ -307,6 +352,7 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     validacaoQtdPreview,
     precoPreview,
     margemDoGrupo,
+    margemDoGrupoPct,
     planilhaFiscalForaDoAr,
     produtoBaseId,
     loja,

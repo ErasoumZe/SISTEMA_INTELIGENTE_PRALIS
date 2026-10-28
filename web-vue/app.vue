@@ -25,6 +25,7 @@ function concluirIntro() {
       <NuxtPage />
     </main>
     <LoginIntroCicluz v-if="introPendente || introAposLogin" :pronta="introAposLogin" @concluida="concluirIntro" />
+    <ComumAvisoAoNavegar />
   </v-app>
 </template>
 
