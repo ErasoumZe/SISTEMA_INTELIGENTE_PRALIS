@@ -1,20 +1,27 @@
 <script setup lang="ts">
-import type { VendaCanceladaCaixa } from "@padaria/shared";
+import { conferirInicioFolhaCreare, type VendaCanceladaCaixa } from "@padaria/shared";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
-import { dinheiro, mensagemErro } from "~/utils/domain";
+import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
 import CaixaInicioVendasAjuste from "~/components/caixa/CaixaInicioVendasAjuste.vue";
+import CaixaFolhaCreareLeitura from "~/components/caixa/CaixaFolhaCreareLeitura.vue";
+import CaixaFechamentoRelatorioVendasResumo from "~/components/caixa/CaixaFechamentoRelatorioVendasResumo.vue";
+import {
+  avisoInicioFolhaCreare,
+  leituraDaSugestao,
+  leituraFolhaCreareVazia,
+  leituraParaEnvio,
+  type SugestaoFolhaCreare
+} from "~/utils/folha-creare";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
-type LeituraCreare = Record<
-  "totalBruto" | "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "despesasExcetoSangria" | "resultadoFinal",
-  string
->;
 type DadosRelatorioVendas = {
+  versao?: number;
   vendas: TotaisRelatorioVendas;
   canceladas: VendaCanceladaCaixa[];
-  creare?: { comparacao: Record<string, "ok" | "pendente" | "divergente"> } | null;
+  // A comparacao da folha com o Pralis e mostrada no Relatorio final; aqui so volta a leitura revisada.
+  creare?: { leitura?: SugestaoFolhaCreare } | null;
 };
 type RelatorioGerado = {
   periodoInicio: string;
@@ -23,15 +30,6 @@ type RelatorioGerado = {
   geradoEm: string;
 };
 type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
-type SugestaoCreare = Record<
-  "totalBruto" | "dinheiro" | "credito" | "debito" | "pix" | "voucher" | "despesasExcetoSangria" | "resultadoFinal",
-  number | null
-> & {
-  documentoLegivel: boolean;
-  camposDuvidosos: string[];
-  observacoes: string[];
-};
-
 // `aberturaOficial`/`inicioVendas`: opcionais para nao quebrar quem ainda nao passa (o ajuste so aparece com eles).
 const props = defineProps<{ caixaId: string; aberturaOficial?: string; inicioVendas?: string }>();
 const emit = defineEmits<{ (event: "inicioAjustado"): void }>();
@@ -50,44 +48,33 @@ const canceladas = ref<VendaCanceladaCaixa[]>([]);
 const anexoCreareEnviado = ref(false);
 const enviandoCreare = ref(false);
 const anexoCreareId = ref("");
-const leituraCreare = ref<LeituraCreare>({
-  totalBruto: "",
-  dinheiro: "",
-  credito: "",
-  debito: "",
-  pix: "",
-  voucher: "",
-  despesasExcetoSangria: "",
-  resultadoFinal: ""
-});
-const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
-const camposCreare = [
-  { chave: "totalBruto", titulo: "Total bruto" },
-  { chave: "dinheiro", titulo: "Dinheiro" },
-  { chave: "credito", titulo: "Crédito" },
-  { chave: "debito", titulo: "Débito" },
-  { chave: "pix", titulo: "Pix" },
-  { chave: "voucher", titulo: "Voucher" },
-  { chave: "despesasExcetoSangria", titulo: "Despesas exceto sangria" },
-  { chave: "resultadoFinal", titulo: "Resultado final" }
-] as const;
+const leituraCreare = ref(leituraFolhaCreareVazia());
+const sugestaoCreare = ref<SugestaoFolhaCreare | null>(null);
+// Os campos da folha so aparecem depois de anexar E ler (ou quando a leitura falha e o operador preenche).
+const leituraPronta = ref(false);
 let consultaAtual = 0;
-const totaisPorForma = computed(() => totais.value?.porFormaPagamento ?? []);
 
-function numeroDoCampo(valor: string) {
-  const texto = valor.trim();
-  if (!texto) return null;
-  const normalizado = texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto;
-  const numero = Number(normalizado);
-  return Number.isFinite(numero) && numero >= 0 ? numero : null;
-}
+// R-225: o "Periodo de" da folha comparado com o inicio das vendas do caixa, ja na leitura (antes de gerar).
+const conferenciaInicio = computed(() =>
+  props.aberturaOficial && props.inicioVendas && leituraCreare.value.periodoInicio.trim()
+    ? conferirInicioFolhaCreare({
+        periodoInicio: leituraCreare.value.periodoInicio,
+        inicioVendas: props.inicioVendas,
+        aberturaOficial: props.aberturaOficial
+      })
+    : null
+);
+const sugestaoInicio = computed(() =>
+  conferenciaInicio.value?.sugestaoInicio
+    ? { inicio: conferenciaInicio.value.sugestaoInicio, periodoTexto: leituraCreare.value.periodoInicio.trim() }
+    : null
+);
+const avisoInicio = computed(() => avisoInicioFolhaCreare(conferenciaInicio.value));
 
-function aplicarSugestaoCreare(sugestao: SugestaoCreare) {
-  for (const { chave } of camposCreare) {
-    const valor = sugestao[chave];
-    leituraCreare.value[chave] =
-      valor === null ? "" : valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
+function aplicarSugestaoCreare(sugestao: SugestaoFolhaCreare) {
+  sugestaoCreare.value = sugestao;
+  leituraCreare.value = leituraDaSugestao(sugestao);
+  leituraPronta.value = true;
   const pendentes = sugestao.camposDuvidosos.length ? " Revise: " + sugestao.camposDuvidosos.join(", ") + "." : "";
   aviso.value = sugestao.documentoLegivel
     ? "A leitura preencheu os valores visiveis da folha. Confira antes de gerar." + pendentes
@@ -95,7 +82,7 @@ function aplicarSugestaoCreare(sugestao: SugestaoCreare) {
 }
 
 async function analisarAnexoCreare(anexoId: string) {
-  const leitura = await apiPost<{ sugestao: SugestaoCreare }>(
+  const leitura = await apiPost<{ sugestao: SugestaoFolhaCreare }>(
     "/api/caixa/" + encodeURIComponent(props.caixaId) + "/relatorio-vendas/analisar",
     { anexoId }
   );
@@ -106,8 +93,19 @@ function aplicarRelatorio(relatorio: RelatorioGerado) {
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
   canceladas.value = relatorio.dados.canceladas;
-  comparacaoCreare.value = relatorio.dados.creare?.comparacao ?? null;
+  // Ao voltar para a etapa, a leitura revisada que gerou o relatorio reaparece (so no modelo atual, v4).
+  const lida = relatorio.dados.creare?.leitura;
+  if (lida && (relatorio.dados.versao ?? 0) >= 4 && !sugestaoCreare.value) {
+    sugestaoCreare.value = lida;
+    leituraCreare.value = leituraDaSugestao(lida);
+    leituraPronta.value = true;
+  }
   gerado.value = true;
+}
+
+function leituraIndisponivel() {
+  leituraPronta.value = true;
+  aviso.value = "A folha foi anexada. A leitura automática não ficou disponível; preencha os valores do cupom.";
 }
 
 async function carregarRelatorioExistente() {
@@ -126,8 +124,7 @@ async function carregarRelatorioExistente() {
       try {
         await analisarAnexoCreare(anexoCreare.id);
       } catch {
-        aviso.value =
-          "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
+        leituraIndisponivel();
       }
     }
     if (consulta !== consultaAtual || !relatorio) return;
@@ -146,7 +143,6 @@ function aoAjustarInicio(resultado: {
   totais.value = null;
   intervalo.value = null;
   gerado.value = false;
-  comparacaoCreare.value = null;
   canceladas.value = [];
   const saidas = resultado.vendasDesanexadas ? `, ${resultado.vendasDesanexadas} saíram` : "";
   aviso.value = `Início ajustado (${resultado.vendasAnexadas} venda(s) entraram neste caixa${saidas}). Gere o relatório de novo.`;
@@ -165,14 +161,7 @@ async function gerarRelatorio() {
       anexoCreareId.value
         ? {
             anexoId: anexoCreareId.value,
-            leituraCreare: {
-              documentoLegivel: true,
-              ...Object.fromEntries(
-                camposCreare.map(({ chave }) => [chave, numeroDoCampo(leituraCreare.value[chave])])
-              ),
-              camposDuvidosos: [],
-              observacoes: []
-            }
+            leituraCreare: leituraParaEnvio(leituraCreare.value, sugestaoCreare.value)
           }
         : {}
     );
@@ -208,11 +197,12 @@ async function enviarRelatorioCreare(evento: Event) {
     if (!resposta.ok) throw new Error(json.detail || "Não foi possível anexar o relatório do CREARE.");
     anexoCreareEnviado.value = true;
     anexoCreareId.value = json.data?.id ?? "";
+    sugestaoCreare.value = null;
+    leituraPronta.value = false;
     try {
       await analisarAnexoCreare(anexoCreareId.value);
     } catch {
-      aviso.value =
-        "A folha foi anexada. A leitura automática não ficou disponível; preencha apenas os valores visíveis.";
+      leituraIndisponivel();
     }
   } catch (falha) {
     erro.value = mensagemErro(falha);
@@ -270,33 +260,13 @@ watch(
 
     <v-alert v-if="aviso" type="info" density="compact" variant="tonal" class="mt-4">{{ aviso }}</v-alert>
 
-    <section v-if="anexoCreareEnviado" class="relatorio-vendas__leitura mt-4" aria-label="Valores conferidos do CREARE">
-      <div>
-        <strong>Valores da folha CREARE</strong>
-        <p>Os valores serão sugeridos pela leitura do arquivo. Revise-os antes de gerar.</p>
-      </div>
-      <v-text-field
-        v-for="campo in camposCreare"
-        :key="campo.chave"
-        v-model="leituraCreare[campo.chave]"
-        :label="campo.titulo"
-        prefix="R$"
-        inputmode="decimal"
-        density="comfortable"
-      />
-    </section>
+    <p v-if="anexoCreareEnviado && !leituraPronta" class="relatorio-vendas__lendo mt-4" role="status">
+      Lendo a folha do CREARE…
+    </p>
+    <CaixaFolhaCreareLeitura v-if="anexoCreareEnviado && leituraPronta" v-model="leituraCreare" class="mt-4" />
 
-    <v-alert
-      v-if="comparacaoCreare"
-      :type="Object.values(comparacaoCreare).every((situacao) => situacao === 'ok') ? 'success' : 'warning'"
-      variant="tonal"
-      class="mt-4"
-    >
-      {{
-        Object.values(comparacaoCreare).every((situacao) => situacao === "ok")
-          ? "CREARE e Pralis conferem em todos os valores comparáveis."
-          : "Há valores pendentes ou divergentes no comparativo CREARE × Pralis. Revise a folha e os lançamentos."
-      }}
+    <v-alert v-if="avisoInicio" type="warning" variant="tonal" density="compact" class="mt-4" role="status">
+      {{ avisoInicio }}
     </v-alert>
 
     <CaixaInicioVendasAjuste
@@ -304,6 +274,7 @@ watch(
       :caixa-id="caixaId"
       :abertura-oficial="aberturaOficial"
       :inicio-vendas="inicioVendas"
+      :sugestao="sugestaoInicio"
       @ajustado="aoAjustarInicio"
     />
 
@@ -326,45 +297,7 @@ watch(
         </span>
       </v-alert>
 
-      <div class="relatorio-vendas__indicadores mt-4">
-        <article class="relatorio-vendas__indicador--quantidade">
-          <span>Aprovadas</span>
-          <strong>{{ totais.quantidade }}</strong>
-        </article>
-        <article class="relatorio-vendas__indicador--total">
-          <span>Total aprovado</span>
-          <strong>{{ dinheiro(totais.totalGeral) }}</strong>
-        </article>
-        <article class="relatorio-vendas__indicador--canceladas">
-          <span>Canceladas</span>
-          <strong>{{ canceladas.length }}</strong>
-          <small>Ficam fora do total.</small>
-        </article>
-      </div>
-
-      <details class="relatorio-vendas__formas mt-4" aria-label="Totais por tipo de recebimento">
-        <summary>
-          <strong>Pagamentos aprovados</strong>
-          <span>Toque para mostrar ou ocultar</span>
-        </summary>
-        <div class="d-flex align-center justify-space-between ga-3 flex-wrap mb-3">
-          <h4>Pagamentos aprovados</h4>
-          <span class="text-caption text-medium-emphasis">Por forma de pagamento</span>
-        </div>
-        <div v-if="totaisPorForma.length" class="relatorio-vendas__formas-lista">
-          <div
-            v-for="forma in totaisPorForma"
-            :key="forma.formaPagamento"
-            class="relatorio-vendas__forma"
-            :class="`relatorio-vendas__forma--${forma.categoriaFechamentoCaixa ?? 'outros'}`"
-          >
-            <span>{{ forma.formaPagamento }}</span>
-            <strong>{{ dinheiro(forma.total) }}</strong>
-            <small>{{ forma.quantidade }} venda{{ forma.quantidade === 1 ? "" : "s" }}</small>
-          </div>
-        </div>
-        <p v-else class="text-body-2 text-medium-emphasis mb-0">Nenhuma forma de pagamento foi informada.</p>
-      </details>
+      <CaixaFechamentoRelatorioVendasResumo :totais="totais" :quantidade-canceladas="canceladas.length" />
 
       <CaixaFechamentoRelatorioVendasDetalhes :canceladas="canceladas" />
     </template>
@@ -403,64 +336,9 @@ watch(
   margin: 6px 0 0;
   color: var(--cx-ink-soft);
 }
-.relatorio-vendas__indicadores,
-.relatorio-vendas__formas-lista {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.relatorio-vendas__indicadores article,
-.relatorio-vendas__forma {
-  padding: 14px;
-  border: 1px solid var(--cx-line);
-  border-radius: 12px;
-  background: var(--cx-surface-sunken);
-}
-.relatorio-vendas__indicadores span,
-.relatorio-vendas__forma span {
-  display: block;
+.relatorio-vendas__lendo {
+  margin: 0;
   color: var(--cx-ink-soft);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-.relatorio-vendas__indicadores strong,
-.relatorio-vendas__forma strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 1.1rem;
-}
-.relatorio-vendas__indicadores small,
-.relatorio-vendas__forma small {
-  color: var(--cx-ink-soft);
-}
-.relatorio-vendas__indicador--canceladas {
-  border-color: color-mix(in srgb, var(--cx-attention) 52%, var(--cx-line)) !important;
-}
-.relatorio-vendas__indicador--total {
-  border-color: color-mix(in srgb, var(--cx-positive) 46%, var(--cx-line));
-  background: color-mix(in srgb, var(--cx-positive) 16%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__indicador--quantidade {
-  border-color: color-mix(in srgb, var(--cat-entradas-base) 46%, var(--cx-line));
-}
-.relatorio-vendas__formas {
-  padding: 16px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--cx-brand) 15%, var(--cx-surface));
-}
-.relatorio-vendas__formas summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
-  list-style: none;
-}
-.relatorio-vendas__formas summary::-webkit-details-marker {
-  display: none;
-}
-.relatorio-vendas__formas summary span {
-  color: var(--cx-ink-soft);
-  font-size: 0.78rem;
 }
 .relatorio-vendas__gerar {
   background: var(--cat-entradas-base) !important;
@@ -487,69 +365,11 @@ watch(
 .relatorio-vendas__anexo small {
   grid-column: 1 / -1;
 }
-.relatorio-vendas__formas-lista {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-.relatorio-vendas__forma--dinheiro {
-  border-color: color-mix(in srgb, var(--cx-positive) 42%, var(--cx-line)) !important;
-  background: color-mix(in srgb, var(--cx-positive) 24%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__forma--credito,
-.relatorio-vendas__forma--voucher {
-  border-color: color-mix(in srgb, var(--cx-brand) 46%, var(--cx-line)) !important;
-  background: color-mix(in srgb, var(--cx-brand) 24%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__forma--debito {
-  border-color: color-mix(in srgb, var(--cat-retiradas-base) 46%, var(--cx-line)) !important;
-  background: color-mix(in srgb, var(--cat-retiradas-base) 24%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__forma--pix {
-  border-color: color-mix(in srgb, var(--cat-mercadorias-base) 46%, var(--cx-line)) !important;
-  background: color-mix(in srgb, var(--cat-mercadorias-base) 24%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__forma--crediario,
-.relatorio-vendas__forma--outros {
-  border-color: color-mix(in srgb, var(--cx-attention) 46%, var(--cx-line)) !important;
-  background: color-mix(in srgb, var(--cx-attention) 24%, var(--cx-surface-sunken)) !important;
-}
-.relatorio-vendas__leitura {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 12px;
-  padding: 14px;
-  border: 1px solid var(--cx-line);
-  border-radius: 12px;
-}
-.relatorio-vendas__leitura > div {
-  grid-column: 1 / -1;
-}
-.relatorio-vendas__leitura p {
-  margin: 4px 0 8px;
-  color: var(--cx-ink-soft);
-}
 @media (max-width: 720px) {
   .relatorio-vendas__cabecalho {
     flex-direction: column;
   }
-  .relatorio-vendas__indicadores {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .relatorio-vendas__anexo {
-    grid-template-columns: 1fr;
-  }
-  .relatorio-vendas__leitura {
-    grid-template-columns: 1fr;
-  }
-  .relatorio-vendas__formas-lista {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .relatorio-vendas__forma {
-    padding: 10px;
-  }
-}
-@media (max-width: 340px) {
-  .relatorio-vendas__indicadores {
     grid-template-columns: 1fr;
   }
 }

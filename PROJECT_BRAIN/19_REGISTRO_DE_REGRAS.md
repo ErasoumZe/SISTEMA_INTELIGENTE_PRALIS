@@ -1383,6 +1383,34 @@ corte do fechamento.
 
 Rota `POST /api/caixa/:caixaId/inicio-vendas`; tela `CaixaInicioVendasAjuste.vue`.
 
+Revisão de 28/10/2026: dentro da janela o operador também pode corrigir para mais tarde (as vendas que ficam antes
+do novo início voltam a ficar sem caixa); o log guarda `dataHoraAbertura` antiga/nova, a abertura oficial e quantas
+vendas entraram/saíram. O início não pode ser no mesmo instante do fechamento do caixa anterior.
+
+### R-225 — Folha do CREARE comparada campo a campo, com o horário (Marco, 28/10/2026)
+
+**Complementa a comparação CREARE × Pralis que já existia** (a folha é o espelho do fechamento manual do PDV e
+serve para achar inconsistência com o relatório de vendas do sistema). A folha anexada na etapa Vendas é o cupom
+térmico **"Relatório de Venda Geral"** (Compilart/Sistema Menu); a leitura (IA ou texto do PDF) usa os rótulos
+exatos do cupom, e a tela mostra os campos na ordem impressa.
+
+| Linha da folha                                | Compara com (Pralis)                                                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Troco Inicial                                 | o que entrou no PDV pela transferência de abertura                                                                 |
+| CREDITO, DEBITO, DINHEIRO, PIX, VOUCHER       | vendas do caixa por categoria da forma de pagamento                                                                |
+| Total                                         | total aprovado do relatório de vendas                                                                              |
+| Despesas                                      | despesas + mercadorias + retiradas (como antes)                                                                    |
+| Sangria                                       | sangrias e retornos que saíram do PDV no turno                                                                     |
+| Saldo Inicial, CLIENTES, Saldo Final Dinheiro | **só exibidos** (CLIENTES sem equivalente definido; o Saldo Final do CREARE soma voucher e o físico do Pralis não) |
+
+"Bate" = igual em centavos. Turno da tarde é outra folha começando do zero (diferente da maquininha, R-210).
+
+**Horário:** o "Período de" (início) da folha é comparado com o início das vendas do caixa, com tolerância de
+**2 min**. Se não bate e cabe na janela da R-224, a tela destaca o **Ajustar início** já com a hora da folha
+(minuto cheio, para baixo) e o motivo preenchido; fora da janela, só avisa. A "Data da emissão" é comparada com
+o corte do fechamento só para informar (de 2 min antes a 15 min depois = bate). O "até 23:59:59" é fim de dia, não
+o fechamento. Relatório gravado como `versao: 4`; os de antes pedem para gerar de novo.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

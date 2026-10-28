@@ -3,15 +3,15 @@ import type { DetalheCaixaResponse } from "@padaria/shared";
 import type { ResumoCaixa } from "~/types/padaria";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { dinheiro } from "~/utils/domain";
+import CaixaRelatorioFinalFolhaCreare from "~/components/caixa/CaixaRelatorioFinalFolhaCreare.vue";
+import type { FolhaCreareGerada } from "~/utils/folha-creare";
 
 type RelatorioVendas = {
   dados: {
+    versao?: number;
     vendas: TotaisRelatorioVendas;
     canceladas: unknown[];
-    creare?: {
-      comparacao: Record<string, "ok" | "pendente" | "divergente">;
-      leitura?: Partial<Record<"dinheiro" | "credito" | "debito" | "pix" | "voucher", number | null>>;
-    } | null;
+    creare?: FolhaCreareGerada | null;
   };
 };
 type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
@@ -34,7 +34,7 @@ const leituraCreare = ref<LeituraMaquininha>({});
 const leituraMaquininha = ref<LeituraMaquininha>({});
 const transferencias = ref<Transferencia[]>([]);
 const lancamentos = ref<DetalheCaixaResponse["lancamentos"]>([]);
-const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
+const folhaCreare = ref<{ creare: FolhaCreareGerada; versao: number } | null>(null);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
   { chave: "debito", titulo: "Débito" },
@@ -86,7 +86,8 @@ async function carregar() {
     ]);
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
-    comparacaoCreare.value = relatorioVendas?.dados.creare?.comparacao ?? null;
+    const creare = relatorioVendas?.dados.creare;
+    folhaCreare.value = creare ? { creare, versao: relatorioVendas?.dados.versao ?? 0 } : null;
     leituraCreare.value = leitura(relatorioVendas?.dados.creare?.leitura);
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
@@ -126,18 +127,7 @@ watch(
     </v-alert>
 
     <template v-else>
-      <v-alert
-        v-if="comparacaoCreare"
-        :type="Object.values(comparacaoCreare).every((situacao) => situacao === 'ok') ? 'success' : 'warning'"
-        variant="tonal"
-        class="mt-4"
-      >
-        {{
-          Object.values(comparacaoCreare).every((situacao) => situacao === "ok")
-            ? "CREARE × Pralis: valores comparáveis conferem."
-            : "CREARE × Pralis: existem valores pendentes ou divergentes para revisar."
-        }}
-      </v-alert>
+      <CaixaRelatorioFinalFolhaCreare v-if="folhaCreare" :creare="folhaCreare.creare" :versao="folhaCreare.versao" />
       <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
         <article class="fechamento-movimentacoes__vendas">
           <v-icon icon="mdi-receipt-text-check-outline" size="22" />

@@ -19,9 +19,9 @@ const campo = {
     '<label>{{ label }}<input :value="modelValue" :data-teste="$attrs[\'data-teste\']" @input="$emit(\'update:modelValue\', $event.target.value)" /></label>'
 };
 
-function montar(inicio = OFICIAL) {
+function montar(inicio = OFICIAL, sugestao: { inicio: string; periodoTexto: string } | null = null) {
   return mount(CaixaInicioVendasAjuste, {
-    props: { caixaId: "cx-1", aberturaOficial: OFICIAL, inicioVendas: inicio },
+    props: { caixaId: "cx-1", aberturaOficial: OFICIAL, inicioVendas: inicio, sugestao },
     global: {
       stubs: {
         "v-dialog": { props: ["modelValue"], template: '<div v-if="modelValue"><slot /></div>' },
@@ -94,6 +94,20 @@ describe("CaixaInicioVendasAjuste", () => {
     });
     expect(wrapper.emitted("ajustado")?.[0]?.[0]).toMatchObject({ vendasAnexadas: 3 });
     expect(wrapper.find('[data-teste="inicio-vendas-oficial"]').exists()).toBe(true);
+  });
+
+  it("com a folha do CREARE comecando antes, destaca e ja preenche a hora e o motivo", async () => {
+    const wrapper = montar(OFICIAL, {
+      inicio: new Date(2026, 9, 28, 13, 1, 0).toISOString(),
+      periodoTexto: "28/10/2026 13:01:30"
+    });
+    expect(wrapper.get('[data-teste="inicio-vendas-sugerido"]').text()).toContain("28/10/2026 13:01:30");
+    expect(wrapper.get('[data-teste="inicio-vendas"]').classes()).toContain("inicio-vendas--sugerido");
+    await wrapper.get('[data-teste="botao-ajustar-inicio"]').trigger("click");
+    expect((wrapper.get('[data-teste="campo-hora-inicio"]').element as HTMLInputElement).value).toBe("13:01");
+    expect((wrapper.get('[data-teste="campo-motivo-inicio"]').element as HTMLTextAreaElement).value).toContain(
+      "folha do CREARE"
+    );
   });
 
   it("mostra o erro do servidor", async () => {

@@ -161,7 +161,9 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
   text-transform: uppercase;
 }
 
-.retorno-dialog__intro { margin: 0 0 14px; }
+.retorno-dialog__intro {
+  margin: 0 0 14px;
+}
 
 .retorno-dialog__saldo {
   padding: 10px 12px;
@@ -211,12 +213,23 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
   gap: 8px;
 }
 
-.retorno-dialog__continuar { color: var(--cat-transferencias-tinta, #9c2f07); }
-.retorno-dialog__salvar { color: #fff; background: var(--cat-transferencias-base, #fb4b0b); }
-.retorno-dialog__campos :deep(.v-field--focused .v-field__outline) { color: var(--cat-transferencias-base, #fb4b0b); }
+.retorno-dialog__continuar {
+  color: var(--cat-transferencias-tinta, #9c2f07);
+}
+.retorno-dialog__salvar {
+  color: #fff;
+  background: var(--cat-transferencias-base, #fb4b0b);
+}
+.retorno-dialog__campos :deep(.v-field--focused .v-field__outline) {
+  color: var(--cat-transferencias-base, #fb4b0b);
+}
 
 @media (max-width: 560px) {
-  .retorno-dialog__corpo { padding: 14px 16px; }
-  .retorno-dialog__acoes { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .retorno-dialog__corpo {
+    padding: 14px 16px;
+  }
+  .retorno-dialog__acoes {
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

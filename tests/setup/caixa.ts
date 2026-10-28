@@ -7,7 +7,7 @@ import { consultarUm, executarSql, json } from "./integracao.js";
 
 const arquivoPngMinimo = Buffer.from("89504e470d0a1a0a0000000049454e44ae426082", "hex");
 
-function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare") {
+export function multipartAnexoFechamento(tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare") {
   const boundary = `----padaria-caixa-${randomUUID()}`;
   const inicio = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\n${tipo}\r\n` +
@@ -310,14 +310,15 @@ export async function prepararFechamentoValido(
       anexoId: anexoCreareId,
       leituraCreare: {
         documentoLegivel: true,
-        totalBruto: 0,
-        dinheiro: 0,
+        trocoInicial: 0,
         credito: 0,
         debito: 0,
+        dinheiro: 0,
         pix: 0,
         voucher: 0,
-        despesasExcetoSangria: 0,
-        resultadoFinal: 0
+        total: 0,
+        despesas: 0,
+        sangria: 0
       }
     }
   });
