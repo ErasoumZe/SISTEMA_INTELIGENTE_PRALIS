@@ -37,9 +37,9 @@ function montar(props: Record<string, unknown> = {}) {
 }
 
 describe("RelatorioFechamentoPainelConferencia", () => {
-  it("tem UM botao Fechou certo quando o caixa fechou sem diferenca", async () => {
+  it("oferece Fechou certo e Teve quebra quando o caixa fechou sem diferenca", async () => {
     const wrapper = montar();
-    expect(wrapper.findAll("button")).toHaveLength(1);
+    expect(wrapper.findAll("button")).toHaveLength(2);
     await wrapper.get('[data-teste="botao-fechou-certo"]').trigger("click");
     expect(wrapper.emitted("fechou-certo")).toHaveLength(1);
   });
@@ -57,20 +57,32 @@ describe("RelatorioFechamentoPainelConferencia", () => {
 
   it("lacre diferente do reservado bloqueia o Fechou certo e diz por que", () => {
     const wrapper = montar({ lacreDiferente: true });
-    expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
     expect(wrapper.text()).toContain("não bate com o reservado");
   });
 
-  it("com diferenca registrada o botao vira Registrar divergencia", async () => {
+  it("Teve quebra aparece junto do Fechou certo, mesmo com o caixa sem diferenca", async () => {
+    const wrapper = montar();
+    expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(true);
+    await wrapper.get('[data-teste="botao-teve-quebra"]').trigger("click");
+    expect(wrapper.emitted("registrar-divergencia")).toHaveLength(1);
+  });
+
+  it("com diferenca registrada so resta Teve quebra", () => {
     const wrapper = montar({ situacao: "com_quebra" });
     expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
-    await wrapper.get('[data-teste="botao-registrar-divergencia"]').trigger("click");
-    expect(wrapper.emitted("registrar-divergencia")).toHaveLength(1);
+    expect(wrapper.find('[data-teste="botao-teve-quebra"]').exists()).toBe(true);
+  });
+
+  it("lacre diferente tira o Fechou certo mas deixa Teve quebra", () => {
+    const wrapper = montar({ lacreDiferente: true });
+    expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
+    expect(wrapper.find('[data-teste="botao-teve-quebra"]').exists()).toBe(true);
   });
 
   it("sem acesso as transferencias nao finge que esta tudo certo", () => {
     const wrapper = montar({ retornoVisivel: false });
     expect(wrapper.find('[data-teste="botao-fechou-certo"]').exists()).toBe(false);
+    expect(wrapper.find('[data-teste="botao-teve-quebra"]').exists()).toBe(false);
     expect(wrapper.text()).toContain("Sem permissão para ver as transferências");
   });
 

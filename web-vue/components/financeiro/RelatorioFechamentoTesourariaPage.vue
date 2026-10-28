@@ -5,6 +5,7 @@ import type { Opcao } from "~/types/padaria";
 import { CONFIRMAR_ACAO_KEY, type ConfirmarAcao } from "~/utils/confirmacao-acao";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
+import RelatorioFechamentoDetalhes from "./RelatorioFechamentoDetalhes.vue";
 import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
 import RelatorioFechamentoPainelConferencia from "./RelatorioFechamentoPainelConferencia.vue";
 import RelatorioFechamentoQuemFechou from "./RelatorioFechamentoQuemFechou.vue";
@@ -96,7 +97,6 @@ const revisandoConferencia = ref(false);
 const observacaoConferencia = ref("");
 const confirmandoConferencia = ref(false);
 const erroConferencia = ref("");
-const detalhesAbertos = ref<string[]>([]);
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 const linhasParaConferir = computed(() =>
   linhas.value.filter((linha) =>
@@ -119,16 +119,6 @@ const linhasDaAba = computed(() => (abaAtiva.value === "conferir" ? linhasParaCo
 const periodoInvertido = computed(() =>
   Boolean(filtros.dataInicio && filtros.dataFim && filtros.dataInicio > filtros.dataFim)
 );
-const secoesLancamentos = computed(() => {
-  const lancamentos = dossie.value?.lancamentos;
-  return [
-    { titulo: "Vendas", itens: lancamentos?.linhasVendas ?? [] },
-    { titulo: "Transferências", itens: lancamentos?.linhasTransferencias ?? [] },
-    { titulo: "Despesas", itens: lancamentos?.linhasDespesas ?? [] },
-    { titulo: "Mercadorias", itens: lancamentos?.linhasMercadorias ?? [] },
-    { titulo: "Retiradas", itens: lancamentos?.linhasRetiradas ?? [] }
-  ];
-});
 const conferenciaMaquininha = computed<LinhaMaquininha[]>(() => {
   const relatorio = registro(dossie.value?.relatorioMaquininha);
   return ["credito", "debito", "pix", "voucher"].map((forma) => {
@@ -185,7 +175,6 @@ async function abrirDossie(linha: LinhaRelatorio) {
   caixaSelecionado.value = linha;
   dossie.value = null;
   erroDossie.value = "";
-  detalhesAbertos.value = [];
   dialogoAberto.value = true;
   await carregarDossie(linha.id);
 }
@@ -214,7 +203,6 @@ function fecharDossie() {
   dossie.value = null;
   caixaSelecionado.value = null;
   erroDossie.value = "";
-  detalhesAbertos.value = [];
 }
 
 function aoAlterarDossie(aberto: boolean) {
@@ -251,7 +239,7 @@ async function fecharCerto() {
     await carregarDossie(caixa.id, true);
     if (dossie.value?.situacaoTesouraria !== "fechado_sem_pendencias") {
       erroFechouCerto.value =
-        "Há diferença ou pendência neste caixa. Confira os dados abaixo e use Registrar divergência se for o caso.";
+        "Há diferença ou pendência neste caixa. Confira os dados abaixo e use Teve quebra se for o caso.";
       return;
     }
     await apiPost(`/api/relatorios/fechamentos/${caixa.id}/conferir`, { resultado: "conferido", observacao: null });
@@ -280,7 +268,7 @@ async function registrarConferencia() {
   ) {
     erroConferencia.value = revisandoConferencia.value
       ? "Informe o motivo da alteração de status."
-      : "Informe a justificativa da divergência.";
+      : "Informe o motivo da quebra.";
     return;
   }
   confirmandoConferencia.value = true;
@@ -344,17 +332,8 @@ function formatarDataHoraOuTraco(valor: unknown) {
 function registro(valor: unknown): Record<string, unknown> {
   return valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {};
 }
-function anexoUrl(anexo: Anexo) {
+function anexoUrl(anexo: { id: string }) {
   return `${apiUrl}/api/relatorios/fechamentos/${caixaSelecionado.value?.id}/anexos/${anexo.id}`;
-}
-function rotuloAnexo(tipo: string) {
-  return (
-    {
-      folha_fechamento: "Folha de fechamento",
-      comprovante_cartao: "Comprovante da maquininha",
-      relatorio_vendas_creare: "Folha CREARE"
-    }[tipo] ?? tipo
-  );
 }
 
 watch(pagina, () => void buscar());
@@ -595,128 +574,17 @@ watch(
             :data-hora="formatarDataHoraOuTraco"
           />
 
-          <div class="mt-4 mb-2">
-            <div class="text-subtitle-2 font-weight-bold">Evidências adicionais</div>
-            <div class="text-caption text-medium-emphasis">
-              Detalhes e documentos do fechamento, sem repetir os dados da folha acima.
-            </div>
-          </div>
-          <v-expansion-panels v-model="detalhesAbertos" multiple class="mt-4">
-            <v-expansion-panel value="fisico" title="Conferências físicas e quebras"
-              ><v-expansion-panel-text
-                ><v-table density="compact"
-                  ><thead>
-                    <tr>
-                      <th>Etapa</th>
-                      <th>Resultado</th>
-                      <th>Declarado</th>
-                      <th>Contado</th>
-                      <th>Conferido em</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in dossie.conferencias" :key="String(item.id)">
-                      <td data-rotulo="Etapa">{{ texto(item.etapa) }}</td>
-                      <td data-rotulo="Resultado">{{ texto(item.resultado) }}</td>
-                      <td data-rotulo="Declarado">
-                        {{ dinheiro(numero(item.valorEspecieDeclarado) + numero(item.valorMoedasDeclarado)) }}
-                      </td>
-                      <td data-rotulo="Contado">
-                        {{ dinheiro(numero(item.valorEspecieContado) + numero(item.valorMoedasContado)) }}
-                      </td>
-                      <td data-rotulo="Conferido em">
-                        {{ item.conferidoEm ? formatarDataHora(String(item.conferidoEm)) : "--" }}
-                      </td>
-                    </tr>
-                    <tr v-if="!dossie.conferencias.length">
-                      <td colspan="5">Ainda não há conferência física registrada.</td>
-                    </tr>
-                  </tbody></v-table
-                ><v-alert
-                  v-for="quebra in dossie.quebras"
-                  :key="String(quebra.id)"
-                  type="error"
-                  variant="tonal"
-                  class="mt-3"
-                  ><strong>Quebra {{ dinheiro(numero(quebra.valor)) }}</strong> ·
-                  {{ texto(quebra.observacao) }}</v-alert
-                ></v-expansion-panel-text
-              ></v-expansion-panel
-            >
-            <v-expansion-panel value="decisoes" title="Decisões da Tesouraria"
-              ><v-expansion-panel-text
-                ><v-table density="compact"
-                  ><thead>
-                    <tr>
-                      <th>Resultado</th>
-                      <th>Justificativa</th>
-                      <th>Conferido por</th>
-                      <th>Data</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in dossie.conferenciasTesouraria" :key="item.id">
-                      <td data-rotulo="Resultado">
-                        {{ item.resultado === "conferido" ? "Conferido" : "Divergência" }}
-                      </td>
-                      <td data-rotulo="Justificativa">{{ item.observacao || "--" }}</td>
-                      <td data-rotulo="Conferido por">{{ item.conferidoPorNome || item.conferidoPor }}</td>
-                      <td data-rotulo="Data">{{ item.conferidoEm ? formatarDataHora(item.conferidoEm) : "--" }}</td>
-                    </tr>
-                    <tr v-if="!dossie.conferenciasTesouraria.length">
-                      <td colspan="4">Nenhuma decisão final registrada.</td>
-                    </tr>
-                  </tbody></v-table
-                ></v-expansion-panel-text
-              ></v-expansion-panel
-            >
-            <v-expansion-panel value="movimentacoes" title="Movimentações e vendas canceladas"
-              ><v-expansion-panel-text
-                ><v-list density="compact" lines="two"
-                  ><template v-for="secao in secoesLancamentos" :key="secao.titulo"
-                    ><v-list-subheader>{{ secao.titulo }} · {{ secao.itens.length }}</v-list-subheader
-                    ><v-list-item v-for="item in secao.itens" :key="String(item.id)"
-                      ><v-list-item-title>{{ texto(item.descricao) }}</v-list-item-title
-                      ><v-list-item-subtitle>{{
-                        item.data ? formatarDataSomenteDia(String(item.data)) : "--"
-                      }}</v-list-item-subtitle
-                      ><template #append
-                        ><strong>{{ dinheiro(numero(item.valor)) }}</strong></template
-                      ></v-list-item
-                    ><v-list-item v-if="!secao.itens.length" title="Nenhum lançamento" /></template></v-list
-                ><v-alert v-if="dossie.vendasCanceladas.length" type="warning" variant="tonal" class="mt-2"
-                  >{{ dossie.vendasCanceladas.length }} venda(s) cancelada(s), fora dos totais do caixa.</v-alert
-                ></v-expansion-panel-text
-              ></v-expansion-panel
-            >
-            <v-expansion-panel value="anexos" title="Folhas e comprovantes anexados"
-              ><v-expansion-panel-text
-                ><v-row dense
-                  ><v-col v-for="anexo in dossie.anexos" :key="anexo.id" cols="12" sm="6" md="4"
-                    ><v-card variant="outlined"
-                      ><v-img
-                        v-if="anexo.mimeType.startsWith('image/')"
-                        :src="anexoUrl(anexo)"
-                        height="120"
-                        cover
-                      /><v-sheet v-else class="pa-6 text-center"
-                        ><v-icon icon="mdi-file-pdf-box" size="42" color="error" /></v-sheet
-                      ><v-card-text
-                        ><strong>{{ rotuloAnexo(anexo.tipo) }}</strong>
-                        <div class="text-caption text-truncate">{{ anexo.nomeOriginal }}</div></v-card-text
-                      ><v-card-actions
-                        ><v-btn :href="anexoUrl(anexo)" target="_blank" size="small" prepend-icon="mdi-download"
-                          >Abrir</v-btn
-                        ></v-card-actions
-                      ></v-card
-                    ></v-col
-                  ><v-col v-if="!dossie.anexos.length" cols="12"
-                    ><span class="text-medium-emphasis">Nenhum anexo foi enviado.</span></v-col
-                  ></v-row
-                ></v-expansion-panel-text
-              ></v-expansion-panel
-            >
-          </v-expansion-panels>
+          <RelatorioFechamentoDetalhes
+            :conferencias="dossie.conferencias"
+            :quebras="dossie.quebras"
+            :vendas-canceladas="dossie.vendasCanceladas"
+            :decisoes="dossie.conferenciasTesouraria"
+            :anexos="dossie.anexos"
+            :anexo-url="anexoUrl"
+            :dinheiro="dinheiro"
+            :numero="numero"
+            :texto="texto"
+          />
         </template>
         <v-alert v-else-if="erroDossie" type="error" variant="tonal">
           {{ erroDossie }}
@@ -738,13 +606,13 @@ watch(
           ? "Alterar status da conferência"
           : resultadoConferencia === "conferido"
             ? "Confirmar conferência da Tesouraria"
-            : "Registrar conferência com divergência"
+            : "Registrar quebra"
       }}</v-card-title>
       <v-card-text>
         <template v-if="revisandoConferencia"
           ><p>
             O status passa para
-            <strong>{{ resultadoConferencia === "conferido" ? "Conferido" : "Divergência confirmada" }}</strong
+            <strong>{{ resultadoConferencia === "conferido" ? "Conferido" : "Quebra / divergência" }}</strong
             >. A decisão anterior continua no histórico e os valores financeiros não mudam.
           </p>
           <v-textarea
@@ -760,12 +628,12 @@ watch(
         </p>
         <template v-else
           ><p>
-            Descreva a divergência conferida. Este registro não altera os valores financeiros nem apaga a quebra
-            existente.
+            Descreva a quebra que a Tesouraria encontrou. Este registro avisa a quebra, não altera os valores
+            financeiros e fica no histórico.
           </p>
           <v-textarea
             v-model="observacaoConferencia"
-            label="Justificativa da divergência"
+            label="O que aconteceu (motivo da quebra)"
             auto-grow
             counter="1000"
             :error-messages="erroConferencia"
@@ -790,7 +658,7 @@ watch(
               ? "Alterar status"
               : resultadoConferencia === "conferido"
                 ? "Confirmar"
-                : "Registrar divergência"
+                : "Registrar quebra"
           }}</v-btn
         ></v-card-actions
       >

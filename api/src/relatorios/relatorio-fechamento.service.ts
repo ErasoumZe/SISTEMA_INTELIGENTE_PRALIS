@@ -240,7 +240,7 @@ export async function registrarConferenciaTesourariaFechamento(
         if (ultima?.resultado === "conferido") return ultima;
       }
     } else {
-      if (!ehRevisao && !temDivergencia) throw new Error("Não há divergência registrada neste caixa para confirmar");
+      // "Teve quebra": a Tesouraria pode apontar quebra mesmo quando o caixa fechou sem diferenca; o motivo e obrigatorio.
       if (!observacao) throw new Error("Informe a justificativa da conferência com divergência");
       if (
         ultima?.resultado === "divergente" &&

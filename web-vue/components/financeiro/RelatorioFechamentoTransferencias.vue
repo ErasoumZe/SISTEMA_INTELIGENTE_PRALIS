@@ -218,6 +218,7 @@ watch(() => props.caixaId, carregar, { immediate: true });
   margin-bottom: var(--cx-sp-3);
   padding: var(--cx-sp-4);
   border: 1px solid var(--cx-line);
+  border-left: 4px solid var(--cx-warning);
   border-radius: var(--cx-r-lg);
   background: var(--cx-surface-raised);
   color: var(--cx-ink);

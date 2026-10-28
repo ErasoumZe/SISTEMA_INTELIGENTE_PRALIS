@@ -188,4 +188,40 @@ describe("Relatório de fechamento - conferência final da Tesouraria", () => {
     });
     expect(json<{ data: { situacaoTesouraria: string } }>(dossie).data.situacaoTesouraria).toBe("conferido_tesouraria");
   });
+
+  it("Teve quebra: a Tesouraria aponta quebra num caixa sem diferenca, com motivo obrigatorio", async () => {
+    const caixaLimpo = randomUUID();
+    await executarSql(
+      `insert into fechamentos_caixa (
+         id, empresa_id, pdv_id, usuario_id, usuario_caixa_id, colaborador_id,
+         data_movimento, data_hora_abertura, aberto_em, data_hora_fechamento, fechado_em,
+         token_edicao, status, criado_por
+       )
+       select $1, empresa_id, pdv_id, usuario_id, usuario_caixa_id, colaborador_id,
+              '2026-07-21', now(), now(), now(), now(), $2, 'fechado', criado_por
+         from fechamentos_caixa
+        where id = $3`,
+      [caixaLimpo, `TOKEN-QUEBRA-${caixaLimpo}`, idsTeste.caixaFechado]
+    );
+    const conferir = (payload: Record<string, unknown>) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/relatorios/fechamentos/${caixaLimpo}/conferir`,
+        headers: { cookie: cookieTesouraria },
+        payload
+      });
+
+    expect((await conferir({ resultado: "divergente" })).statusCode).toBe(400);
+    const resposta = await conferir({ resultado: "divergente", observacao: "Faltou uma nota de R$ 50 na contagem." });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+
+    const dossie = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/fechamentos/${caixaLimpo}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    expect(json<{ data: { situacaoTesouraria: string } }>(dossie).data.situacaoTesouraria).toBe(
+      "divergencia_confirmada_tesouraria"
+    );
+  });
 });

@@ -96,6 +96,7 @@ const abertura = computed(() => {
   gap: var(--cx-sp-3);
   padding: var(--cx-sp-4);
   border: 1px solid var(--cx-line);
+  border-left: 4px solid var(--cx-brand);
   border-radius: var(--cx-r-lg);
   background: var(--cx-surface-raised);
   color: var(--cx-ink);
