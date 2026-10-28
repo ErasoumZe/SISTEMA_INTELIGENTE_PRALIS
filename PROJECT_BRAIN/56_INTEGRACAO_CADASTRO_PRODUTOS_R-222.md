@@ -809,3 +809,41 @@ José autorizou ("Sim, segue") portar o escritor real e a publicação no Drive,
   6. Conferir um produto na planilha e no TXT.
   7. Apontar o robô da loja para o ERP.
   - Nunca deixar os dois escrevendo ao mesmo tempo: as linhas se trocariam.
+
+### Manutenção: pesáveis portados; código, custo e duplicados aguardam decisão (28/10/2026)
+
+**Pesáveis portados** (tela `/produtos/pesaveis`, link na Manutenção, só para administrador). São os três cards de
+pesável da `manutencao` do app. Os planos foram copiados literalmente para o shared, com os 32 testes
+oficiais.
+
+| Ferramenta             | Loja    | O que faz                                                                                                                                  | Frase                        |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Pela exportação do SIA | só TNP  | Quem o SIA marca `Pesável = S` vira S, tecla 000 e a validade do SIA, no produto e no de-para. Casa só pelo código interno.                | `ATUALIZAR PESAVEIS TNP`     |
+| Classificar            | TNP, LI | Dá valor a quem não tem, nesta ordem: cadastro, depois de-para, depois N/0/0. Conflito bloqueia, ou mantém o cadastro e corrige o de-para. | `CLASSIFICAR PESAVEL {loja}` |
+| Padronizar             | TNP, LI | Todo ativo vira S/000/5. Quem tem barras próprias fica N, por padrão, como no app. Sobrescreve.                                            | `TODOS PESAVEIS {loja}`      |
+
+- **Como grava:** a prévia não grava nada. Gravar exige a frase e o hash da prévia; se o arquivo ou o cadastro
+  mudaram no meio, a resposta é 409 e nada é gravado.
+- **Diferenças em relação ao app:**
+  - o app aceita `.xls`; o ERP só lê `.xlsx` e `.csv`, a mesma pendência do de-para;
+  - o app libera para quem tem a tela de Manutenção; o ERP exige administrador.
+- **Fora do porte:**
+  - `pesavel-sia-reconcile`: é só um script de linha de comando que lê a aba "BASE SIA FULL", e o
+    Classificar já cobre o mesmo caso pelo de-para;
+  - `giulia-sia`: depende de produto da BASE criado por uma pessoa específica (`created_by_name`), do histórico
+    de código interno e da BASE como linha de `products`. Nada disso existe no ERP.
+
+**Aguardam decisão:**
+
+- **Código de cadastro** (alinhar o `codigo_interno` ao `coditem` do SIA, em lote ou por decisão):
+  - o motor é puro, mas a gravação precisa de uma tabela de **histórico de código interno**, que o ERP não
+    tem. É migration nova: mostrar o SQL antes;
+  - o lote troca até 200 códigos por vez, na BASE e nas cópias.
+- **Custo pela discriminação (DB-05):**
+  - **fórmula de dinheiro**: custo = custo unitário da nota mais recente × `qtCad`, arredondado;
+  - no ERP o custo é por empresa e a BASE não tem custo; é preciso decidir onde gravar;
+  - a fonte é outra planilha (MER), que precisa de configuração própria.
+- **Duplicados históricos** (aposentar os códigos 00001–00428 que duplicam o SIA 10000–13126):
+  - precisa do status `unificado` e de uma tabela de merges, ou seja, migration;
+  - muda listagens, TXT e planilha;
+  - é preciso decidir se a unificação é feita no ERP ou se o ERP só importa o resultado do app.

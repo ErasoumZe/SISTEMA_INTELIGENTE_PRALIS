@@ -20,7 +20,7 @@ import { invalidarTabelasFiscais, lojaFiscalDaEmpresa } from "./produtos-fiscal.
 export class DeParaSiaError extends Error {
   constructor(
     mensagem: string,
-    readonly status: 400 | 403 | 422,
+    readonly status: 400 | 403 | 409 | 422,
     readonly code: string
   ) {
     super(mensagem);
@@ -42,12 +42,16 @@ function textoDoCsv(bytes: Buffer): string {
   return utf8.includes(CARACTERE_INVALIDO) ? bytes.toString("latin1") : utf8;
 }
 
-function tabelaDoArquivo(arquivo: ArquivoDoSia): string[][] {
+/** A tabela de uma exportacao do SIA (.xlsx ou .csv); `escolher` acha a aba certa numa planilha de trabalho. */
+export function tabelaDoArquivoDoSia(
+  arquivo: ArquivoDoSia,
+  escolher: (aba: string[][]) => boolean = temColunasDoSia
+): string[][] {
   if (/\.csv$/iu.test(arquivo.nome)) return lerCsvDoSia(textoDoCsv(arquivo.bytes));
   if (/\.xlsx$/iu.test(arquivo.nome)) {
     const abas = [...lerAbasXlsx(arquivo.bytes, "arquivo do SIA").values()];
     // A exportacao tem uma aba; a planilha de trabalho (BASE SIA FULL) divide espaco com outras.
-    return abas.find(temColunasDoSia) ?? abas[0] ?? [];
+    return abas.find(escolher) ?? abas[0] ?? [];
   }
   if (/\.xls$/iu.test(arquivo.nome)) {
     throw new DeParaSiaError(
@@ -62,7 +66,7 @@ function tabelaDoArquivo(arquivo: ArquivoDoSia): string[][] {
 function lerCatalogo(arquivo: ArquivoDoSia): CatalogoDeParaSia {
   let tabela: string[][];
   try {
-    tabela = tabelaDoArquivo(arquivo);
+    tabela = tabelaDoArquivoDoSia(arquivo);
   } catch (erro) {
     if (erro instanceof DeParaSiaError) throw erro;
     throw new DeParaSiaError(

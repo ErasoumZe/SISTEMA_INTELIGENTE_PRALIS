@@ -15,7 +15,7 @@ const querySia = z.object({
   confirmacao: z.string().trim().max(80).optional()
 });
 
-function ator(request: FastifyRequest) {
+export function ator(request: FastifyRequest) {
   const perfil = request.perfilUsuario;
   return {
     administrador: perfil?.role === "usuario_admin",
@@ -23,7 +23,7 @@ function ator(request: FastifyRequest) {
   };
 }
 
-async function arquivoDaRequisicao(request: FastifyRequest): Promise<ArquivoDoSia | null> {
+export async function arquivoDaRequisicao(request: FastifyRequest): Promise<ArquivoDoSia | null> {
   // So o administrador chega a enviar o arquivo: ninguem mais faz o servidor ler 20 MB.
   if (request.perfilUsuario?.role !== "usuario_admin") {
     throw new DeParaSiaError("Apenas o administrador importa o de-para do SIA.", 403, "FORBIDDEN");
@@ -33,7 +33,7 @@ async function arquivoDaRequisicao(request: FastifyRequest): Promise<ArquivoDoSi
   return { nome: arquivo.filename, bytes: await arquivo.toBuffer() };
 }
 
-function responderErro(reply: ReplyHttp, error: DadosExternos) {
+export function responderErro(reply: ReplyHttp, error: DadosExternos) {
   if (error instanceof DeParaSiaError) return erro(reply, error.status, error.message, error.code);
   const mensagem = mensagemDominioOuRelancar(error);
   return erro(reply, statusErroValidacao(mensagem), mensagem);

@@ -430,3 +430,6 @@ export * from "./formato-creare.js";
 export * from "./planilha-mapa.js";
 export * from "./planilha-traducao.js";
 export * from "./planilha-leiaute.js";
+export * from "./pesaveis.js";
+export * from "./pesaveis-backfill.js";
+export * from "./pesaveis-padronizar.js";

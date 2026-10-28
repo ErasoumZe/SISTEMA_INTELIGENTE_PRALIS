@@ -55,7 +55,7 @@ onMounted(async () => {
         <div>
           <h1 class="text-h5">Manutenção do catálogo</h1>
           <p class="text-body-2 text-medium-emphasis">
-            Backups, de-para do SIA e carga fiscal. Só grava quando você confirma cada ação.
+            Backups, de-para do SIA, pesáveis e carga fiscal. Só grava quando você confirma cada ação.
           </p>
         </div>
         <v-btn variant="outlined" prepend-icon="mdi-arrow-left" to="/produtos">Voltar aos produtos</v-btn>
@@ -111,6 +111,18 @@ onMounted(async () => {
                 <v-btn variant="tonal" prepend-icon="mdi-swap-horizontal" to="/produtos/depara-sia"
                   >Abrir de-para</v-btn
                 >
+              </v-card-actions>
+            </v-card>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-card variant="outlined" height="100%">
+              <v-card-title class="text-subtitle-1">Pesáveis da loja</v-card-title>
+              <v-card-text>
+                Pesável, tecla e validade de balança pela exportação do SIA, para quem não tem valor ou para todos os
+                ativos.
+              </v-card-text>
+              <v-card-actions>
+                <v-btn variant="tonal" prepend-icon="mdi-scale" to="/produtos/pesaveis">Abrir pesáveis</v-btn>
               </v-card-actions>
             </v-card>
           </v-col>
