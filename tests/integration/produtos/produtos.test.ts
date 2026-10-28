@@ -1,17 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
-import { assertOk, assertProblem } from "../../setup/asserts.js";
+import { cadastrarProdutoNaLoja } from "../../setup/produtos.js";
+import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarUm, json } from "../../setup/integracao.js";
 
 describe("produtos integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieSemPermissao: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieSemPermissao = await cookieSessao(contexto.app, "semPermissao");
   }, 120_000);
 
   afterAll(async () => {
@@ -23,24 +26,21 @@ describe("produtos integration", () => {
       method: "POST",
       url: "/api/unidades-medida",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Unidade Produto CRUD", sigla: "un" }
+      payload: { empresaId: idsTeste.empresaA, nome: "Unidade Produto CRUD", sigla: "ucr" }
     });
     expect(unidade.statusCode).toBe(201);
     const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
 
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        codigo: "PROD-CRUD",
-        descricao: "Produto criado por integracao",
-        unidadeIndividualId: unidadeId,
-        quantidadeIndividual: 1,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      codigo: "PROD-CRUD",
+      descricao: "Produto criado por integracao",
+      nomeCatalogo: "Produto CRUD",
+      pesavel: false,
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      conversoes: []
     });
     expect(criado.statusCode).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -53,6 +53,7 @@ describe("produtos integration", () => {
         empresaId: idsTeste.empresaA,
         codigo: "PROD-CRUD-EDIT",
         descricao: "Produto editado por integracao",
+        nomeCatalogo: "Produto CRUD renomeado",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
         grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
@@ -61,11 +62,91 @@ describe("produtos integration", () => {
     });
     expect(editado.statusCode).toBe(204);
     await expect(
-      consultarUm("select id from produtos where id = $1 and descricao = $2", [
-        produtoId,
-        "Produto editado por integracao"
-      ])
-    ).resolves.toBeTruthy();
+      consultarUm<{ id: string; nome_catalogo: string; pesavel: boolean }>(
+        "select id, nome_catalogo, pesavel from produtos where id = $1 and descricao = $2",
+        // O cadastro grava nome e descricao em maiusculas (regra do app oficial).
+        [produtoId, "PRODUTO EDITADO POR INTEGRACAO"]
+      )
+    ).resolves.toMatchObject({ nome_catalogo: "PRODUTO CRUD RENOMEADO", pesavel: false });
+
+    const exportacao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/export.csv",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(exportacao.statusCode, exportacao.body).toBe(200);
+    expect(exportacao.headers["content-type"]).toContain("text/csv");
+    expect(exportacao.headers["content-disposition"]).toContain("produtos-pralis.csv");
+    expect(exportacao.body).toContain("codigo_interno");
+    expect(exportacao.body).toContain("PRODUTO CRUD RENOMEADO");
+
+    const exportacaoSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/export.csv",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(exportacaoSemPermissao.statusCode).toBe(403);
+
+    const backup = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/backup.xlsx",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(backup.statusCode, backup.body).toBe(200);
+    expect(backup.headers["content-type"]).toContain("spreadsheetml.sheet");
+    expect(backup.headers["content-disposition"]).toContain("backup-produtos-pralis.xlsx");
+
+    const backupSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/backup.xlsx",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(backupSemPermissao.statusCode).toBe(403);
+
+    const panoramaFiscal = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/fiscal/panorama",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(panoramaFiscal.statusCode, panoramaFiscal.body).toBe(200);
+    expect(json<{ data: Record<string, number> }>(panoramaFiscal).data).toEqual(expect.any(Object));
+
+    const panoramaFiscalSemPermissao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/produtos/fiscal/panorama",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(panoramaFiscalSemPermissao.statusCode).toBe(403);
+
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(historico.statusCode).toBe(200);
+    expect(
+      json<{ data: Array<{ nomeAnterior: string; nomeNovo: string; alteradoPor: string }> }>(historico).data
+    ).toEqual([
+      expect.objectContaining({
+        nomeAnterior: "PRODUTO CRUD",
+        nomeNovo: "PRODUTO CRUD RENOMEADO",
+        alteradoPor: "Admin Integracao"
+      })
+    ]);
+
+    const semAcesso = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(semAcesso.statusCode).toBe(403);
+
+    const outraEmpresa = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${produtoId}/historico-nomes?empresaId=${idsTeste.empresaB}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(outraEmpresa.statusCode).toBe(404);
   });
 
   it("Deve_PersistirCamposComerciais_Quando_CriarProduto", async () => {
@@ -76,50 +157,60 @@ describe("produtos integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Unidade Comercial", sigla: "cx" }
     });
     const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
+    // Embalagem e medida de compra sao siglas de unidade da loja: a copia da BASE as resolve por sigla.
+    for (const [nome, sigla] of [
+      ["Saco comercial", "SACO"],
+      ["Quilo comercial", "KGC"]
+    ] as const) {
+      const extra = await contexto.app.inject({
+        method: "POST",
+        url: "/api/unidades-medida",
+        headers: { cookie: cookieAdmin },
+        payload: { empresaId: idsTeste.empresaA, nome, sigla }
+      });
+      expect(extra.statusCode, extra.body).toBe(201);
+    }
 
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Produto comercial integracao",
-        unidadeIndividualId: unidadeId,
-        quantidadeIndividual: 1,
-        embalagem: "SACO",
-        cDe: "DE",
-        quantidadeCaixa: 30,
-        medidaCompra: "KG",
-        custo: 84.9,
-        margem: 0.7,
-        precoVenda: 4.81,
-        auto: true,
-        status: "ativo",
-        tipo: "revenda",
-        quantidadeEstoque: 12,
-        estoqueMin: 5,
-        estoqueMax: 50,
-        setorEstoque: "LJ - CAIXAS",
-        localVenda1: "PDV1",
-        fotoUrl: "https://exemplo.test/foto.png",
-        fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA", aliquotaCheia: 18, icms: 18 },
-        promocoes: [
-          {
-            tipo: "desconto",
-            descontoFracao: 0.1,
-            horaInicio: "08:00",
-            horaFim: "12:00",
-            seg: true,
-            ter: false,
-            qua: false,
-            qui: false,
-            sex: false,
-            sab: false,
-            dom: false
-          }
-        ],
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao: "Produto comercial integracao",
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      embalagem: "SACO",
+      cDe: "DE",
+      quantidadeCaixa: 30,
+      medidaCompra: "KGC",
+      custo: 84.9,
+      margem: 0.7,
+      precoVenda: 4.81,
+      auto: true,
+      status: "ativo",
+      tipo: "revenda",
+      quantidadeEstoque: 12,
+      // Caixa de 30: minimo e maximo em embalagem fechada (regra do app oficial).
+      estoqueMin: 30,
+      estoqueMax: 60,
+      setorEstoque: "LJ - CAIXAS",
+      localVenda1: "PDV1",
+      fotoUrl: "https://exemplo.test/foto.png",
+      fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA", aliquotaCheia: 18, icms: 18 },
+      promocoes: [
+        {
+          tipo: "desconto",
+          descontoFracao: 0.1,
+          horaInicio: "08:00",
+          horaFim: "12:00",
+          seg: true,
+          ter: false,
+          qua: false,
+          qui: false,
+          sex: false,
+          sab: false,
+          dom: false
+        }
+      ],
+      conversoes: []
     });
     expect(criado.statusCode).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -155,14 +246,14 @@ describe("produtos integration", () => {
     });
     // O saldo informado por um cliente antigo/malicioso e ignorado. Somente movimentos auditados alteram estoque.
     expect(Number(linha?.quantidade_estoque)).toBe(0);
-    expect(Number(linha?.estoque_min)).toBe(5);
+    expect(Number(linha?.estoque_min)).toBe(30);
     expect(linha).toMatchObject({
       auto: true,
       status: "ativo",
       tipo: "revenda",
       embalagem: "SACO",
       c_de: "DE",
-      medida_compra: "KG"
+      medida_compra: "KGC"
     });
     expect(Number(linha?.custo)).toBe(84.9);
     expect(Number(linha?.margem)).toBe(0.7);
@@ -190,6 +281,7 @@ describe("produtos integration", () => {
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         descricao: "Produto comercial integracao",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
@@ -214,19 +306,15 @@ describe("produtos integration", () => {
     });
     const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
 
-    const criado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        descricao: "Massa transformacao integracao",
-        unidadeIndividualId: unidadeId,
-        quantidadeIndividual: 1,
-        tipo: "transformacao",
-        transformacao: { precisao: "EXATOS", quantidade: 500, unidade: "G", produtoReceituario: "MASSA BASE" },
-        conversoes: []
-      }
+    const criado = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao: "Massa transformacao integracao",
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      tipo: "transformacao",
+      transformacao: { precisao: "EXATOS", quantidade: 500, unidade: "G", produtoReceituario: "MASSA BASE" },
+      conversoes: []
     });
     expect(criado.statusCode).toBe(201);
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
@@ -249,55 +337,53 @@ describe("produtos integration", () => {
     const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
     const base = {
       empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       descricao: "Produto Duplicado Teste",
       unidadeIndividualId: unidadeId,
       quantidadeIndividual: 1,
       conversoes: []
     };
 
-    const primeiro = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: base
-    });
-    expect(primeiro.statusCode).toBe(201);
+    const naBase = (payload: Record<string, unknown>) =>
+      contexto.app.inject({ method: "POST", url: "/api/produtos/base", headers: { cookie: cookieAdmin }, payload });
+    const importar = async (resposta: { json: () => unknown }) =>
+      json<{ data: { estado: string } }>(
+        await contexto.app.inject({
+          method: "POST",
+          url: `/api/produtos/catalogo-base/${json<{ data: { id: string } }>(resposta).data.id}/importar`,
+          headers: { cookie: cookieAdmin },
+          payload: { empresaId: idsTeste.empresaA }
+        })
+      ).data.estado;
 
-    const segundo = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: base
-    });
-    assertProblem(segundo, 409, "DUPLICATE_PRODUCT");
+    const primeiro = await naBase(base);
+    expect(primeiro.statusCode, primeiro.body).toBe(201);
+    expect(await importar(primeiro)).toBe("importado");
 
-    const forcado = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: { ...base, forcar: true }
-    });
-    expect(forcado.statusCode).toBe(201);
+    assertProblem(await naBase(base), 409, "DUPLICATE_PRODUCT");
+
+    // "Cadastrar mesmo assim" grava na BASE; a loja que ja tem o produto nao recebe a segunda copia
+    // (oficial `importFromBase`: duplicado na loja e pulado).
+    const forcado = await naBase({ ...base, forcar: true });
+    expect(forcado.statusCode, forcado.body).toBe(201);
+    expect(await importar(forcado)).toBe("ignorado");
   });
 
   it("Deve_Retornar403_Quando_CriarProdutoEmEmpresaNaoPermitida", async () => {
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/produtos",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaB,
-        descricao: "Produto proibido",
-        unidadeIndividualId: idsTeste.unidade,
-        quantidadeIndividual: 1
-      }
+    const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
+      empresaId: idsTeste.empresaB,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaB,
+      descricao: "Produto proibido",
+      unidadeIndividualId: idsTeste.unidade,
+      quantidadeIndividual: 1
     });
 
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 });
 
-describe("produtos importacao/exportacao integration", () => {
+// Oficial: a loja so recebe produto pela BASE. A copia loja -> loja deixou de existir (R-222).
+describe("produtos - sem copia entre lojas", () => {
   let contexto: ContextoApiTeste;
   let cookieMultiempresa: string;
 
@@ -310,50 +396,20 @@ describe("produtos importacao/exportacao integration", () => {
     await contexto.fechar();
   });
 
-  it("Deve_ImportarProdutosEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from produtos where empresa_id = $1 and importado_de = $2", [
-      idsTeste.empresaB,
-      idsTeste.empresaA
-    ]);
-
-    const resposta = await contexto.app.inject({
+  it("Deve_NaoExistirImportarNemExportarProdutoEntreEmpresas", async () => {
+    const importar = await contexto.app.inject({
       method: "POST",
       url: "/api/produtos/importar",
       headers: { cookie: cookieMultiempresa },
       payload: { empresaOrigemId: idsTeste.empresaA, empresaDestinoId: idsTeste.empresaB, modo: "completo" }
     });
-
-    assertOk(resposta);
-    expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(
-      consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2", [
-        idsTeste.empresaB,
-        idsTeste.empresaA
-      ])
-    ).resolves.toBeTruthy();
-  });
-
-  it("Deve_ExportarProdutoParaEmpresaPermitida", async () => {
-    await executarSql("delete from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
-      idsTeste.empresaB,
-      idsTeste.empresaA,
-      idsTeste.produto
-    ]);
-
-    const resposta = await contexto.app.inject({
+    expect(importar.statusCode).toBe(404);
+    const exportar = await contexto.app.inject({
       method: "POST",
       url: `/api/produtos/${idsTeste.produto}/exportar`,
       headers: { cookie: cookieMultiempresa },
       payload: { empresaDestinoId: idsTeste.empresaB, modo: "completo" }
     });
-
-    assertOk(resposta);
-    expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    const copiado = await consultarUm<{ codigo: string; codigo_interno: string }>(
-      "select codigo, codigo_interno from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3",
-      [idsTeste.empresaB, idsTeste.empresaA, idsTeste.produto]
-    );
-    expect(copiado?.codigo).toMatch(/^PR-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    expect(copiado?.codigo_interno).toMatch(/^\d{5}$/);
+    expect(exportar.statusCode).toBe(404);
   });
 });

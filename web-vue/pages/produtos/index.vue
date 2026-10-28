@@ -9,9 +9,13 @@ import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoCard from "~/components/produtos/ProdutoCard.vue";
+import ProdutosCabecalho from "~/components/produtos/ProdutosCabecalho.vue";
 import ProdutoFiltros from "~/components/produtos/ProdutoFiltros.vue";
+import ProdutoInativarLote from "~/components/produtos/ProdutoInativarLote.vue";
+import ProdutoListaLinha from "~/components/produtos/ProdutoListaLinha.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useListagemProdutos } from "~/composables/useListagemProdutos";
+import { useStatusDeProdutos } from "~/composables/useStatusDeProdutos";
 import { mensagemErro } from "~/utils/domain";
 
 const router = useRouter();
@@ -25,6 +29,25 @@ const carregandoPagina = ref(true);
 const trocandoEmpresa = ref(false);
 const erroDeAcesso = ref("");
 const mostrarFiltros = ref(false);
+const modoVisualizacao = ref<"cards" | "lista">("cards");
+const CHAVE_MODO_VISUALIZACAO = "pralis:produtos:modo";
+
+onMounted(() => {
+  try {
+    const salvo = localStorage.getItem(CHAVE_MODO_VISUALIZACAO);
+    if (salvo === "card" || salvo === "lista") modoVisualizacao.value = salvo === "card" ? "cards" : salvo;
+  } catch {
+    // A preferência é local; sem acesso ao armazenamento, a tela segue no padrão de cards.
+  }
+});
+
+watch(modoVisualizacao, (modo) => {
+  try {
+    localStorage.setItem(CHAVE_MODO_VISUALIZACAO, modo === "cards" ? "card" : modo);
+  } catch {
+    // O bloqueio de localStorage não impede a navegação entre os modos.
+  }
+});
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
@@ -35,6 +58,18 @@ const podeCriar = computed(() => temPermissao("cadastro_produtos_criar"));
 const podeEditar = computed(() => temPermissao("cadastro_produtos_editar"));
 
 const lista = useListagemProdutos(empresaId);
+const ehAdmin = computed(() => sessao.value?.perfil?.role === "usuario_admin");
+const statusDeProdutos = useStatusDeProdutos(empresaId, () => lista.carregar());
+const loteInativar = ref<InstanceType<typeof ProdutoInativarLote> | null>(null);
+async function confirmarLote(confirmacao: string) {
+  if (await statusDeProdutos.inativarSelecionados(confirmacao)) loteInativar.value?.fechar();
+}
+const soAtivos = computed({
+  get: () => lista.status.value === "ativo",
+  set: (marcado: boolean) => {
+    lista.status.value = marcado ? "ativo" : null;
+  }
+});
 
 async function trocarEmpresa(id: string) {
   trocandoEmpresa.value = true;
@@ -84,13 +119,7 @@ onMounted(async () => {
     <v-alert v-if="erroDeAcesso" type="error" variant="tonal">{{ erroDeAcesso }}</v-alert>
 
     <div v-else class="produtos-tela">
-      <header class="produtos-tela__cabecalho">
-        <div>
-          <h1>Produtos</h1>
-          <p>{{ lista.paginacao.total }} produto(s) nesta loja</p>
-        </div>
-        <v-btn v-if="podeCriar" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
-      </header>
+      <ProdutosCabecalho :total="lista.paginacao.total" :eh-admin="ehAdmin" :pode-criar="podeCriar" />
 
       <div class="produtos-tela__barra">
         <v-text-field
@@ -101,6 +130,20 @@ onMounted(async () => {
           placeholder="Buscar por nome, código, EAN ou marca..."
           prepend-inner-icon="mdi-magnify"
           class="produtos-tela__busca"
+        />
+        <v-checkbox
+          v-model="soAtivos"
+          label="Só ativos"
+          density="compact"
+          hide-details
+          class="produtos-tela__so-ativos"
+        />
+        <v-checkbox
+          v-model="lista.somenteVendidos.value"
+          label="Só os que já vendi"
+          density="compact"
+          hide-details
+          class="produtos-tela__so-vendidos"
         />
         <v-btn
           variant="outlined"
@@ -115,6 +158,26 @@ onMounted(async () => {
             {{ lista.quantidadeDeFiltros.value }}
           </v-chip>
         </v-btn>
+        <div class="produtos-tela__visualizacao" role="group" aria-label="Modo de visualização">
+          <v-btn
+            icon="mdi-view-grid-outline"
+            size="small"
+            variant="outlined"
+            aria-label="Ver em cards"
+            :aria-pressed="modoVisualizacao === 'cards'"
+            :color="modoVisualizacao === 'cards' ? 'primary' : undefined"
+            @click="modoVisualizacao = 'cards'"
+          />
+          <v-btn
+            icon="mdi-view-list-outline"
+            size="small"
+            variant="outlined"
+            aria-label="Ver em lista"
+            :aria-pressed="modoVisualizacao === 'lista'"
+            :color="modoVisualizacao === 'lista' ? 'primary' : undefined"
+            @click="modoVisualizacao = 'lista'"
+          />
+        </div>
       </div>
 
       <v-expand-transition>
@@ -132,6 +195,26 @@ onMounted(async () => {
         </div>
       </v-expand-transition>
 
+      <v-alert
+        v-if="statusDeProdutos.mensagem.value"
+        :type="statusDeProdutos.mensagem.value.tipo"
+        variant="tonal"
+        closable
+        @click:close="statusDeProdutos.mensagem.value = null"
+      >
+        {{ statusDeProdutos.mensagem.value.texto }}
+      </v-alert>
+
+      <ProdutoInativarLote
+        v-if="ehAdmin"
+        ref="loteInativar"
+        :quantidade="statusDeProdutos.selecionados.value.length"
+        :frase="statusDeProdutos.fraseDoLote.value"
+        :processando="statusDeProdutos.inativandoLote.value"
+        @confirmar="confirmarLote"
+        @limpar="statusDeProdutos.selecionados.value = []"
+      />
+
       <v-progress-linear v-if="lista.carregando.value" indeterminate color="primary" />
 
       <v-alert v-if="lista.erro.value" type="error" variant="tonal">
@@ -141,12 +224,31 @@ onMounted(async () => {
         </div>
       </v-alert>
 
-      <div v-else-if="lista.produtos.value.length" class="produtos-tela__grade">
+      <div v-else-if="lista.produtos.value.length && modoVisualizacao === 'cards'" class="produtos-tela__grade">
         <ProdutoCard
           v-for="produto in lista.produtos.value"
           :key="produto.id"
           :produto="produto"
           :pode-editar="podeEditar"
+          :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
+          :selecionavel="ehAdmin"
+          :selecionado="statusDeProdutos.selecionados.value.includes(produto.id)"
+          @alternar-status="statusDeProdutos.alternar(produto)"
+          @selecionar="statusDeProdutos.alternarSelecao(produto.id)"
+        />
+      </div>
+
+      <div v-else-if="lista.produtos.value.length" class="produtos-tela__lista" role="list" aria-label="Produtos">
+        <ProdutoListaLinha
+          v-for="produto in lista.produtos.value"
+          :key="produto.id"
+          :produto="produto"
+          :pode-editar="podeEditar"
+          :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
+          :selecionavel="ehAdmin"
+          :selecionado="statusDeProdutos.selecionados.value.includes(produto.id)"
+          @alternar-status="statusDeProdutos.alternar(produto)"
+          @selecionar="statusDeProdutos.alternarSelecao(produto.id)"
         />
       </div>
 
@@ -185,25 +287,6 @@ onMounted(async () => {
   max-width: 100%;
 }
 
-.produtos-tela__cabecalho {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cx-sp-3);
-}
-.produtos-tela__cabecalho h1 {
-  font-size: var(--cx-fs-h2);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-tight);
-  color: var(--cx-ink);
-}
-.produtos-tela__cabecalho p {
-  margin: 0;
-  font-size: var(--cx-fs-caption);
-  color: var(--cx-ink-soft);
-}
-
 .produtos-tela__barra {
   display: flex;
   flex-wrap: wrap;
@@ -215,7 +298,16 @@ onMounted(async () => {
   min-width: 0;
   max-width: 420px;
 }
-
+.produtos-tela__visualizacao {
+  display: flex;
+  gap: var(--cx-sp-1);
+  margin-left: auto;
+}
+.produtos-tela__lista {
+  display: grid;
+  gap: var(--cx-sp-2);
+  min-width: 0;
+}
 /* Progressao 3 -> 2 -> 1. O passo de 2 colunas existe porque 3 em tablet aperta o preco. */
 .produtos-tela__grade {
   display: grid;
@@ -231,6 +323,9 @@ onMounted(async () => {
 @media (max-width: 600px) {
   .produtos-tela__grade {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .produtos-tela__visualizacao {
+    margin-left: 0;
   }
 }
 

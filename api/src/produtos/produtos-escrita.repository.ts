@@ -1,17 +1,20 @@
-import { and, eq, ilike, inArray, max, ne } from "drizzle-orm";
-import { sqlTravarCadastroDeProdutosDaEmpresa } from "@padaria/db/sessao";
+import { and, desc, eq, ilike, inArray, ne } from "drizzle-orm";
+import { sqlConsultaMaiorCodigoInterno, sqlTravarCadastroDeProdutos } from "@padaria/db/sessao";
+import { codigoBarrasNaCriacao } from "@padaria/shared/produtos";
 import {
   gruposMercadorias,
   perfisUsuarios,
   produtos,
   produtosConversoes,
   produtosFiscal,
+  produtosHistoricoNomes,
   produtosPromocoes,
   produtosTransformacao,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
 import { banco } from "../banco/conexao.js";
 import type { ExecutorBanco, TransacaoBanco } from "../banco/conexao.js";
+import { calcularProximoCodigoInterno, ULTIMO_CODIGO_DE_PRODUTO } from "./codigo-interno.js";
 
 // Codigo externo: PR-XXXX-XXXX (alfabeto sem caracteres ambiguos I/O/0/1). Unico global — tenta ate achar livre.
 const ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,25 +37,20 @@ export async function gerarCodigoExternoUnico(tx: ExecutorBanco): Promise<string
   return `PR-${blocoCodigo(4)}-${blocoCodigo(4)}`;
 }
 
-// Codigo interno: sequencial de 5 digitos por empresa (00001, 00002, ...). Zero-padded => max lexicografico = numerico.
-// SO e seguro sob `travarCadastroDeProdutosDaEmpresa`: `max()` nao trava linha nenhuma, entao dois
-// cadastros simultaneos leriam o mesmo maximo.
-export async function proximoCodigoInterno(tx: ExecutorBanco, empresaIdAlvo: string): Promise<string> {
-  const [linha] = await tx
-    .select({ maximo: max(produtos.codigoInterno) })
-    .from(produtos)
-    .where(eq(produtos.empresaId, empresaIdAlvo));
-  const atual = Number(linha?.maximo ?? 0) || 0;
-  return String(atual + 1).padStart(5, "0");
+// Regra R-222: sequência global do app oficial; a consulta ignora a faixa >=700000.
+export async function proximoCodigoInterno(tx: ExecutorBanco): Promise<string> {
+  const resultado = await tx.execute<{ maximo: string | number | null }>(sqlConsultaMaiorCodigoInterno());
+  const maximo = resultado.rows[0]?.maximo;
+  return calcularProximoCodigoInterno(Number(maximo ?? ULTIMO_CODIGO_DE_PRODUTO));
 }
 
 /**
- * Serializa o cadastro de produtos DA EMPRESA pelo resto da transacao. Precisa vir ANTES de
+ * Serializa o cadastro de produtos globalmente pelo resto da transacao. Precisa vir ANTES de
  * `proximoCodigoInterno` e das buscas de duplicidade — e o que impede que duas requisicoes
  * simultaneas escolham o mesmo codigo interno ou passem as duas pela checagem de duplicado.
  */
-export async function travarCadastroDeProdutosDaEmpresa(tx: TransacaoBanco, empresaId: string): Promise<void> {
-  await tx.execute(sqlTravarCadastroDeProdutosDaEmpresa(empresaId));
+export async function travarCadastroDeProdutos(tx: ExecutorBanco): Promise<void> {
+  await tx.execute(sqlTravarCadastroDeProdutos());
 }
 
 /**
@@ -63,13 +61,74 @@ export async function travarCadastroDeProdutosDaEmpresa(tx: TransacaoBanco, empr
 export async function carregarProdutoParaEscritaRepository(
   tx: TransacaoBanco,
   id: string
-): Promise<{ id: string; empresaId: string; criadoPor: string | null } | null> {
+): Promise<{
+  id: string;
+  empresaId: string;
+  produtoBaseId: string | null;
+  criadoPor: string | null;
+  descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
+  grupoMercadoriaId: string | null;
+} | null> {
   const [linha] = await tx
-    .select({ id: produtos.id, empresaId: produtos.empresaId, criadoPor: produtos.criadoPor })
+    .select({
+      id: produtos.id,
+      empresaId: produtos.empresaId,
+      produtoBaseId: produtos.produtoBaseId,
+      criadoPor: produtos.criadoPor,
+      descricao: produtos.descricao,
+      nomeCatalogo: produtos.nomeCatalogo,
+      pesavel: produtos.pesavel,
+      teclaBalanca: produtos.teclaBalanca,
+      validadeBalanca: produtos.validadeBalanca,
+      grupoIdExterno: produtos.grupoIdExterno,
+      areaVenda: produtos.areaVenda,
+      grupoMercadoriaId: produtos.grupoMercadoriaId
+    })
     .from(produtos)
     .where(eq(produtos.id, id))
     .for("update");
   return linha ?? null;
+}
+
+export async function registrarHistoricoNomeProdutoRepository(
+  tx: TransacaoBanco,
+  input: {
+    empresaId: string;
+    produtoId: string;
+    nomeAnterior: string;
+    nomeNovo: string;
+    alteradoPor: string | null;
+    alteradoPorNome: string | null;
+  }
+): Promise<void> {
+  await tx.insert(produtosHistoricoNomes).values(input);
+}
+
+export async function listarHistoricoNomesProdutoRepository(empresaId: string, produtoId: string) {
+  const [produto] = await banco
+    .select({ id: produtos.id })
+    .from(produtos)
+    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.id, produtoId)))
+    .limit(1);
+  if (!produto) return null;
+  return banco
+    .select({
+      id: produtosHistoricoNomes.id,
+      nomeAnterior: produtosHistoricoNomes.nomeAnterior,
+      nomeNovo: produtosHistoricoNomes.nomeNovo,
+      alteradoPor: produtosHistoricoNomes.alteradoPorNome,
+      alteradoEm: produtosHistoricoNomes.alteradoEm
+    })
+    .from(produtosHistoricoNomes)
+    .where(and(eq(produtosHistoricoNomes.empresaId, empresaId), eq(produtosHistoricoNomes.produtoId, produtoId)))
+    .orderBy(desc(produtosHistoricoNomes.alteradoEm), desc(produtosHistoricoNomes.id))
+    .limit(200);
 }
 
 export interface ReferenciasDoProduto {
@@ -112,7 +171,7 @@ export async function referenciasForaDaEmpresaRepository(
   return problemas;
 }
 
-/** Codigo de barras repetido na MESMA empresa. Bloqueio absoluto — nao existe "cadastrar mesmo assim". */
+/** Codigo de barras repetido na MESMA empresa. Pede confirmacao ("cadastrar mesmo assim"), como no app oficial. */
 export async function buscarProdutoPorCodigoBarrasRepository(
   tx: ExecutorBanco,
   empresaId: string,
@@ -158,13 +217,22 @@ export async function buscarProdutoPorDescricaoRepository(
 
 export interface ProdutoParaGravar {
   id?: string;
+  produtoBaseId?: string | null;
   empresaId: string;
   codigo: string | null;
   codigoInterno?: string | null;
   criadoPor?: string | null;
   codigoBarras: string | null;
   descricao: string;
+  nomeCatalogo: string | null;
+  pesavel: boolean | null;
+  teclaBalanca: number | null;
+  validadeBalanca: number | null;
+  grupoIdExterno: string | null;
+  areaVenda: string | null;
   marca: string | null;
+  compraAproximada: boolean;
+  habilitarAjuda: boolean;
   unidadeIndividualId: string;
   quantidadeIndividual: number;
   grupoMercadoriaId: string | null;
@@ -187,6 +255,8 @@ export interface ProdutoParaGravar {
   toleranciaQuantidadePercentual: number | null;
   localVenda1: string | null;
   localVenda2: string | null;
+  setorVenda1: string | null;
+  setorVenda2: string | null;
   fotoUrl: string | null;
   conversoes: Array<{ unidadeMedidaId: string; quantidade: number; unidadesIndividuais: number }>;
   fiscal: {
@@ -200,12 +270,30 @@ export interface ProdutoParaGravar {
     aliquotaCofins: number | null;
     reducaoIcms: number | null;
     icms: number | null;
+    tributacaoSimples: string | null;
+    aliquotaSimples: number | null;
+    icmsRe: number | null;
+    baseFiscal: string | null;
+    codigoFiscal: string | null;
+    produtoFiscal: string | null;
+    cstReforma: string | null;
+    cClassTrib: string | null;
+    aliquotaIbs: number | null;
+    aliquotaCbs: number | null;
+    origemFiscal: string | null;
+    aliquotaEcf: string | null;
+    aliquotaEcfId: string | null;
+    estado: string | null;
+    motivo: string | null;
+    conferidoEm: string | null;
+    pctNcm: number | null;
   } | null;
   transformacao: {
     precisao: string | null;
     quantidade: number | null;
     unidade: string | null;
     produtoReceituario: string | null;
+    refReceituario: string | null;
   } | null;
   promocoes: Array<{
     tipo: "valor" | "desconto";
@@ -238,10 +326,19 @@ export async function salvarProdutoRepository(
 ): Promise<{ id: string; empresaId: string }> {
   const valores = {
     empresaId: input.empresaId,
+    produtoBaseId: input.produtoBaseId,
     codigo: input.codigo,
     codigoBarras: input.codigoBarras,
     descricao: input.descricao,
+    nomeCatalogo: input.nomeCatalogo,
+    pesavel: input.pesavel,
+    teclaBalanca: input.teclaBalanca,
+    validadeBalanca: input.validadeBalanca,
+    grupoIdExterno: input.grupoIdExterno,
+    areaVenda: input.areaVenda,
     marca: input.marca,
+    compraAproximada: input.compraAproximada,
+    habilitarAjuda: input.habilitarAjuda,
     unidadeMedidaId: input.unidadeIndividualId,
     unidadeIndividualId: input.unidadeIndividualId,
     quantidadeIndividual: String(input.quantidadeIndividual),
@@ -266,6 +363,8 @@ export async function salvarProdutoRepository(
       input.toleranciaQuantidadePercentual != null ? String(input.toleranciaQuantidadePercentual) : null,
     localVenda1: input.localVenda1,
     localVenda2: input.localVenda2,
+    setorVenda1: input.setorVenda1,
+    setorVenda2: input.setorVenda2,
     fotoUrl: input.fotoUrl
   };
 
@@ -284,13 +383,15 @@ export async function salvarProdutoRepository(
     // Criacao: codigo externo (PR-XXXX-XXXX) se nao veio manual; codigo interno sequencial
     // (ou herdado na importacao), escolhido sob a trava da empresa.
     const codigo = valores.codigo || (await gerarCodigoExternoUnico(tx));
-    const codigoInterno = input.codigoInterno ?? (await proximoCodigoInterno(tx, input.empresaId));
+    const codigoInterno = input.codigoInterno ?? (await proximoCodigoInterno(tx));
     const inserido = await tx
       .insert(produtos)
       .values({
         ...valores,
         codigo,
         codigoInterno,
+        // Oficial: EAN vazio na criacao recebe o proprio codigo interno.
+        codigoBarras: codigoBarrasNaCriacao(valores.codigoBarras, codigoInterno),
         criadoPor: input.criadoPor ?? null,
         quantidadeEstoque: "0"
       })
@@ -301,6 +402,50 @@ export async function salvarProdutoRepository(
 
   await gravarSatelites(tx, produtoId, input);
   return { id: produtoId, empresaId: input.empresaId };
+}
+
+/**
+ * Regrava a linha fiscal do produto (apaga e reinsere). Um caminho so: o cadastro e o backfill fiscal
+ * gravam o fiscal exatamente do mesmo jeito.
+ */
+export async function regravarFiscalDoProdutoRepository(
+  tx: TransacaoBanco,
+  produtoId: string,
+  fiscal: ProdutoParaGravar["fiscal"]
+): Promise<void> {
+  await tx.delete(produtosFiscal).where(eq(produtosFiscal.produtoId, produtoId));
+  if (fiscal) {
+    await tx.insert(produtosFiscal).values({
+      produtoId,
+      ncm: fiscal.ncm,
+      cest: fiscal.cest,
+      categoriaFiscal: fiscal.categoriaFiscal,
+      cstPisCofins: fiscal.cstPisCofins,
+      aliquotaCheia: fiscal.aliquotaCheia != null ? String(fiscal.aliquotaCheia) : null,
+      aliquotaFcp: fiscal.aliquotaFcp != null ? String(fiscal.aliquotaFcp) : null,
+      aliquotaPis: fiscal.aliquotaPis != null ? String(fiscal.aliquotaPis) : null,
+      aliquotaCofins: fiscal.aliquotaCofins != null ? String(fiscal.aliquotaCofins) : null,
+      reducaoIcms: fiscal.reducaoIcms != null ? String(fiscal.reducaoIcms) : null,
+      icms: fiscal.icms != null ? String(fiscal.icms) : null,
+      tributacaoSimples: fiscal.tributacaoSimples,
+      aliquotaSimples: fiscal.aliquotaSimples != null ? String(fiscal.aliquotaSimples) : null,
+      icmsRe: fiscal.icmsRe != null ? String(fiscal.icmsRe) : null,
+      baseFiscal: fiscal.baseFiscal,
+      codigoFiscal: fiscal.codigoFiscal,
+      produtoFiscal: fiscal.produtoFiscal,
+      cstReforma: fiscal.cstReforma,
+      cClassTrib: fiscal.cClassTrib,
+      aliquotaIbs: fiscal.aliquotaIbs != null ? String(fiscal.aliquotaIbs) : null,
+      aliquotaCbs: fiscal.aliquotaCbs != null ? String(fiscal.aliquotaCbs) : null,
+      origemFiscal: fiscal.origemFiscal,
+      aliquotaEcf: fiscal.aliquotaEcf,
+      aliquotaEcfId: fiscal.aliquotaEcfId,
+      estado: fiscal.estado,
+      motivo: fiscal.motivo,
+      conferidoEm: fiscal.conferidoEm ? new Date(fiscal.conferidoEm) : null,
+      pctNcm: fiscal.pctNcm != null ? String(fiscal.pctNcm) : null
+    });
+  }
 }
 
 /** As quatro satelites sao regravadas por completo (apaga e reinsere) — sempre na mesma transacao. */
@@ -317,22 +462,7 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
     );
   }
 
-  await tx.delete(produtosFiscal).where(eq(produtosFiscal.produtoId, produtoId));
-  if (input.fiscal) {
-    await tx.insert(produtosFiscal).values({
-      produtoId,
-      ncm: input.fiscal.ncm,
-      cest: input.fiscal.cest,
-      categoriaFiscal: input.fiscal.categoriaFiscal,
-      cstPisCofins: input.fiscal.cstPisCofins,
-      aliquotaCheia: input.fiscal.aliquotaCheia != null ? String(input.fiscal.aliquotaCheia) : null,
-      aliquotaFcp: input.fiscal.aliquotaFcp != null ? String(input.fiscal.aliquotaFcp) : null,
-      aliquotaPis: input.fiscal.aliquotaPis != null ? String(input.fiscal.aliquotaPis) : null,
-      aliquotaCofins: input.fiscal.aliquotaCofins != null ? String(input.fiscal.aliquotaCofins) : null,
-      reducaoIcms: input.fiscal.reducaoIcms != null ? String(input.fiscal.reducaoIcms) : null,
-      icms: input.fiscal.icms != null ? String(input.fiscal.icms) : null
-    });
-  }
+  await regravarFiscalDoProdutoRepository(tx, produtoId, input.fiscal);
 
   await tx.delete(produtosTransformacao).where(eq(produtosTransformacao.produtoId, produtoId));
   if (input.transformacao) {
@@ -341,7 +471,8 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
       precisao: input.transformacao.precisao,
       quantidade: input.transformacao.quantidade != null ? String(input.transformacao.quantidade) : null,
       unidade: input.transformacao.unidade,
-      produtoReceituario: input.transformacao.produtoReceituario
+      produtoReceituario: input.transformacao.produtoReceituario,
+      refReceituario: input.transformacao.refReceituario
     });
   }
 
