@@ -69,6 +69,21 @@ const podeSolicitarFechamento = computed(
     props.folhaFechamentoEnviada
 );
 
+const somaComposicao = computed(
+  () => Number(props.fechamento.valorEspecie || 0) + Number(props.fechamento.valorMoedas || 0)
+);
+// Diz POR QUE ainda nao da para encerrar (antes era so "Preencha os campos obrigatorios").
+const motivoPendente = computed(() => {
+  if (props.fechamentoComposicaoInvalida)
+    return `Cédulas + moedas somam ${dinheiro(somaComposicao.value)}, mas o total contado é ${dinheiro(props.totalFechamentoContado)}. Corrija para os dois valores baterem.`;
+  if (!props.fechamentoComposicaoInformada) return "Informe cédulas, moedas e o total contado.";
+  if (props.lacreFechamentoPendente) return "Informe o lacre de fechamento.";
+  if (props.observacaoObrigatoriaPendente) return "Explique a falta na observação.";
+  if (props.responsaveisFechamentoPendentes) return "Informe o caixa e o supervisor responsáveis.";
+  if (!props.folhaFechamentoEnviada) return "Anexe a foto da folha de fechamento.";
+  return "Preencha os campos obrigatórios para liberar o fechamento.";
+});
+
 function solicitarFechamento() {
   if (props.fechamentoTravado) {
     blocoTravas.value?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -146,6 +161,19 @@ function solicitarFechamento() {
           />
         </v-col>
       </v-row>
+      <v-alert
+        v-if="fechamentoComposicaoInvalida"
+        type="error"
+        variant="tonal"
+        density="compact"
+        class="mt-3"
+        role="alert"
+        data-teste="aviso-composicao"
+      >
+        Cédulas + moedas somam <strong>{{ dinheiro(somaComposicao) }}</strong
+        >, mas o total contado é <strong>{{ dinheiro(totalFechamentoContado) }}</strong
+        >. Os dois precisam bater para encerrar.
+      </v-alert>
     </section>
 
     <div ref="blocoTravas" tabindex="-1" class="fechamento-etapas__travas">
@@ -260,9 +288,7 @@ function solicitarFechamento() {
       <div>
         <span>{{ podeSolicitarFechamento ? "Pronto para encerrar" : "Pendências antes de encerrar" }}</span>
         <strong>{{
-          podeSolicitarFechamento
-            ? "Revise uma última vez antes de bloquear novas vendas."
-            : "Preencha os campos obrigatórios para liberar o fechamento."
+          podeSolicitarFechamento ? "Revise uma última vez antes de bloquear novas vendas." : motivoPendente
         }}</strong>
       </div>
       <div>

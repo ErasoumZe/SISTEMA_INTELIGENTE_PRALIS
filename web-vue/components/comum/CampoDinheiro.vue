@@ -28,11 +28,22 @@ const props = withDefaults(
     icone?: string;
     placeholder?: string;
     disabled?: boolean;
+    // Antes estas duas props chegavam como atributo solto e NADA era desenhado: o campo ficava "valido" na
+    // tela mesmo quando a tela de fora sabia que o valor nao bate. Agora o erro aparece (borda + mensagem).
+    error?: boolean;
+    errorMessages?: string | string[];
   }>(),
-  { casas: 2, placeholder: "0,00", disabled: false }
+  { casas: 2, placeholder: "0,00", disabled: false, error: false, errorMessages: "" }
 );
 
 const emit = defineEmits<{ "update:modelValue": [string] }>();
+
+const mensagemErro = computed(() => {
+  const mensagens = Array.isArray(props.errorMessages) ? props.errorMessages : [props.errorMessages];
+  return mensagens.filter(Boolean).join(" ");
+});
+const invalido = computed(() => props.error || Boolean(mensagemErro.value));
+const idErro = `campo-dinheiro-erro-${Math.random().toString(36).slice(2, 9)}`;
 
 const exibido = computed(() => {
   const numero = numeroDoCampo(props.modelValue);
@@ -84,10 +95,14 @@ function aoDigitar(evento: Event) {
       inputmode="decimal"
       autocomplete="off"
       class="campo-dinheiro campo-dinheiro--com-rotulo"
+      :class="{ 'campo-dinheiro--invalido': invalido }"
       :placeholder="props.placeholder"
       :disabled="props.disabled"
+      :aria-invalid="invalido ? 'true' : undefined"
+      :aria-describedby="mensagemErro ? idErro : undefined"
       @input="aoDigitar"
     />
+    <small v-if="mensagemErro" :id="idErro" class="campo-dinheiro__erro" role="alert">{{ mensagemErro }}</small>
   </label>
   <input
     v-else
@@ -96,8 +111,10 @@ function aoDigitar(evento: Event) {
     inputmode="decimal"
     autocomplete="off"
     class="campo-dinheiro"
+    :class="{ 'campo-dinheiro--invalido': invalido }"
     :placeholder="props.placeholder"
     :disabled="props.disabled"
+    :aria-invalid="invalido ? 'true' : undefined"
     @input="aoDigitar"
   />
 </template>
@@ -145,6 +162,19 @@ function aoDigitar(evento: Event) {
 
 .campo-dinheiro--com-rotulo:disabled {
   opacity: 0.6;
+}
+
+.campo-dinheiro--invalido,
+.campo-dinheiro--invalido:focus {
+  border-color: rgb(var(--v-theme-error));
+  box-shadow: 0 0 0 1px rgb(var(--v-theme-error));
+}
+
+.campo-dinheiro__erro {
+  color: rgb(var(--v-theme-error));
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .campo-dinheiro__rotulo {
