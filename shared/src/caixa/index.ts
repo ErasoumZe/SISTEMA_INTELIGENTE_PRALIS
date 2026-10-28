@@ -7,8 +7,10 @@ import {
   type TotaisCaixaCentavos,
   type TotaisFormaPagamentoCentavos
 } from "./regras.js";
+import { normalizarDataHoraFolhaCreare } from "./folha-creare.js";
 
 export * from "./regras.js";
+export * from "./folha-creare.js";
 
 const uuidSchema = z.string().uuid();
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "data deve ser YYYY-MM-DD");
@@ -171,17 +173,37 @@ export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
 });
 export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
 
-const valorRelatorioCreareSchema = z.coerce.number().nonnegative().nullable();
+// R-225 · folha "Relatorio de Venda Geral" do CREARE (cupom termico), campo a campo na ordem impressa.
+// Valores ausentes ou ilegiveis ficam null ("pendente"); nada e estimado.
+const valorRelatorioCreareSchema = z.coerce.number().nonnegative().nullable().default(null);
+const dataHoraRelatorioCreareSchema = z
+  .preprocess(
+    (valor) => (typeof valor === "string" ? normalizarDataHoraFolhaCreare(valor) : null),
+    z.string().nullable()
+  )
+  .default(null);
 export const relatorioVendasCreareSchema = z.object({
   documentoLegivel: z.boolean(),
-  totalBruto: valorRelatorioCreareSchema,
-  dinheiro: valorRelatorioCreareSchema,
+  nomeLoja: z.string().trim().max(160).nullable().default(null),
+  dataEmissao: dataHoraRelatorioCreareSchema,
+  periodoInicio: dataHoraRelatorioCreareSchema,
+  periodoFim: dataHoraRelatorioCreareSchema,
+  trocoInicial: valorRelatorioCreareSchema,
+  saldoInicial: valorRelatorioCreareSchema,
+  clientes: valorRelatorioCreareSchema,
   credito: valorRelatorioCreareSchema,
   debito: valorRelatorioCreareSchema,
+  dinheiro: valorRelatorioCreareSchema,
   pix: valorRelatorioCreareSchema,
   voucher: valorRelatorioCreareSchema,
-  despesasExcetoSangria: valorRelatorioCreareSchema,
-  resultadoFinal: valorRelatorioCreareSchema,
+  total: valorRelatorioCreareSchema,
+  despesas: valorRelatorioCreareSchema,
+  // A folha imprime "-R$ 600,00": guarda o valor positivo da sangria.
+  sangria: z
+    .preprocess((valor) => (typeof valor === "number" ? Math.abs(valor) : valor), z.coerce.number().nullable())
+    .default(null),
+  // Pode ser negativo; so exibido (a conta do CREARE soma voucher, a do Pralis nao — R-225).
+  saldoFinalDinheiro: z.coerce.number().nullable().default(null),
   camposDuvidosos: z.array(z.string().trim().max(120)).max(30).default([]),
   observacoes: z.array(z.string().trim().max(300)).max(20).default([])
 });

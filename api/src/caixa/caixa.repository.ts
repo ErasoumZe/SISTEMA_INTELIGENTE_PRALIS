@@ -1763,7 +1763,9 @@ export async function calcularTotaisCaixaOperacionalRepository(
     transferenciasSaida: 0,
     despesas: 0,
     retiradas: 0,
-    mercadorias: 0
+    mercadorias: 0,
+    trocoInicialEntrada: 0,
+    sangriasSaida: 0
   };
 
   const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias, linhasPagamentos] =
@@ -1784,7 +1786,8 @@ export async function calcularTotaisCaixaOperacionalRepository(
           valorRecebido: transferencias.valorRecebido,
           contaOrigemId: transferencias.contaOrigemId,
           contaDestinoId: transferencias.contaDestinoId,
-          status: transferencias.status
+          status: transferencias.status,
+          tipo: transferencias.tipo
         })
         .from(transferencias)
         .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true))),
@@ -1832,10 +1835,16 @@ export async function calcularTotaisCaixaOperacionalRepository(
     if (transferenciaContaComoEntrada(movimento.status) && movimento.contaDestinoId === pdvContaId) {
       totais.transferencias += valorEntrada;
       totais.transferenciasEntrada += valorEntrada;
+      if (movimento.tipo === "abertura") {
+        totais.trocoInicialEntrada = (totais.trocoInicialEntrada ?? 0) + valorEntrada;
+      }
     }
     if (transferenciaContaComoSaida(movimento.status) && movimento.contaOrigemId === pdvContaId) {
       totais.transferencias += valorSaida;
       totais.transferenciasSaida += valorSaida;
+      if (movimento.tipo === "sangria" || movimento.tipo === "retorno") {
+        totais.sangriasSaida = (totais.sangriasSaida ?? 0) + valorSaida;
+      }
     }
   }
   for (const movimento of linhasDespesas) {

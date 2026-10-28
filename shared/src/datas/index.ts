@@ -50,6 +50,15 @@ function horaNegocio(instante: Date): string {
   }).format(instante);
 }
 
+/**
+ * Instante UTC de um dia contabil ("yyyy-MM-dd") as "HH:MM:SS" no fuso do negocio. Usado para
+ * datas impressas sem fuso (ex.: a folha do CREARE), que sao sempre a hora local da loja.
+ */
+export function instanteNegocio(dia: string, hora: string): Date {
+  const [h = 0, m = 0, s = 0] = hora.split(":").map(Number);
+  return new Date(inicioDoDiaNegocio(dia).getTime() + ((h * 60 + m) * 60 + s) * 1000);
+}
+
 export function somarDias(dia: string, dias: number): string {
   const data = new Date(`${dia}T00:00:00Z`);
   data.setUTCDate(data.getUTCDate() + dias);
