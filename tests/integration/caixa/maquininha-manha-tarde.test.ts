@@ -143,7 +143,7 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
     const salvaManha = await salvarLeitura(manha.caixaId, leitura(100, 50, 20, 10));
     expect(salvaManha.statusCode, salvaManha.body).toBe(200);
     const fechaManha = await chamar(cookieCaixa, "POST", `/api/caixa/${manha.caixaId}/fechar`, {
-      lacreFechamento: "FCH-MANHA-A",
+      // A fixture ja devolve o lacre de fechamento reservado no malote.
       ...fechamentoManha
     });
     expect(fechaManha.statusCode, fechaManha.body).toBe(204);
