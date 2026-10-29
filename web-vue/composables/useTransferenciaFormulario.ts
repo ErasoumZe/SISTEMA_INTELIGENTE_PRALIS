@@ -109,17 +109,66 @@ export function useTransferenciaFormulario() {
     }
   }
 
-  watch(preparandoMaloteParaCaixa, (preparando) => {
-    erroComposicao.value = "";
-    if (!preparando) {
-      form.value.valorEspecieDeclarado = "";
-      form.value.valorMoedasDeclarado = "";
-      form.value.lacresRetorno = [];
-      form.value.lacreFechamentoPlanejado = "";
-      novoLacreRetorno.value = "";
-      lacresRetornoAtivos.value = false;
+  // --- Valor transferido: a tela pede so dinheiro fisico e moedas; o valor da transferencia e a soma. ---
+  // Malote para o Caixa: os dois campos SAO a composicao do malote (gravada, regra fisico + moedas = total conferida
+  // no salvar). Qualquer outro destino: os dois campos so servem para chegar ao total e nao sao gravados (a
+  // composicao continua existindo so no malote do Caixa).
+  const fisicoAvulso = ref("");
+  const moedasAvulsas = ref("");
+  const campoFisico = computed({
+    get: () => (preparandoMaloteParaCaixa.value ? form.value.valorEspecieDeclarado : fisicoAvulso.value),
+    set: (valor: string) => {
+      if (preparandoMaloteParaCaixa.value) form.value.valorEspecieDeclarado = valor;
+      else fisicoAvulso.value = valor;
     }
   });
+  const campoMoedas = computed({
+    get: () => (preparandoMaloteParaCaixa.value ? form.value.valorMoedasDeclarado : moedasAvulsas.value),
+    set: (valor: string) => {
+      if (preparandoMaloteParaCaixa.value) form.value.valorMoedasDeclarado = valor;
+      else moedasAvulsas.value = valor;
+    }
+  });
+  const totalDigitado = computed(() => (paraCentavos(campoFisico.value) + paraCentavos(campoMoedas.value)) / 100);
+
+  watch(preparandoMaloteParaCaixa, (preparando) => {
+    erroComposicao.value = "";
+    // O que ja foi digitado acompanha a troca de destino, para o operador nao perder os valores.
+    if (preparando) {
+      if (!form.value.valorEspecieDeclarado && !form.value.valorMoedasDeclarado) {
+        form.value.valorEspecieDeclarado = fisicoAvulso.value;
+        form.value.valorMoedasDeclarado = moedasAvulsas.value;
+      }
+      return;
+    }
+    fisicoAvulso.value = form.value.valorEspecieDeclarado;
+    moedasAvulsas.value = form.value.valorMoedasDeclarado;
+    form.value.valorEspecieDeclarado = "";
+    form.value.valorMoedasDeclarado = "";
+    form.value.lacresRetorno = [];
+    form.value.lacreFechamentoPlanejado = "";
+    novoLacreRetorno.value = "";
+    lacresRetornoAtivos.value = false;
+  });
+  watch([campoFisico, campoMoedas], ([fisico, moedas]) => {
+    const total = fisico.trim() === "" && moedas.trim() === "" ? "" : String(totalDigitado.value);
+    if (form.value.valorOriginal !== total) form.value.valorOriginal = total;
+  });
+  // Transferencia comum aberta para editar (ou formulario zerado no "Salvar e criar nova"): o valor gravado entra
+  // como dinheiro fisico, e o formulario vazio limpa os dois campos.
+  watch(
+    () => form.value.valorOriginal,
+    (valor) => {
+      if (preparandoMaloteParaCaixa.value) return;
+      if (!valor) {
+        fisicoAvulso.value = "";
+        moedasAvulsas.value = "";
+      } else if (!fisicoAvulso.value && !moedasAvulsas.value) {
+        fisicoAvulso.value = valor;
+      }
+    },
+    { immediate: true }
+  );
   watch(lacresRetornoAtivos, (ativo) => {
     if (!ativo) {
       form.value.lacresRetorno = [];
@@ -224,6 +273,9 @@ export function useTransferenciaFormulario() {
     destinosSelecionados,
     erroDestino,
     totalSaida,
+    campoFisico,
+    campoMoedas,
+    totalDigitado,
     erroComposicao,
     erroLacre,
     novoLacreRetorno,

@@ -74,20 +74,12 @@
   background: rgb(255 255 255 / 22%);
 }
 .tr-secao {
-  margin: 6px 0 8px;
+  margin: 16px 0 8px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--cat-transferencias-base, #c2410c);
-}
-.tr-hero {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-bottom: 14px;
-  border-bottom: 2px solid var(--cat-transferencias-base, #c2410c);
-  padding-bottom: 6px;
 }
 .tr-malote {
   margin: 0 0 14px;
@@ -183,33 +175,26 @@
 .tr-lacres-retorno .tr-legenda {
   color: rgba(var(--v-theme-on-surface), 0.72);
 }
-.tr-lacre-fechamento-planejado {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 35%, transparent);
-  border-radius: 10px;
-  background: rgb(var(--v-theme-surface));
+/* Sangria e o ultimo lacre: o respiro abaixo separa o bloco de lacres das opcoes (agendamento etc.). */
+.tr-lacres-sangria {
+  margin-bottom: 18px;
 }
-.tr-lacre-fechamento-planejado .tr-campo-lbl {
-  color: rgb(var(--v-theme-on-surface));
-  font-weight: 700;
+/* Mesmo card do lacre de abertura: os dois lacres obrigatorios do malote tem o mesmo peso visual. */
+.tr-lacre-fechamento-planejado {
+  margin-top: 0;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 48%, transparent);
+  border-radius: 10px;
+  background: var(--cat-transferencias-soft, #fff1e8);
+}
+.tr-lacre-fechamento-planejado .tr-input {
+  padding: 11px;
+  border: 1px solid var(--cat-transferencias-base, #c2410c);
+  font-size: 15px;
+  font-weight: 500;
 }
 .tr-erro {
   color: #b42318;
-}
-.tr-cifra {
-  font-size: 16px;
-  color: var(--cat-transferencias-base, #c2410c);
-}
-.tr-valor {
-  width: 100%;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--cat-transferencias-base, #c2410c);
-  font-size: 34px;
-  font-weight: 500;
-  letter-spacing: -0.5px;
 }
 .tr-dois {
   display: flex;
@@ -351,12 +336,14 @@
   flex: 1;
 }
 .tr-rota .tr-campo-lbl,
-.tr-campo-lacre-principal .tr-campo-lbl {
+.tr-campo-lacre-principal .tr-campo-lbl,
+.tr-lacre-fechamento-planejado .tr-campo-lbl {
   color: rgb(var(--v-theme-on-surface));
   font-size: 12px;
   font-weight: 700;
 }
-.tr-campo-lacre-principal .tr-hint {
+.tr-campo-lacre-principal .tr-hint,
+.tr-lacre-fechamento-planejado .tr-hint {
   color: #b42318;
   font-weight: 800;
 }
@@ -385,27 +372,25 @@
   font-size: 12px;
   line-height: 1.35;
 }
-.tr-previsao-composicao {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
+.tr-total-malote {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 30%, transparent);
 }
-.tr-previsao-composicao > div {
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-  border: 1px solid rgb(124 45 18 / 16%);
-  border-radius: 8px;
-  background: rgb(var(--v-theme-surface));
-}
-.tr-previsao-composicao span {
-  font-size: 10px;
+.tr-total-malote span {
+  font-size: 12px;
+  font-weight: 700;
   color: rgba(var(--v-theme-on-surface), 0.8);
 }
-.tr-previsao-composicao strong {
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 13px;
+.tr-total-malote strong {
+  color: var(--cat-transferencias-base, #c2410c);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .tr-recebimento {
   margin: -4px 0 0;
@@ -628,9 +613,6 @@
     flex-direction: column;
     align-items: stretch;
     gap: 2px;
-  }
-  .tr-previsao-composicao {
-    grid-template-columns: 1fr;
   }
   .tr-seta {
     margin: 2px auto;

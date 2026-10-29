@@ -42,9 +42,8 @@ import {
   validarEdicaoNoCaixaAberto,
   validarReferenciasTransferencia
 } from "../lancamentos/lancamentos.dominio.js";
-// R-127: a transferencia nao tem data de pagamento (a R-129 nao a alcanca), mas TEM texto — e o
-// contrato dela afrouxou junto com o dos outros tres. Sem este passo, transferencia sem texto
-// nenhum passaria a ser aceita, que e o oposto do que a regra pediu.
+// R-127: a transferencia nao tem data de pagamento (a R-129 nao a alcanca), mas TEM texto. R-230: na
+// transferencia a observacao e opcional; em branco, o servidor escreve a rota (ver `comTextoDaTransferencia`).
 import { resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
@@ -53,6 +52,7 @@ import {
   buscarContextoConferenciaRepository,
   buscarTransferenciaDetalheRepository,
   travarTransferenciaRepository,
+  nomesDasContasRepository,
   confirmarTransferenciaRepository,
   encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
@@ -179,6 +179,18 @@ function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
   throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
 }
 
+// R-230 (Marco, 29/10/2026): observacao da transferencia e opcional. Em branco, grava-se a rota
+// ("Malote Cofre → Conta PDV 1"), para a lista e a auditoria nunca ficarem sem texto. O malote do Caixa e o
+// unico que leva lacre de fechamento planejado (validado acima), entao ele identifica o malote sem outra consulta.
+async function comTextoDaTransferencia(dados: TransferenciaPayload, tx: TransacaoBanco) {
+  if ((dados.observacao ?? "").trim() || (dados.descricao ?? "").trim()) return resolverObservacaoDoLancamento(dados);
+  const destinos = [...new Set([dados.contaDestinoId, ...dados.contasDestinoIds])];
+  const nomes = await nomesDasContasRepository([dados.contaOrigemId, ...destinos], dados.empresaId, tx);
+  const tipo = dados.lacreFechamentoPlanejado?.trim() ? "Malote" : "Transferência";
+  const rota = `${nomes.get(dados.contaOrigemId) ?? "Origem"} → ${destinos.map((id) => nomes.get(id) ?? "Destino").join(", ")}`;
+  return { ...dados, observacao: `${tipo} ${rota}` };
+}
+
 export async function criarTransferencia(
   dados: TransferenciaPayload,
   perfil: PerfilUsuario
@@ -279,7 +291,7 @@ export async function criarTransferencia(
       );
 
       const transferencia = await criarTransferenciaRepository(
-        resolverObservacaoDoLancamento(dados),
+        await comTextoDaTransferencia(dados, tx),
         computar,
         perfil.usuarioId,
         envolveContaPdv ? caixa!.id : null,
@@ -968,7 +980,7 @@ export async function atualizarTransferencia(
       },
       tx
     );
-    await atualizarTransferenciaRepository(transferenciaId, resolverObservacaoDoLancamento(dados), computar, tx);
+    await atualizarTransferenciaRepository(transferenciaId, await comTextoDaTransferencia(dados, tx), computar, tx);
     return { id: transferenciaId, computar };
   });
 }
