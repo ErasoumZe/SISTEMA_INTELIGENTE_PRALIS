@@ -136,10 +136,9 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
     expect(semGrupo.statusCode, semGrupo.body).toBe(201);
   });
 
-  // A transferencia entrou na R-127 junto com as tres saidas: o contrato dela tambem afrouxou
-  // `descricao`, entao e o servidor que precisa exigir o texto — senao passaria movimento sem frase
-  // nenhuma, que e o contrario do que a regra pediu.
-  it("transferencia sem texto nenhum e recusada", async () => {
+  // R-230 (Marco, 29/10) · na transferencia a observacao ficou opcional, mas o movimento continua com texto: em
+  // branco, o servidor grava a rota ("Transferência Caixa → Banco"). As tres saidas acima seguem exigindo (R-127).
+  it("transferencia sem texto nenhum grava a rota como texto", async () => {
     const semTexto = await contexto.app.inject({
       method: "POST",
       url: "/api/transferencias",
@@ -153,7 +152,11 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
         nLacreDoc: "LACRE-R127-VAZIO"
       }
     });
-    expect(semTexto.statusCode, semTexto.body).toBe(400);
+    expect(semTexto.statusCode, semTexto.body).toBe(201);
+    const gravada = await consultarUm<{ observacao: string }>("select observacao from transferencias where id = $1", [
+      json<{ data: { id: string } }>(semTexto).data.id
+    ]);
+    expect(gravada?.observacao).toMatch(/^Transferência .+ → .+/);
   });
 
   // --- R-128: credor da retirada e fornecedor ou socio/gestor -------------------------------------
