@@ -969,8 +969,12 @@ mais a conferência de produção pela API.
 
 - **D1:** a loja pode trocar a foto e a transformação de produto herdado da BASE, como no paralelo.
 - **D2:** aprovadas duas rotas novas:
-  - classificação fiscal ao vivo (F3);
-  - busca exata por EAN, para o aviso ao digitar (F4/R2).
+  - classificação fiscal ao vivo (F3): `POST /api/produtos/fiscal/classificar` { empresaId, nome, codigoBarras,
+    grupoMercadoriaId } → `ResultadoFiscal` do mesmo motor da gravação, sem gravar; `cadastro_produtos_editar` e
+    empresa no escopo (PR E);
+  - busca exata por EAN, para o aviso ao digitar (F4/R2): `GET /api/produtos/por-codigo-barras?codigoBarras=&empresaId=`
+    (ou `catalogo=base`) → até 5 { id, nome, codigoInterno } por igualdade com `candidatosDeCodigo`;
+    `cadastro_produtos_visualizar` e empresa no escopo (PR E).
 - **D3:** ao trocar o grupo, o produto grava a margem do grupo como margem própria, como o paralelo. Sem isso o TXT
   manda R$ 0,10 ao PDV. A fórmula do preço não muda.
 - **D4:** a tela fica igual à do paralelo. Saem do formulário o que só o ERP tinha:

@@ -15,6 +15,11 @@ export async function contextoDaEmpresaFiscalRepository(empresaId: string) {
   return empresa ?? null;
 }
 
+/** O mesmo contexto da gravacao, fora de transacao e sem produto: e o da classificacao ao vivo (F3). */
+export async function contextoDaClassificacaoRepository(empresaId: string, grupoMercadoriaId: string | null) {
+  return contextoFiscalRepository(banco, { empresaId, grupoMercadoriaId, produtoId: null });
+}
+
 /**
  * O que a classificacao fiscal precisa saber na gravacao: o NOME do grupo (a regra e por nome, como no
  * oficial), o prefixo da empresa (de qual loja e o ECF) e, na edicao, o fiscal, o grupo e o EAN atuais.

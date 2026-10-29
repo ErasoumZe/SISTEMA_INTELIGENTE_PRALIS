@@ -11,6 +11,8 @@ import { mensagemErro } from "~/utils/domain";
 import { ErroApiCliente } from "~/composables/useApi";
 import { useGrupoFiscalDoProduto } from "~/composables/useGrupoFiscalDoProduto";
 import { useProdutoFotoPendente } from "~/composables/useProdutoFotoPendente";
+import { useClassificacaoFiscalAoVivo } from "~/composables/useClassificacaoFiscalAoVivo";
+import { useAvisoDeEanRepetido } from "~/composables/useAvisoDeEanRepetido";
 import { mensagemDeProdutoSalvo, numeroDigitado, percentualParaFracao } from "~/utils/produto-numeros";
 import { siglaCanonica } from "~/utils/produto-listas";
 import {
@@ -69,8 +71,6 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
   /** Grupo com que o produto chegou: quem ja tinha grupo nao pode ficar sem (oficial). */
   const grupoOriginal = ref<string | null>(null);
   const grupoObrigatorio = computed(() => !produtoId.value || Boolean(grupoOriginal.value));
-  /** Grupo trocado na tela: a classificacao gravada deixa de valer ate salvar (o servidor refaz). */
-  const grupoMudou = computed(() => (form.value.grupoMercadoriaId || null) !== grupoOriginal.value);
   /** Copia de um produto da BASE: so ela tem campos herdados (produto proprio da loja nao). */
   const produtoBaseId = ref<string | null>(null);
   /** Loja do produto (TNP/LI/HORA; "BASE" na base geral). Area de venda so na TNP. */
@@ -126,6 +126,14 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
 
   const grupoFiscal = useGrupoFiscalDoProduto({ form, grupos, grupoOriginal, carregando });
   const { margemDoGrupo, planilhaFiscalForaDoAr } = grupoFiscal;
+  /** F3: a classificacao que a gravacao aplicaria, ao vivo (so na loja, que tem cartao fiscal). */
+  const fiscalAoVivo = useClassificacaoFiscalAoVivo({
+    form,
+    empresaId,
+    ativo: computed(() => modo.value === "loja")
+  });
+  /** F4: aviso ao digitar um EAN que outro produto ja tem (nao bloqueia o salvar). */
+  const { eanRepetido } = useAvisoDeEanRepetido({ form, empresaId, produtoId, modo });
 
   /**
    * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
@@ -345,7 +353,9 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     errosDePromocao,
     valido,
     grupoObrigatorio,
-    grupoMudou,
+    classificacaoAoVivo: fiscalAoVivo.classificacao,
+    classificando: fiscalAoVivo.classificando,
+    eanRepetido,
     siglaDaUnidade,
     descricaoPreview,
     comoSeCompraPreview,

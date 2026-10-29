@@ -70,11 +70,6 @@ export function percentualFiscal(valor: number | null | undefined): string {
   return `${(Number(valor) || 0).toFixed(2).replace(".", ",")}%`;
 }
 
-/** NCM vindo da planilha por PRODUTO (código ou PLU da balança) fica travado: a regra o achou. */
-export function ncmAchadoPelaRegra(origemFiscal: string | null | undefined): boolean {
-  return origemFiscal === "produto" || origemFiscal === "plu_balanca";
-}
-
 /** Rótulo da fonte da classificação (paralelo: "PLU do código de balança" ou a própria origem). */
 export function rotuloDaOrigemFiscal(origemFiscal: string | null | undefined): string {
   return origemFiscal === "plu_balanca" ? "PLU do código de balança" : (origemFiscal ?? "");

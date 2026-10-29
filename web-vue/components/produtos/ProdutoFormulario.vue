@@ -228,6 +228,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :herdado-travado="formulario.herdadoTravado.value"
           :origem-da-foto="formulario.origemDaFoto.value"
           :foto-pendente="formulario.fotoPendente.value"
+          :ean-repetido="formulario.eanRepetido.value"
           :dica="dicaDoProduto"
           @foto-escolher="formulario.fotoPendente.value = $event"
           @foto-remover="removerFoto"
@@ -253,9 +254,10 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           <ProdutoSecaoFiscal
             :form="formulario.form.value"
             :regra-do-grupo="formulario.regraDoGrupo.value"
+            :classificacao="formulario.classificacaoAoVivo.value"
+            :classificando="formulario.classificando.value"
             :eh-admin="ehAdmin"
             :fiscal-editavel="ehAdmin && !somenteLeitura"
-            :grupo-mudou="formulario.grupoMudou.value"
             :dica="dicaDoProduto"
           />
           <ProdutoSecaoPromocao
