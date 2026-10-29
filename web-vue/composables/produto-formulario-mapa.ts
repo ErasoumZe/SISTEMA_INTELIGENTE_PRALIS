@@ -232,7 +232,7 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
 
 /**
  * "Voltar a herdar da base" (oficial): devolve ao formulario os valores ATUAIS da BASE nos campos
- * herdados. Promocoes, estoque, preco e fiscal sao da loja e nao sao tocados.
+ * herdados (inclusive a foto). Promocoes, estoque, preco e fiscal sao da loja e nao sao tocados.
  */
 export function aplicarValoresDaBase(form: ProdutoForm, base: ValoresHerdados): void {
   Object.assign(form, {
@@ -253,6 +253,9 @@ export function aplicarValoresDaBase(form: ProdutoForm, base: ValoresHerdados): 
     grupoMercadoriaId: base.grupoMercadoriaId,
     tipo: base.tipo,
     habilitarAjuda: base.habilitarAjuda,
+    // Foto tambem volta (paralelo). O servidor ja manda o caminho da foto da BASE no storage do ERP;
+    // foto ainda no app de origem chega igual a da copia, e entao nada muda.
+    fotoUrl: base.fotoUrl,
     precisao: base.transformacao?.precisao ?? "EXATOS",
     quantidadeTransformacao: base.transformacao?.quantidade == null ? "" : String(base.transformacao.quantidade),
     unidadeTransformacao: base.transformacao?.unidade ?? "",

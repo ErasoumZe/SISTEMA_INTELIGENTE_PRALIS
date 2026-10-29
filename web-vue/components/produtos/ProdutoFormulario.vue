@@ -4,16 +4,22 @@
  *  - `base`: produto novo e edicao da base geral — so o administrador; a edicao desce para as lojas;
  *  - `loja`: a copia importada — o que veio da base fica em leitura; a loja completa o resto.
  */
-import type { AuthSession, FiltrosDeProduto } from "@padaria/shared";
+import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoSecaoIdentificacao from "~/components/produtos/ProdutoSecaoIdentificacao.vue";
 import ProdutoSecaoComercial from "~/components/produtos/ProdutoSecaoComercial.vue";
-import ProdutoSecaoFiscalPromocoes from "~/components/produtos/ProdutoSecaoFiscalPromocoes.vue";
+import ProdutoSecaoFiscal from "~/components/produtos/ProdutoSecaoFiscal.vue";
+import ProdutoSecaoPromocao from "~/components/produtos/ProdutoSecaoPromocao.vue";
+import ProdutoConversoes from "~/components/produtos/ProdutoConversoes.vue";
 import ProdutoHerancaBase from "~/components/produtos/ProdutoHerancaBase.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { useAvisoAoNavegar } from "~/composables/useAvisoAoNavegar";
-import { useProdutoFormulario, type ModoDoProduto } from "~/composables/useProdutoFormulario";
+import {
+  REGRAS_FISCAIS_INDISPONIVEIS,
+  useProdutoFormulario,
+  type ModoDoProduto
+} from "~/composables/useProdutoFormulario";
 import { dicaProduto } from "~/utils/produto-dicas";
 import { semRolagemNoNumero } from "~/utils/produto-numeros";
 import { mensagemErro } from "~/utils/domain";
@@ -29,7 +35,6 @@ const empresaId = ref("");
 const caixaStatus = ref<CaixaStatus | null>(null);
 const carregandoPagina = ref(true);
 const erroDeAcesso = ref("");
-const setores = ref<string[]>([]);
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
@@ -68,7 +73,7 @@ const { avisar } = useAvisoAoNavegar();
 async function salvar(forcar = false) {
   const salvo = await formulario.salvar(forcar);
   if (salvo) {
-    avisar(salvo.mensagem);
+    avisar(salvo.mensagem, salvo.tipo);
     await router.push(listagem.value);
   } else focarPrimeiroInvalido();
 }
@@ -82,6 +87,12 @@ function focarPrimeiroInvalido() {
     : document.querySelector<HTMLElement>(".produto-form__erro");
   alvo?.focus();
   alvo?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+/** Remover a foto so marca no formulario; o servidor so fica sabendo ao salvar. */
+function removerFoto() {
+  formulario.fotoPendente.value = null;
+  formulario.form.value.fotoUrl = null;
 }
 
 function sair() {
@@ -120,8 +131,6 @@ onMounted(async () => {
     empresaId.value =
       sessao.value.perfil?.empresaId ?? sessao.value.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
     await formulario.carregar();
-    const filtros = await apiGet<FiltrosDeProduto>(`/api/produtos/filtros?empresaId=${empresaId.value}`);
-    setores.value = filtros.setores;
     window.addEventListener("beforeunload", avisarAoSair);
   } catch (erro) {
     erroDeAcesso.value = mensagemErro(erro);
@@ -185,14 +194,13 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
         </div>
       </v-alert>
 
+      <!-- Paralelo: sem regra fiscal, edicao segue, mas cadastro novo e reclassificacao ficam bloqueados. -->
       <v-alert
         v-if="!formulario.carregando.value && formulario.planilhaFiscalForaDoAr.value"
         type="warning"
         variant="tonal"
-        density="compact"
       >
-        A planilha fiscal está fora do ar: o produto salva normalmente e fica marcado "fonte indisponível". A prévia do
-        preço sai sem a margem do grupo.
+        {{ REGRAS_FISCAIS_INDISPONIVEIS }}
       </v-alert>
 
       <v-progress-linear v-if="formulario.carregando.value" indeterminate color="primary" />
@@ -204,48 +212,66 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :somente-leitura="somenteLeitura"
           @voltar-a-herdar="formulario.voltarAHerdar"
         />
+        <v-alert v-if="formulario.herdadoTravado.value" type="info" variant="tonal" density="compact">
+          Este produto veio da base. Os campos do cadastro geral estão em leitura — só o administrador os altera, e a
+          mudança desce para as lojas. Aqui você completa o que é da sua loja e pode ativar ou inativar.
+        </v-alert>
 
         <ProdutoSecaoIdentificacao
           :form="formulario.form.value"
           :produto-id="produtoId"
           :unidades="formulario.unidades.value"
-          :grupos="formulario.grupos.value"
           :erros="formulario.erros.value"
-          :grupo-obrigatorio="formulario.grupoObrigatorio.value"
           :descricao-preview="formulario.descricaoPreview.value"
           :como-se-compra-preview="formulario.comoSeCompraPreview.value"
           :somente-leitura="somenteLeitura"
           :herdado-travado="formulario.herdadoTravado.value"
-          :rota-foto="modo === 'base' ? '/api/produtos/base' : '/api/produtos'"
-          :mostrar-area-venda="formulario.loja.value === 'TNP'"
+          :origem-da-foto="formulario.origemDaFoto.value"
+          :foto-pendente="formulario.fotoPendente.value"
           :dica="dicaDoProduto"
-          @foto-escolhida="formulario.fotoPendente.value = $event"
+          @foto-escolher="formulario.fotoPendente.value = $event"
+          @foto-remover="removerFoto"
         />
 
         <ProdutoSecaoComercial
           :form="formulario.form.value"
-          :unidades="formulario.unidades.value"
-          :setores="setores"
+          :grupos="formulario.gruposComRegra.value"
+          :grupo-obrigatorio="formulario.grupoObrigatorio.value"
           :erros="formulario.erros.value"
           :preco-preview="formulario.precoPreview.value"
           :validacao-qtd-preview="formulario.validacaoQtdPreview.value"
           :margem-do-grupo-pct="formulario.margemDoGrupoPct.value"
           :na-base="modo === 'base'"
+          :mostrar-area-venda="formulario.loja.value === 'TNP'"
           :somente-leitura="somenteLeitura"
+          :herdado-travado="formulario.herdadoTravado.value"
           :dica="dicaDoProduto"
         />
 
-        <!-- Oficial: fiscal e promocao sao da LOJA; a base geral nao tem esses cartoes. -->
-        <ProdutoSecaoFiscalPromocoes
-          v-if="modo === 'loja'"
-          :form="formulario.form.value"
-          :unidades="formulario.unidades.value"
-          :erros="formulario.erros.value"
-          :erros-de-promocao="formulario.errosDePromocao.value"
-          :somente-leitura="somenteLeitura"
-          :fiscal-editavel="ehAdmin && !somenteLeitura"
-          :dica="dicaDoProduto"
-        />
+        <!-- Oficial: fiscal, promocao e conversoes sao da LOJA; a base geral nao tem esses cartoes. -->
+        <template v-if="modo === 'loja'">
+          <ProdutoSecaoFiscal
+            :form="formulario.form.value"
+            :regra-do-grupo="formulario.regraDoGrupo.value"
+            :eh-admin="ehAdmin"
+            :fiscal-editavel="ehAdmin && !somenteLeitura"
+            :grupo-mudou="formulario.grupoMudou.value"
+            :dica="dicaDoProduto"
+          />
+          <ProdutoSecaoPromocao
+            v-if="formulario.form.value.tipo === 'revenda'"
+            :form="formulario.form.value"
+            :erros-de-promocao="formulario.errosDePromocao.value"
+            :somente-leitura="somenteLeitura"
+          />
+          <ProdutoConversoes
+            :form="formulario.form.value"
+            :unidades="formulario.unidades.value"
+            :erros="formulario.erros.value"
+            :somente-leitura="somenteLeitura"
+            :dica="dicaDoProduto"
+          />
+        </template>
       </template>
 
       <footer class="produto-form__acoes">
