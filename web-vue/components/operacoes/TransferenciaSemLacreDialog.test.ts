@@ -1,10 +1,13 @@
-import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TransferenciaSemLacreDialog from "./TransferenciaSemLacreDialog.vue";
 import type { Opcao } from "~/types/padaria";
 
-const apiPost = vi.fn();
-vi.mock("~/composables/useApi", () => ({ useApi: () => ({ apiPost }) }));
+let apiPost = vi.fn();
+// Mock NOVO a cada teste (a funcao do useApi so delega): reaproveitar o mesmo vi.fn entre testes fazia a
+// rejeicao tratada de um teste aparecer como erro no Vitest 4.
+vi.mock("~/composables/useApi", () => ({ useApi: () => ({ apiPost: (...args: unknown[]) => apiPost(...args) }) }));
+enableAutoUnmount(afterEach);
 
 const contas: Opcao[] = [
   { id: "cofre", nome: "Cofre", ehCofre: true, saldoAtual: 1000 },
@@ -33,7 +36,9 @@ function montar() {
 
 // R-231 · sem lacre: origem, destino, fisico + moedas (total = soma) e observacao opcional.
 describe("TransferenciaSemLacreDialog", () => {
-  beforeEach(() => apiPost.mockReset());
+  beforeEach(() => {
+    apiPost = vi.fn();
+  });
 
   it("já abre com o Cofre de origem e não oferece conta de PDV como origem", () => {
     const tela = montar();
@@ -69,12 +74,18 @@ describe("TransferenciaSemLacreDialog", () => {
     const tela = montar();
     const salvar = tela.find("[data-teste='sem-lacre-salvar']");
     expect(salvar.attributes("disabled")).toBeDefined();
-    await tela.find("[data-teste='sem-lacre-destino']").setValue("banco");
-    expect(salvar.attributes("disabled")).toBeDefined();
+    expect(
+      tela
+        .find("[data-teste='sem-lacre-destino']")
+        .findAll("option")
+        .map((opcao) => opcao.text())
+    ).toEqual(["—", "Conta PDV 2"]);
   });
 
   it("recusa do servidor (PDV sem caixa aberto) aparece e o modal fica aberto", async () => {
-    apiPost.mockRejectedValue(new Error("O PDV de destino não tem caixa aberto."));
+    apiPost.mockImplementation(async () => {
+      throw new Error("O PDV de destino não tem caixa aberto.");
+    });
     const tela = montar();
     await tela.find("[data-teste='sem-lacre-destino']").setValue("pdv-2");
     await tela.find("[data-teste='sem-lacre-fisico']").setValue("10");

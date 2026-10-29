@@ -3,6 +3,7 @@ export type { CadastroForm } from "@padaria/shared";
 
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 import type { CaixaDaTransferencia, LacreRelatorio, SituacaoMalote } from "@padaria/shared/transferencias";
+import type { RecebimentoSemLacrePendente } from "@padaria/shared/caixa";
 
 // Dados fiscais do produto como vêm da API (numeric chega como string).
 export type Opcao = {
@@ -370,19 +371,10 @@ export type CaixaStatus = {
   entregasPendentes: EntregaCofrePendente[];
   planejamentosPendentes: PlanejamentoRetorno[];
   // R-231 · dinheiro sem lacre a caminho deste caixa (o operador confirma ou marca "Nao recebi").
-  recebimentosSemLacre?: RecebimentoSemLacrePendente[];
+  recebimentosSemLacre: RecebimentoSemLacrePendente[];
 };
 
-export type RecebimentoSemLacrePendente = {
-  id: string;
-  valor: number;
-  valorEspecie: number | null;
-  valorMoedas: number | null;
-  origemNome: string;
-  enviadoPorNome: string | null;
-  enviadoEm: string;
-  observacao: string | null;
-};
+export type { RecebimentoSemLacrePendente } from "@padaria/shared/caixa";
 
 export type ItemMenu = {
   id: string;

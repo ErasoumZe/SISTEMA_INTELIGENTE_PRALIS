@@ -46,7 +46,8 @@ export function derivarSituacaoMalote(
   if (!ehMaloteDeIda(linha)) return null;
   switch (linha.status) {
     case "cancelada":
-      return "cancelado";
+      // Suprimento presa a um caixa e o recebimento sem lacre que o operador recusou (R-231): nao e malote.
+      return linha.tipo === "suprimento" && linha.caixaId !== null ? null : "cancelado";
     case "divergente":
       return "divergente";
     // A abertura recusa "Transferencia agendada ainda nao foi liberada": nao e disponivel.

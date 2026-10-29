@@ -26,13 +26,19 @@ const erro = ref("");
 
 // Dinheiro que SAI do PDV vai pelo retorno / sangria do Caixa: conta de PDV nao e origem aqui.
 const origens = computed(() => props.contas.filter((conta) => !conta.ehContaPdv));
-const destinos = computed(() => props.contas.filter((conta) => conta.id !== origemId.value));
+// So conta de PDV: o recebimento e confirmado pelo operador do caixa (R-231).
+const destinos = computed(() => props.contas.filter((conta) => conta.ehContaPdv && conta.id !== origemId.value));
 const origem = computed(() => props.contas.find((conta) => conta.id === origemId.value));
 const destino = computed(() => props.contas.find((conta) => conta.id === destinoId.value));
 const total = computed(() => (paraCentavos(fisico.value) + paraCentavos(moedas.value)) / 100);
 const podeSalvar = computed(
   () => Boolean(origemId.value && destinoId.value && origemId.value !== destinoId.value) && total.value > 0
 );
+
+// Origem trocada para a conta que era o destino: o destino sai do select e precisa limpar junto.
+watch(origemId, (id) => {
+  if (id && id === destinoId.value) destinoId.value = "";
+});
 
 watch(
   () => props.modelValue,
@@ -76,13 +82,27 @@ async function salvar() {
 </script>
 
 <template>
-  <v-dialog :model-value="modelValue" max-width="520" persistent @update:model-value="fechar">
+  <v-dialog
+    :model-value="modelValue"
+    max-width="520"
+    persistent
+    aria-labelledby="sem-lacre-titulo"
+    @update:model-value="fechar"
+  >
     <div class="tr-modal" data-teste="transferencia-sem-lacre">
       <div class="tr-faixa">
         <div class="tr-head">
           <span class="tr-ic"><v-icon size="19">mdi-cash-fast</v-icon></span>
-          <h2 class="tr-titulo">Transferência sem lacre</h2>
-          <v-icon class="tr-x" size="19" aria-label="Fechar" :disabled="salvando" @click="fechar">mdi-close</v-icon>
+          <h2 id="sem-lacre-titulo" class="tr-titulo">Transferência sem lacre</h2>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            color="white"
+            size="small"
+            aria-label="Fechar"
+            :disabled="salvando"
+            @click="fechar"
+          />
         </div>
       </div>
 
@@ -93,6 +113,10 @@ async function salvar() {
         </p>
 
         <div class="tr-secao">1 · Origem e destino</div>
+        <p v-if="!origens.length || !destinos.length" class="sl-aviso" role="status">
+          Você não tem conta de origem ou conta de PDV vinculada ao seu usuário. Peça ao administrador para vincular em
+          Contas.
+        </p>
         <div class="tr-rota">
           <label class="tr-campo">
             <span class="tr-campo-lbl">Origem / Saída</span>
@@ -171,5 +195,10 @@ async function salvar() {
   background: var(--cat-transferencias-soft, #fff1eb);
   color: var(--cat-transferencias-tinta, #9c2f07);
   font-size: 12px;
+}
+/* Alvo de toque de 44px (os botoes herdados do modal de transferencia sao mais baixos). */
+.tr-acoes button {
+  min-height: 44px;
+  padding-inline: 14px;
 }
 </style>

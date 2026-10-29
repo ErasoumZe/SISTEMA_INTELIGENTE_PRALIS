@@ -226,6 +226,8 @@ const saldoLivre = computed(() =>
 const motivoTravado = computed(() => {
   if (planejamentosPendentes.value.length)
     return "há transferencia de retorno planejada aguardando execucao ou cancelamento";
+  if (props.status?.recebimentosSemLacre?.length)
+    return "há dinheiro sem lacre aguardando sua confirmação em Recebimentos pendentes";
   return null;
 });
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
@@ -575,6 +577,8 @@ async function confirmarInicioFechamento() {
     emit("recarregar");
   } catch (erro) {
     erroInicioFechamento.value = erro instanceof Error ? erro.message : "Não foi possível encerrar as vendas.";
+    // A recusa pode vir de algo que a tela ainda nao mostra (ex.: dinheiro sem lacre recem-enviado).
+    emit("recarregar");
   } finally {
     iniciandoFechamento.value = false;
   }

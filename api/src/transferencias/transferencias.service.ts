@@ -47,6 +47,7 @@ import {
 // R-127: a transferencia nao tem data de pagamento (a R-129 nao a alcanca), mas TEM texto. R-230: na
 // transferencia a observacao e opcional; em branco, o servidor escreve a rota (ver `comTextoDaTransferencia`).
 import { resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
+import { ehRecebimentoSemLacrePendenteRepository } from "../caixa/recebimento-sem-lacre.repository.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 import {
@@ -345,19 +346,21 @@ export async function criarTransferenciaSemLacre(
     if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaOrigemId, tx)) {
       throw new Error("Dinheiro que sai do PDV vai pelo retorno / sangria do Caixa");
     }
-    let caixaId: string | null = null;
-    if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx)) {
-      // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
-      const caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
-      if (!caixa) {
-        throw new ErroDominio(
-          "O PDV de destino não tem caixa aberto. Sem caixa aberto, o dinheiro vai pelo malote.",
-          409,
-          "PDV_SEM_CAIXA_ABERTO"
-        );
-      }
-      caixaId = caixa.id;
+    // So para conta de PDV: e o operador do caixa que confirma o recebimento (R-231). Entre outras contas o lacre
+    // continua obrigatorio.
+    if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
+      throw new Error("Transferencia sem lacre e so para conta de PDV com caixa aberto");
     }
+    // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
+    const caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
+    if (!caixa) {
+      throw new ErroDominio(
+        "O PDV de destino não tem caixa aberto. Sem caixa aberto, o dinheiro vai pelo malote.",
+        409,
+        "PDV_SEM_CAIXA_ABERTO"
+      );
+    }
+    const caixaId = caixa.id;
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
@@ -378,15 +381,6 @@ export async function criarTransferenciaSemLacre(
   });
 }
 
-// Sem lacre, presa a um caixa e pendente: e recebimento sem lacre (R-231), resolvido so pelo operador do Caixa.
-function ehRecebimentoSemLacrePendente(transferencia: {
-  nLacreDoc?: string | null | undefined;
-  caixaId?: string | null | undefined;
-  status: string;
-}) {
-  return !transferencia.nLacreDoc?.trim() && Boolean(transferencia.caixaId) && transferencia.status === "pendente";
-}
-
 export async function confirmarTransferencia(
   transferenciaId: string,
   dados: ConfirmarTransferenciaPayload,
@@ -397,7 +391,8 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
-    if (ehRecebimentoSemLacrePendente(existente)) {
+    // R-231 · recebimento sem lacre so o operador do Caixa resolve (mesmo predicado da lista dele).
+    if (await ehRecebimentoSemLacrePendenteRepository(transferenciaId, tx)) {
       throw new Error("Dinheiro sem lacre e confirmado pelo operador, em Recebimentos pendentes na tela do Caixa");
     }
     // O lacre principal do malote so e usado quando o Caixa e ABERTO com ele. A conferencia comum nao pode dar o
@@ -993,7 +988,7 @@ export async function atualizarTransferencia(
     // Revalida sob a trava: a conferencia pode ter vencido a corrida entre a leitura previa e o
     // lock da transferencia. Sem esta segunda guarda o PUT alteraria uma linha ja recebida.
     if (existente?.status === "recebido") throw new Error("Transferencia ja conferida nao pode ser editada");
-    if (existente && ehRecebimentoSemLacrePendente(existente)) {
+    if (existente && (await ehRecebimentoSemLacrePendenteRepository(transferenciaId, tx))) {
       throw new Error("Transferencia sem lacre nao e editada: o operador confirma ou marca Nao recebi; lance outra");
     }
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);

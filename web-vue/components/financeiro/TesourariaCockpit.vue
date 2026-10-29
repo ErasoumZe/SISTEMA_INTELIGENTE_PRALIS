@@ -281,4 +281,9 @@ function atualizarStatusFiltro(status: unknown) {
   color: #fff !important;
   font-weight: 700;
 }
+@media (width <= 560px) {
+  .tes-sem-lacre {
+    width: 100%;
+  }
+}
 </style>

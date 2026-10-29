@@ -60,12 +60,17 @@ export const transferenciaPayloadSchema = z.object({
 
 // R-231 · transferencia sem lacre: suprimento no meio do turno. So dinheiro fisico + moedas (o valor e a soma);
 // sem lacre, sem agendamento, sem multiplo destino e sem prazo. Rota propria: POST /api/transferencias/sem-lacre.
+const dinheiroEmCentavosSchema = z.coerce
+  .number()
+  .min(0)
+  .max(1_000_000)
+  .refine((valor) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6, "Use no maximo duas casas decimais");
 export const transferenciaSemLacrePayloadSchema = z.object({
   empresaId: uuidSchema,
   contaOrigemId: uuidSchema,
   contaDestinoId: uuidSchema,
-  valorEspecieDeclarado: dinheiroSchema,
-  valorMoedasDeclarado: dinheiroSchema,
+  valorEspecieDeclarado: dinheiroEmCentavosSchema,
+  valorMoedasDeclarado: dinheiroEmCentavosSchema,
   observacao: z.string().trim().max(500).optional().nullable()
 });
 export type TransferenciaSemLacrePayload = z.infer<typeof transferenciaSemLacrePayloadSchema>;

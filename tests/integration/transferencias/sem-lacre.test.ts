@@ -82,6 +82,26 @@ describe("transferencias - sem lacre (R-231)", () => {
     expect(resposta.statusCode, resposta.body).toBe(403);
   });
 
+  it("so para conta de PDV e com no maximo duas casas decimais", async () => {
+    expect((await enviar(cookieAdmin, idsTeste.contaBanco, 10, 0)).statusCode).toBe(400);
+    expect((await enviar(cookieAdmin, caixa.contaId, 10.999, 0)).statusCode).toBe(400);
+    expect((await enviar(cookieAdmin, caixa.contaId, 0.0000001, 0)).statusCode).toBe(400);
+  });
+
+  it("quem enviou nao confirma o proprio envio (R-028)", async () => {
+    const resposta = await enviar(cookieAdmin, caixa.contaId, 4, 0);
+    const id = json<{ data: { id: string } }>(resposta).data.id;
+    const proprio = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixa.caixaId}/recebimentos-sem-lacre/${id}/confirmar`,
+      headers: { cookie: cookieAdmin },
+      payload: {}
+    });
+    expect(proprio.statusCode, proprio.body).toBe(409);
+    expect((await statusDaTransferencia(id)).status).toBe("pendente");
+    expect((await resolver(id, "confirmar")).statusCode).toBe(200);
+  });
+
   it("sem caixa aberto no PDV de destino, recusa e manda usar o malote", async () => {
     const conta = await contexto.app.inject({
       method: "POST",

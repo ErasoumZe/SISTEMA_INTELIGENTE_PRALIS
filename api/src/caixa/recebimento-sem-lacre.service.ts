@@ -11,6 +11,7 @@ import {
   travarCaixaCompartilhadoRepository
 } from "./caixa.repository.js";
 import {
+  buscarRemetenteDoRecebimentoRepository,
   existeRecebimentoSemLacrePendenteRepository,
   listarRecebimentosSemLacreRepository,
   resolverRecebimentoSemLacreRepository
@@ -64,6 +65,13 @@ export async function resolverRecebimentoSemLacre(
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (trava?.status !== "aberto") {
       throw new ErroDominio("O caixa não está aberto.", 409, "CAIXA_NAO_ABERTO");
+    }
+    if ((await buscarRemetenteDoRecebimentoRepository(transferenciaId, tx)) === perfil.usuarioId) {
+      throw new ErroDominio(
+        "Quem enviou o dinheiro não confirma o próprio envio: o operador do caixa confirma.",
+        409,
+        "RECEBIMENTO_PROPRIO_ENVIO"
+      );
     }
     const agora = new Date();
     const linha = await resolverRecebimentoSemLacreRepository(

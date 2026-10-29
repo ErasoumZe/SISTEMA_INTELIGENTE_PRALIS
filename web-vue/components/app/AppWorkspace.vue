@@ -699,6 +699,16 @@ async function carregarContasCompletas(idEmpresa = empresaId.value) {
   return carregarOpcoesCompletas("/api/contas", idEmpresa);
 }
 
+// R-231 · a lista e os saldos das contas mudam (a origem ja foi debitada); o PDV confirma depois.
+async function aposTransferenciaSemLacre() {
+  notificar("Enviado sem lacre. Aguarda o operador do PDV confirmar o recebimento.");
+  try {
+    await carregarDadosTela(telaAtiva.value, empresaId.value);
+  } catch (falha) {
+    notificar(mensagemErro(falha), "error");
+  }
+}
+
 async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
@@ -2275,7 +2285,7 @@ const pageContext = computed(() => ({
   podeEditarTransferencia: temPermissao("transferencias_editar"),
   // R-231 · botao "Transferencia sem lacre" no topo de Transferencias.
   podeTransferirSemLacre: temPermissao("transferencias_sem_lacre"),
-  recarregarOperacoes: () => carregarOperacoes(),
+  aposTransferenciaSemLacre,
   empresaIdAtual: empresaId.value,
   caixaStatus: caixaStatus.value,
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,

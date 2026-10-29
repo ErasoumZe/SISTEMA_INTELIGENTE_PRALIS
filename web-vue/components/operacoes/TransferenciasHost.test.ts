@@ -46,7 +46,8 @@ function criarStatusCaixaAberto(): CaixaStatus {
     },
     lacreFechamentoReservado: null,
     entregasPendentes: [],
-    planejamentosPendentes: []
+    planejamentosPendentes: [],
+    recebimentosSemLacre: []
   };
 }
 

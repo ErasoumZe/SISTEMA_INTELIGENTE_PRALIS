@@ -29,7 +29,7 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       :pode-cancelar-planejamento="ctx.podeCancelarPlanejamentoRetorno"
       :salvando="ctx.caixaSalvando"
       @nova="ctx.abrirOperacao('transferencia')"
-      @sem-lacre-criada="ctx.recarregarOperacoes"
+      @sem-lacre-criada="ctx.aposTransferenciaSemLacre"
       @editar="(op) => ctx.abrirOperacao('transferencia', op)"
       @update:pagina="ctx.atualizarPaginaOperacoes"
       @update:status-filtro="ctx.atualizarFiltroStatusTransferencia"

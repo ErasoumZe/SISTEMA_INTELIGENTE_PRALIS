@@ -2,7 +2,7 @@
 // R-231 · dinheiro sem lacre a caminho deste caixa (ex.: reforço de troco que a gerencia trouxe do Cofre). So vira
 // saldo do caixa quando o operador confirma; "Nao recebi" cancela, o valor volta a origem e a Tesouraria e avisada.
 // Enquanto houver um aqui, o caixa nao inicia o fechamento.
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useApi } from "~/composables/useApi";
 import type { RecebimentoSemLacrePendente } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
@@ -16,6 +16,15 @@ const resolvendoId = ref("");
 const erro = ref("");
 const naoRecebiDe = ref<RecebimentoSemLacrePendente | null>(null);
 
+// O item resolvido fica travado ate a lista do servidor chegar sem ele: soltar antes reabria o botao sobre um
+// recebimento ja resolvido (segundo clique = 409).
+watch(
+  () => props.recebimentos,
+  () => {
+    resolvendoId.value = "";
+  }
+);
+
 async function resolver(recebimento: RecebimentoSemLacrePendente, acao: "confirmar" | "nao-recebi") {
   if (resolvendoId.value) return;
   resolvendoId.value = recebimento.id;
@@ -26,8 +35,9 @@ async function resolver(recebimento: RecebimentoSemLacrePendente, acao: "confirm
     emit("resolvido");
   } catch (falha) {
     erro.value = mensagemErro(falha);
-  } finally {
     resolvendoId.value = "";
+    // Ja resolvido por outra tela ou caixa que saiu de "aberto": a lista na tela esta velha, recarrega.
+    if (/já foi resolvido|não está aberto/iu.test(erro.value)) emit("resolvido");
   }
 }
 
@@ -72,6 +82,7 @@ function composicao(recebimento: RecebimentoSemLacrePendente) {
           <v-btn
             color="success"
             variant="flat"
+            size="large"
             prepend-icon="mdi-check"
             :loading="resolvendoId === recebimento.id"
             :disabled="Boolean(resolvendoId)"
@@ -83,6 +94,7 @@ function composicao(recebimento: RecebimentoSemLacrePendente) {
           <v-btn
             color="error"
             variant="outlined"
+            size="large"
             prepend-icon="mdi-close"
             :disabled="Boolean(resolvendoId)"
             data-teste="recebimento-nao-recebi"
@@ -93,20 +105,39 @@ function composicao(recebimento: RecebimentoSemLacrePendente) {
         </div>
       </li>
     </ul>
-    <p v-if="erro" class="rsl__erro" role="alert">{{ erro }}</p>
+    <p v-if="erro && !naoRecebiDe" class="rsl__erro" role="alert">{{ erro }}</p>
 
-    <v-dialog :model-value="Boolean(naoRecebiDe)" max-width="420" @update:model-value="naoRecebiDe = null">
+    <v-dialog
+      :model-value="Boolean(naoRecebiDe)"
+      max-width="420"
+      @update:model-value="
+        naoRecebiDe = null;
+        erro = '';
+      "
+    >
       <v-card v-if="naoRecebiDe" rounded="lg">
         <v-card-title class="text-wrap">Não recebeu {{ dinheiro(naoRecebiDe.valor) }}?</v-card-title>
         <v-card-text>
           A transferência é cancelada, o valor volta para {{ naoRecebiDe.origemNome }} e a Tesouraria é avisada.
+          <!-- O erro aparece aqui dentro: fora do dialogo ele ficava atras do veu. -->
+          <p v-if="erro" class="rsl__erro mt-2" role="alert">{{ erro }}</p>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" :disabled="Boolean(resolvendoId)" @click="naoRecebiDe = null">Voltar</v-btn>
+          <v-btn
+            variant="text"
+            size="large"
+            :disabled="Boolean(resolvendoId)"
+            @click="
+              naoRecebiDe = null;
+              erro = '';
+            "
+            >Voltar</v-btn
+          >
           <v-btn
             color="error"
             variant="flat"
+            size="large"
             :loading="Boolean(resolvendoId)"
             data-teste="recebimento-nao-recebi-confirmar"
             @click="resolver(naoRecebiDe, 'nao-recebi')"
