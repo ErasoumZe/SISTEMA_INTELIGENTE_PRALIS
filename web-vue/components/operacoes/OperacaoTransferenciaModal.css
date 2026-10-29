@@ -662,12 +662,44 @@
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 }
-/* R-231 · opcao Sem lacre e o aviso do que ela muda. */
-.tr-check-sem-lacre span {
-  font-weight: 700;
+/* R-231 · Transferencia sem Lacre: botao de liga/desliga em destaque, na cor da categoria. */
+.tr-sem-lacre {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+  padding: 10px 14px;
+  border: 2px solid var(--cat-transferencias-base, #c2410c);
+  border-radius: 10px;
+  background: var(--cat-transferencias-soft, #fff1e8);
+  color: var(--cat-transferencias-tinta, #9c2f07);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+  transition:
+    background var(--cx-dur-1, 120ms) var(--cx-ease, ease),
+    color var(--cx-dur-1, 120ms) var(--cx-ease, ease);
+}
+.tr-sem-lacre:hover {
+  filter: brightness(0.97);
+}
+.tr-sem-lacre:focus-visible {
+  outline: 2px solid var(--cat-transferencias-base, #c2410c);
+  outline-offset: 2px;
+}
+.tr-sem-lacre--ativo {
+  background: var(--cat-transferencias-base, #c2410c);
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tr-sem-lacre {
+    transition: none;
+  }
 }
 .tr-aviso-sem-lacre {
-  margin: 2px 0 12px 22px;
+  margin: 0 0 12px;
   padding: 8px 10px;
   border-radius: 7px;
   background: var(--cat-transferencias-soft, #fff1eb);

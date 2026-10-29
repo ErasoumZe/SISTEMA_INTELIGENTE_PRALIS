@@ -56,6 +56,7 @@ import {
   buscarTransferenciaDetalheRepository,
   travarTransferenciaRepository,
   nomesDasContasRepository,
+  receberNaCriacaoRepository,
   confirmarTransferenciaRepository,
   encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
@@ -347,7 +348,7 @@ export async function criarTransferenciaSemLacre(
       throw new Error("Dinheiro que sai do PDV vai pelo retorno / sangria do Caixa");
     }
     // Qualquer conta de destino (Marco, 29/10). Destino PDV: exige o caixa daquele PDV aberto e a linha fica presa a
-    // ele; o operador confirma no Caixa. Outra conta: quem opera a conta confirma, na conferencia comum.
+    // ele; o operador confirma no Caixa. Outra conta (Banco, Cofre...): entra direto, ja recebida.
     let caixaId: string | null = null;
     if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx)) {
       // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
@@ -377,6 +378,8 @@ export async function criarTransferenciaSemLacre(
       caixaId,
       tx
     );
+    // Confirmacao so existe para PDV (Marco, 29/10): sem caixa, o destino recebe na hora.
+    if (!caixaId) await receberNaCriacaoRepository(transferencia.id, perfil.usuarioId, new Date(), tx);
     return { id: transferencia.id, computar };
   });
 }

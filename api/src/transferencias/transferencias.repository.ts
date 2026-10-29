@@ -419,6 +419,22 @@ export async function contasPertencemEmpresaRepository(
   return linhas.length === unicos.length;
 }
 
+// R-231 · transferencia sem lacre para conta que nao e PDV (Banco, Cofre...): nao ha quem confirme fora do Caixa, entao
+// ela ja nasce recebida — o destino recebe o valor na hora (decisao do Marco, 29/10).
+export async function receberNaCriacaoRepository(
+  transferenciaId: string,
+  usuarioId: string,
+  agora: Date,
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(transferencias)
+    .set({ status: "recebido", dataRecebimento: agora, confirmadoPor: usuarioId, atualizadoEm: agora })
+    .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.status, "pendente")))
+    .returning({ id: transferencias.id });
+  if (!linha) throw new Error("Transferencia sem lacre nao foi registrada como recebida");
+}
+
 // Nomes das contas da rota, para o texto automatico da transferencia sem observacao.
 export async function nomesDasContasRepository(contaIds: string[], empresaId: string, db: ExecutorBanco = banco) {
   const unicos = [...new Set(contaIds)];

@@ -208,15 +208,30 @@ const {
       </template>
 
       <!-- R-231 · junto das outras opcoes: marcada, a transferencia vai sem malote e sem lacre. -->
-      <label v-if="podeUsarSemLacre" class="tr-check tr-check-sem-lacre">
-        <input v-model="semLacre" type="checkbox" data-teste="opcao-sem-lacre" />
-        <span>Sem lacre <span class="tr-hint">(dinheiro no meio do turno, sem malote)</span></span>
-      </label>
+      <button
+        v-if="podeUsarSemLacre"
+        type="button"
+        role="switch"
+        class="tr-sem-lacre"
+        :class="{ 'tr-sem-lacre--ativo': semLacre }"
+        :aria-checked="semLacre"
+        data-teste="opcao-sem-lacre"
+        @click="semLacre = !semLacre"
+      >
+        <v-icon size="20">{{ semLacre ? "mdi-checkbox-marked" : "mdi-checkbox-blank-outline" }}</v-icon>
+        <v-icon size="20">mdi-cash-fast</v-icon>
+        <span>Transferência sem Lacre</span>
+      </button>
       <p v-if="semLacre" class="tr-aviso-sem-lacre" role="status" data-teste="aviso-sem-lacre">
-        Vai sem malote e sem lacre. Quem recebe confirma; até lá, o valor não entra no destino.
+        Vai sem malote e sem lacre.
         <template v-if="contaDestinoSelecionada?.ehContaPdv">
-          Para o {{ contaDestinoSelecionada.nome }}, o caixa precisa estar aberto agora: o operador confirma no Caixa.
+          O caixa de {{ contaDestinoSelecionada.nome }} precisa estar aberto agora; o operador confirma o recebimento no
+          Caixa e só então o valor entra no caixa.
         </template>
+        <template v-else-if="contaDestinoSelecionada">
+          Entra direto em {{ contaDestinoSelecionada.nome }}, sem confirmação.
+        </template>
+        <template v-else>Para PDV, o operador confirma no Caixa; para outra conta, entra direto.</template>
       </p>
 
       <template v-if="!semLacre">

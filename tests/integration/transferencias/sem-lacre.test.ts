@@ -83,11 +83,11 @@ describe("transferencias - sem lacre (R-231)", () => {
   });
 
   it("qualquer conta de destino; dinheiro com no maximo duas casas decimais", async () => {
-    // Destino que nao e PDV: sem caixa, pendente, confirmado na conferencia comum por quem opera a conta.
+    // Destino que nao e PDV: confirmacao so existe para PDV, entao entra direto, ja recebida.
     const banco = await enviar(cookieAdmin, idsTeste.contaBanco, 10, 0);
     expect(banco.statusCode, banco.body).toBe(201);
     const gravada = await statusDaTransferencia(json<{ data: { id: string } }>(banco).data.id);
-    expect(gravada).toMatchObject({ status: "pendente", nLacreDoc: null, caixaId: null });
+    expect(gravada).toMatchObject({ status: "recebido", nLacreDoc: null, caixaId: null });
     expect((await enviar(cookieAdmin, caixa.contaId, 10.999, 0)).statusCode).toBe(400);
     expect((await enviar(cookieAdmin, caixa.contaId, 0.0000001, 0)).statusCode).toBe(400);
   });
