@@ -1,3 +1,4 @@
+import { LIMITE_UPLOAD_PLANILHA_BYTES } from "../utils.js";
 import type { FastifyInstance } from "fastify";
 import {
   analisarHistoricoSchema,
@@ -45,7 +46,7 @@ export async function registrarRotasComprasHistorico(app: FastifyInstance): Prom
 
   app.post(`${BASE}/importacoes/analisar-arquivo`, guarda, async (request, reply) => {
     const { empresaId } = historicoImportacaoQuerySchema.parse(request.query);
-    const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
+    const arquivo = await request.file({ limits: { fileSize: LIMITE_UPLOAD_PLANILHA_BYTES, files: 1, fields: 0 } });
     if (!arquivo) throw erroValidacao("Arquivo .xlsx ou .csv obrigatorio", "PURCHASE_HISTORY_FILE_REQUIRED");
     const nome = arquivo.filename.toLocaleLowerCase("pt-BR");
     if (!nome.endsWith(".xlsx") && !nome.endsWith(".csv"))

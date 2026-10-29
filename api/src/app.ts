@@ -83,7 +83,9 @@ import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 import { registrarRotasGoogle } from "./google/google-connection.controller.js";
 import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
+import { registrarRotasWebhookMeta } from "./whatsapp/meta-webhook.controller.js";
 import { usuarioEstaTravado } from "./transferencias/transferencias.service.js";
+import { LIMITE_UPLOAD_PLANILHA_BYTES } from "./utils.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
 // (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
@@ -97,6 +99,8 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/sessao",
   "/api/integracoes",
   "/api/integracoes/conciliacao",
+  // GET valida a assinatura de configuracao; POST exige HMAC SHA-256 do corpo bruto.
+  "/api/whatsapp/meta/webhook",
   // ADM-003 V3: a ficha do candidato. Ele NAO tem conta — autentica pelo header
   // `x-admissao-convite`, cujo hash mora em `admissoes_convites`. Uma entrada por rota
   // porque a comparacao e exata; e GET e PUT dividem a mesma entrada, porque o Set e por url.
@@ -192,9 +196,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     const statusFastify = (error as { statusCode?: number }).statusCode;
     const codigoFastify = (error as { code?: string }).code;
     // Upload acima do limite: dizer o motivo. "Requisição inválida" generica fez o operador achar que a
-    // planilha estava errada, quando ela so tinha 10,6 MB contra o teto de 10 MB.
+    // planilha estava errada, quando ela so tinha 10,6 MB contra o teto de 10 MB. Nao cita o teto de
+    // foto/comprovante: cada rota declara o seu e o erro do multipart nao diz qual estourou.
     if (codigoFastify === "FST_REQ_FILE_TOO_LARGE") {
-      return erro(reply, 413, "Arquivo acima do limite de 10 MB", "FILE_TOO_LARGE");
+      return erro(
+        reply,
+        413,
+        "Arquivo grande demais para este envio. Planilhas e backups aceitam até 50 MB; fotos e comprovantes, menos.",
+        "FILE_TOO_LARGE"
+      );
     }
     if (statusFastify && statusFastify >= 400 && statusFastify < 500 && codigoFastify?.startsWith("FST_")) {
       return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
@@ -249,7 +259,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(multipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024,
+      fileSize: LIMITE_UPLOAD_PLANILHA_BYTES,
       files: 1,
       fields: 10,
       parts: 12
@@ -295,6 +305,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await registrarRotasSaude(app);
+  await registrarRotasWebhookMeta(app);
   await registrarRotasAuth(app);
   await registrarRotasTema(app);
   await registrarRotasMenuEmpresa(app);

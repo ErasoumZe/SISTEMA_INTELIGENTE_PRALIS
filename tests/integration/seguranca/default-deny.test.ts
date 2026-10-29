@@ -83,6 +83,7 @@ describe("seguranca default-deny integration", () => {
       "/api/rodada/responder",
       "/api/rodada/separacao",
       "/api/sessao",
+      "/api/whatsapp/meta/webhook",
       "/health"
     ]);
   });

@@ -89,7 +89,7 @@ async function aoEscolherArquivo(evento: Event) {
     </div>
     <p class="text-caption text-medium-emphasis mb-3">
       Planilha de discriminação com as colunas PRODUTOS, FORNECEDOR (ou REFERÊNCIA), QUANT, VALOR CUSTO UN e DATA REF.
-      Envie só a aba de compras, em .xlsx ou .csv (até 10 MB). Nada entra no histórico antes de você conferir e aplicar.
+      Envie só a aba de compras, em .xlsx ou .csv (até 50 MB). Nada entra no histórico antes de você conferir e aplicar.
     </p>
 
     <div class="responsive-table-shell">

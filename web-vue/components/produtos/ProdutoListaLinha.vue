@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import type { ProdutoResumo } from "@padaria/shared/produtos";
+import type { ProdutoResumo } from "@padaria/shared";
+import { reais } from "~/utils/produto-preco-card";
 
 defineProps<{
   produto: ProdutoResumo;
+  /** Mesmo preco do card (conta do formulario); `null` = sem preco. */
+  preco: number | null;
   podeEditar: boolean;
   alterandoStatus?: boolean;
   selecionavel?: boolean;
@@ -48,9 +51,7 @@ defineEmits<{ "alternar-status": []; selecionar: [] }>();
       </span>
     </div>
     <div class="produto-linha__acao">
-      <strong v-if="produto.precoVendaAtual != null" class="cx-num">
-        {{ produto.precoVendaAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }}
-      </strong>
+      <strong v-if="preco != null" class="cx-num">{{ reais(preco) }}</strong>
       <span v-else class="produto-linha__sem-preco">Sem preço</span>
       <v-btn
         size="small"
