@@ -94,7 +94,7 @@ const postosCaixaOpcoes = computed(() => {
 function escolherPostoCaixa(valor: string | null) {
   formCadastro.value.postoCaixa = valor ?? "";
   if (!valor || formCadastro.value.novoColaboradorCargoId || !formCadastro.value.novoColaborador) return;
-  const cargoCaixa = opcoesEmpresa.value.cargos.find((cargo) => /caixa/i.test(cargo.nome));
+  const cargoCaixa = opcoesEmpresa.value.cargos.find((cargo) => /caixa/i.test(cargo.nome ?? ""));
   if (cargoCaixa) formCadastro.value.novoColaboradorCargoId = cargoCaixa.id;
 }
 const pessoasParaSelectUsuario = computed(() =>
