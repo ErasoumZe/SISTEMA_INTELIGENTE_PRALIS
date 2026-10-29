@@ -15,6 +15,9 @@ const {
   destinosSelecionados,
   erroDestino,
   totalSaida,
+  campoFisico,
+  campoMoedas,
+  totalDigitado,
   erroComposicao,
   erroLacre,
   novoLacreRetorno,
@@ -23,8 +26,6 @@ const {
   contaOrigemSelecionada,
   destinoSemPdv,
   preparandoMaloteParaCaixa,
-  composicaoMaloteInformada,
-  composicaoMaloteBate,
   valorEspecieDeclarado,
   valorMoedasDeclarado,
   saldoOrigem,
@@ -66,28 +67,9 @@ const {
         </button>
       </div>
 
-      <!-- Bloco A · Transf. Saída -->
-      <div class="tr-secao">Transf. Saída</div>
-
-      <div class="tr-hero">
-        <span class="tr-cifra">R$</span>
-        <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
-      </div>
-
-      <label class="tr-campo tr-campo-lacre-principal">
-        <span class="tr-campo-lbl">Lacre do malote <span class="tr-hint">(obrigatório)</span></span>
-        <input
-          v-model="form.nLacreDoc"
-          required
-          class="tr-input tr-input-lacre"
-          placeholder="Ex.: 001"
-          @blur="void verificarLacreDisponivel()"
-        />
-        <span v-if="erroLacre" class="tr-erro" role="alert">{{ erroLacre }}</span>
-        <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
-      </label>
-
-      <!-- A rota vem junto da identificação do malote: o tesoureiro enxerga antes de declarar o físico. -->
+      <!-- Ordem do fluxo (pedido do Marco, 29/10): 1) de onde para onde, 2) quanto vai, 3) os lacres
+           (abertura, fechamento, sangria). So a ordem e o rotulo mudaram: as regras sao as mesmas. -->
+      <div class="tr-secao">1 · Origem e destino</div>
       <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
         <v-icon icon="mdi-alert-circle-outline" size="18" />
         <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
@@ -127,75 +109,46 @@ const {
         retorno/sangria e lacre de fechamento.
       </div>
 
-      <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">
-        <strong>Composição do malote <span>(obrigatória)</span></strong>
-        <p>Informe o dinheiro físico e as moedas que seguem para o caixa.</p>
+      <div class="tr-secao">2 · Valor transferido</div>
+      <!-- So dinheiro fisico e moedas; o valor da transferencia e a soma (nao ha campo de total separado). -->
+      <section class="tr-malote" aria-label="Valor transferido: dinheiro físico e moedas">
+        <p>
+          {{
+            preparandoMaloteParaCaixa
+              ? "Informe o dinheiro físico e as moedas que seguem para o caixa."
+              : "Informe o dinheiro físico e as moedas transferidos."
+          }}
+          O total é a soma dos dois.
+        </p>
         <div class="tr-dois">
-          <CampoDinheiro
-            v-model="form.valorEspecieDeclarado"
-            label="Dinheiro físico"
-            icone="mdi-cash"
-            data-teste="malote-dinheiro"
-          />
-          <CampoDinheiro
-            v-model="form.valorMoedasDeclarado"
-            label="Moedas"
-            icone="mdi-circle-multiple"
-            data-teste="malote-moedas"
-          />
+          <CampoDinheiro v-model="campoFisico" label="Dinheiro físico" icone="mdi-cash" data-teste="malote-dinheiro" />
+          <CampoDinheiro v-model="campoMoedas" label="Moedas" icone="mdi-circle-multiple" data-teste="malote-moedas" />
         </div>
         <span v-if="erroComposicao" class="tr-erro" role="alert">{{ erroComposicao }}</span>
-        <span v-else-if="composicaoMaloteInformada && !composicaoMaloteBate" class="tr-erro" role="alert"
-          >Dinheiro físico + moedas deve ser igual ao valor total.</span
-        >
-        <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
-        <div class="tr-previsao-composicao" aria-label="Prévia da composição do malote">
-          <div>
-            <span>Total</span><strong>{{ dinheiro(totalSaida) }}</strong>
-          </div>
-          <div>
-            <span>Dinheiro físico</span><strong>{{ dinheiro(valorEspecieDeclarado) }}</strong>
-          </div>
-          <div>
-            <span>Moedas</span><strong>{{ dinheiro(valorMoedasDeclarado) }}</strong>
-          </div>
+        <div class="tr-total-malote" data-teste="malote-total">
+          <span>Total da transferência</span>
+          <strong>{{ dinheiro(totalDigitado) }}</strong>
         </div>
       </section>
 
+      <div class="tr-secao">3 · Lacres</div>
+      <label class="tr-campo tr-campo-lacre-principal">
+        <span class="tr-campo-lbl"
+          >{{ preparandoMaloteParaCaixa ? "Lacre do malote de abertura" : "Lacre do malote" }}
+          <span class="tr-hint">(obrigatório)</span></span
+        >
+        <input
+          v-model="form.nLacreDoc"
+          required
+          class="tr-input tr-input-lacre"
+          placeholder="Ex.: 001"
+          @blur="void verificarLacreDisponivel()"
+        />
+        <span v-if="erroLacre" class="tr-erro" role="alert">{{ erroLacre }}</span>
+        <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
+      </label>
+
       <template v-if="preparandoMaloteParaCaixa">
-        <label class="tr-check tr-lacres-opcao">
-          <input v-model="lacresRetornoAtivos" type="checkbox" />
-          <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
-        </label>
-        <div v-if="lacresRetornoAtivos" class="tr-lacres-retorno">
-          <p>Informe os lacres das bolsas abertas que seguem dentro deste malote.</p>
-          <div class="tr-lacre-adicionar">
-            <input
-              v-model="novoLacreRetorno"
-              class="tr-input"
-              placeholder="Número do lacre da bolsa"
-              maxlength="100"
-              @keydown.enter.prevent="adicionarLacreRetorno"
-            />
-            <button
-              type="button"
-              class="tr-lacre-botao"
-              :disabled="!novoLacreRetorno.trim()"
-              @click="adicionarLacreRetorno"
-            >
-              <v-icon size="17">mdi-plus</v-icon> Adicionar lacre
-            </button>
-          </div>
-          <div v-if="form.lacresRetorno.length" class="tr-lacres-lista" aria-label="Lacres de retorno adicionados">
-            <span v-for="(lacre, indice) in form.lacresRetorno" :key="`${lacre}-${indice}`" class="tr-lacre-chip">
-              Bolsa {{ indice + 1 }}: {{ lacre }}
-              <button type="button" :aria-label="`Remover lacre ${lacre}`" @click="removerLacreRetorno(indice)">
-                <v-icon size="15">mdi-close</v-icon>
-              </button>
-            </span>
-          </div>
-          <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
-        </div>
         <label class="tr-campo tr-lacre-fechamento-planejado">
           <span class="tr-campo-lbl">Lacre do malote de fechamento <span class="tr-hint">(obrigatório)</span></span>
           <input
@@ -209,6 +162,41 @@ const {
             caixa.
           </span>
         </label>
+        <div class="tr-lacres-sangria">
+          <label class="tr-check tr-lacres-opcao">
+            <input v-model="lacresRetornoAtivos" type="checkbox" />
+            <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
+          </label>
+          <div v-if="lacresRetornoAtivos" class="tr-lacres-retorno">
+            <p>Informe os lacres das bolsas abertas que seguem dentro deste malote.</p>
+            <div class="tr-lacre-adicionar">
+              <input
+                v-model="novoLacreRetorno"
+                class="tr-input"
+                placeholder="Número do lacre da bolsa"
+                maxlength="100"
+                @keydown.enter.prevent="adicionarLacreRetorno"
+              />
+              <button
+                type="button"
+                class="tr-lacre-botao"
+                :disabled="!novoLacreRetorno.trim()"
+                @click="adicionarLacreRetorno"
+              >
+                <v-icon size="17">mdi-plus</v-icon> Adicionar lacre
+              </button>
+            </div>
+            <div v-if="form.lacresRetorno.length" class="tr-lacres-lista" aria-label="Lacres de retorno adicionados">
+              <span v-for="(lacre, indice) in form.lacresRetorno" :key="`${lacre}-${indice}`" class="tr-lacre-chip">
+                Bolsa {{ indice + 1 }}: {{ lacre }}
+                <button type="button" :aria-label="`Remover lacre ${lacre}`" @click="removerLacreRetorno(indice)">
+                  <v-icon size="15">mdi-close</v-icon>
+                </button>
+              </span>
+            </div>
+            <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
+          </div>
+        </div>
       </template>
 
       <label class="tr-check">

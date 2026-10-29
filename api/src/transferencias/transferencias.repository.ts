@@ -419,6 +419,17 @@ export async function contasPertencemEmpresaRepository(
   return linhas.length === unicos.length;
 }
 
+// Nomes das contas da rota, para o texto automatico da transferencia sem observacao.
+export async function nomesDasContasRepository(contaIds: string[], empresaId: string, db: ExecutorBanco = banco) {
+  const unicos = [...new Set(contaIds)];
+  if (!unicos.length) return new Map<string, string>();
+  const linhas = await db
+    .select({ id: contas.id, nome: contas.nome })
+    .from(contas)
+    .where(and(inArray(contas.id, unicos), eq(contas.empresaId, empresaId)));
+  return new Map(linhas.map((linha) => [linha.id, linha.nome]));
+}
+
 // Quem pode conferir ESTA transferencia por ESTA conta: precisa operar uma conta candidata ao
 // destino e, como regra, nao pode ser quem criou ou executou o movimento (R-028). A Tesouraria
 // recebe a excecao operacional R-189 no SERVICO; ela ainda precisa deste vinculo, da empresa e da

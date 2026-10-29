@@ -1465,6 +1465,26 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
 - Relatórios mostram o turno como "PDV 1 · Tarde". Migration 0090 (só acrescenta colunas). As contas de posto que
   já existiam ficam sem posto até alguém escolher em Usuários (sem `UPDATE` automático).
 
+### R-230 — Nova Transferência: ordem do modal, valor por físico + moedas e observação opcional (Marco, 29/10/2026)
+
+**Complementa** R-127 (texto do movimento) só na transferência.
+
+- **Ordem do modal:** 1) Origem e destino, 2) Valor transferido, 3) Lacres: abertura, fechamento, sangria.
+- **Valor:** não há campo de total. Digita-se **Dinheiro físico** e **Moedas**; o valor da transferência é a soma.
+  No malote Cofre → PDV os dois campos continuam sendo a composição gravada (regra físico + moedas = total
+  inalterada). Nos outros destinos servem só para chegar ao total e não são gravados.
+- **Observação opcional** na transferência. Em branco, o servidor grava a rota ("Malote Cofre → Conta PDV 1" ou
+  "Transferência Cofre → Banco"), para a lista e a auditoria não ficarem sem texto. Despesa, mercadoria e retirada
+  continuam exigindo observação (R-127).
+- **Pendente de decisão:** Marco quer que **Banco → PDV** também seja malote do caixa (lacres de fechamento e
+  sangria). Hoje só o Cofre é identificado (`empresas.conta_cofre_id`); não existe marcação de conta Banco. Precisa
+  definir como o sistema reconhece o Banco e de confirmação do Rodrigo antes de implementar.
+- **A implementar (entrega própria):** "Transferência sem lacre" — suprimento no meio do turno (ex.: Cofre → PDV),
+  sem malote e sem lacre. Decisões do Marco em 29/10: botão bem visível no topo de Transferências; quem pode fazer
+  é definido por **permissão própria** na tela de Permissões (na prática, o gerente que busca o dinheiro durante o
+  dia); informa **dinheiro físico + moedas**; o operador do PDV **confirma o recebimento** antes de virar saldo do
+  caixa.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

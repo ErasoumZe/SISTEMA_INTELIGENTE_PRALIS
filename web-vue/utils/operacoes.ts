@@ -568,8 +568,10 @@ export function validarOperacaoParaEnvio(
   // ficou de fora da regra e continua com `descricao`, entao o texto exigido e "observacao ou
   // descricao": sem isto o lancamento novo (que so preenche observacao) seria barrado AQUI, antes de
   // chegar ao servidor, com uma mensagem falando de um campo que nao existe mais na tela.
+  // R-230: na transferencia a observacao e opcional — em branco, o servidor grava a rota como texto.
   const texto = (dados.observacao ?? "").trim() || dados.descricao.trim();
-  if (!texto) return entidade === "venda" ? "Informe a descricao da venda." : "Informe a observacao do lancamento.";
+  if (!texto && entidade !== "transferencia")
+    return entidade === "venda" ? "Informe a descricao da venda." : "Informe a observacao do lancamento.";
 
   // GRUPO e ITENS sao OPCIONAIS em despesa e mercadoria (decisao do Jose, 04/08/2026): o campo Grupo
   // saiu do modal — vive so na discriminacao — e discriminar continua opcional. A exigencia antiga
