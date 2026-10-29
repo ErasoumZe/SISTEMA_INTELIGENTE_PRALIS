@@ -310,9 +310,10 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
 }
 
-// R-229 · o turno mostrado nos relatorios e o do posto (PDV 1 · Tarde); caixa antigo usa o turno do DP.
+// R-229 · o turno mostrado nos relatorios e o do posto (Manhã/Tarde); caixa antigo usa o turno do DP.
 function turnoDoRelatorio(caixa: CaixaLinha) {
-  if (caixa.turnoCaixa) return `${caixa.pdvNome} · ${rotuloTurnoCaixa[caixa.turnoCaixa]}`;
+  // So o turno do posto: as telas ja mostram o PDV ao lado (senao "PDV 2 · PDV 2 · Manhã").
+  if (caixa.turnoCaixa) return rotuloTurnoCaixa[caixa.turnoCaixa];
   return caixa.turnoNome?.trim() || "Turno não informado na abertura";
 }
 

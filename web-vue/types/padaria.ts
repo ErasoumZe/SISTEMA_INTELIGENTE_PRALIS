@@ -3,7 +3,7 @@ export type { CadastroForm } from "@padaria/shared";
 
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 import type { CaixaDaTransferencia, LacreRelatorio, SituacaoMalote } from "@padaria/shared/transferencias";
-import type { RecebimentoSemLacrePendente } from "@padaria/shared/caixa";
+import type { RecebimentoSemLacrePendente } from "@padaria/shared";
 
 // Dados fiscais do produto como vêm da API (numeric chega como string).
 export type Opcao = {
@@ -374,7 +374,7 @@ export type CaixaStatus = {
   recebimentosSemLacre: RecebimentoSemLacrePendente[];
 };
 
-export type { RecebimentoSemLacrePendente } from "@padaria/shared/caixa";
+export type { RecebimentoSemLacrePendente } from "@padaria/shared";
 
 export type ItemMenu = {
   id: string;

@@ -141,7 +141,7 @@ async function salvar() {
           >
         </div>
         <p v-if="destino?.ehContaPdv" class="sl-aviso" role="status">
-          Só vai se o {{ destino.nome }} estiver com o caixa aberto agora.
+          Só vai se o caixa de {{ destino.nome }} estiver aberto agora.
         </p>
 
         <div class="tr-secao">2 · Valor transferido</div>

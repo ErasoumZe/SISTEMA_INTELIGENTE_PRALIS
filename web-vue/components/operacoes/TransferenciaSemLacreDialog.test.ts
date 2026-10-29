@@ -51,7 +51,7 @@ describe("TransferenciaSemLacreDialog", () => {
     apiPost.mockResolvedValue({ id: "tr-1" });
     const tela = montar();
     await tela.find("[data-teste='sem-lacre-destino']").setValue("pdv-2");
-    expect(tela.text()).toContain("caixa aberto");
+    expect(tela.text()).toContain("Só vai se o caixa de Conta PDV 2 estiver aberto agora");
     await tela.find("[data-teste='sem-lacre-fisico']").setValue("80");
     await tela.find("[data-teste='sem-lacre-moedas']").setValue("20");
     expect(tela.text()).toContain("100,00");

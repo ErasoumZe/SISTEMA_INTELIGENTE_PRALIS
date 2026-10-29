@@ -1462,7 +1462,8 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
   olha o PDV no dia (`data_movimento`) com qualquer maquininha; o desconto da tarde é o último relatório fechado da
   **mesma maquininha** naquele PDV e dia (o acumulado é por aparelho). Tarde sem manhã fechada salva só com
   justificativa (gravada; líquido sem desconto). Caixa antigo, sem turno do caixa, segue pela ordem.
-- Relatórios mostram o turno como "PDV 1 · Tarde". Migration 0090 (só acrescenta colunas). As contas de posto que
+- Relatórios mostram PDV e turno lado a lado ("PDV 1 · Tarde"); o campo de turno traz só "Manhã"/"Tarde" (com o
+  PDV dentro dele saía "PDV 1 · PDV 1 · Tarde"). Migration 0090 (só acrescenta colunas). As contas de posto que
   já existiam ficam sem posto até alguém escolher em Usuários (sem `UPDATE` automático).
 
 ### R-230 — Nova Transferência: ordem do modal, valor por físico + moedas e observação opcional (Marco, 29/10/2026)
