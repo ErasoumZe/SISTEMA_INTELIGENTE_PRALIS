@@ -17,7 +17,12 @@ import {
  * No app oficial a copia da loja herda o MESMO codigo interno da BASE; e por ele que o vinculo e refeito
  * aqui — nunca por nome. So liga o inequivoco: um codigo, uma BASE, um produto, e o codigo de barras nao
  * contradiz (quando os dois tem). O resto aparece na previa com o motivo e fica solto, como esta hoje.
- * Nao muda nenhum outro campo do produto: so passa a apontar para a BASE.
+ *
+ * Fase A (29/10/2026, José): os produtos que a integracao do PDV criou sozinha nao tem codigo interno, so
+ * o codigo do PDV (`codigo`: o EAN, ou o codigo interno quando nao ha EAN, com zeros a esquerda). Para
+ * eles o codigo do PDV e procurado no codigo interno OU no codigo de barras da BASE. Ao ligar, o produto
+ * recebe da BASE o codigo interno, o codigo de barras e o nome do catalogo — so onde estavam vazios.
+ * Preco, grupo, fiscal, descricao e o proprio `codigo` do PDV nao mudam.
  */
 export const CONFIRMACAO_VINCULO_BASE = "LIGAR PRODUTOS A BASE";
 
@@ -27,7 +32,8 @@ export type MotivoSemVinculo =
   | "base-ambigua"
   | "base-ja-tem-copia"
   | "codigo-disputado"
-  | "barras-divergem";
+  | "barras-divergem"
+  | "codigo-ocupado";
 
 export class VinculoBaseError extends Error {
   constructor(
@@ -72,9 +78,18 @@ async function planejar(empresaId: string, bloquear: boolean, tx?: ExecutorBanco
     await basesComCopiaNaLojaRepository(empresaId, tx)
   ];
   const basesPorCodigo = new Map<string, typeof bases>();
+  // Codigo do PDV -> BASE pelo codigo interno OU pelo codigo de barras (sem zeros a esquerda).
+  const basesPorCodigoPdv = new Map<string, Map<string, (typeof bases)[number]>>();
   for (const base of bases) {
     const codigo = numero(base.codigoInterno);
     if (codigo) basesPorCodigo.set(codigo, [...(basesPorCodigo.get(codigo) ?? []), base]);
+    for (const chave of [codigo, barras(base.codigoBarras)]) {
+      if (!chave) continue;
+      basesPorCodigoPdv.set(
+        chave,
+        (basesPorCodigoPdv.get(chave) ?? new Map<string, (typeof bases)[number]>()).set(base.id, base)
+      );
+    }
   }
   const soltos = daLoja.filter((p) => !p.produtoBaseId);
   const candidatos: Array<{ produto: (typeof soltos)[number]; base: (typeof bases)[number] }> = [];
@@ -84,10 +99,16 @@ async function planejar(empresaId: string, bloquear: boolean, tx?: ExecutorBanco
     "base-ambigua": 0,
     "base-ja-tem-copia": 0,
     "codigo-disputado": 0,
-    "barras-divergem": 0
+    "barras-divergem": 0,
+    "codigo-ocupado": 0
   };
-  const exemplos: Array<{ produtoId: string; nome: string; codigoInterno: string | null; motivo: MotivoSemVinculo }> =
-    [];
+  const exemplos: Array<{
+    produtoId: string;
+    nome: string;
+    codigoInterno: string | null;
+    codigoPdv: string | null;
+    motivo: MotivoSemVinculo;
+  }> = [];
   const recusar = (produto: (typeof soltos)[number], motivo: MotivoSemVinculo) => {
     motivos[motivo] += 1;
     if (exemplos.length < 50) {
@@ -95,17 +116,21 @@ async function planejar(empresaId: string, bloquear: boolean, tx?: ExecutorBanco
         produtoId: produto.id,
         nome: produto.nomeCatalogo ?? produto.descricao,
         codigoInterno: produto.codigoInterno,
+        codigoPdv: produto.codigo,
         motivo
       });
     }
   };
   for (const produto of soltos) {
     const codigo = numero(produto.codigoInterno);
-    if (!codigo) {
+    const codigoPdv = codigo ? null : numero(produto.codigo);
+    if (!codigo && !codigoPdv) {
       recusar(produto, "sem-codigo");
       continue;
     }
-    const achadas = basesPorCodigo.get(codigo) ?? [];
+    const achadas = codigo
+      ? (basesPorCodigo.get(codigo) ?? [])
+      : [...(basesPorCodigoPdv.get(codigoPdv!)?.values() ?? [])];
     if (!achadas.length) {
       recusar(produto, "sem-base");
       continue;
@@ -130,12 +155,35 @@ async function planejar(empresaId: string, bloquear: boolean, tx?: ExecutorBanco
   // Dois produtos da loja para a MESMA BASE: nenhum dos dois e ligado (decisao de gente).
   const porBase = new Map<string, number>();
   for (const c of candidatos) porBase.set(c.base.id, (porBase.get(c.base.id) ?? 0) + 1);
-  const ligar = candidatos.filter((c) => {
+  const unicos = candidatos.filter((c) => {
     if ((porBase.get(c.base.id) ?? 0) === 1) return true;
     recusar(c.produto, "codigo-disputado");
     return false;
   });
-  const pares = ligar.map((c) => ({ produtoId: c.produto.id, produtoBaseId: c.base.id }));
+  // O codigo interno e unico por loja no banco: se OUTRO produto da loja ja usa o da BASE, fica solto.
+  const codigosEmUso = new Map(
+    daLoja.filter((p) => p.codigoInterno?.trim()).map((p) => [p.codigoInterno!.trim(), p.id] as const)
+  );
+  const ligar = unicos
+    .map((c) => ({
+      ...c,
+      codigoInterno: c.produto.codigoInterno ?? c.base.codigoInterno,
+      codigoBarras: c.produto.codigoBarras ?? c.base.codigoBarras,
+      nomeCatalogo: c.produto.nomeCatalogo ?? c.base.nome
+    }))
+    .filter((c) => {
+      const dono = c.codigoInterno ? codigosEmUso.get(c.codigoInterno.trim()) : undefined;
+      if (!dono || dono === c.produto.id) return true;
+      recusar(c.produto, "codigo-ocupado");
+      return false;
+    });
+  const pares = ligar.map((c) => ({
+    produtoId: c.produto.id,
+    produtoBaseId: c.base.id,
+    codigoInterno: c.codigoInterno,
+    codigoBarras: c.codigoBarras,
+    nomeCatalogo: c.nomeCatalogo
+  }));
   const hashPlano = createHash("sha256").update(JSON.stringify(pares)).digest("hex");
   return { total: daLoja.length, jaLigados: daLoja.length - soltos.length, ligar, pares, motivos, exemplos, hashPlano };
 }
@@ -153,7 +201,10 @@ export async function previaVinculoBase(empresaId: string, ator: Ator) {
     amostra: plano.ligar.slice(0, 25).map((c) => ({
       produtoId: c.produto.id,
       nome: c.produto.nomeCatalogo ?? c.produto.descricao,
-      codigoInterno: c.produto.codigoInterno,
+      codigoPdv: c.produto.codigo,
+      // Como fica depois de ligar (o que estava vazio vem da BASE).
+      codigoInterno: c.codigoInterno,
+      codigoBarras: c.codigoBarras,
       nomeNaBase: c.base.nome
     })),
     hashPlano: plano.hashPlano,

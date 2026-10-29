@@ -29,6 +29,8 @@ export async function produtosDaLojaParaVinculoRepository(
       produtoBaseId: produtos.produtoBaseId,
       nomeCatalogo: produtos.nomeCatalogo,
       descricao: produtos.descricao,
+      // Codigo do PDV: o unico codigo dos produtos que a integracao de vendas criou sozinha.
+      codigo: produtos.codigo,
       codigoInterno: produtos.codigoInterno,
       codigoBarras: produtos.codigoBarras
     })
@@ -38,17 +40,32 @@ export async function produtosDaLojaParaVinculoRepository(
   return bloquear ? consulta.for("update") : consulta;
 }
 
-/** Liga so quem ainda esta solto (a guarda e o proprio `produto_base_id IS NULL`). */
+/**
+ * Liga so quem ainda esta solto (a guarda e o proprio `produto_base_id IS NULL`). Codigo interno, codigo
+ * de barras e nome do catalogo chegam resolvidos pelo plano: so preenchem o que estava vazio.
+ */
 export async function ligarProdutosABaseRepository(
   tx: TransacaoBanco,
   empresaId: string,
-  pares: Array<{ produtoId: string; produtoBaseId: string }>
+  pares: Array<{
+    produtoId: string;
+    produtoBaseId: string;
+    codigoInterno: string | null;
+    codigoBarras: string | null;
+    nomeCatalogo: string | null;
+  }>
 ): Promise<number> {
   let ligados = 0;
   for (const par of pares) {
     const atingidos = await tx
       .update(produtos)
-      .set({ produtoBaseId: par.produtoBaseId, atualizadoEm: new Date() })
+      .set({
+        produtoBaseId: par.produtoBaseId,
+        codigoInterno: par.codigoInterno,
+        codigoBarras: par.codigoBarras,
+        nomeCatalogo: par.nomeCatalogo,
+        atualizadoEm: new Date()
+      })
       .where(and(eq(produtos.empresaId, empresaId), eq(produtos.id, par.produtoId), isNull(produtos.produtoBaseId)))
       .returning({ id: produtos.id });
     ligados += atingidos.length;

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Ligar os produtos da loja a BASE (passo da virada, R-222): pelo codigo interno, so o inequivoco.
- * Previa sem gravar; ligar exige a frase e o hash da previa.
+ * Ligar os produtos da loja a BASE (passo da virada, R-222): pelo codigo interno ou, no produto que veio
+ * so da integracao do PDV, pelo codigo do PDV. So o inequivoco. Previa sem gravar; ligar exige a frase e
+ * o hash da previa.
  */
 import type { Opcao } from "~/types/padaria";
 
@@ -12,18 +13,26 @@ interface PreviaVinculo {
   ligar: number;
   motivos: Record<string, number>;
   exemplosSemVinculo: Array<{ produtoId: string; nome: string; codigoInterno: string | null; motivo: string }>;
-  amostra: Array<{ produtoId: string; nome: string; codigoInterno: string | null; nomeNaBase: string }>;
+  amostra: Array<{
+    produtoId: string;
+    nome: string;
+    codigoPdv: string | null;
+    codigoInterno: string | null;
+    codigoBarras: string | null;
+    nomeNaBase: string;
+  }>;
   hashPlano: string;
   confirmacao: string;
 }
 
 const MOTIVO: Record<string, string> = {
-  "sem-codigo": "Sem código interno",
+  "sem-codigo": "Sem código interno nem código do PDV",
   "sem-base": "O código não existe na BASE",
   "base-ambigua": "O código está em mais de um produto da BASE",
   "base-ja-tem-copia": "Esse produto da BASE já tem cópia nesta loja",
   "codigo-disputado": "Dois produtos da loja apontam para o mesmo produto da BASE",
-  "barras-divergem": "O código de barras da loja e o da BASE se contradizem"
+  "barras-divergem": "O código de barras da loja e o da BASE se contradizem",
+  "codigo-ocupado": "Outro produto da loja já usa o código interno da BASE"
 };
 
 const props = defineProps<{ empresas: Opcao[]; empresaInicial: string }>();
@@ -95,8 +104,9 @@ async function ligar() {
     <v-card-text class="vinculo__corpo">
       <p>
         Passo da virada: o produto da loja que já existe no ERP passa a apontar para o produto da BASE com o
-        <strong>mesmo código interno</strong>, como as cópias do app. Só o inequívoco é ligado; nada mais muda no
-        produto.
+        <strong>mesmo código interno</strong>, como as cópias do app. Produto que veio só das vendas do PDV é procurado
+        pelo código do PDV (interno ou de barras) e recebe da BASE o código interno, o código de barras e o nome. Só o
+        inequívoco é ligado; preço, grupo e fiscal não mudam.
       </p>
       <div class="vinculo__acoes">
         <v-select v-model="empresaId" :items="empresas" item-title="nome" item-value="id" label="Loja" hide-details />
@@ -116,7 +126,9 @@ async function ligar() {
         </ul>
         <ul v-if="previa.amostra.length" class="vinculo__lista">
           <li v-for="item in previa.amostra.slice(0, 8)" :key="item.produtoId">
-            {{ item.codigoInterno }} · {{ item.nome }} → {{ item.nomeNaBase }}
+            <template v-if="item.codigoPdv">PDV {{ item.codigoPdv }} · </template>{{ item.nome }} →
+            {{ item.codigoInterno ?? "sem código" }} · {{ item.codigoBarras ?? "sem código de barras" }} ·
+            {{ item.nomeNaBase }}
           </li>
         </ul>
         <div class="vinculo__acoes">
