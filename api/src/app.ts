@@ -83,6 +83,7 @@ import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 import { registrarRotasGoogle } from "./google/google-connection.controller.js";
 import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
+import { registrarRotasWebhookMeta } from "./whatsapp/meta-webhook.controller.js";
 import { usuarioEstaTravado } from "./transferencias/transferencias.service.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
@@ -97,6 +98,8 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/sessao",
   "/api/integracoes",
   "/api/integracoes/conciliacao",
+  // GET valida a assinatura de configuracao; POST exige HMAC SHA-256 do corpo bruto.
+  "/api/whatsapp/meta/webhook",
   // ADM-003 V3: a ficha do candidato. Ele NAO tem conta — autentica pelo header
   // `x-admissao-convite`, cujo hash mora em `admissoes_convites`. Uma entrada por rota
   // porque a comparacao e exata; e GET e PUT dividem a mesma entrada, porque o Set e por url.
@@ -295,6 +298,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await registrarRotasSaude(app);
+  await registrarRotasWebhookMeta(app);
   await registrarRotasAuth(app);
   await registrarRotasTema(app);
   await registrarRotasMenuEmpresa(app);

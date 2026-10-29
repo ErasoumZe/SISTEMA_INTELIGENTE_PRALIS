@@ -151,6 +151,9 @@ const envSchema = z.object({
   // Evolution, n8n) recebe {telefone, mensagem}. `teste`: so para os testes automatizados.
   WHATSAPP_PROVEDOR: z.enum(["desligado", "meta", "webhook", "teste"]).default("desligado"),
   WHATSAPP_META_TOKEN: envOpcionalNaoVazio,
+  // Callback da Meta: o token confirma o GET inicial; o app secret autentica cada POST.
+  WHATSAPP_META_WEBHOOK_VERIFY_TOKEN: envOpcionalNaoVazio,
+  WHATSAPP_META_APP_SECRET: envOpcionalNaoVazio,
   WHATSAPP_META_TELEFONE_ID: envOpcionalNaoVazio,
   WHATSAPP_META_VERSAO_API: z.string().trim().min(1).default("v21.0"),
   WHATSAPP_META_MODELO_COTACAO: z.string().trim().min(1).default("cotacao_compra"),
