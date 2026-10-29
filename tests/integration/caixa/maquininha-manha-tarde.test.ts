@@ -74,10 +74,12 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
   }
 
   // `nome` precisa ser DIFERENTE em cada turno: a fixture cria um turno com esse nome e o nome e unico por PDV.
+  // R-229 · o turno do posto (manha/tarde) do login decide a etapa da maquininha.
   function abrirCaixa(
     base: { contaId: string; pdvId: string; maquininhaId: string },
     dataHoraAbertura: string,
-    nome: string
+    nome: string,
+    turnoCaixa: "manha" | "tarde" = "manha"
   ) {
     return abrirCaixaDoOperador(contexto.app, {
       cookieAdmin,
@@ -87,7 +89,8 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
       dataHoraAbertura,
       contaId: base.contaId,
       pdvId: base.pdvId,
-      maquininhaId: base.maquininhaId
+      maquininhaId: base.maquininhaId,
+      turnoCaixa
     });
   }
 
@@ -158,7 +161,7 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
     await executarSql("update lacres set numero = numero || '-MANHA' where numero like $1", [`TESTE-%-${base.pdvId}`]);
 
     // ---- TARDE: o servidor ja sabe que e a tarde e qual foi a leitura da manha.
-    const tarde = await abrirCaixa(base, "2026-07-30T14:00", "Caixa tarde");
+    const tarde = await abrirCaixa(base, "2026-07-30T14:00", "Caixa tarde", "tarde");
     const consulta = await chamar(cookieCaixa, "GET", `/api/caixa/${tarde.caixaId}/relatorio-maquininha`);
     expect(consulta.statusCode, consulta.body).toBe(200);
     const dadosConsulta = json<{
@@ -216,7 +219,7 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
       const consulta = await chamar(cookieCaixa, "GET", `/api/caixa/${caixaId}/relatorio-maquininha`);
       expect(consulta.statusCode, consulta.body).toBe(200);
       return json<{
-        data: { etapaDia: string; leituraReferencia: { leitura: { credito: number } } | null };
+        data: { etapaDia: string; semManha: boolean; leituraReferencia: { leitura: { credito: number } } | null };
       }>(consulta).data;
     };
 
@@ -246,15 +249,47 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
 
     // PDV A tarde: desconta a manha do PROPRIO PDV (credito 100), mesmo o PDV B tendo fechado depois.
     await executarSql("update lacres set numero = numero || '-MANHA' where numero like $1", [`TESTE-%-${pdvA.pdvId}`]);
-    const tardeA = await abrirCaixa(pdvA, "2026-07-30T14:00", "ISO tarde A");
+    const tardeA = await abrirCaixa(pdvA, "2026-07-30T14:00", "ISO tarde A", "tarde");
     const tarde = await etapa(tardeA.caixaId);
     expect(tarde.etapaDia).toBe("tarde");
     expect(tarde.leituraReferencia?.leitura.credito).toBe(100);
 
-    // Dia seguinte: o mesmo PDV volta a ser manha, sem desconto (a manha de ontem nao conta mais).
+    // Dia seguinte: a manha de ontem nao conta mais. O caixa da tarde fica sem manha no dia (pede justificativa).
     await executarSql("update fechamentos_caixa set data_movimento = data_movimento + 1 where id = $1", [
       tardeA.caixaId
     ]);
-    expect(await etapa(tardeA.caixaId)).toMatchObject({ etapaDia: "manha", leituraReferencia: null });
+    expect(await etapa(tardeA.caixaId)).toMatchObject({ etapaDia: "tarde", leituraReferencia: null, semManha: true });
+  });
+
+  // R-229 · tarde sem a manha do PDV fechada no dia: so salva com justificativa (fica gravada).
+  it("tarde sem manha no dia exige justificativa e grava sem desconto", async () => {
+    const base = await prepararPdvEMaquininha("SEM-MANHA");
+    const tarde = await abrirCaixa(base, "2026-07-30T14:00", "Tarde sem manha", "tarde");
+    await prepararSoOComprovanteDaMaquininha(tarde.caixaId);
+    const anexo = await consultarUm<{ id: string }>(
+      "select id from fechamentos_caixa_anexos where fechamento_caixa_id = $1 and tipo = 'comprovante_cartao' order by criado_em desc limit 1",
+      [tarde.caixaId]
+    );
+    const salvar = (justificativaSemManha: string | null) =>
+      chamar(cookieCaixa, "PUT", `/api/caixa/${tarde.caixaId}/relatorio-maquininha`, {
+        anexoId: anexo!.id,
+        leituraAcumulada: leitura(160, 80, 45, 25),
+        justificativaSemManha
+      });
+    const sem = await salvar(null);
+    expect(sem.statusCode, sem.body).toBe(422);
+    expect(sem.body).toMatch(/MANHA_NAO_ENCONTRADA|caixa da manh/);
+    const com = await salvar("A manha do PDV nao abriu caixa no sistema hoje");
+    expect(com.statusCode, com.body).toBe(200);
+    const gravado = await consultarUm<{ dados_revisados: Record<string, unknown> }>(
+      "select dados_revisados from fechamentos_caixa_relatorios_maquininha where fechamento_caixa_id = $1",
+      [tarde.caixaId]
+    );
+    expect(gravado?.dados_revisados).toMatchObject({
+      etapaDia: "tarde",
+      semManha: true,
+      justificativaSemManha: "A manha do PDV nao abriu caixa no sistema hoje",
+      liquidos: { credito: 160, debito: 80, pix: 45, voucher: 25 }
+    });
   });
 });

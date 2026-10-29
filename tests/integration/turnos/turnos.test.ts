@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { encerrarCaixaSeedAdminParaTeste, vincularPostoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarUm, json } from "../../setup/integracao.js";
 
 describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
   let contexto: ContextoApiTeste;
@@ -46,11 +46,7 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
 
     // Define o vinculo operacional completo do administrador: a abertura sem turnoId deve herdar
     // o turno, e a API precisa aceitar somente o PDV que foi configurado no colaborador.
-    await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
-      idsTeste.pdvLivre,
-      turnoId,
-      idsTeste.colaboradorAdmin
-    ]);
+    await vincularPostoCaixaParaTeste(idsTeste.colaboradorAdmin, idsTeste.pdvLivre, turnoId, "manha");
     const statusAntesDaAbertura = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -58,9 +54,9 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
     });
     expect(statusAntesDaAbertura.statusCode, statusAntesDaAbertura.body).toBe(200);
     expect(
-      json<{ data: { vinculoOperador?: { pdvId: string; turnoId: string } | null } }>(statusAntesDaAbertura).data
+      json<{ data: { vinculoOperador?: { pdvId: string; turnoCaixa: string } | null } }>(statusAntesDaAbertura).data
         .vinculoOperador
-    ).toEqual({ pdvId: idsTeste.pdvLivre, turnoId });
+    ).toEqual({ pdvId: idsTeste.pdvLivre, turnoCaixa: "manha" });
     const maquininha = await contexto.app.inject({
       method: "POST",
       url: "/api/maquininhas",

@@ -1245,6 +1245,11 @@ const colaboradorCargoCaixaId = colaboradorCargoIds.get("caixa@email.com");
 if (!colaboradorCaixaId || !colaboradorComprasId || !colaboradorFinanceiroId) {
   throw new Error("Colaboradores base do seed nao foram criados");
 }
+// R-229 · a conta caixa@email.com e o login de posto "PDV 01 · Manha": ja nasce pronta para abrir caixa.
+await banco
+  .update(colaboradores)
+  .set({ pdvPadraoId: pdv.id, turnoCaixa: "manha" })
+  .where(eq(colaboradores.id, colaboradorCaixaId));
 
 await banco.insert(colaboradoresJornadas).values([
   {
