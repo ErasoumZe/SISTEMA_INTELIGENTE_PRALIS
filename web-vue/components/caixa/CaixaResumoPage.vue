@@ -4,6 +4,7 @@ import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
+import CaixaRecebimentosSemLacre from "~/components/caixa/CaixaRecebimentosSemLacre.vue";
 import CaixaResumoOperacao from "~/components/caixa/CaixaResumoOperacao.vue";
 import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
 import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
@@ -898,6 +899,12 @@ function confirmarFechamento() {
       />
 
       <template v-if="caixaAberto">
+        <!-- R-231 · dinheiro sem lacre a caminho: o operador confirma antes de qualquer outra coisa. -->
+        <CaixaRecebimentosSemLacre
+          :caixa-id="caixaAberto.id"
+          :recebimentos="status?.recebimentosSemLacre ?? []"
+          @resolvido="emit('recarregar')"
+        />
         <section
           v-if="!etapaFechamento"
           class="caixa-pdv-desligado"

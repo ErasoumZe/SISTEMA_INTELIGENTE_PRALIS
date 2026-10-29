@@ -369,6 +369,19 @@ export type CaixaStatus = {
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];
   planejamentosPendentes: PlanejamentoRetorno[];
+  // R-231 · dinheiro sem lacre a caminho deste caixa (o operador confirma ou marca "Nao recebi").
+  recebimentosSemLacre?: RecebimentoSemLacrePendente[];
+};
+
+export type RecebimentoSemLacrePendente = {
+  id: string;
+  valor: number;
+  valorEspecie: number | null;
+  valorMoedas: number | null;
+  origemNome: string;
+  enviadoPorNome: string | null;
+  enviadoEm: string;
+  observacao: string | null;
 };
 
 export type ItemMenu = {

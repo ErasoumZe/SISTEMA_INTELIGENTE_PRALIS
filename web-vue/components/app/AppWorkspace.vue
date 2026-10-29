@@ -2273,6 +2273,10 @@ const pageContext = computed(() => ({
   // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
   podeCriarTransferencia: temPermissao("transferencias_criar"),
   podeEditarTransferencia: temPermissao("transferencias_editar"),
+  // R-231 · botao "Transferencia sem lacre" no topo de Transferencias.
+  podeTransferirSemLacre: temPermissao("transferencias_sem_lacre"),
+  recarregarOperacoes: () => carregarOperacoes(),
+  empresaIdAtual: empresaId.value,
   caixaStatus: caixaStatus.value,
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
