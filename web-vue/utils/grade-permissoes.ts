@@ -25,6 +25,8 @@ export const COLUNAS_GRADE_PERMISSOES = [
   { rotulo: "Efet", nome: "Efetuar", sufixos: ["efetuar"] },
   { rotulo: "Pagar", nome: "Pagar", sufixos: ["pagar"] },
   { rotulo: "Conf", nome: "Conferir", sufixos: ["conferir"] },
+  // R-231 · so Transferencias tem: dinheiro no meio do turno, sem malote e sem lacre.
+  { rotulo: "S/Lacre", nome: "Transferência sem lacre", sufixos: ["sem_lacre"] },
   { rotulo: "Discr", nome: "Discriminar", sufixos: ["discriminar"] },
   { rotulo: "Ver", nome: "Visualizar", sufixos: ["visualizar"] },
   { rotulo: "Ver$", nome: "Visualizar lançamento pago (D/Pago)", sufixos: ["visualizar_dpago"] },

@@ -230,6 +230,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "entradas_criar",
       "transferencias_criar",
       "transferencias_editar",
+      // R-231 · e a gerencia que busca dinheiro no cofre durante o turno.
+      "transferencias_sem_lacre",
       "despesas_criar",
       "despesas_editar",
       "despesas_discriminar",

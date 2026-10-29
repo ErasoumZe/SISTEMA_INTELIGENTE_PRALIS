@@ -34,12 +34,21 @@ const emit = defineEmits<{
   (event: "alternar", id: string): void;
 }>();
 
+// R-231 · dinheiro sem lacre a caminho de um caixa: o operador confirma ou marca "Nao recebi"; nao se edita.
+const ehRecebimentoSemLacre = computed(
+  () =>
+    props.operacao.tipoMovimento === "suprimento" &&
+    !props.operacao.nLacreDoc?.trim() &&
+    Boolean(props.operacao.caixaId) &&
+    props.operacao.status === "pendente"
+);
 const permiteEditar = computed(() =>
   Boolean(
     props.podeEditar &&
     props.operacao.status !== "recebido" &&
     !props.operacao.possuiPlanejamentoRetorno &&
-    !props.operacao.ehPlanejamentoRetorno
+    !props.operacao.ehPlanejamentoRetorno &&
+    !ehRecebimentoSemLacre.value
   )
 );
 const permiteCancelar = computed(() =>

@@ -42,6 +42,8 @@ import {
 import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
+import { podeOperarCaixa } from "./caixa-acesso.js";
+import { exigirSemRecebimentoSemLacrePendente, listarRecebimentosSemLacre } from "./recebimento-sem-lacre.service.js";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
@@ -246,14 +248,6 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
   };
 }
 
-function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
-  return (
-    temPermissao(perfil.permissoes, "caixas_gerenciar") ||
-    caixa.usuarioId === perfil.usuarioId ||
-    caixa.usuarioCaixaId === perfil.usuarioId
-  );
-}
-
 export async function salvarAnexoFechamentoCaixa(
   caixaId: string,
   tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare",
@@ -316,9 +310,10 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
 }
 
-// R-229 · o turno mostrado nos relatorios e o do posto (PDV 1 · Tarde); caixa antigo usa o turno do DP.
+// R-229 · o turno mostrado nos relatorios e o do posto (Manhã/Tarde); caixa antigo usa o turno do DP.
 function turnoDoRelatorio(caixa: CaixaLinha) {
-  if (caixa.turnoCaixa) return `${caixa.pdvNome} · ${rotuloTurnoCaixa[caixa.turnoCaixa]}`;
+  // So o turno do posto: as telas ja mostram o PDV ao lado (senao "PDV 2 · PDV 2 · Manhã").
+  if (caixa.turnoCaixa) return rotuloTurnoCaixa[caixa.turnoCaixa];
   return caixa.turnoNome?.trim() || "Turno não informado na abertura";
 }
 
@@ -698,7 +693,8 @@ async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promi
       await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, db)
     ),
     entregasPendentes: await entregasPendentesDoCaixa(caixa.id, db),
-    planejamentosPendentes: serializarPlanejamentos(await listarPlanejamentosRetornoRepository(caixa.id, db))
+    planejamentosPendentes: serializarPlanejamentos(await listarPlanejamentosRetornoRepository(caixa.id, db)),
+    recebimentosSemLacre: await listarRecebimentosSemLacre(caixa, db)
   };
 }
 
@@ -816,7 +812,8 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
         lacreFechamentoReservado: null,
         indisponibilidadeAberta: null,
         entregasPendentes: [],
-        planejamentosPendentes: []
+        planejamentosPendentes: [],
+        recebimentosSemLacre: []
       };
     }
 
@@ -985,6 +982,8 @@ export async function iniciarFechamentoCaixa(caixaId: string, perfil: PerfilUsua
     if (await buscarIndisponibilidadeAbertaCaixaRepository(caixa.id, caixa.empresaId, tx)) {
       throw new Error("Registre o retorno do computador do PDV antes de encerrar as vendas");
     }
+    // R-231 · dinheiro sem lacre ainda nao confirmado: depois do fechamento ninguem mais o confirmaria.
+    await exigirSemRecebimentoSemLacrePendente(caixa, tx);
     const corte = new Date();
     if (!(await iniciarFechamentoCaixaRepository(caixa.id, perfil.usuarioId, corte, tx))) {
       throw new Error("Caixa ja esta em fechamento ou fechado");
@@ -1426,6 +1425,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (await existePlanejamentoRetornoAgendadoRepository(caixa.id, tx)) {
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
+    await exigirSemRecebimentoSemLacrePendente(caixa, tx);
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
     const valorFisicoEsperadoCentavos = saldoFisicoCaixaCentavos(totais);
     // A composicao registrada no fechamento representa dinheiro que poderia existir na gaveta e
@@ -1564,7 +1564,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       lacreFechamentoReservado: null,
       indisponibilidadeAberta: null,
       entregasPendentes: [],
-      planejamentosPendentes: []
+      planejamentosPendentes: [],
+      recebimentosSemLacre: []
     } satisfies CaixaStatus;
   });
 }

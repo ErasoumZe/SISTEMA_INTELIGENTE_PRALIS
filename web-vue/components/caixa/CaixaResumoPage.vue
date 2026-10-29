@@ -4,6 +4,7 @@ import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
+import CaixaRecebimentosSemLacre from "~/components/caixa/CaixaRecebimentosSemLacre.vue";
 import CaixaResumoOperacao from "~/components/caixa/CaixaResumoOperacao.vue";
 import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
 import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
@@ -225,6 +226,8 @@ const saldoLivre = computed(() =>
 const motivoTravado = computed(() => {
   if (planejamentosPendentes.value.length)
     return "há transferencia de retorno planejada aguardando execucao ou cancelamento";
+  if (props.status?.recebimentosSemLacre?.length)
+    return "há dinheiro sem lacre aguardando sua confirmação em Recebimentos pendentes";
   return null;
 });
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
@@ -574,6 +577,8 @@ async function confirmarInicioFechamento() {
     emit("recarregar");
   } catch (erro) {
     erroInicioFechamento.value = erro instanceof Error ? erro.message : "Não foi possível encerrar as vendas.";
+    // A recusa pode vir de algo que a tela ainda nao mostra (ex.: dinheiro sem lacre recem-enviado).
+    emit("recarregar");
   } finally {
     iniciandoFechamento.value = false;
   }
@@ -898,6 +903,12 @@ function confirmarFechamento() {
       />
 
       <template v-if="caixaAberto">
+        <!-- R-231 · dinheiro sem lacre a caminho: o operador confirma antes de qualquer outra coisa. -->
+        <CaixaRecebimentosSemLacre
+          :caixa-id="caixaAberto.id"
+          :recebimentos="status?.recebimentosSemLacre ?? []"
+          @resolvido="emit('recarregar')"
+        />
         <section
           v-if="!etapaFechamento"
           class="caixa-pdv-desligado"

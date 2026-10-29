@@ -285,6 +285,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     const lacreAbertura = (request.body as { lacreAbertura?: string | null } | undefined)?.lacreAbertura;
     if (
       rota.endsWith("/confirmar") ||
+      rota.endsWith("/nao-recebi") ||
       rota.endsWith("/liberar-trava") ||
       (rota === "/api/caixa/abrir" && typeof lacreAbertura === "string" && Boolean(lacreAbertura.trim())) ||
       rota.startsWith("/api/notificacoes") ||

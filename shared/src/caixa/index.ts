@@ -604,6 +604,20 @@ export const indisponibilidadeAbertaCaixaSchema = z.object({
   iniciadoEm: z.string()
 });
 
+// R-231 · dinheiro sem lacre a caminho deste caixa: so vira saldo quando o operador confirma ("Nao recebi"
+// cancela e devolve a origem). Enquanto houver um, o caixa nao inicia nem conclui o fechamento.
+export const recebimentoSemLacrePendenteSchema = z.object({
+  id: uuidSchema,
+  valor: z.number(),
+  valorEspecie: z.number().nullable(),
+  valorMoedas: z.number().nullable(),
+  origemNome: z.string(),
+  enviadoPorNome: z.string().nullable(),
+  enviadoEm: z.string(),
+  observacao: z.string().nullable()
+});
+export type RecebimentoSemLacrePendente = z.infer<typeof recebimentoSemLacrePendenteSchema>;
+
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable(),
@@ -623,7 +637,8 @@ export const caixaStatusSchema = z.object({
   // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
   // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".
   entregasPendentes: entregaCofrePendenteSchema.array(),
-  planejamentosPendentes: planejamentoRetornoSchema.array()
+  planejamentosPendentes: planejamentoRetornoSchema.array(),
+  recebimentosSemLacre: recebimentoSemLacrePendenteSchema.array()
 });
 
 export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;

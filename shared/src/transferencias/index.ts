@@ -58,6 +58,23 @@ export const transferenciaPayloadSchema = z.object({
   computar: z.boolean().default(true)
 });
 
+// R-231 · transferencia sem lacre: suprimento no meio do turno. So dinheiro fisico + moedas (o valor e a soma);
+// sem lacre, sem agendamento, sem multiplo destino e sem prazo. Rota propria: POST /api/transferencias/sem-lacre.
+const dinheiroEmCentavosSchema = z.coerce
+  .number()
+  .min(0)
+  .max(1_000_000)
+  .refine((valor) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6, "Use no maximo duas casas decimais");
+export const transferenciaSemLacrePayloadSchema = z.object({
+  empresaId: uuidSchema,
+  contaOrigemId: uuidSchema,
+  contaDestinoId: uuidSchema,
+  valorEspecieDeclarado: dinheiroEmCentavosSchema,
+  valorMoedasDeclarado: dinheiroEmCentavosSchema,
+  observacao: z.string().trim().max(500).optional().nullable()
+});
+export type TransferenciaSemLacrePayload = z.infer<typeof transferenciaSemLacrePayloadSchema>;
+
 // Relatorio de Transferencias (Tesouraria): os tres lacres de um malote e o estado de cada um.
 // Tudo aqui e DERIVADO de `lacres`/`transferencias` na leitura; nada novo e gravado.
 export const tipoLacreRelatorioSchema = z.enum(["abertura", "sangria", "fechamento"]);

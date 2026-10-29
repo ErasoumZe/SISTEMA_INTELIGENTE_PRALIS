@@ -385,6 +385,7 @@ const telasComAcessoDeCargo = computed(() =>
 );
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
+const podeTransferirSemLacre = computed(() => temPermissao("transferencias_sem_lacre"));
 const podeEditarTransferencia = computed(() => temPermissao("transferencias_editar"));
 const podeOperarCaixa = computed(() => temPermissao("caixa_operar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
@@ -697,6 +698,16 @@ async function carregarPdvsCompletos(idEmpresa = empresaId.value) {
 // aquele usuario ja pode ler.
 async function carregarContasCompletas(idEmpresa = empresaId.value) {
   return carregarOpcoesCompletas("/api/contas", idEmpresa);
+}
+
+// R-231 · a lista e os saldos das contas mudam (a origem ja foi debitada); o PDV confirma depois.
+async function aposTransferenciaSemLacre() {
+  notificar("Enviado sem lacre. Aguarda o operador do PDV confirmar o recebimento.");
+  try {
+    await carregarDadosTela(telaAtiva.value, empresaId.value);
+  } catch (falha) {
+    notificar(mensagemErro(falha), "error");
+  }
 }
 
 async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
@@ -2119,6 +2130,8 @@ provide(WORKSPACE_CONTEXT, {
   podeOperarTransferenciaSemCaixa,
   podeCriarTransferencia,
   podeEditarTransferencia,
+  podeTransferirSemLacre,
+  aposTransferenciaSemLacre,
   carregarStatusCaixa,
   retornarSaldoOperacional,
   opcoesEmpresa,

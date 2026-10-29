@@ -1462,7 +1462,8 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
   olha o PDV no dia (`data_movimento`) com qualquer maquininha; o desconto da tarde é o último relatório fechado da
   **mesma maquininha** naquele PDV e dia (o acumulado é por aparelho). Tarde sem manhã fechada salva só com
   justificativa (gravada; líquido sem desconto). Caixa antigo, sem turno do caixa, segue pela ordem.
-- Relatórios mostram o turno como "PDV 1 · Tarde". Migration 0090 (só acrescenta colunas). As contas de posto que
+- Relatórios mostram PDV e turno lado a lado ("PDV 1 · Tarde"); o campo de turno traz só "Manhã"/"Tarde" (com o
+  PDV dentro dele saía "PDV 1 · PDV 1 · Tarde"). Migration 0090 (só acrescenta colunas). As contas de posto que
   já existiam ficam sem posto até alguém escolher em Usuários (sem `UPDATE` automático).
 
 ### R-230 — Nova Transferência: ordem do modal, valor por físico + moedas e observação opcional (Marco, 29/10/2026)
@@ -1479,11 +1480,31 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
 - **Pendente de decisão:** Marco quer que **Banco → PDV** também seja malote do caixa (lacres de fechamento e
   sangria). Hoje só o Cofre é identificado (`empresas.conta_cofre_id`); não existe marcação de conta Banco. Precisa
   definir como o sistema reconhece o Banco e de confirmação do Rodrigo antes de implementar.
-- **A implementar (entrega própria):** "Transferência sem lacre" — suprimento no meio do turno (ex.: Cofre → PDV),
-  sem malote e sem lacre. Decisões do Marco em 29/10: botão bem visível no topo de Transferências; quem pode fazer
-  é definido por **permissão própria** na tela de Permissões (na prática, o gerente que busca o dinheiro durante o
-  dia); informa **dinheiro físico + moedas**; o operador do PDV **confirma o recebimento** antes de virar saldo do
-  caixa.
+- **Transferência sem lacre:** ver R-231.
+
+### R-231 — Transferência sem lacre: suprimento no meio do turno (Marco, 29/10/2026)
+
+Dinheiro que a gerência leva do Cofre (ou de outra conta) para um PDV durante o turno, sem malote. **Não é malote**:
+não tem lacre de abertura, de fechamento nem de sangria.
+
+- **Dentro da própria Nova transferência**: um botão em destaque **"Transferência sem Lacre"** junto de Agendamento, Múltiplo destino e
+  Tempo de confirmação (sem aba, modal ou botão à parte — pedido do Marco). Marcada, a seção de lacres e as outras
+  opções somem e a transferência vai como comum, sem malote. **Qualquer conta para qualquer conta**, exceto origem
+  conta de PDV (dinheiro que sai do PDV tem caminho único: retorno / sangria). **Confirmação só para PDV**: destino que não é PDV (Banco, Cofre…) entra direto, já
+  recebido. Quem vê a opção é definido pela permissão **`transferencias_sem_lacre`**
+  (coluna "S/Lacre" na grade de Permissões; o administrador já tem; padrão do cargo Gerência). O malote Cofre → PDV
+  sem a opção continua igual (composição + lacres obrigatórios).
+- Informa **dinheiro físico + moedas** (gravados como composição); o valor é a soma. Observação opcional (R-230).
+  Sem agendamento, sem múltiplo destino e sem tempo de confirmação.
+- **Destino PDV exige caixa aberto naquele PDV**; sem caixa aberto, recusa ("use o malote"). A transferência fica
+  presa ao caixa aberto do PDV de destino (suprimento direto, R-190), não ao caixa de quem lançou.
+- O dinheiro sai da origem ao lançar (pendente conta como saída) e **só entra no caixa quando o operador do PDV
+  confirma** em "Recebimentos pendentes", na tela do Caixa. **"Não recebi"** cancela a transferência: o valor
+  volta para a origem e a Tesouraria é avisada.
+- **O caixa não fecha** (nem inicia o fechamento) com recebimento sem lacre pendente.
+- Transferência sem lacre **não é editada**: o operador confirma ou marca "Não recebi"; para corrigir, lança-se
+  outra.
+- Sem migration: gravada como `suprimento` com `n_lacre_doc` nulo e `caixa_id` do PDV.
 
 ## §4 · Como isto deixa de ser mais um documento
 

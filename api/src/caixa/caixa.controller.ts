@@ -53,6 +53,10 @@ import {
   registrarIndisponibilidadeCaixa,
   registrarRetornoIndisponibilidadeCaixa
 } from "./caixa.service.js";
+import { resolverRecebimentoSemLacre } from "./recebimento-sem-lacre.service.js";
+
+// R-231 · recebimento sem lacre: o operador do caixa confirma ou marca "Nao recebi".
+const recebimentoSemLacreParamsSchema = z.object({ caixaId: z.string().uuid(), transferenciaId: z.string().uuid() });
 
 function statusErro(mensagem: string) {
   if (mensagem === "Empresa nao permitida" || mensagem === "Caixa nao permitido") return 403;
@@ -522,4 +526,22 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       }
     }
   );
+  for (const [sufixo, recebido] of [
+    ["confirmar", true],
+    ["nao-recebi", false]
+  ] as const) {
+    app.post(
+      `/api/caixa/:caixaId/recebimentos-sem-lacre/:transferenciaId/${sufixo}`,
+      { preHandler: exigirPermissao("caixa_operar") },
+      async (request, reply) => {
+        const { caixaId, transferenciaId } = recebimentoSemLacreParamsSchema.parse(request.params);
+        try {
+          return ok(await resolverRecebimentoSemLacre(caixaId, transferenciaId, recebido, request.perfilUsuario!));
+        } catch (error) {
+          const mensagem = mensagemDominioOuRelancar(error);
+          return erro(reply, statusErro(mensagem), mensagem);
+        }
+      }
+    );
+  }
 }

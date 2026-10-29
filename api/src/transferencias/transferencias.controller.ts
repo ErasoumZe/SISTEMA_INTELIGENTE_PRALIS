@@ -6,6 +6,7 @@ import {
   confirmarTransferenciaPayloadSchema,
   recusarConferenciaPayloadSchema,
   transferenciaPayloadSchema,
+  transferenciaSemLacrePayloadSchema,
   transferenciasQuerySchema
 } from "@padaria/shared/transferencias";
 import { exigirPermissao } from "../auth/guards.js";
@@ -17,6 +18,7 @@ import {
   atualizarTransferencia,
   confirmarTransferencia,
   criarTransferencia,
+  criarTransferenciaSemLacre,
   liberarTravaTransferencia,
   listarTransferencias,
   listarAnexosDaConferencia,
@@ -67,6 +69,29 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
         page: query.page,
         pageSize: query.pageSize
       });
+    }
+  );
+
+  // R-231 · transferencia sem lacre (suprimento no meio do turno). Permissao propria; o servico valida o resto.
+  app.post(
+    "/api/transferencias/sem-lacre",
+    { preHandler: exigirPermissao("transferencias_sem_lacre") },
+    async (request, reply) => {
+      const perfil = request.perfilUsuario;
+      if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
+      const dados = transferenciaSemLacrePayloadSchema.parse(request.body);
+      if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      try {
+        const transferencia = await criarTransferenciaSemLacre(dados, perfil);
+        return criadoId(reply, transferencia.id);
+      } catch (error) {
+        if (error instanceof PermissaoLancamentoInsuficienteError) {
+          return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
+        }
+        return erro(reply, 400, mensagemDominioOuRelancar(error));
+      }
     }
   );
 
