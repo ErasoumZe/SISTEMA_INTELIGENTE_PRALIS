@@ -82,7 +82,8 @@ const etapas = [
     resumo: "Anexe a folha CREARE e confronte vendas e saídas.",
     passos: [
       "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
-      "Revise o total bruto, dinheiro, crédito, débito, Pix, voucher, despesas sem sangria e resultado final.",
+      "Revise os campos como estão no cupom: período, troco inicial, formas de pagamento, total, despesas e sangria.",
+      "Se o horário da folha não bater com o início das vendas, use Ajustar início.",
       "Gere o relatório para o sistema comparar a folha com as vendas e saídas registradas.",
       "A folha CREARE é diferente da folha do malote usada no fechamento físico."
     ],
@@ -231,7 +232,12 @@ function formatarHora(dataHora: string | null | undefined) {
 
     <CaixaFechamentoMaquininha v-else-if="etapaAtual === 3" id="fechamento-painel-3" :caixa="caixa" />
 
-    <CaixaFechamentoMovimentacoes v-else-if="etapaAtual === 4" :resumo="resumo" :caixa-id="caixa.id" />
+    <CaixaFechamentoMovimentacoes
+      v-else-if="etapaAtual === 4"
+      :resumo="resumo"
+      :caixa-id="caixa.id"
+      :pdv-nome="caixa.pdvNome"
+    />
 
     <CaixaFechamentoEtapas
       v-else

@@ -13,6 +13,13 @@ export type TotaisCaixaCentavos = {
   mercadorias: number;
   /** Subtotais informativos das vendas por forma de pagamento (em centavos). */
   porFormaPagamento?: TotaisFormaPagamentoCentavos[];
+  /**
+   * Informativos para conferir a folha do CREARE (R-225); NAO entram em nenhuma formula de saldo.
+   * Troco inicial: o que entrou no PDV pela transferencia de abertura. Sangrias: o que saiu do PDV por
+   * sangria/retorno durante o turno (o retorno final so nasce no fechamento).
+   */
+  trocoInicialEntrada?: number;
+  sangriasSaida?: number;
 };
 
 export type TotaisFormaPagamentoCentavos = {

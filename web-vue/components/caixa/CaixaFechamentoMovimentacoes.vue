@@ -3,15 +3,17 @@ import type { DetalheCaixaResponse } from "@padaria/shared";
 import type { ResumoCaixa } from "~/types/padaria";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { dinheiro } from "~/utils/domain";
+import CaixaRelatorioFinalFolhaCreare from "~/components/caixa/CaixaRelatorioFinalFolhaCreare.vue";
+import type { FolhaCreareGerada } from "~/utils/folha-creare";
 
 type RelatorioVendas = {
+  periodoInicio: string;
+  periodoFim: string;
   dados: {
+    versao?: number;
     vendas: TotaisRelatorioVendas;
     canceladas: unknown[];
-    creare?: {
-      comparacao: Record<string, "ok" | "pendente" | "divergente">;
-      leitura?: Partial<Record<"dinheiro" | "credito" | "debito" | "pix" | "voucher", number | null>>;
-    } | null;
+    creare?: FolhaCreareGerada | null;
   };
 };
 type LeituraMaquininha = Partial<Record<"credito" | "debito" | "pix" | "voucher", number | null>>;
@@ -24,17 +26,18 @@ type Transferencia = {
 };
 type Transferencias = { itens: Transferencia[] };
 
-const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string }>();
+const props = defineProps<{ resumo: ResumoCaixa | null; caixaId: string; pdvNome?: string | null }>();
 const { apiGet } = useApi();
 const carregando = ref(false);
 const erro = ref("");
 const vendas = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const canceladas = ref<unknown[]>([]);
-const leituraCreare = ref<LeituraMaquininha>({});
 const leituraMaquininha = ref<LeituraMaquininha>({});
 const transferencias = ref<Transferencia[]>([]);
 const lancamentos = ref<DetalheCaixaResponse["lancamentos"]>([]);
-const comparacaoCreare = ref<Record<string, "ok" | "pendente" | "divergente"> | null>(null);
+const folhaCreare = ref<{ creare: FolhaCreareGerada; versao: number } | null>(null);
+const periodoVendas = ref<{ inicio: string; fim: string } | null>(null);
+const correcaoMaquininha = ref<{ justificativa: string; campos: string[] } | null>(null);
 const formasMaquininha = [
   { chave: "credito", titulo: "Crédito" },
   { chave: "debito", titulo: "Débito" },
@@ -50,29 +53,6 @@ function leitura(valor: unknown): LeituraMaquininha {
   const dados = valor as Record<string, unknown>;
   return Object.fromEntries(formasMaquininha.map(({ chave }) => [chave, numero(dados[chave])])) as LeituraMaquininha;
 }
-function liquidoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
-  return leituraMaquininha.value[chave] ?? null;
-}
-function valorPralis(chave: (typeof formasMaquininha)[number]["chave"]) {
-  return (
-    vendas.value?.porFormaPagamento
-      .filter((forma) => forma.categoriaFechamentoCaixa === chave)
-      .reduce((soma, forma) => soma + forma.total, 0) ?? 0
-  );
-}
-function valorCreare(chave: (typeof formasMaquininha)[number]["chave"]) {
-  return leituraCreare.value[chave] ?? null;
-}
-function diferencaMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
-  const maquininha = liquidoMaquininha(chave);
-  const referencia = valorCreare(chave) ?? valorPralis(chave);
-  return maquininha === null ? null : maquininha - referencia;
-}
-function situacaoMaquininha(chave: (typeof formasMaquininha)[number]["chave"]) {
-  const diferenca = diferencaMaquininha(chave);
-  if (diferenca === null) return "pendente";
-  return Math.abs(diferenca) < 0.005 ? "ok" : "divergente";
-}
 async function carregar() {
   if (!props.caixaId) return;
   carregando.value = true;
@@ -86,11 +66,19 @@ async function carregar() {
     ]);
     vendas.value = relatorioVendas ? normalizarTotaisRelatorioVendas(relatorioVendas.dados.vendas) : null;
     canceladas.value = relatorioVendas?.dados.canceladas ?? [];
-    comparacaoCreare.value = relatorioVendas?.dados.creare?.comparacao ?? null;
-    leituraCreare.value = leitura(relatorioVendas?.dados.creare?.leitura);
+    const creare = relatorioVendas?.dados.creare;
+    folhaCreare.value = creare ? { creare, versao: relatorioVendas?.dados.versao ?? 0 } : null;
+    periodoVendas.value = relatorioVendas
+      ? { inicio: relatorioVendas.periodoInicio, fim: relatorioVendas.periodoFim }
+      : null;
     const dados = relatorioMaquininha.relatorio?.dadosRevisados;
     const revisado = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
     leituraMaquininha.value = leitura(revisado.liquidos);
+    const acumulada = revisado.leituraAcumulada;
+    const correcao =
+      acumulada && typeof acumulada === "object" ? (acumulada as Record<string, unknown>).correcaoManual : null;
+    correcaoMaquininha.value =
+      correcao && typeof correcao === "object" ? (correcao as { justificativa: string; campos: string[] }) : null;
     transferencias.value = movimentos.itens.filter((item) => item.tipo === "sangria" || item.tipo === "retorno");
     lancamentos.value = detalhe.lancamentos.filter((grupo) =>
       ["despesas", "mercadorias", "retiradas"].includes(grupo.categoria)
@@ -126,18 +114,15 @@ watch(
     </v-alert>
 
     <template v-else>
-      <v-alert
-        v-if="comparacaoCreare"
-        :type="Object.values(comparacaoCreare).every((situacao) => situacao === 'ok') ? 'success' : 'warning'"
-        variant="tonal"
-        class="mt-4"
-      >
-        {{
-          Object.values(comparacaoCreare).every((situacao) => situacao === "ok")
-            ? "CREARE × Pralis: valores comparáveis conferem."
-            : "CREARE × Pralis: existem valores pendentes ou divergentes para revisar."
-        }}
-      </v-alert>
+      <CaixaRelatorioFinalFolhaCreare
+        v-if="folhaCreare"
+        :creare="folhaCreare.creare"
+        :versao="folhaCreare.versao"
+        :maquininha="leituraMaquininha"
+        :periodo="periodoVendas"
+        :pdv-nome="pdvNome"
+        :correcao-maquininha="correcaoMaquininha"
+      />
       <section class="fechamento-movimentacoes__visao" aria-label="Visão geral do turno">
         <article class="fechamento-movimentacoes__vendas">
           <v-icon icon="mdi-receipt-text-check-outline" size="22" />
@@ -178,63 +163,6 @@ watch(
             </article>
           </div>
           <p v-else class="fechamento-movimentacoes__vazio">Gere o relatório de vendas na etapa anterior.</p>
-        </details>
-      </section>
-
-      <section
-        class="fechamento-movimentacoes__bloco fechamento-movimentacoes__bloco--maquininha"
-        aria-labelledby="maquininha-consolidada-titulo"
-      >
-        <header>
-          <div>
-            <span>Maquininha</span>
-            <h4 id="maquininha-consolidada-titulo">Líquido informado</h4>
-          </div>
-          <v-icon icon="mdi-credit-card-chip-outline" size="22" />
-        </header>
-        <details class="fechamento-movimentacoes__detalhes">
-          <summary>Ver valores por maquininha</summary>
-          <p class="fechamento-movimentacoes__explicacao-maquininha">
-            A maquininha é a leitura efetiva. À tarde, o líquido já desconta automaticamente a leitura da manhã.
-          </p>
-          <div class="fechamento-movimentacoes__comparacao-maquininha">
-            <article v-for="forma in formasMaquininha" :key="forma.chave">
-              <header>
-                <strong>{{ forma.titulo }}</strong>
-                <span :class="`fechamento-movimentacoes__situacao--${situacaoMaquininha(forma.chave)}`">
-                  {{
-                    situacaoMaquininha(forma.chave) === "ok"
-                      ? "Confere"
-                      : situacaoMaquininha(forma.chave) === "pendente"
-                        ? "Pendente"
-                        : "Diferença"
-                  }}
-                </span>
-              </header>
-              <dl>
-                <div>
-                  <dt>CREARE</dt>
-                  <dd>{{ valorCreare(forma.chave) === null ? "—" : dinheiro(valorCreare(forma.chave)!) }}</dd>
-                </div>
-                <div>
-                  <dt>Pralis</dt>
-                  <dd>{{ dinheiro(valorPralis(forma.chave)) }}</dd>
-                </div>
-                <div>
-                  <dt>Maquininha</dt>
-                  <dd>
-                    {{ liquidoMaquininha(forma.chave) === null ? "—" : dinheiro(liquidoMaquininha(forma.chave)!) }}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Diferença</dt>
-                  <dd>
-                    {{ diferencaMaquininha(forma.chave) === null ? "—" : dinheiro(diferencaMaquininha(forma.chave)!) }}
-                  </dd>
-                </div>
-              </dl>
-            </article>
-          </div>
         </details>
       </section>
 
@@ -413,10 +341,6 @@ watch(
   border-color: color-mix(in srgb, var(--cx-positive) 42%, var(--cx-line));
   background: color-mix(in srgb, var(--cx-positive) 14%, var(--cx-surface));
 }
-.fechamento-movimentacoes__bloco--maquininha {
-  border-color: color-mix(in srgb, var(--cx-brand) 48%, var(--cx-line));
-  background: color-mix(in srgb, var(--cx-brand) 14%, var(--cx-surface));
-}
 .fechamento-movimentacoes__bloco--caixa {
   border-color: color-mix(in srgb, var(--cat-retiradas-base) 42%, var(--cx-line));
   background: color-mix(in srgb, var(--cat-retiradas-base) 14%, var(--cx-surface));
@@ -527,71 +451,6 @@ watch(
   margin: 12px 0 0;
   color: var(--cx-ink-soft);
 }
-.fechamento-movimentacoes__explicacao-maquininha {
-  margin: 12px 0 0;
-  color: var(--cx-ink-soft);
-  font-size: 0.78rem;
-}
-.fechamento-movimentacoes__comparacao-maquininha {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-.fechamento-movimentacoes__comparacao-maquininha article {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--cx-brand) 36%, var(--cx-line));
-  border-radius: 10px;
-  background: var(--cx-surface);
-}
-.fechamento-movimentacoes__comparacao-maquininha article > header {
-  align-items: center;
-}
-.fechamento-movimentacoes__comparacao-maquininha article > header > strong {
-  color: var(--cx-ink);
-  font-size: 0.92rem;
-}
-.fechamento-movimentacoes__comparacao-maquininha article > header > span {
-  padding: 3px 7px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.fechamento-movimentacoes__situacao--ok {
-  background: color-mix(in srgb, var(--cx-positive) 18%, var(--cx-surface));
-  color: var(--cx-positive);
-}
-.fechamento-movimentacoes__situacao--pendente {
-  background: color-mix(in srgb, var(--cx-attention) 18%, var(--cx-surface));
-  color: var(--cx-attention);
-}
-.fechamento-movimentacoes__situacao--divergente {
-  background: color-mix(in srgb, var(--cx-negative) 18%, var(--cx-surface));
-  color: var(--cx-negative);
-}
-.fechamento-movimentacoes__comparacao-maquininha dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 10px 0 0;
-}
-.fechamento-movimentacoes__comparacao-maquininha dl > div {
-  min-width: 0;
-}
-.fechamento-movimentacoes__comparacao-maquininha dt {
-  color: var(--cx-ink-soft);
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-.fechamento-movimentacoes__comparacao-maquininha dd {
-  margin: 2px 0 0;
-  overflow-wrap: anywhere;
-  color: var(--cx-ink);
-  font-size: 0.84rem;
-  font-weight: 800;
-}
 .fechamento-movimentacoes__lista {
   display: grid;
   gap: 6px;
@@ -669,14 +528,8 @@ watch(
   }
   .fechamento-movimentacoes__visao article,
   .fechamento-movimentacoes__formas article,
-  .fechamento-movimentacoes__comparacao-maquininha article,
   .fechamento-movimentacoes__totais > div {
     padding: 10px;
-  }
-}
-@media (max-width: 520px) {
-  .fechamento-movimentacoes__comparacao-maquininha {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 340px) {

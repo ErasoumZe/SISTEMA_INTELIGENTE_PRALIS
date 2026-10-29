@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { RECUO_MAXIMO_INICIO_VENDAS_MIN } from "@padaria/shared";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 
@@ -14,11 +15,17 @@ type Resultado = {
   relatorioVendasInvalidado: boolean;
 };
 
-const props = defineProps<{ caixaId: string; aberturaOficial: string; inicioVendas: string }>();
+// `sugestao` (R-225): o "Periodo de" da folha do CREARE nao bate com o inicio das vendas e cabe na janela.
+const props = defineProps<{
+  caixaId: string;
+  aberturaOficial: string;
+  inicioVendas: string;
+  sugestao?: { inicio: string; periodoTexto: string } | null;
+}>();
 const emit = defineEmits<{ (event: "ajustado", resultado: Resultado): void }>();
 const { apiPost } = useApi();
 
-const RECUO_MAXIMO_MIN = 60;
+const RECUO_MAXIMO_MIN = RECUO_MAXIMO_INICIO_VENDAS_MIN;
 const inicioAtual = ref(props.inicioVendas);
 watch(
   () => props.inicioVendas,
@@ -64,8 +71,8 @@ const problema = computed(() => {
 });
 
 function abrir() {
-  hora.value = horaLocal(inicioAtual.value);
-  motivo.value = "";
+  hora.value = horaLocal(props.sugestao?.inicio ?? inicioAtual.value);
+  motivo.value = props.sugestao ? `Início conforme a folha do CREARE (Período de ${props.sugestao.periodoTexto}).` : "";
   erro.value = "";
   aberto.value = true;
 }
@@ -92,7 +99,12 @@ async function confirmar() {
 </script>
 
 <template>
-  <section class="inicio-vendas" aria-labelledby="inicio-vendas-titulo" data-teste="inicio-vendas">
+  <section
+    class="inicio-vendas"
+    :class="{ 'inicio-vendas--sugerido': sugestao }"
+    aria-labelledby="inicio-vendas-titulo"
+    data-teste="inicio-vendas"
+  >
     <div class="inicio-vendas__texto">
       <strong id="inicio-vendas-titulo">Vendas a partir de {{ formatarDataHora(inicioAtual) }}</strong>
       <small v-if="ajustado" data-teste="inicio-vendas-oficial"
@@ -100,9 +112,12 @@ async function confirmar() {
         registro).</small
       >
       <small v-else>É a hora em que o caixa foi aberto no sistema.</small>
+      <small v-if="sugestao" class="inicio-vendas__sugestao" role="status" data-teste="inicio-vendas-sugerido">
+        A folha do CREARE começa {{ sugestao.periodoTexto }}. Ajuste o início para as vendas desse horário entrarem.
+      </small>
     </div>
     <v-btn
-      variant="outlined"
+      :variant="sugestao ? 'flat' : 'outlined'"
       color="primary"
       prepend-icon="mdi-clock-edit-outline"
       class="inicio-vendas__botao"
@@ -173,6 +188,14 @@ async function confirmar() {
   padding: var(--cx-sp-3);
   border: 1px solid var(--cx-line);
   border-radius: var(--cx-r-md);
+}
+.inicio-vendas--sugerido {
+  border-color: var(--cx-attention);
+  background: color-mix(in srgb, var(--cx-attention) 10%, transparent);
+}
+.inicio-vendas__sugestao {
+  color: var(--cx-ink) !important;
+  font-weight: 600;
 }
 .inicio-vendas__texto {
   display: grid;

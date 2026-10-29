@@ -30,7 +30,14 @@ import type {
   VendaCanceladaCaixa,
   VendasDoCaixaQuery
 } from "@padaria/shared/caixa";
-import { montarResumoCaixa, saldoFisicoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
+import {
+  conferirEmissaoFolhaCreare,
+  conferirInicioFolhaCreare,
+  montarResumoCaixa,
+  RECUO_MAXIMO_INICIO_VENDAS_MIN,
+  saldoFisicoCaixaCentavos,
+  statusCaixaSchema
+} from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
@@ -280,6 +287,10 @@ export async function salvarAnexoFechamentoCaixa(
       );
       if (tipo === "comprovante_cartao") {
         await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+      }
+      // Folha nova do CREARE: o relatorio de vendas gerado com a folha anterior deixa de valer.
+      if (tipo === "relatorio_vendas_creare") {
+        await invalidarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx);
       }
       return anexo;
     } catch (error) {
@@ -854,7 +865,7 @@ export async function registrarRetornoIndisponibilidadeCaixa(caixaId: string, pe
 // nunca antes do fim do caixa anterior do mesmo PDV, e so com motivo. As vendas sem caixa desse intervalo passam
 // a ser deste caixa (as que ja sao de outro caixa nunca sao tiradas de la). Se o fechamento ja comecou, o
 // relatorio de vendas gerado fica invalido e precisa ser gerado de novo com o periodo novo.
-const RECUO_MAXIMO_INICIO_VENDAS_MS = 60 * 60_000;
+const RECUO_MAXIMO_INICIO_VENDAS_MS = RECUO_MAXIMO_INICIO_VENDAS_MIN * 60_000;
 export async function ajustarInicioVendasCaixa(
   caixaId: string,
   dados: AjustarInicioVendasCaixaPayload,
@@ -2272,21 +2283,60 @@ export async function gerarRelatorioVendasFechamento(
       totaisOperacionais.despesas + totaisOperacionais.mercadorias + totaisOperacionais.retiradas
     );
     const leitura = leituraCreare.leituraCreare;
+    // Soma e compara em centavos ARREDONDADOS: 0,07 + 2,34 em reais da 2,4099999... e truncar daria 240.
+    const centavos = (valor: number) => Math.round(valor * 100);
     const comparar = (creare: number | null, pralis: number) =>
-      creare === null ? "pendente" : paraCentavos(creare) === paraCentavos(pralis) ? "ok" : "divergente";
+      creare === null ? "pendente" : centavos(creare) === centavos(pralis) ? "ok" : "divergente";
     const porCategoria = (categoria: string) =>
-      primeiraPagina.totais.porFormaPagamento
-        .filter((item) => item.categoriaFechamentoCaixa === categoria)
-        .reduce((soma, item) => soma + item.total, 0);
+      deCentavos(
+        primeiraPagina.totais.porFormaPagamento
+          .filter((item) => item.categoriaFechamentoCaixa === categoria)
+          .reduce((soma, item) => soma + centavos(item.total), 0)
+      );
+    // R-225 · folha "Relatorio de Venda Geral": cada linha com equivalente no Pralis e comparada em
+    // centavos. CLIENTES, Saldo Inicial e Saldo Final Dinheiro (que soma voucher) so sao exibidos.
+    const pralis = {
+      trocoInicial: deCentavos(totaisOperacionais.trocoInicialEntrada ?? 0),
+      credito: porCategoria("credito"),
+      debito: porCategoria("debito"),
+      dinheiro: porCategoria("dinheiro"),
+      pix: porCategoria("pix"),
+      voucher: porCategoria("voucher"),
+      total: primeiraPagina.totais.totalGeral,
+      despesas: saidasSemSangria,
+      sangria: deCentavos(totaisOperacionais.sangriasSaida ?? 0)
+    };
     const comparacaoCreare = {
-      totalBruto: comparar(leitura.totalBruto, primeiraPagina.totais.totalGeral),
-      dinheiro: comparar(leitura.dinheiro, porCategoria("dinheiro")),
-      credito: comparar(leitura.credito, porCategoria("credito")),
-      debito: comparar(leitura.debito, porCategoria("debito")),
-      pix: comparar(leitura.pix, porCategoria("pix")),
-      voucher: comparar(leitura.voucher, porCategoria("voucher")),
-      despesasExcetoSangria: comparar(leitura.despesasExcetoSangria, saidasSemSangria),
-      resultadoFinal: comparar(leitura.resultadoFinal, primeiraPagina.totais.totalGeral - saidasSemSangria)
+      trocoInicial: comparar(leitura.trocoInicial, pralis.trocoInicial),
+      credito: comparar(leitura.credito, pralis.credito),
+      debito: comparar(leitura.debito, pralis.debito),
+      dinheiro: comparar(leitura.dinheiro, pralis.dinheiro),
+      pix: comparar(leitura.pix, pralis.pix),
+      voucher: comparar(leitura.voucher, pralis.voucher),
+      total: comparar(leitura.total, pralis.total),
+      despesas: comparar(leitura.despesas, pralis.despesas),
+      sangria: comparar(leitura.sangria, pralis.sangria)
+    };
+    const formasDaFolha = [
+      leitura.clientes,
+      leitura.credito,
+      leitura.debito,
+      leitura.dinheiro,
+      leitura.pix,
+      leitura.voucher
+    ];
+    // Forma ilegivel (null) deixa a conferencia pendente, nunca "nao confere".
+    const somaFormasConfereTotal =
+      leitura.total === null || formasDaFolha.some((item) => item === null)
+        ? null
+        : formasDaFolha.reduce<number>((soma, item) => soma + centavos(item ?? 0), 0) === centavos(leitura.total);
+    const horario = {
+      inicio: conferirInicioFolhaCreare({
+        periodoInicio: leitura.periodoInicio,
+        inicioVendas: travado.dataHoraAbertura,
+        aberturaOficial: travado.abertoEm ?? travado.dataHoraAbertura
+      }),
+      emissao: conferirEmissaoFolhaCreare({ dataEmissao: leitura.dataEmissao, corte: travado.dataHoraFechamento })
     };
     return salvarRelatorioVendasFechamentoRepository(
       {
@@ -2295,14 +2345,22 @@ export async function gerarRelatorioVendasFechamento(
         periodoInicio: new Date(travado.dataHoraAbertura),
         periodoFim: new Date(travado.dataHoraFechamento ?? new Date()),
         dados: {
-          versao: 3,
+          versao: 4,
           vendas: {
             quantidade: primeiraPagina.totais.quantidade,
             totalGeral: primeiraPagina.totais.totalGeral,
             porFormaPagamento: primeiraPagina.totais.porFormaPagamento
           },
           canceladas,
-          creare: { anexoId: leituraCreare.anexoId, leitura, comparacao: comparacaoCreare, saidasSemSangria }
+          creare: {
+            anexoId: leituraCreare.anexoId,
+            leitura,
+            comparacao: comparacaoCreare,
+            pralis,
+            somaFormasConfereTotal,
+            horario,
+            saidasSemSangria
+          }
         },
         geradoPor: perfil.usuarioId
       },

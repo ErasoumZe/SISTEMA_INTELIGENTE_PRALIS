@@ -50,6 +50,21 @@ function horaNegocio(instante: Date): string {
   }).format(instante);
 }
 
+/**
+ * Instante UTC de um dia contabil ("yyyy-MM-dd") as "HH:MM:SS" no fuso do negocio. Usado para
+ * datas impressas sem fuso (ex.: a folha do CREARE), que sao sempre a hora local da loja.
+ */
+export function instanteNegocio(dia: string, hora: string): Date {
+  const [h = 0, m = 0, s = 0] = hora.split(":").map(Number);
+  const relogio = [h, m, s].map((parte) => String(parte).padStart(2, "0")).join(":");
+  const comoUtc = new Date(`${dia}T${relogio}Z`).getTime();
+  // Duas passadas pelo offset que o fuso aplica NAQUELE instante: cobre deslocamento fixo e horario de verao.
+  const lidoNoFuso = (ms: number) => new Date(`${diaNegocio(new Date(ms))}T${horaNegocio(new Date(ms))}Z`).getTime();
+  let instante = comoUtc - (lidoNoFuso(comoUtc) - comoUtc);
+  instante = comoUtc - (lidoNoFuso(instante) - instante);
+  return new Date(instante);
+}
+
 export function somarDias(dia: string, dias: number): string {
   const data = new Date(`${dia}T00:00:00Z`);
   data.setUTCDate(data.getUTCDate() + dias);

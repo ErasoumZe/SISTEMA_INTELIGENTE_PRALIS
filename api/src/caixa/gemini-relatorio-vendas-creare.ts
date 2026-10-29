@@ -5,48 +5,55 @@ import { ErroDominio } from "../erros.js";
 
 export type ConfigGeminiRelatorioCreare = { chave: string; modelo: string; timeoutMs: number };
 
+const valor = { type: ["number", "null"] } as const;
+const dataHora = { type: ["string", "null"] } as const;
+const camposFolha = {
+  documentoLegivel: { type: "boolean" },
+  nomeLoja: { type: ["string", "null"] },
+  dataEmissao: dataHora,
+  periodoInicio: dataHora,
+  periodoFim: dataHora,
+  trocoInicial: valor,
+  saldoInicial: valor,
+  clientes: valor,
+  credito: valor,
+  debito: valor,
+  dinheiro: valor,
+  pix: valor,
+  voucher: valor,
+  total: valor,
+  despesas: valor,
+  sangria: valor,
+  saldoFinalDinheiro: valor,
+  camposDuvidosos: { type: "array", items: { type: "string" } },
+  observacoes: { type: "array", items: { type: "string" } }
+} as const;
 const schemaResposta = {
   type: "object",
-  properties: {
-    documentoLegivel: { type: "boolean" },
-    totalBruto: { type: ["number", "null"] },
-    dinheiro: { type: ["number", "null"] },
-    credito: { type: ["number", "null"] },
-    debito: { type: ["number", "null"] },
-    pix: { type: ["number", "null"] },
-    voucher: { type: ["number", "null"] },
-    despesasExcetoSangria: { type: ["number", "null"] },
-    resultadoFinal: { type: ["number", "null"] },
-    camposDuvidosos: { type: "array", items: { type: "string" } },
-    observacoes: { type: "array", items: { type: "string" } }
-  },
-  required: [
-    "documentoLegivel",
-    "totalBruto",
-    "dinheiro",
-    "credito",
-    "debito",
-    "pix",
-    "voucher",
-    "despesasExcetoSangria",
-    "resultadoFinal",
-    "camposDuvidosos",
-    "observacoes"
-  ]
+  properties: camposFolha,
+  required: Object.keys(camposFolha)
 } as const;
 
+// R-225 · a folha anexada e o cupom termico "Relatorio de Venda Geral" (Compilart, Sistema Menu).
 const prompt = [
-  "Leia UMA foto ou PDF do Relatorio de fechamento de caixa do CREARE/Compilart.",
-  "Extraia somente valores explicitamente visiveis e responda o JSON solicitado.",
-  "Mapeamento obrigatorio:",
-  '- totalBruto: "Valor Total de venda" ou "Total Bruto de Vendas".',
-  '- dinheiro, credito, debito, pix e voucher: o "Total" da secao "Forma de Pagamento" correspondente.',
-  '- despesasExcetoSangria: "Total de Despesas (Exceto Sangria)" no resumo final.',
-  '- resultadoFinal: "Resultado" no resumo final.',
-  '"Saldo Final do caixa", "Saldo inicial caixa", "Entradas e Saidas do Caixa" e sangrias nao devem preencher nenhum desses campos.',
-  "Sao evidencias operacionais diferentes e nao podem ser usadas para inferir vendas.",
-  "Nao some, nao estime e nao complete valor cortado. Use null para valor ausente ou ambiguo e liste o campo em camposDuvidosos.",
-  "Valor deve ser numero puro, sem R$, pontos ou virgulas. Responda somente JSON."
+  'Leia UMA foto ou PDF do cupom "Relatorio de Venda Geral" do CREARE/Compilart (Sistema Menu).',
+  "Extraia somente o que esta explicitamente impresso e responda o JSON solicitado.",
+  "Mapeamento obrigatorio (rotulos exatos do cupom):",
+  "- nomeLoja: a primeira linha do cupom (ex.: PADARIA LISBOA 2).",
+  '- dataEmissao: a data e hora de "Data da emissao:", no formato DD/MM/AAAA HH:MM:SS (sem o hifen).',
+  '- periodoInicio: a PRIMEIRA data e hora de "Periodo de ... ate ...", no formato DD/MM/AAAA HH:MM:SS.',
+  '- periodoFim: a SEGUNDA data e hora de "Periodo de ... ate ..." (costuma ser 23:59:59; nao e a hora do fechamento).',
+  '- trocoInicial: "Troco Inicial:". saldoInicial: "Saldo Inicial:".',
+  '- Na tabela "Forma pagamento / Valor": clientes = "CLIENTES (VND/TRANS)", credito = "CREDITO (VND/TRANS)",',
+  '  debito = "DEBITO (VND/TRAN)", dinheiro = "DINHEIRO (VND)", pix = "PIX (VND/TRANS)", voucher = "VOUCHER (VND/TRANS)".',
+  '- total: "Total:" logo abaixo da tabela de formas de pagamento.',
+  '- despesas: "Despesas:". sangria: "Sangria:" como numero POSITIVO (o cupom imprime com sinal de menos).',
+  '- saldoFinalDinheiro: "Saldo Final Dinheiro:" (negativo somente se o cupom imprimir o sinal de menos).',
+  '"Saldo Final Dinheiro" nunca preenche o campo dinheiro: dinheiro e somente a linha "DINHEIRO (VND)".',
+  "Nao converta fuso, nao some, nao estime e nao complete valor cortado.",
+  "Forma de pagamento que nao aparece no cupom fica null. Use null para valor ausente ou ambiguo e liste o campo em camposDuvidosos.",
+  "Valor em reais como numero JSON com PONTO decimal e os centavos: R$ 3.674,27 vira 3674.27; R$ 243,20 vira 243.2.",
+  "Nunca descarte os centavos (nunca 367427). Responda somente JSON."
 ].join("\n");
 
 type RespostaGemini = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -63,17 +70,23 @@ function normalizarTexto(texto: string) {
     .trim();
 }
 
-function lerMoeda(valor: string | undefined) {
+function lerMoeda(valor: string | undefined, sinal = "") {
   if (!valor) return null;
   const normalizado = valor.replace(/\./g, "").replace(",", ".");
   const numero = Number(normalizado);
-  return Number.isFinite(numero) && numero >= 0 ? numero : null;
+  if (!Number.isFinite(numero)) return null;
+  return sinal.includes("-") ? -numero : numero;
 }
 
+// Valor em reais logo depois do rotulo, com o sinal que o cupom imprime antes ou depois do "R$".
 function moedaAposRotulo(texto: string, rotulo: string) {
-  const encontrado = texto.match(new RegExp(`${rotulo}\\s*:?[\\s\\S]{0,80}?R\\$\\s*([\\d.]+,\\d{2}|\\d+(?:[.,]\\d+)?)`, "i"));
-  return lerMoeda(encontrado?.[1]);
+  const encontrado = texto.match(
+    new RegExp(`${rotulo}\\s*:?\\s*(-?)\\s*R\\$\\s*(-?)\\s*([\\d.]+,\\d{2}|\\d+(?:[.,]\\d+)?)`, "i")
+  );
+  return lerMoeda(encontrado?.[3], `${encontrado?.[1] ?? ""}${encontrado?.[2] ?? ""}`);
 }
+
+const DATA_HORA = "(\\d{2}\\/\\d{2}\\/\\d{4})\\s*-?\\s*(\\d{2}:\\d{2}:\\d{2})";
 
 /**
  * PDFs digitais do CREARE ja contem texto selecionavel. Ler esse texto localmente evita que um
@@ -85,39 +98,53 @@ export async function extrairRelatorioVendasCreareDePdf(arquivo: Buffer): Promis
   try {
     parser = new PDFParse({ data: new Uint8Array(arquivo) });
     const resultado = await parser.getText();
-    const texto = normalizarTexto(resultado.text);
-    if (!texto || !/vendas|pagamento|creare/i.test(texto)) return null;
-
-    const dinheiro = moedaAposRotulo(texto, "Dinheiro");
-    const credito = moedaAposRotulo(texto, "Credito");
-    const debito = moedaAposRotulo(texto, "Debito");
-    const pix = moedaAposRotulo(texto, "Pix");
-    const voucher = moedaAposRotulo(texto, "Voucher");
-    const totalBruto =
-      moedaAposRotulo(texto, "Valor Total de venda") ??
-      moedaAposRotulo(texto, "Total Bruto de Vendas") ??
-      moedaAposRotulo(texto, "\\bTotal\\b");
-    const despesasExcetoSangria =
-      moedaAposRotulo(texto, "Total de Despesas \\(Exceto Sangria\\)") ??
-      moedaAposRotulo(texto, "Despesas exceto sangria") ??
-      (/nenhuma despesa/i.test(texto) ? 0 : null);
-    const resultadoFinal = moedaAposRotulo(texto, "Resultado(?: CREARE do turno| final)?");
-    const valores = { totalBruto, dinheiro, credito, debito, pix, voucher, despesasExcetoSangria, resultadoFinal };
-    const camposDuvidosos = Object.entries(valores)
-      .filter(([, valor]) => valor === null)
-      .map(([campo]) => campo);
-    if (camposDuvidosos.length === Object.keys(valores).length) return null;
-    return relatorioVendasCreareSchema.parse({
-      documentoLegivel: true,
-      ...valores,
-      camposDuvidosos,
-      observacoes: ["Valores lidos do texto nativo do PDF; revise antes de gerar o relatório."]
-    });
+    return lerTextoRelatorioVendasCreare(resultado.text);
   } catch {
     return null;
   } finally {
     await parser?.destroy();
   }
+}
+
+/** Le o texto do cupom "Relatorio de Venda Geral" (rotulos na ordem impressa). */
+export function lerTextoRelatorioVendasCreare(bruto: string): RelatorioVendasCreare | null {
+  const texto = normalizarTexto(bruto);
+  // So o cupom "Relatorio de Venda Geral": outro relatorio do CREARE tem "Total" em outras secoes.
+  if (!texto || !/venda geral/i.test(texto)) return null;
+  const emissao = texto.match(new RegExp(`Data da emissao\\s*:?\\s*${DATA_HORA}`, "i"));
+  const periodo = texto.match(new RegExp(`Periodo de\\s*${DATA_HORA}\\s*ate\\s*${DATA_HORA}`, "i"));
+  const positivo = (numero: number | null) => (numero === null ? null : Math.abs(numero));
+  const valores = {
+    trocoInicial: positivo(moedaAposRotulo(texto, "Troco Inicial")),
+    saldoInicial: moedaAposRotulo(texto, "Saldo Inicial"),
+    clientes: positivo(moedaAposRotulo(texto, "CLIENTES \\(VND\\/TRANS?\\)")),
+    credito: positivo(moedaAposRotulo(texto, "CREDITO \\(VND\\/TRANS?\\)")),
+    debito: positivo(moedaAposRotulo(texto, "DEBITO \\(VND\\/TRANS?\\)")),
+    dinheiro: positivo(moedaAposRotulo(texto, "DINHEIRO \\(VND\\)")),
+    pix: positivo(moedaAposRotulo(texto, "PIX \\(VND\\/TRANS?\\)")),
+    voucher: positivo(moedaAposRotulo(texto, "VOUCHER \\(VND\\/TRANS?\\)")),
+    total: positivo(moedaAposRotulo(texto, "\\bTotal")),
+    despesas: positivo(moedaAposRotulo(texto, "\\bDespesas")),
+    sangria: positivo(moedaAposRotulo(texto, "\\bSangria")),
+    saldoFinalDinheiro: moedaAposRotulo(texto, "Saldo Final Dinheiro")
+  };
+  const datas = {
+    dataEmissao: emissao ? `${emissao[1]} ${emissao[2]}` : null,
+    periodoInicio: periodo ? `${periodo[1]} ${periodo[2]}` : null,
+    periodoFim: periodo ? `${periodo[3]} ${periodo[4]}` : null
+  };
+  if (Object.values(valores).every((item) => item === null)) return null;
+  const camposDuvidosos = Object.entries({ ...datas, ...valores })
+    .filter(([, item]) => item === null)
+    .map(([campo]) => campo);
+  return relatorioVendasCreareSchema.parse({
+    documentoLegivel: true,
+    nomeLoja: null,
+    ...datas,
+    ...valores,
+    camposDuvidosos,
+    observacoes: ["Valores lidos do texto nativo do PDF; revise antes de gerar o relatório."]
+  });
 }
 
 export async function extrairRelatorioVendasCreareComGemini(
@@ -140,7 +167,10 @@ export async function extrairRelatorioVendasCreareComGemini(
           contents: [
             {
               role: "user",
-              parts: [{ text: prompt }, { inlineData: { mimeType: arquivo.mimeType, data: arquivo.dados.toString("base64") } }]
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: arquivo.mimeType, data: arquivo.dados.toString("base64") } }
+              ]
             }
           ],
           generationConfig: { temperature: 0, responseMimeType: "application/json", responseJsonSchema: schemaResposta }
@@ -158,7 +188,12 @@ export async function extrairRelatorioVendasCreareComGemini(
     }
     const corpo = (await resposta.json()) as RespostaGemini;
     const texto = corpo.candidates?.[0]?.content?.parts?.find((parte) => parte.text)?.text;
-    if (!texto) return falha("A IA nao conseguiu ler esta folha. Preencha os campos visiveis manualmente.", 422, "IA_RESPOSTA_INCOMPLETA");
+    if (!texto)
+      return falha(
+        "A IA nao conseguiu ler esta folha. Preencha os campos visiveis manualmente.",
+        422,
+        "IA_RESPOSTA_INCOMPLETA"
+      );
     let json: JsonValue;
     try {
       json = JSON.parse(texto) as JsonValue;
@@ -166,11 +201,13 @@ export async function extrairRelatorioVendasCreareComGemini(
       return falha("A IA devolveu uma leitura incompleta. Revise a folha.", 422, "IA_RESPOSTA_INCOMPLETA");
     }
     const validado = relatorioVendasCreareSchema.safeParse(json);
-    if (!validado.success) return falha("A IA devolveu campos invalidos. Revise a folha.", 422, "IA_RESPOSTA_INCOMPLETA");
+    if (!validado.success)
+      return falha("A IA devolveu campos invalidos. Revise a folha.", 422, "IA_RESPOSTA_INCOMPLETA");
     return validado.data;
   } catch (erro) {
     if (erro instanceof ErroDominio) throw erro;
-    if (erro instanceof Error && erro.name === "AbortError") return falha("A leitura demorou demais. Tente novamente.", 504, "IA_TIMEOUT");
+    if (erro instanceof Error && erro.name === "AbortError")
+      return falha("A leitura demorou demais. Tente novamente.", 504, "IA_TIMEOUT");
     return falha("Sem conexao com a leitura por IA. Preencha os campos visiveis manualmente.", 503);
   } finally {
     clearTimeout(timeout);

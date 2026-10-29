@@ -40,14 +40,16 @@ describe("contrato dos relatórios de manhã e tarde da maquininha", () => {
 describe("contrato da prova CREARE", () => {
   const leituraCreare = {
     documentoLegivel: true,
-    totalBruto: 100,
+    periodoInicio: "26/10/2026 06:14:58",
+    trocoInicial: 0,
     dinheiro: 100,
     credito: 0,
     debito: 0,
     pix: 0,
     voucher: 0,
-    despesasExcetoSangria: 0,
-    resultadoFinal: 100,
+    total: 100,
+    despesas: 0,
+    sangria: 0,
     camposDuvidosos: [],
     observacoes: []
   };
