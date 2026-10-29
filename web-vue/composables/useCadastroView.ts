@@ -82,6 +82,10 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.apelido ?? item.nome,
         numeroSerie: item.numeroSerie,
+        // Colunas da tabela: a chave e a que `chaveColuna` deriva do rotulo ("Apelido", "Número de série").
+        // `nome`/`numeroSerie` continuam para o formulario de edicao.
+        apelido: item.apelido ?? item.nome,
+        numero_de_serie: item.numeroSerie,
         ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "clientes")
