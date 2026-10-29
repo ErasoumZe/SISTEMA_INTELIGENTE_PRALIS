@@ -327,6 +327,43 @@ describe("Central de produtos integration", () => {
     expect(depois?.total).toBe((antes?.total ?? 0) + 1);
   }, 60_000);
 
+  // 29/10/2026: o backup real do cadastro tem 10,9 MB e o teto global de 10 MB o recusava com 413.
+  it("Deve_AceitarBackupAcimaDe10MB_ERecusarSoAcimaDe50MB", async () => {
+    const criada = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos/central/cargas",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(criada.statusCode, criada.body).toBe(201);
+    const cargaId = json<{ data: { id: string } }>(criada).data.id;
+    const enviar = (tamanho: number) => {
+      const boundary = `----central-backup-${randomUUID()}`;
+      const corpo = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="arquivo"; filename="backup.xlsx"\r\n` +
+            "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n"
+        ),
+        Buffer.alloc(tamanho),
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
+      return contexto.app.inject({
+        method: "POST",
+        url: `/api/produtos/central/cargas/${cargaId}/fontes?fonte=pralis`,
+        headers: { cookie: cookieAdmin, "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: corpo
+      });
+    };
+
+    // 11 MB chega ao leitor do backup, que recusa o conteudo (nao e XLSX) — nao o tamanho.
+    const acimaDoTetoAntigo = await enviar(11 * 1024 * 1024);
+    expect(acimaDoTetoAntigo.statusCode, acimaDoTetoAntigo.body).toBe(400);
+    expect(json<{ code?: string }>(acimaDoTetoAntigo).code).toBe("PRALIS_BACKUP_INVALID");
+
+    const acimaDoTeto = await enviar(50 * 1024 * 1024 + 1024);
+    expect(acimaDoTeto.statusCode).toBe(413);
+    expect(json<{ code?: string }>(acimaDoTeto).code).toBe("FILE_TOO_LARGE");
+  }, 60_000);
+
   it("Deve_RestringirAcesso_AdminDaCentral", async () => {
     const anonima = await contexto.app.inject({ method: "GET", url: "/api/produtos/central/cargas" });
     expect(anonima.statusCode).toBe(401);
