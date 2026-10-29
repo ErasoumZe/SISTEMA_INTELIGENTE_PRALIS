@@ -13,7 +13,10 @@ import ProdutosCabecalho from "~/components/produtos/ProdutosCabecalho.vue";
 import ProdutoFiltros from "~/components/produtos/ProdutoFiltros.vue";
 import ProdutoInativarLote from "~/components/produtos/ProdutoInativarLote.vue";
 import ProdutoListaLinha from "~/components/produtos/ProdutoListaLinha.vue";
+import ProdutoFotoAmpliada from "~/components/produtos/ProdutoFotoAmpliada.vue";
+import ProdutosListaVazia from "~/components/produtos/ProdutosListaVazia.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
+import { useEmpresaAtivaDosProdutos } from "~/composables/useEmpresaAtivaDosProdutos";
 import { useListagemProdutos } from "~/composables/useListagemProdutos";
 import { useStatusDeProdutos } from "~/composables/useStatusDeProdutos";
 import { mensagemErro } from "~/utils/domain";
@@ -23,11 +26,13 @@ const { apiGet, carregarSessao } = useApi();
 
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
-const empresaId = ref("");
+// Empresa ATIVA do seletor do shell, a mesma do "Importar da base".
+const empresaAtiva = useEmpresaAtivaDosProdutos();
+const empresaId = empresaAtiva.empresaId;
 const caixaStatus = ref<CaixaStatus | null>(null);
 const carregandoPagina = ref(true);
-const trocandoEmpresa = ref(false);
 const erroDeAcesso = ref("");
+const fotoAmpliada = ref<{ endereco: string; nome: string } | null>(null);
 const mostrarFiltros = ref(false);
 const modoVisualizacao = ref<"cards" | "lista">("cards");
 const CHAVE_MODO_VISUALIZACAO = "pralis:produtos:modo";
@@ -71,12 +76,6 @@ const soAtivos = computed({
   }
 });
 
-async function trocarEmpresa(id: string) {
-  trocandoEmpresa.value = true;
-  empresaId.value = id;
-  trocandoEmpresa.value = false;
-}
-
 onMounted(async () => {
   try {
     sessao.value = await carregarSessao();
@@ -89,8 +88,7 @@ onMounted(async () => {
       return;
     }
     empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
-    empresaId.value =
-      sessao.value.perfil?.empresaId ?? sessao.value.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
+    empresaAtiva.iniciar(sessao.value, empresas.value);
     await Promise.all([lista.carregar(), lista.carregarOpcoesDeFiltro()]);
   } catch (error) {
     erroDeAcesso.value = mensagemErro(error);
@@ -113,8 +111,8 @@ onMounted(async () => {
     :caixa-status="caixaStatus"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
-    :carregando-empresa="trocandoEmpresa"
-    @selecionar-empresa="trocarEmpresa"
+    :carregando-empresa="false"
+    @selecionar-empresa="empresaAtiva.trocar"
   >
     <v-alert v-if="erroDeAcesso" type="error" variant="tonal">{{ erroDeAcesso }}</v-alert>
 
@@ -213,6 +211,7 @@ onMounted(async () => {
         :processando="statusDeProdutos.inativandoLote.value"
         @confirmar="confirmarLote"
         @limpar="statusDeProdutos.selecionados.value = []"
+        @selecionar-pagina="statusDeProdutos.selecionarPagina(lista.produtos.value.map((produto) => produto.id))"
       />
 
       <v-progress-linear v-if="lista.carregando.value" indeterminate color="primary" />
@@ -229,12 +228,14 @@ onMounted(async () => {
           v-for="produto in lista.produtos.value"
           :key="produto.id"
           :produto="produto"
+          :preco="lista.precoDe(produto)"
           :pode-editar="podeEditar"
           :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
           :selecionavel="ehAdmin"
           :selecionado="statusDeProdutos.selecionados.value.includes(produto.id)"
           @alternar-status="statusDeProdutos.alternar(produto)"
           @selecionar="statusDeProdutos.alternarSelecao(produto.id)"
+          @ampliar-foto="fotoAmpliada = $event"
         />
       </div>
 
@@ -243,6 +244,7 @@ onMounted(async () => {
           v-for="produto in lista.produtos.value"
           :key="produto.id"
           :produto="produto"
+          :preco="lista.precoDe(produto)"
           :pode-editar="podeEditar"
           :alterando-status="statusDeProdutos.emAlteracao.value.has(produto.id)"
           :selecionavel="ehAdmin"
@@ -252,18 +254,14 @@ onMounted(async () => {
         />
       </div>
 
-      <div v-else-if="!lista.carregando.value" class="produtos-tela__vazio">
-        <v-icon icon="mdi-basket-off-outline" size="44" />
-        <p>
-          {{
-            lista.temFiltroOuBusca.value
-              ? "Nenhum produto com esses filtros."
-              : "Nenhum produto cadastrado nesta loja ainda."
-          }}
-        </p>
-        <v-btn v-if="lista.temFiltroOuBusca.value" variant="tonal" @click="lista.limparFiltros">Limpar filtros</v-btn>
-        <v-btn v-else-if="podeCriar" color="primary" variant="tonal" to="/produtos/novo">Cadastrar o primeiro</v-btn>
-      </div>
+      <ProdutosListaVazia
+        v-else-if="!lista.carregando.value"
+        :tem-filtro="lista.temFiltroOuBusca.value"
+        :eh-admin="ehAdmin"
+        :pode-importar="podeCriar"
+        @limpar="lista.limparFiltros"
+      />
+      <ProdutoFotoAmpliada :foto="fotoAmpliada" @fechar="fotoAmpliada = null" />
 
       <div v-if="lista.paginacao.totalPages > 1" class="produtos-tela__paginacao">
         <span class="cx-num">Página {{ lista.paginacao.page }} de {{ lista.paginacao.totalPages }}</span>
@@ -327,20 +325,6 @@ onMounted(async () => {
   .produtos-tela__visualizacao {
     margin-left: 0;
   }
-}
-
-.produtos-tela__vazio {
-  display: grid;
-  gap: var(--cx-sp-3);
-  justify-items: center;
-  padding: var(--cx-sp-8) var(--cx-sp-4);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface);
-  color: var(--cx-ink-soft);
-  text-align: center;
-}
-.produtos-tela__vazio p {
-  margin: 0;
 }
 
 .produtos-tela__paginacao {

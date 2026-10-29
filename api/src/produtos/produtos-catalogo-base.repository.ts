@@ -9,6 +9,7 @@ import {
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
 import { banco, executarEmTransacao } from "../banco/conexao.js";
+import { codigoDeBarrasIgualA } from "./produtos-leitura.repository.js";
 
 function normalizarChave(valor: string) {
   return valor
@@ -140,6 +141,8 @@ export async function importarCatalogoBaseRepository(cargaId: string): Promise<R
 export async function listarCatalogoBaseRepository(input: {
   busca?: string | undefined;
   status?: "ativo" | "inativo" | undefined;
+  /** Loja de destino: com ela, cada linha diz se ja foi importada ali (oficial "Novo"/"Importado"). */
+  empresaId?: string | undefined;
   page: number;
   pageSize: number;
 }) {
@@ -151,7 +154,8 @@ export async function listarCatalogoBaseRepository(input: {
       or(
         ilike(produtosCatalogoBase.nome, termo),
         ilike(produtosCatalogoBase.codigoInterno, termo),
-        ilike(produtosCatalogoBase.codigoBarras, termo)
+        // EAN por igualdade com as variantes do oficial (zeros a esquerda e etiqueta de balanca).
+        codigoDeBarrasIgualA(produtosCatalogoBase.codigoBarras, input.busca)
       )!
     );
   }
@@ -174,7 +178,27 @@ export async function listarCatalogoBaseRepository(input: {
     .orderBy(asc(produtosCatalogoBase.nome), asc(produtosCatalogoBase.codigoInterno))
     .limit(input.pageSize)
     .offset((input.page - 1) * input.pageSize);
-  return { itens, total: Number(total?.total ?? 0) };
+  const importados = new Set<string>();
+  if (input.empresaId && itens.length) {
+    const copias = await banco
+      .select({ produtoBaseId: produtos.produtoBaseId })
+      .from(produtos)
+      .where(
+        and(
+          eq(produtos.empresaId, input.empresaId),
+          inArray(
+            produtos.produtoBaseId,
+            itens.map((item) => item.id)
+          )
+        )
+      );
+    for (const copia of copias) if (copia.produtoBaseId) importados.add(copia.produtoBaseId);
+  }
+  return {
+    // Sem loja de destino nao ha como dizer: `null`, e a tela nao marca a linha.
+    itens: itens.map((item) => ({ ...item, jaImportado: input.empresaId ? importados.has(item.id) : null })),
+    total: Number(total?.total ?? 0)
+  };
 }
 
 export async function carregarProdutoBaseParaLojaRepository(id: string, empresaId: string) {

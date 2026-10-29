@@ -278,13 +278,22 @@ export function montarPayloadBase(
   };
 }
 
-export function listarCatalogoBase(input: {
-  busca?: string | undefined;
-  status?: "ativo" | "inativo" | undefined;
-  page: number;
-  pageSize: number;
-}) {
-  return listarCatalogoBaseRepository(input);
+/**
+ * Catalogo BASE paginado. Com `empresaId` (loja de destino), cada linha traz `jaImportado`. A empresa
+ * fora do escopo do ator e ignorada (sem marca), nunca revela o que a outra loja importou.
+ */
+export function listarCatalogoBase(
+  input: {
+    busca?: string | undefined;
+    status?: "ativo" | "inativo" | undefined;
+    empresaId?: string | undefined;
+    page: number;
+    pageSize: number;
+  },
+  empresasDoAtor: string[]
+) {
+  const empresaId = input.empresaId && empresasDoAtor.includes(input.empresaId) ? input.empresaId : undefined;
+  return listarCatalogoBaseRepository({ ...input, empresaId });
 }
 
 export async function importarCatalogoBase(cargaId: string) {

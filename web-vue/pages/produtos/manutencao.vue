@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
+import ProdutoFilaPlanilha from "~/components/produtos/ProdutoFilaPlanilha.vue";
 import ProdutoPanoramaFiscal from "~/components/produtos/ProdutoPanoramaFiscal.vue";
 import ProdutoVinculoBase from "~/components/produtos/ProdutoVinculoBase.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
@@ -44,7 +45,7 @@ onMounted(async () => {
     v-else-if="sessao"
     :sessao="sessao"
     :telas="telasPermitidas"
-    tela-ativa="produtos"
+    tela-ativa="produtos_manutencao"
     :empresas="empresas"
     :empresa-id="sessao.perfil?.empresaId ?? ''"
     :caixa-status="caixaStatus"
@@ -65,6 +66,8 @@ onMounted(async () => {
 
       <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
       <template v-else>
+        <!-- A fila vem primeiro: e a acao de toda semana (paralelo). -->
+        <ProdutoFilaPlanilha class="mb-4" />
         <v-row class="mb-1">
           <v-col cols="12" md="6">
             <v-card variant="outlined" height="100%">

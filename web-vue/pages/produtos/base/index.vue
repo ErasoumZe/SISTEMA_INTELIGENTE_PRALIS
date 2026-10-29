@@ -1,34 +1,19 @@
 <script setup lang="ts">
+/**
+ * Catalogo mestre BASE = "Importar da base" da loja (paralelo `importar.vue`). A copia vai para a
+ * empresa ATIVA do seletor do shell; cada linha diz se o produto ja esta nela ("Novo"/"Importado").
+ */
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import CatalogoBaseDetalhe from "~/components/produtos/CatalogoBaseDetalhe.vue";
+import CatalogoBaseTabela from "~/components/produtos/CatalogoBaseTabela.vue";
+import { useEmpresaAtivaDosProdutos } from "~/composables/useEmpresaAtivaDosProdutos";
+import { useImportacaoDaBase, type ProdutoBase } from "~/composables/useImportacaoDaBase";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
 
-type ProdutoBase = {
-  id: string;
-  idOrigem: string;
-  codigoInterno: string | null;
-  codigoBarras: string | null;
-  nome: string;
-  status: "ativo" | "inativo";
-  grupoIdOrigem: string | null;
-  dadosOficiais: Record<string, unknown>;
-  atualizadoEm: string;
-};
-type ResultadoCopiaLote = {
-  total: number;
-  importados: number;
-  jaImportados: number;
-  ignorados: number;
-  bloqueados: number;
-  naoEncontrados: number;
-  erros: number;
-  itens: Array<{ produtoBaseId: string; nome: string; estado: string; motivo?: string }>;
-};
-
 const router = useRouter();
-const { apiGet, apiPost, carregarSessao } = useApi();
+const { apiGet, carregarSessao } = useApi();
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
 const caixaStatus = ref<CaixaStatus | null>(null);
@@ -41,18 +26,19 @@ const pageSize = 30;
 const total = ref(0);
 const carregando = ref(true);
 const erro = ref("");
-const aviso = ref("");
-const copiandoId = ref<string | null>(null);
-const copiandoLote = ref(false);
-const idsSelecionados = ref<string[]>([]);
-const lote = ref<ResultadoCopiaLote | null>(null);
 const buscaAplicada = ref("");
 let temporizadorBusca: ReturnType<typeof setTimeout> | undefined;
 /** Oficial: so o administrador cria e altera produto na BASE; a loja importa a copia. */
 const ehAdmin = computed(() => sessao.value?.perfil?.role === "usuario_admin");
-const { telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
+const { telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas, temPermissao } = usePermissoes(
   computed(() => sessao.value?.perfil?.permissoes ?? []),
   () => Boolean(caixaStatus.value?.caixaAberto)
+);
+const podeImportar = computed(() => temPermissao("cadastro_produtos_criar"));
+
+const empresaAtiva = useEmpresaAtivaDosProdutos();
+const nomeDaLoja = computed(
+  () => empresas.value.find((empresa) => empresa.id === empresaAtiva.empresaId.value)?.nome ?? "a loja ativa"
 );
 
 async function carregar() {
@@ -62,6 +48,8 @@ async function carregar() {
     const query = new URLSearchParams({ page: String(page.value), pageSize: String(pageSize) });
     if (buscaAplicada.value.trim()) query.set("busca", buscaAplicada.value.trim());
     if (status.value !== "todos") query.set("status", status.value);
+    // A loja de destino faz cada linha dizer se ja foi importada ali.
+    if (empresaAtiva.empresaId.value) query.set("empresaId", empresaAtiva.empresaId.value);
     const resultado = await apiGet<{ itens: ProdutoBase[]; total: number }>(`/api/produtos/catalogo-base?${query}`);
     itens.value = resultado.itens;
     total.value = resultado.total;
@@ -72,92 +60,20 @@ async function carregar() {
   }
 }
 
-function grupoProduto(produto: ProdutoBase) {
-  const grupo = produto.dadosOficiais["grupo"];
-  return typeof grupo === "string" && grupo.trim() ? grupo : produto.grupoIdOrigem || "—";
-}
-
-async function copiarParaLoja(produto: ProdutoBase) {
-  const empresaId = sessao.value?.perfil?.empresaId;
-  if (!empresaId || !sessao.value?.perfil?.permissoes?.includes("cadastro_produtos_criar")) return;
-  if (!window.confirm(`Copiar “${produto.nome}” para a loja ativa? O saldo de estoque será iniciado em zero.`)) return;
-  lote.value = null;
-  copiandoId.value = produto.id;
-  aviso.value = "";
-  try {
-    const resultado = await apiPost<{ estado: string; motivo?: string; mensagem?: string }>(
-      `/api/produtos/catalogo-base/${produto.id}/importar`,
-      { empresaId }
-    );
-    aviso.value =
-      resultado.estado === "importado"
-        ? "Produto copiado para a loja. O saldo começou em zero."
-        : (resultado.motivo ?? resultado.mensagem ?? "O produto não foi copiado.");
-  } catch (falha) {
-    aviso.value = mensagemErro(falha);
-  } finally {
-    copiandoId.value = null;
-  }
-}
-
-function selecionarProduto(produtoBaseId: string, selecionado: boolean | null) {
-  idsSelecionados.value = selecionado
-    ? [...new Set([...idsSelecionados.value, produtoBaseId])]
-    : idsSelecionados.value.filter((id) => id !== produtoBaseId);
-}
-
-function selecionarPagina(selecionado: boolean | null) {
-  idsSelecionados.value = selecionado ? itens.value.map((produto) => produto.id) : [];
-}
-
-async function copiarSelecionadosParaLoja() {
-  const empresaId = sessao.value?.perfil?.empresaId;
-  if (!empresaId || !idsSelecionados.value.length || copiandoLote.value) return;
-  const nomes = new Map(itens.value.map((produto) => [produto.id, produto.nome]));
-  if (
-    !window.confirm(
-      `Copiar ${idsSelecionados.value.length} produto(s) selecionado(s) para a loja ativa? O saldo será iniciado em zero.`
-    )
-  )
-    return;
-  copiandoLote.value = true;
-  aviso.value = "";
-  lote.value = null;
-  try {
-    const resultado = await apiPost<
-      Omit<ResultadoCopiaLote, "itens"> & {
-        itens: Array<{ produtoBaseId: string; estado: string; motivo?: string }>;
-      }
-    >("/api/produtos/catalogo-base/importar", {
-      empresaId,
-      produtoBaseIds: idsSelecionados.value
-    });
-    lote.value = {
-      ...resultado,
-      itens: resultado.itens.map((item) => ({ ...item, nome: nomes.get(item.produtoBaseId) ?? item.produtoBaseId }))
-    };
-    idsSelecionados.value = [];
-    await carregar();
-  } catch (falha) {
-    aviso.value = mensagemErro(falha);
-  } finally {
-    copiandoLote.value = false;
-  }
-}
+const importacao = useImportacaoDaBase({ empresaId: empresaAtiva.empresaId, itens, recarregar: carregar });
+const ocupado = computed(() => importacao.copiandoLote.value || Boolean(importacao.copiandoId.value));
 
 watch(busca, (valor) => {
   if (temporizadorBusca) clearTimeout(temporizadorBusca);
   temporizadorBusca = setTimeout(() => (buscaAplicada.value = valor), 300);
 });
+// Busca e pagina NAO limpam a selecao (paralelo); trocar a situacao limpa: nao se importa o que saiu.
+watch(status, () => importacao.limparSelecao());
 watch([buscaAplicada, status], () => {
   page.value = 1;
-  idsSelecionados.value = [];
   void carregar();
 });
-watch(page, () => {
-  idsSelecionados.value = [];
-  void carregar();
-});
+watch([page, empresaAtiva.empresaId], () => void carregar());
 onBeforeUnmount(() => {
   if (temporizadorBusca) clearTimeout(temporizadorBusca);
 });
@@ -170,7 +86,8 @@ onMounted(async () => {
       erro.value = "Sem permissão para consultar o catálogo mestre BASE.";
       return;
     }
-    empresas.value = sessao.value.empresas ?? [];
+    empresas.value = sessao.value.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
+    empresaAtiva.iniciar(sessao.value, empresas.value);
     await carregar();
   } catch (falha) {
     erro.value = mensagemErro(falha);
@@ -185,21 +102,25 @@ onMounted(async () => {
     v-if="sessao"
     :sessao="sessao"
     :telas="telasPermitidas"
-    tela-ativa="produtos"
+    tela-ativa="produtos_importar"
     :empresas="empresas"
-    :empresa-id="sessao.perfil?.empresaId ?? ''"
+    :empresa-id="empresaAtiva.empresaId.value"
     :caixa-status="caixaStatus"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="false"
+    @selecionar-empresa="empresaAtiva.trocar"
   >
     <main class="catalogo-base">
       <header class="catalogo-base__header">
         <div>
-          <h1>Catálogo mestre BASE</h1>
+          <h1>{{ ehAdmin ? "Catálogo mestre BASE" : "Importar da base" }}</h1>
           <p>{{ total.toLocaleString("pt-BR") }} produto(s) · cadastro separado das lojas</p>
         </div>
         <div class="catalogo-base__acoes">
+          <v-chip v-if="podeImportar" color="primary" label prepend-icon="mdi-storefront-outline">
+            Destino: {{ nomeDaLoja }}
+          </v-chip>
           <v-btn variant="outlined" prepend-icon="mdi-arrow-left" to="/produtos">Voltar aos produtos</v-btn>
           <v-btn v-if="ehAdmin" color="primary" prepend-icon="mdi-plus" to="/produtos/novo">Novo produto</v-btn>
         </div>
@@ -211,23 +132,18 @@ onMounted(async () => {
         campo.
       </v-alert>
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
-      <v-alert v-if="aviso" type="info" variant="tonal">{{ aviso }}</v-alert>
-      <v-alert v-if="lote" type="info" variant="tonal">
-        Lote concluído: {{ lote.importados }} importado(s), {{ lote.jaImportados }} já existente(s),
-        {{ lote.ignorados }} ignorado(s), {{ lote.bloqueados }} bloqueado(s), {{ lote.naoEncontrados }} não
-        encontrado(s) e {{ lote.erros }} com falha.
-        <ul
-          v-if="lote.itens.some((item) => item.estado === 'bloqueado' || item.estado === 'erro')"
-          class="catalogo-base__falhas"
-        >
-          <li
-            v-for="item in lote.itens.filter(
-              (resultado) => resultado.estado === 'bloqueado' || resultado.estado === 'erro'
-            )"
-            :key="item.produtoBaseId"
-          >
-            {{ item.nome }}: {{ item.motivo ?? item.estado }}
-          </li>
+      <v-alert v-if="importacao.aviso.value" type="info" variant="tonal">{{ importacao.aviso.value }}</v-alert>
+      <v-alert v-if="importacao.lote.value" type="info" variant="tonal">
+        Lote concluído: {{ importacao.lote.value.importados }} importado(s), {{ importacao.lote.value.jaImportados }} já
+        existente(s), {{ importacao.lote.value.ignorados }} ignorado(s),
+        {{ importacao.lote.value.bloqueados }} bloqueado(s), {{ importacao.lote.value.naoEncontrados }} não
+        encontrado(s) e {{ importacao.lote.value.erros }} com falha.
+        <ul class="catalogo-base__falhas">
+          <template v-for="item in importacao.lote.value.itens" :key="item.produtoBaseId">
+            <li v-if="item.estado === 'bloqueado' || item.estado === 'erro'">
+              {{ item.nome }}: {{ item.motivo ?? item.estado }}
+            </li>
+          </template>
         </ul>
       </v-alert>
 
@@ -251,81 +167,41 @@ onMounted(async () => {
         />
       </div>
 
+      <div v-if="podeImportar && importacao.idsSelecionados.value.length" class="catalogo-base__lote">
+        <span>{{ importacao.idsSelecionados.value.length }} selecionado(s), em qualquer página</span>
+        <div class="catalogo-base__acoes">
+          <v-btn variant="text" :disabled="ocupado" @click="importacao.limparSelecao">Limpar seleção</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :disabled="ocupado"
+            :loading="importacao.copiandoLote.value"
+            @click="importacao.copiarSelecionados(nomeDaLoja)"
+          >
+            Copiar selecionados para {{ nomeDaLoja }}
+          </v-btn>
+        </div>
+      </div>
+
       <v-progress-linear v-if="carregando" indeterminate />
       <v-alert v-else-if="!itens.length" type="info" variant="tonal">
         Nenhum produto BASE corresponde a esta busca e situação.
       </v-alert>
-      <div
-        v-if="!carregando && itens.length && sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')"
-        class="catalogo-base__lote"
-      >
-        <span>{{ idsSelecionados.length }} selecionado(s) nesta página</span>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          :disabled="!idsSelecionados.length || copiandoLote || Boolean(copiandoId)"
-          :loading="copiandoLote"
-          @click="copiarSelecionadosParaLoja"
-        >
-          Copiar selecionados para loja
-        </v-btn>
-      </div>
-      <v-table v-if="!carregando && itens.length" class="catalogo-base__tabela">
-        <thead>
-          <tr>
-            <th v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')">
-              <v-checkbox-btn
-                :model-value="itens.length > 0 && idsSelecionados.length === itens.length"
-                :indeterminate="idsSelecionados.length > 0 && idsSelecionados.length < itens.length"
-                aria-label="Selecionar todos os produtos desta página"
-                @update:model-value="selecionarPagina"
-              />
-            </th>
-            <th>Nome oficial</th>
-            <th>Código interno</th>
-            <th>EAN</th>
-            <th>Grupo oficial</th>
-            <th>Situação</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="produto in itens" :key="produto.id" class="catalogo-base__linha">
-            <td v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')">
-              <v-checkbox-btn
-                :model-value="idsSelecionados.includes(produto.id)"
-                :disabled="copiandoLote || Boolean(copiandoId)"
-                :aria-label="`Selecionar ${produto.nome}`"
-                @update:model-value="selecionarProduto(produto.id, $event)"
-              />
-            </td>
-            <td>{{ produto.nome }}</td>
-            <td class="cx-num">{{ produto.codigoInterno || "—" }}</td>
-            <td class="cx-num">{{ produto.codigoBarras || "—" }}</td>
-            <td>{{ grupoProduto(produto) }}</td>
-            <td>
-              <v-chip size="small" :color="produto.status === 'ativo' ? 'success' : 'default'">{{
-                produto.status
-              }}</v-chip>
-            </td>
-            <td class="catalogo-base__acoes">
-              <v-btn size="small" variant="text" @click="selecionado = produto">Ver cadastro</v-btn>
-              <v-btn v-if="ehAdmin" size="small" variant="text" :to="`/produtos/base/${produto.id}`">Editar</v-btn>
-              <v-btn
-                v-if="sessao.perfil?.permissoes?.includes('cadastro_produtos_criar')"
-                size="small"
-                color="primary"
-                variant="tonal"
-                :loading="copiandoId === produto.id"
-                :disabled="Boolean(copiandoId)"
-                @click="copiarParaLoja(produto)"
-              >
-                Copiar para loja
-              </v-btn>
-            </td>
-          </tr>
-        </tbody>
-      </v-table>
+      <CatalogoBaseTabela
+        v-else
+        :itens="itens"
+        :selecionados="importacao.selecionados.value"
+        :pagina-toda="importacao.paginaToda.value"
+        :pagina-em-parte="importacao.paginaEmParte.value"
+        :pode-importar="podeImportar"
+        :eh-admin="ehAdmin"
+        :ocupado="ocupado"
+        :copiando-id="importacao.copiandoId.value"
+        @selecionar="importacao.selecionar"
+        @selecionar-pagina="importacao.selecionarPagina"
+        @ver="selecionado = $event"
+        @copiar="importacao.copiarUm($event, nomeDaLoja)"
+      />
       <v-pagination v-if="total > pageSize" v-model="page" :length="Math.ceil(total / pageSize)" :total-visible="5" />
 
       <CatalogoBaseDetalhe :produto="selecionado" @fechar="selecionado = null" />
@@ -343,8 +219,10 @@ onMounted(async () => {
   padding: 24px;
 }
 .catalogo-base__header,
-.catalogo-base__filtros {
+.catalogo-base__filtros,
+.catalogo-base__lote {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -362,23 +240,11 @@ onMounted(async () => {
 .catalogo-base__filtros > :last-child {
   flex: 0 1 220px;
 }
-.catalogo-base__tabela {
-  overflow-x: auto;
-}
-.catalogo-base__linha {
-  cursor: pointer;
-}
 .catalogo-base__acoes {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-}
-.catalogo-base__lote {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 .catalogo-base__falhas {
   margin-top: 8px;

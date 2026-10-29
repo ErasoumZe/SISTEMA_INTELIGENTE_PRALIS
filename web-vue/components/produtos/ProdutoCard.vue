@@ -7,15 +7,22 @@
  * Nao existe botao de EXCLUIR: produto e inativado, nunca apagado.
  */
 import type { ProdutoResumo } from "@padaria/shared";
+import { reais } from "~/utils/produto-preco-card";
 
 const props = defineProps<{
   produto: ProdutoResumo;
+  /** Preco calculado como no formulario (`precoCalculadoDoProduto`); `null` = sem preco. */
+  preco: number | null;
   podeEditar: boolean;
   alterandoStatus?: boolean;
   selecionavel?: boolean;
   selecionado?: boolean;
 }>();
-defineEmits<{ "alternar-status": []; selecionar: [] }>();
+const emit = defineEmits<{
+  "alternar-status": [];
+  selecionar: [];
+  "ampliar-foto": [foto: { endereco: string; nome: string }];
+}>();
 
 const { apiUrl } = useApi();
 
@@ -42,25 +49,31 @@ const estoque = computed(() => {
   return Number.isFinite(atual) ? atual.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) : "—";
 });
 
-const preco = computed(() =>
-  props.produto.precoVendaAtual == null
-    ? null
-    : props.produto.precoVendaAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-);
+const preco = computed(() => (props.preco == null ? null : reais(props.preco)));
+/** Promocao vigente agora (o servidor ja aplica): aparece ao lado, sem trocar o preco de referencia. */
+const promocao = computed(() => {
+  const atual = props.produto.precoVendaAtual;
+  return atual != null && props.preco != null && atual < props.preco ? reais(atual) : null;
+});
+const nome = computed(() => props.produto.nomeCatalogo || props.produto.descricao);
 </script>
 
 <template>
   <article class="produto-card">
     <header class="produto-card__topo">
       <div class="produto-card__identidade">
-        <div class="produto-card__foto" :class="{ 'produto-card__foto--vazia': !enderecoDaFoto }">
-          <img
-            v-if="enderecoDaFoto"
-            :src="enderecoDaFoto"
-            :alt="produto.nomeCatalogo || produto.descricao"
-            loading="lazy"
-          />
-          <v-icon v-else icon="mdi-basket-outline" size="22" />
+        <!-- Clicar na foto amplia (paralelo). Sem foto, nada a ampliar. -->
+        <button
+          v-if="enderecoDaFoto"
+          type="button"
+          class="produto-card__foto produto-card__foto--botao"
+          :aria-label="`Ampliar a foto de ${nome}`"
+          @click="emit('ampliar-foto', { endereco: enderecoDaFoto, nome })"
+        >
+          <img :src="enderecoDaFoto" :alt="nome" loading="lazy" />
+        </button>
+        <div v-else class="produto-card__foto produto-card__foto--vazia">
+          <v-icon icon="mdi-basket-outline" size="22" />
         </div>
         <div class="produto-card__titulo">
           <h3 :title="produto.descricao">{{ produto.nomeCatalogo || produto.descricao }}</h3>
@@ -122,8 +135,15 @@ const preco = computed(() =>
       </div>
     </dl>
 
+    <p v-if="produto.criadoPorNome" class="produto-card__autor">
+      <v-icon icon="mdi-account-outline" size="14" /> cadastrado por {{ produto.criadoPorNome }}
+    </p>
+
     <footer class="produto-card__rodape">
-      <span v-if="preco" class="produto-card__preco cx-num">{{ preco }}</span>
+      <span v-if="preco" class="produto-card__preco cx-num">
+        {{ preco }}
+        <small v-if="promocao" class="produto-card__promocao">promoção {{ promocao }}</small>
+      </span>
       <span v-else class="produto-card__preco produto-card__preco--vazio">sem preço de referência</span>
       <v-btn
         v-if="podeEditar"
@@ -300,6 +320,29 @@ const preco = computed(() =>
   font-size: var(--cx-fs-caption);
   font-weight: 400;
   color: var(--cx-ink-soft);
+}
+.produto-card__promocao {
+  display: block;
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  color: var(--cx-positive);
+}
+.produto-card__autor {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-1);
+  margin: 0;
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+}
+.produto-card__foto--botao {
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+.produto-card__foto--botao:focus-visible {
+  outline: 2px solid var(--cx-brand);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

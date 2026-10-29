@@ -154,6 +154,25 @@ describe("produtos - listagem paginada no banco", () => {
     expect(porMarca.meta.pagination.total).toBe(TOTAL);
   });
 
+  it("Deve_BuscarPeloEAN_SemZerosEPelaEtiquetaDeBalanca_PorIgualdade", async () => {
+    // criados[1] tem EAN "0009876543210" (beforeAll). Os zeros a esquerda nao contam, dos dois lados.
+    for (const busca of ["9876543210", "0009876543210", "0000000009876543210"]) {
+      const resultado = await listar({ busca, pageSize: 50 });
+      expect(
+        resultado.data.map((item) => item.id),
+        busca
+      ).toContain(criados[1]);
+    }
+    // Pedaco de EAN nao acha mais: codigo de barras e identidade (oficial `barcodeCandidates`).
+    const pedaco = await listar({ busca: "98765", pageSize: 50 });
+    expect(pedaco.data.map((item) => item.id)).not.toContain(criados[1]);
+
+    // Etiqueta da balanca: 2 + PLU (24680) + peso + digito acha o produto cujo codigo e o PLU.
+    await executarSql("UPDATE produtos SET codigo_barras = $2 WHERE id = $1", [criados[5], "24680"]);
+    const etiqueta = await listar({ busca: "2246800012347", pageSize: 50 });
+    expect(etiqueta.data.map((item) => item.id)).toContain(criados[5]);
+  });
+
   it("Deve_FiltrarPorStatusTipoGrupoESetor", async () => {
     const ativos = await listar({ status: "ativo", pageSize: 50 });
     expect(ativos.data.every((item) => item.status === "ativo")).toBe(true);

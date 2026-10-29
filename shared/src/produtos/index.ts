@@ -273,6 +273,11 @@ export interface ProdutoResumo {
   toleranciaQuantidadePercentual: string | null;
   precoVenda: string | null;
   precoVendaAtual: number | null;
+  /** Insumos do preco calculado do card (mesma conta do formulario). */
+  custo: string | null;
+  margem: string | null;
+  auto: boolean;
+  quantidadeCaixa: number;
   fotoUrl: string | null;
   criadoPorNome: string | null;
 }

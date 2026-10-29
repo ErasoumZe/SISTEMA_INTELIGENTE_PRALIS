@@ -47,6 +47,11 @@ export function useStatusDeProdutos(empresaId: Ref<string>, recarregar: () => Pr
       : [...selecionados.value, id];
   }
 
+  /** "Selecionar página atual" (paralelo): soma a pagina a selecao que ja existe, sem repetir. */
+  function selecionarPagina(ids: readonly string[]) {
+    selecionados.value = [...new Set([...selecionados.value, ...ids])];
+  }
+
   /** Devolve `true` quando o lote foi inativado (o dialogo fecha). */
   async function inativarSelecionados(confirmacao: string): Promise<boolean> {
     if (inativandoLote.value || !selecionados.value.length) return false;
@@ -87,6 +92,7 @@ export function useStatusDeProdutos(empresaId: Ref<string>, recarregar: () => Pr
     fraseDoLote,
     alternar,
     alternarSelecao,
+    selecionarPagina,
     inativarSelecionados
   };
 }

@@ -23,6 +23,7 @@ import type {
 } from "~/types/padaria";
 import { mascararCep, mascararDocumento, mascararWhatsapp } from "./formatacao";
 import { corCategoriaPorTela } from "./tema";
+import { ROTAS_SUBTELAS_DE_PRODUTOS } from "./menu";
 
 export const telasOcultasNoDrawerEPermissoes = new Set([
   "promocoes",
@@ -1044,7 +1045,9 @@ export function rotaTela(tela: string) {
     conplus_adiantamento_20: "/conplus/adiantamento-20",
     conplus_rescisoes: "/conplus/rescisoes",
     conplus_ferias: "/conplus/ferias",
-    conplus_exportar: "/conplus/exportar"
+    conplus_exportar: "/conplus/exportar",
+    // Submenu "Produtos" (utils/menu.ts): rotas que nao seguem o padrao `/${tela}`.
+    ...ROTAS_SUBTELAS_DE_PRODUTOS
   };
   return rotasConplus[tela] ?? (tela === "fechamento" ? "/pendencias" : `/${tela}`);
 }
