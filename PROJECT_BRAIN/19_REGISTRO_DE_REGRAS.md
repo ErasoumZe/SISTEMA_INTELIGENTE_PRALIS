@@ -1479,11 +1479,27 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
 - **Pendente de decisão:** Marco quer que **Banco → PDV** também seja malote do caixa (lacres de fechamento e
   sangria). Hoje só o Cofre é identificado (`empresas.conta_cofre_id`); não existe marcação de conta Banco. Precisa
   definir como o sistema reconhece o Banco e de confirmação do Rodrigo antes de implementar.
-- **A implementar (entrega própria):** "Transferência sem lacre" — suprimento no meio do turno (ex.: Cofre → PDV),
-  sem malote e sem lacre. Decisões do Marco em 29/10: botão bem visível no topo de Transferências; quem pode fazer
-  é definido por **permissão própria** na tela de Permissões (na prática, o gerente que busca o dinheiro durante o
-  dia); informa **dinheiro físico + moedas**; o operador do PDV **confirma o recebimento** antes de virar saldo do
-  caixa.
+- **Transferência sem lacre:** ver R-231.
+
+### R-231 — Transferência sem lacre: suprimento no meio do turno (Marco, 29/10/2026)
+
+Dinheiro que a gerência leva do Cofre (ou de outra conta) para um PDV durante o turno, sem malote. **Não é malote**:
+não tem lacre de abertura, de fechamento nem de sangria.
+
+- **Botão próprio**, bem visível no topo de Transferências: "Transferência sem lacre". Quem vê e pode fazer é
+  definido pela permissão **`transferencias_sem_lacre`** (tela de Permissões; o administrador já tem). O malote
+  Cofre → PDV pelo botão comum continua igual (composição + lacres obrigatórios).
+- Informa **dinheiro físico + moedas** (gravados como composição); o valor é a soma. Observação opcional (R-230).
+  Sem agendamento, sem múltiplo destino e sem tempo de confirmação.
+- **Destino PDV exige caixa aberto naquele PDV**; sem caixa aberto, recusa ("use o malote"). A transferência fica
+  presa ao caixa aberto do PDV de destino (suprimento direto, R-190), não ao caixa de quem lançou.
+- O dinheiro sai da origem ao lançar (pendente conta como saída) e **só entra no caixa quando o operador do PDV
+  confirma** em "Recebimentos pendentes", na tela do Caixa. **"Não recebi"** cancela a transferência: o valor
+  volta para a origem e a Tesouraria é avisada.
+- **O caixa não fecha** (nem inicia o fechamento) com recebimento sem lacre pendente.
+- Transferência sem lacre **não é editada**: o operador confirma ou marca "Não recebi"; para corrigir, lança-se
+  outra.
+- Sem migration: gravada como `suprimento` com `n_lacre_doc` nulo e `caixa_id` do PDV.
 
 ## §4 · Como isto deixa de ser mais um documento
 

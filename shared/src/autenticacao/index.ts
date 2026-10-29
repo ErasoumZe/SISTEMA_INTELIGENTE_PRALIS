@@ -10,6 +10,8 @@ export const permissoes = [
   "transferencias_editar",
   "transferencias_excluir",
   "transferencias_conferir",
+  // R-231 · suprimento no meio do turno, sem malote e sem lacre (botao proprio em Transferencias).
+  "transferencias_sem_lacre",
   "despesas_visualizar",
   "despesas_criar",
   "despesas_editar",
@@ -453,6 +455,8 @@ const descricoesEspeciaisPermissao: Partial<Record<Permissao, string>> = {
   relatorio_vendas_comprovantes_criar: "Permite gerar comprovantes para as vendas consultadas.",
   transferencias_conferir:
     "Permite conferir, aceitar ou recusar transferências recebidas e consultar os anexos do fechamento.",
+  transferencias_sem_lacre:
+    "Permite mandar dinheiro para um PDV com caixa aberto sem malote e sem lacre (ex.: reforço de troco no meio do turno). O operador confirma o recebimento.",
   relatorio_fechamento_visualizar:
     "Mostra no menu o Relatório de fechamento e permite consultar a fila e a folha digital. É efetiva para Tesouraria, Diretor Geral e Administrador Total.",
   fechamentos_caixa_conferir:

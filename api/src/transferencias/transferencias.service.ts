@@ -9,6 +9,8 @@ import type {
   TransferenciaPayload,
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
+import { transferenciaPayloadSchema, type TransferenciaSemLacrePayload } from "@padaria/shared/transferencias";
+import { diaNegocio } from "@padaria/shared/datas";
 import { ErroDominio, erroValidacao } from "../erros.js";
 import { caminhoAbsolutoDocumento } from "../lancamentos/foto-documento.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
@@ -308,6 +310,83 @@ export async function criarTransferencia(
   }
 }
 
+// R-231 · transferencia sem lacre: suprimento no meio do turno, sem malote. Rota propria para nao afrouxar as regras
+// do malote (composicao + lacres) no botao comum. Destino PDV exige caixa aberto naquele PDV, e a linha nasce presa a
+// ESSE caixa (R-190), pendente: so vira entrada quando o operador confirma na tela do Caixa.
+export async function criarTransferenciaSemLacre(
+  entrada: TransferenciaSemLacrePayload,
+  perfil: PerfilUsuario
+): Promise<TransferenciaCriada> {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_sem_lacre");
+  if (entrada.contaOrigemId === entrada.contaDestinoId)
+    throw new Error("Conta de destino deve ser diferente da origem");
+  const totalCentavos = paraCentavos(entrada.valorEspecieDeclarado) + paraCentavos(entrada.valorMoedasDeclarado);
+  if (totalCentavos <= 0) throw new Error("Informe o dinheiro fisico ou as moedas transferidos");
+  const dados = transferenciaPayloadSchema.parse({
+    empresaId: entrada.empresaId,
+    dataReferencia: diaNegocio(new Date()),
+    observacao: entrada.observacao ?? null,
+    valorOriginal: totalCentavos / 100,
+    valorEspecieDeclarado: entrada.valorEspecieDeclarado,
+    valorMoedasDeclarado: entrada.valorMoedasDeclarado,
+    contaOrigemId: entrada.contaOrigemId,
+    contaDestinoId: entrada.contaDestinoId,
+    nLacreDoc: null
+  });
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  return executarEmTransacao(async (tx) => {
+    const contasValidas = await contasPertencemEmpresaRepository(
+      [dados.contaOrigemId, dados.contaDestinoId],
+      dados.empresaId,
+      tx
+    );
+    if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+    // Dinheiro que SAI do PDV tem caminho proprio (retorno / sangria do Caixa, R-179).
+    if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaOrigemId, tx)) {
+      throw new Error("Dinheiro que sai do PDV vai pelo retorno / sangria do Caixa");
+    }
+    let caixaId: string | null = null;
+    if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx)) {
+      // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
+      const caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
+      if (!caixa) {
+        throw new ErroDominio(
+          "O PDV de destino não tem caixa aberto. Sem caixa aberto, o dinheiro vai pelo malote.",
+          409,
+          "PDV_SEM_CAIXA_ABERTO"
+        );
+      }
+      caixaId = caixa.id;
+    }
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: dados.contaOrigemId,
+        valorCentavos: computar ? totalCentavos : 0
+      },
+      tx
+    );
+    const transferencia = await criarTransferenciaRepository(
+      await comTextoDaTransferencia(dados, tx),
+      computar,
+      perfil.usuarioId,
+      caixaId,
+      tx
+    );
+    return { id: transferencia.id, computar };
+  });
+}
+
+// Sem lacre, presa a um caixa e pendente: e recebimento sem lacre (R-231), resolvido so pelo operador do Caixa.
+function ehRecebimentoSemLacrePendente(transferencia: {
+  nLacreDoc?: string | null | undefined;
+  caixaId?: string | null | undefined;
+  status: string;
+}) {
+  return !transferencia.nLacreDoc?.trim() && Boolean(transferencia.caixaId) && transferencia.status === "pendente";
+}
+
 export async function confirmarTransferencia(
   transferenciaId: string,
   dados: ConfirmarTransferenciaPayload,
@@ -318,6 +397,9 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+    if (ehRecebimentoSemLacrePendente(existente)) {
+      throw new Error("Dinheiro sem lacre e confirmado pelo operador, em Recebimentos pendentes na tela do Caixa");
+    }
     // O lacre principal do malote so e usado quando o Caixa e ABERTO com ele. A conferencia comum nao pode dar o
     // malote como recebido: o dinheiro iria para a conta do PDV sem caixa e a abertura falharia ("lacre rompido").
     if (await transferenciaEhMaloteDeAberturaRepository(transferenciaId, tx)) {
@@ -911,6 +993,9 @@ export async function atualizarTransferencia(
     // Revalida sob a trava: a conferencia pode ter vencido a corrida entre a leitura previa e o
     // lock da transferencia. Sem esta segunda guarda o PUT alteraria uma linha ja recebida.
     if (existente?.status === "recebido") throw new Error("Transferencia ja conferida nao pode ser editada");
+    if (existente && ehRecebimentoSemLacrePendente(existente)) {
+      throw new Error("Transferencia sem lacre nao e editada: o operador confirma ou marca Nao recebi; lance outra");
+    }
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     if (existente) {
       if (existente.tempoConfirmacao !== dados.tempoConfirmacao) {
