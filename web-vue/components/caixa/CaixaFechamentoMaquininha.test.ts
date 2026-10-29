@@ -21,8 +21,9 @@ afterEach(() => vi.unstubAllGlobals());
 const campo = {
   inheritAttrs: false,
   props: ["modelValue", "label", "readonly", "hint"],
+  emits: ["update:modelValue"],
   template:
-    '<label>{{ label }}<input :value="modelValue" :readonly="readonly" :data-teste="$attrs[\'data-teste\']" /><small>{{ hint }}</small></label>'
+    '<label>{{ label }}<input :value="modelValue" :readonly="readonly" :data-teste="$attrs[\'data-teste\']" @input="$emit(\'update:modelValue\', $event.target.value)" /><small>{{ hint }}</small></label>'
 };
 
 function montar() {
@@ -34,7 +35,14 @@ function montar() {
         "v-text-field": campo,
         "v-chip": { template: "<span><slot /></span>" },
         "v-alert": { template: "<div><slot /></div>" },
-        "v-btn": { template: "<button><slot /></button>" },
+        "v-btn": { template: '<button v-bind="$attrs"><slot /></button>' },
+        "v-textarea": {
+          inheritAttrs: false,
+          props: ["modelValue"],
+          emits: ["update:modelValue"],
+          template:
+            '<textarea :value="modelValue" :data-teste="$attrs[\'data-teste\']" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+        },
         "v-icon": true,
         "v-expansion-panels": { template: "<div><slot /></div>" },
         "v-expansion-panel": { template: "<div><slot /></div>" },
@@ -93,5 +101,38 @@ describe("CaixaFechamentoMaquininha · leitura salva", () => {
     const voucher = wrapper.get('[data-teste="maquininha-campo-voucher"]');
     expect((voucher.element as HTMLInputElement).value).toBe("2.552,61");
     expect(voucher.attributes("readonly")).toBeUndefined();
+  });
+
+  it("corrigir manualmente: destrava, exige justificativa se mudar e envia os campos alterados", async () => {
+    apiGet.mockResolvedValue({
+      etapaDia: "manha",
+      leituraReferencia: null,
+      relatorio: {
+        dadosRevisados: {
+          anexoId: "anexo-1",
+          leituraAcumulada: { documentoLegivel: true, credito: 947.05, debito: 779.72, pix: 601.68, voucher: 224.16 }
+        }
+      }
+    });
+    const apiPut = vi.fn().mockResolvedValue({});
+    vi.stubGlobal("useApi", () => ({ apiUrl: "", apiGet, apiPost, apiPut }));
+    const wrapper = montar();
+    await flushPromises();
+    await wrapper.get('[data-teste="botao-corrigir-manualmente"]').trigger("click");
+    const credito = wrapper.get('[data-teste="maquininha-campo-credito"]');
+    expect(credito.attributes("readonly")).toBeUndefined();
+    await credito.setValue("947,50");
+    const salvar = wrapper.findAll("button").find((botao) => botao.text().includes("Salvar leitura"))!;
+    expect(salvar.attributes("disabled")).toBeDefined();
+    await wrapper.get('[data-teste="justificativa-correcao"]').setValue("IA leu 947,05 mas o cupom mostra 947,50");
+    expect(salvar.attributes("disabled")).toBeUndefined();
+    await salvar.trigger("click");
+    await flushPromises();
+    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({
+      leituraAcumulada: {
+        credito: 947.5,
+        correcaoManual: { justificativa: "IA leu 947,05 mas o cupom mostra 947,50", campos: ["Crédito"] }
+      }
+    });
   });
 });

@@ -3,6 +3,7 @@ import type { CaixaOperacional } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
 import { formatarCampoDinheiro, numeroDoCampo } from "~/utils/campo-dinheiro";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
+import CaixaCorrecaoManual from "~/components/caixa/CaixaCorrecaoManual.vue";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
 type Forma = "credito" | "debito" | "pix" | "voucher";
@@ -14,6 +15,7 @@ type Leitura = Record<Forma, number | null> & {
   detalhes: Record<Forma, unknown[]>;
   camposDuvidosos: string[];
   observacoes: string[];
+  correcaoManual: { justificativa: string; campos: string[] } | null;
 };
 type Editavel = Omit<Leitura, Forma> & Record<Forma, string>;
 const props = defineProps<{ caixa: CaixaOperacional }>();
@@ -41,9 +43,29 @@ const enviando = ref(false),
   erro = ref(""),
   aviso = ref(""),
   salvo = ref(false);
+// O que a IA leu (ou o que foi salvo): base para saber se o operador mudou algum valor travado.
+const original = ref<Editavel | null>(null);
+const corrigindo = ref(false);
+const justificativa = ref("");
+const camposAlterados = computed(() => {
+  const lida = original.value;
+  if (!lida) return [];
+  return campos.filter(
+    ({ chave }) => travadoEm(lida, chave) && valorMonetario(leitura.value[chave]) !== valorMonetario(lida[chave])
+  );
+});
 const podeSalvar = computed(
-  () => Boolean(anexoId.value) && campos.every(({ chave }) => valorMonetario(leitura.value[chave]) !== null)
+  () =>
+    Boolean(anexoId.value) &&
+    campos.every(({ chave }) => valorMonetario(leitura.value[chave]) !== null) &&
+    (!camposAlterados.value.length || justificativa.value.trim().length >= 5)
 );
+function definirLeitura(nova: Editavel) {
+  leitura.value = nova;
+  original.value = { ...nova };
+  corrigindo.value = false;
+  justificativa.value = "";
+}
 // "947,05", "2.552,61" (digitado) e "947.05" (payload) valem; vazio, lixo ou negativo nao.
 function valorMonetario(valor: unknown) {
   const numero = numeroDoCampo(typeof valor === "number" || typeof valor === "string" ? valor : null);
@@ -54,12 +76,11 @@ function textoMonetario(valor: unknown) {
   return typeof valor === "number" && Number.isFinite(valor) ? formatarCampoDinheiro(valor) : "";
 }
 // Valor lido pela IA fica travado; so o que ela nao leu (ou marcou como duvidoso) e digitado.
+function travadoEm(dados: Editavel, chave: Forma) {
+  return dados.documentoLegivel && Boolean(dados[chave].trim()) && !dados.camposDuvidosos.includes(chave);
+}
 function travado(chave: Forma) {
-  return (
-    leitura.value.documentoLegivel &&
-    Boolean(leitura.value[chave].trim()) &&
-    !leitura.value.camposDuvidosos.includes(chave)
-  );
+  return !corrigindo.value && travadoEm(leitura.value, chave);
 }
 function novaLeitura(valor: unknown): Editavel {
   const dados = valor && typeof valor === "object" ? (valor as Record<string, unknown>) : {};
@@ -76,12 +97,20 @@ function novaLeitura(valor: unknown): Editavel {
     camposDuvidosos: Array.isArray(dados.camposDuvidosos)
       ? dados.camposDuvidosos.filter((campo): campo is string => typeof campo === "string")
       : [],
-    observacoes: []
+    observacoes: [],
+    correcaoManual:
+      dados.correcaoManual && typeof dados.correcaoManual === "object"
+        ? (dados.correcaoManual as Editavel["correcaoManual"])
+        : null
   };
 }
 function leituraParaApi(): Leitura {
   return {
     ...leitura.value,
+    // Mudou valor lido pela IA: grava quais campos e por que; senao mantem a correcao ja registrada.
+    correcaoManual: camposAlterados.value.length
+      ? { justificativa: justificativa.value.trim(), campos: camposAlterados.value.map(({ titulo }) => titulo) }
+      : leitura.value.correcaoManual,
     credito: valorMonetario(leitura.value.credito),
     debito: valorMonetario(leitura.value.debito),
     pix: valorMonetario(leitura.value.pix),
@@ -113,7 +142,7 @@ async function carregar() {
     const dados = resposta.relatorio?.dadosRevisados;
     if (dados?.anexoId && dados.leituraAcumulada) {
       anexoId.value = String(dados.anexoId);
-      leitura.value = novaLeitura(dados.leituraAcumulada);
+      definirLeitura(novaLeitura(dados.leituraAcumulada));
       salvo.value = true;
     }
   } catch (falha) {
@@ -145,12 +174,12 @@ async function enviar(evento: Event) {
         `/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha/analisar`,
         { anexoId: json.data.id }
       );
-      leitura.value = novaLeitura(leituraIa.sugestao);
+      definirLeitura(novaLeitura(leituraIa.sugestao));
       aviso.value =
         "A IA leu o comprovante. Os valores lidos ficam travados; preencha só os que ela não conseguiu ler e salve.";
     } catch {
       // IA fora do ar (ou sem resposta): a foto continua anexada como prova e todos os campos ficam livres.
-      leitura.value = novaLeitura(null);
+      definirLeitura(novaLeitura(null));
       aviso.value =
         "A leitura automática não funcionou. A foto ficou anexada: preencha os valores do comprovante manualmente e salve.";
     }
@@ -257,6 +286,13 @@ watch(
                 :data-teste="`maquininha-campo-${campo.chave}`"
               />
             </div>
+            <CaixaCorrecaoManual
+              v-model:corrigindo="corrigindo"
+              v-model:justificativa="justificativa"
+              :tem-travados="campos.some(({ chave }) => travadoEm(leitura, chave))"
+              :alterados="camposAlterados.map(({ titulo }) => titulo)"
+              :salva="leitura.correcaoManual"
+            />
             <section class="maquininha__liquidos">
               <h4>{{ etapa === "manha" ? "Total da manhã" : "Líquido da tarde" }}</h4>
               <div>

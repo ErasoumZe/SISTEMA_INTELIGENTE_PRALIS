@@ -39,7 +39,6 @@ const props = defineProps<{
   motivoTravado: string | null;
   folhaFechamentoEnviada: boolean;
   modoWizard?: boolean;
-  mostrarResponsaveis?: boolean;
   salvando?: boolean;
 }>();
 
@@ -79,7 +78,7 @@ const motivoPendente = computed(() => {
   if (!props.fechamentoComposicaoInformada) return "Informe cédulas, moedas e o total contado.";
   if (props.lacreFechamentoPendente) return "Informe o lacre de fechamento.";
   if (props.observacaoObrigatoriaPendente) return "Explique a falta na observação.";
-  if (props.responsaveisFechamentoPendentes) return "Informe o caixa e o supervisor responsáveis.";
+  if (props.responsaveisFechamentoPendentes) return "Informe o supervisor responsável na etapa 1.";
   if (!props.folhaFechamentoEnviada) return "Anexe a foto da folha de fechamento.";
   return "Preencha os campos obrigatórios para liberar o fechamento.";
 });
@@ -254,28 +253,6 @@ function solicitarFechamento() {
             v-model="fechamento.lacreFechamento"
             :reservado="lacreFechamentoReservado"
             :pendente="lacreFechamentoPendente"
-          />
-        </v-col>
-        <v-col v-if="mostrarResponsaveis !== false" cols="12" md="6">
-          <v-text-field
-            v-model="fechamento.caixaResponsavelNome"
-            label="Caixa responsável no fechamento (obrigatório)"
-            placeholder="Digite o nome do responsável pelo caixa"
-            :error="!fechamento.caixaResponsavelNome.trim()"
-            :error-messages="!fechamento.caixaResponsavelNome.trim() ? 'Informe o caixa responsável.' : ''"
-            prepend-inner-icon="mdi-account-cash-outline"
-            required
-          />
-        </v-col>
-        <v-col v-if="mostrarResponsaveis !== false" cols="12" md="6">
-          <v-text-field
-            v-model="fechamento.supervisorResponsavelNome"
-            label="Supervisor responsável no fechamento (obrigatório)"
-            placeholder="Digite o nome do supervisor"
-            :error="!fechamento.supervisorResponsavelNome.trim()"
-            :error-messages="!fechamento.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsável.' : ''"
-            prepend-inner-icon="mdi-account-supervisor-outline"
-            required
           />
         </v-col>
       </v-row>
