@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, prepararFechamentoValido } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  encerrarCaixaSeedAdminParaTeste,
+  multipartAnexoFechamento,
+  prepararFechamentoValido
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -100,6 +105,48 @@ describe("caixa - contagem física cega (R-232)", () => {
         justificativa: "Achei uma cédula de R$ 5 na gaveta"
       })
     ]);
+
+    // Trocar a folha do CREARE invalida o relatorio, mas a contagem continua gravada e travada: recontar "do zero"
+    // depois de ver a comparacao exigiria justificativa.
+    const { boundary, corpo } = multipartAnexoFechamento("relatorio_vendas_creare");
+    const novaFolha = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixa.caixaId}/anexos`,
+      headers: { cookie: cookieCaixa, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: corpo
+    });
+    expect(novaFolha.statusCode, novaFolha.body).toBe(201);
+    const novaFolhaId = json<{ data: { id: string } }>(novaFolha).data.id;
+    const invalidado = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixa.caixaId}/relatorio-vendas`,
+      headers: { cookie: cookieCaixa }
+    });
+    expect(
+      json<{ data: { dados: { invalidado: boolean; contagemFisica: { total: number } } } }>(invalidado).data.dados
+    ).toMatchObject({ invalidado: true, contagemFisica: { total: 100 } });
+    const recontagemSemMotivo = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixa.caixaId}/relatorio-vendas`,
+      headers: { cookie: cookieCaixa },
+      payload: {
+        anexoId: novaFolhaId,
+        leituraCreare: { documentoLegivel: true },
+        contagemFisica: { valorEspecie: 0, valorMoedas: 0 }
+      }
+    });
+    expect(recontagemSemMotivo.statusCode, recontagemSemMotivo.body).toBe(422);
+    const mesmaContagem = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixa.caixaId}/relatorio-vendas`,
+      headers: { cookie: cookieCaixa },
+      payload: {
+        anexoId: novaFolhaId,
+        leituraCreare: { documentoLegivel: true },
+        contagemFisica: { valorEspecie: 95, valorMoedas: 5 }
+      }
+    });
+    expect(mesmaContagem.statusCode, mesmaContagem.body).toBe(200);
 
     // O fechamento nao recebe contagem: usa a gravada (100 = esperado, sem quebra).
     const fechar = await contexto.app.inject({

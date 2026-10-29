@@ -8,19 +8,28 @@ import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 
-export type ContagemEmEdicao = { valorEspecie: string; valorMoedas: string; justificativa: string; corrigindo: boolean };
+export type ContagemEmEdicao = {
+  valorEspecie: string;
+  valorMoedas: string;
+  justificativa: string;
+  corrigindo: boolean;
+};
 
 const props = defineProps<{ registrada: ContagemFisicaRelatorio | null }>();
 const contagem = defineModel<ContagemEmEdicao>({ required: true });
 
 const editando = computed(() => !props.registrada || contagem.value.corrigindo);
 const totalDigitado = computed(
-  () => (Math.round(Number(contagem.value.valorEspecie || 0) * 100) + Math.round(Number(contagem.value.valorMoedas || 0) * 100)) / 100
+  () =>
+    (Math.round(Number(contagem.value.valorEspecie || 0) * 100) +
+      Math.round(Number(contagem.value.valorMoedas || 0) * 100)) /
+    100
 );
 const situacao = computed(() => {
   const diferenca = props.registrada?.diferenca ?? 0;
   if (diferenca === 0) return { cor: "success", texto: "Confere com o sistema", icone: "mdi-check-circle" };
-  if (diferenca < 0) return { cor: "error", texto: `Falta ${dinheiro(Math.abs(diferenca))}`, icone: "mdi-alert-circle" };
+  if (diferenca < 0)
+    return { cor: "error", texto: `Falta ${dinheiro(Math.abs(diferenca))}`, icone: "mdi-alert-circle" };
   return { cor: "warning", texto: `Sobra ${dinheiro(diferenca)}`, icone: "mdi-alert" };
 });
 
@@ -55,12 +64,7 @@ function cancelarCorrecao() {
 
     <template v-if="editando">
       <div class="contagem__campos">
-        <CampoDinheiro
-          v-model="contagem.valorEspecie"
-          label="Cédulas"
-          icone="mdi-cash"
-          data-teste="contagem-cedulas"
-        />
+        <CampoDinheiro v-model="contagem.valorEspecie" label="Cédulas" icone="mdi-cash" data-teste="contagem-cedulas" />
         <CampoDinheiro
           v-model="contagem.valorMoedas"
           label="Moedas"

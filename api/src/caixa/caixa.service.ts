@@ -1892,8 +1892,11 @@ export async function criarTransferenciaCofreCaixa(
       throw new Error("Saldo disponivel reservado para transferencias de retorno planejadas");
     }
     if (valorCentavos > saldoLivreCentavos) {
+      // R-232 · o operador de caixa nao ve o fisico esperado: a mensagem nao pode revelar o disponivel.
       throw new Error(
-        `Valor acima do saldo livre do caixa: disponivel R$ ${deCentavos(saldoLivreCentavos).toFixed(2)} apos reservar os retornos planejados`
+        temPermissao(perfil.permissoes, "caixas_gerenciar")
+          ? `Valor acima do saldo livre do caixa: disponivel R$ ${deCentavos(saldoLivreCentavos).toFixed(2)} apos reservar os retornos planejados`
+          : "Valor acima do dinheiro disponível no caixa. Confira o valor da sangria."
       );
     }
 

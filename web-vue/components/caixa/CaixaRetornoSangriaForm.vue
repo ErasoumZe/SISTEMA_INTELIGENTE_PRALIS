@@ -4,7 +4,8 @@ import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import { dinheiro } from "~/utils/domain";
 
 const props = defineProps<{
-  saldoLivre: number;
+  // null: o operador de caixa nao ve o fisico esperado (R-232); o servidor valida o teto.
+  saldoLivre: number | null;
   valor: string;
   valorEspecie: string;
   valorMoedas: string;
@@ -27,7 +28,7 @@ const emit = defineEmits<{
   (event: "salvar", fecharDepois: boolean): void;
 }>();
 
-const valorEfetivo = computed(() => Number(props.valor || props.saldoLivre));
+const valorEfetivo = computed(() => Number(props.valor || props.saldoLivre || 0));
 const valorEspecie = computed(() => Number(props.valorEspecie || 0));
 const valorMoedas = computed(() => Number(props.valorMoedas || 0));
 </script>
@@ -37,7 +38,7 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
     <div class="retorno-dialog__corpo">
       <div class="retorno-dialog__secao">Retorno / sangria</div>
       <p class="retorno-dialog__intro">Envie dinheiro físico do Caixa aberto para o cofre.</p>
-      <div class="retorno-dialog__saldo">
+      <div v-if="saldoLivre !== null" class="retorno-dialog__saldo">
         Disponível para retorno: <strong>{{ dinheiro(saldoLivre) }}</strong>
       </div>
       <div class="retorno-dialog__resumo mt-3" aria-live="polite">
@@ -161,7 +162,9 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
   text-transform: uppercase;
 }
 
-.retorno-dialog__intro { margin: 0 0 14px; }
+.retorno-dialog__intro {
+  margin: 0 0 14px;
+}
 
 .retorno-dialog__saldo {
   padding: 10px 12px;
@@ -211,12 +214,23 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
   gap: 8px;
 }
 
-.retorno-dialog__continuar { color: var(--cat-transferencias-tinta, #9c2f07); }
-.retorno-dialog__salvar { color: #fff; background: var(--cat-transferencias-base, #fb4b0b); }
-.retorno-dialog__campos :deep(.v-field--focused .v-field__outline) { color: var(--cat-transferencias-base, #fb4b0b); }
+.retorno-dialog__continuar {
+  color: var(--cat-transferencias-tinta, #9c2f07);
+}
+.retorno-dialog__salvar {
+  color: #fff;
+  background: var(--cat-transferencias-base, #fb4b0b);
+}
+.retorno-dialog__campos :deep(.v-field--focused .v-field__outline) {
+  color: var(--cat-transferencias-base, #fb4b0b);
+}
 
 @media (max-width: 560px) {
-  .retorno-dialog__corpo { padding: 14px 16px; }
-  .retorno-dialog__acoes { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .retorno-dialog__corpo {
+    padding: 14px 16px;
+  }
+  .retorno-dialog__acoes {
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

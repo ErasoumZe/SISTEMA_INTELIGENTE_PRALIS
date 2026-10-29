@@ -22,7 +22,8 @@ type FormaPagamento = {
 const props = defineProps<{
   categorias: Categoria[];
   formasPagamento: FormaPagamento[];
-  saldo: number;
+  // R-232 · null para o operador de caixa: o card do saldo fisico nao aparece (contagem cega).
+  saldo: number | null;
   caixaId: string;
   vendasCanceladasQuantidade: number;
 }>();
@@ -116,7 +117,12 @@ const outrasCategorias = computed(() => props.categorias.filter((categoria) => c
 <template>
   <section class="caixa-resumo-operacao" aria-label="Resumo operacional do caixa">
     <div class="destaques-turno">
-      <section class="saldo-turno" data-teste="resumo-saldo-caixa" aria-label="Saldo físico do caixa">
+      <section
+        v-if="saldo !== null"
+        class="saldo-turno"
+        data-teste="resumo-saldo-caixa"
+        aria-label="Saldo físico do caixa"
+      >
         <div class="saldo-turno__icone"><v-icon icon="mdi-cash-register" size="22" /></div>
         <div class="saldo-turno__conteudo">
           <span class="saldo-turno__rotulo">Saldo do caixa</span>

@@ -1,0 +1,100 @@
+.relatorio-vendas {
+  padding: clamp(16px, 3vw, 28px);
+  border: 1px solid var(--cx-line);
+  border-radius: 16px;
+  background: var(--cx-surface);
+}
+.relatorio-vendas__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.relatorio-vendas__sobretitulo {
+  color: var(--cat-entradas-tinta);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.relatorio-vendas h3,
+.relatorio-vendas h4 {
+  margin: 0;
+}
+.relatorio-vendas__cabecalho p {
+  margin: 6px 0 0;
+  color: var(--cx-ink-soft);
+}
+.relatorio-vendas__lendo {
+  margin: 0;
+  color: var(--cx-ink-soft);
+}
+.relatorio-vendas__passo {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cat-entradas-base);
+  color: var(--cx-canvas);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.relatorio-vendas__passo--botao {
+  background: var(--cx-canvas);
+  color: var(--cat-entradas-base);
+}
+.relatorio-vendas__gerar {
+  background: var(--cat-entradas-base) !important;
+  color: var(--cx-canvas) !important;
+}
+.relatorio-vendas__anexo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface-sunken);
+}
+.relatorio-vendas__anexo p {
+  margin: 4px 0 0;
+}
+.relatorio-vendas__anexo > div:last-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.relatorio-vendas__anexo small {
+  grid-column: 1 / -1;
+}
+@media (max-width: 720px) {
+  .relatorio-vendas__cabecalho {
+    flex-direction: column;
+  }
+  .relatorio-vendas__anexo {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 420px) {
+  .relatorio-vendas__cabecalho :deep(.v-btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+  .relatorio-vendas__anexo :deep(.v-btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+}
+@media (max-width: 600px) {
+  .relatorio-vendas__gerar {
+    width: 100%;
+    min-height: 48px;
+  }
+  .relatorio-vendas__anexo :deep(.v-btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+}

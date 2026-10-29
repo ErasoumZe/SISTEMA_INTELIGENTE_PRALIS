@@ -17,7 +17,7 @@ import CaixaFechamentoWizard from "~/components/caixa/CaixaFechamentoWizard.vue"
 import CaixaAberturaConfirmacaoDialog from "~/components/caixa/CaixaAberturaConfirmacaoDialog.vue";
 import CaixaIndisponibilidadeDialog from "~/components/caixa/CaixaIndisponibilidadeDialog.vue";
 import CaixaInicioFechamentoDialog from "~/components/caixa/CaixaInicioFechamentoDialog.vue";
-import { deCentavos, paraCentavos } from "@padaria/shared";
+import { deCentavos, paraCentavos, type ContagemFisicaRelatorio } from "@padaria/shared";
 const { apiGet, apiPost } = useApi();
 const route = useRoute();
 const router = useRouter();
@@ -60,8 +60,6 @@ const emit = defineEmits<{
       lacreFechamento: string;
       caixaResponsavelNome: string;
       supervisorResponsavelNome: string;
-      valorEspecieFechamento: number;
-      valorMoedasFechamento: number;
       confirmadoPelaRevisao: true;
     }
   ): void;
@@ -85,12 +83,11 @@ const aberturaExtra = reactive({
 const fechamento = reactive({
   observacao: "",
   lacreFechamento: "",
-  valorTotal: "",
-  valorEspecie: "",
-  valorMoedas: "",
   caixaResponsavelNome: "",
   supervisorResponsavelNome: ""
 });
+// R-232 · contagem fisica cega, registrada em Vendas (vem do relatorio de vendas); o fechamento usa esta.
+const contagemFisica = ref<ContagemFisicaRelatorio | null>(null);
 const folhaFechamentoEnviada = ref(false);
 const anexosFechamento = ref<
   Array<{
@@ -176,33 +173,14 @@ watch(
   },
   { immediate: true }
 );
-const saldoAtual = computed(() => Number(resumoAtual.value?.saldo ?? 0));
-// D7: sobra e deficit sao situacoes DIFERENTES e precisam de tratamento visual diferente.
-// A sobra nunca vira quebra positiva — ela volta ao cofre. O deficit vira quebra no nome do
-// operador, e ele tem que saber disso ANTES de confirmar, nao por snackbar vermelho depois.
-const temSobra = computed(() => saldoAtual.value > 0);
-const temDeficit = computed(() => saldoAtual.value < 0);
-const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
-// D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
-// para que o botao nao dispare um 400 previsivel.
-const totalFechamentoContado = computed(() => Number(fechamento.valorTotal || 0));
-const totalFechamentoPorComposicao = computed(
-  () => Number(fechamento.valorEspecie || 0) + Number(fechamento.valorMoedas || 0)
-);
-const fechamentoComposicaoInformada = computed(
-  () =>
-    fechamento.valorTotal.trim() !== "" && fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
-);
-const fechamentoComposicaoInvalida = computed(
-  () =>
-    fechamentoComposicaoInformada.value &&
-    paraCentavos(totalFechamentoContado.value) !== paraCentavos(totalFechamentoPorComposicao.value)
-);
-const diferencaFechamento = computed(() => totalFechamentoContado.value - saldoAtual.value);
-// Antes da contagem, os campos vazios são apenas "ainda não informado" — não R$ 0,00.
-// A quebra e sua justificativa só existem depois que o caixa declarar espécie e moedas.
-const fechamentoDivergente = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value !== 0);
-const fechamentoComQuebra = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value < 0);
+// R-232 · `null` para o operador de caixa: ele nao ve o fisico esperado durante o turno (contagem cega).
+const saldoVisivel = computed(() => resumoAtual.value?.saldo ?? null);
+const saldoAtual = computed(() => Number(saldoVisivel.value ?? 0));
+// D7: observacao e obrigatoria quando ha quebra ou sobra — a mesma regra do servidor, espelhada na tela.
+// A diferenca e a da contagem registrada em Vendas (contado - esperado naquele instante).
+const diferencaFechamento = computed(() => contagemFisica.value?.diferenca ?? 0);
+const fechamentoDivergente = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value !== 0);
+const fechamentoComQuebra = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value < 0);
 const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
 const lacreFechamentoReservado = computed(() => props.status?.lacreFechamentoReservado ?? null);
@@ -551,10 +529,9 @@ function fechar() {
     !caixa ||
     props.salvando ||
     observacaoObrigatoriaPendente.value ||
-    fechamentoComposicaoInvalida.value ||
     lacreFechamentoPendente.value ||
     responsaveisFechamentoPendentes.value ||
-    !fechamentoComposicaoInformada.value ||
+    !contagemFisica.value ||
     !folhaFechamentoEnviada.value
   )
     return;
@@ -594,8 +571,6 @@ function confirmarFechamento() {
     lacreFechamento: fechamento.lacreFechamento.trim(),
     caixaResponsavelNome: fechamento.caixaResponsavelNome.trim(),
     supervisorResponsavelNome: fechamento.supervisorResponsavelNome.trim(),
-    valorEspecieFechamento: Number(fechamento.valorEspecie || 0),
-    valorMoedasFechamento: Number(fechamento.valorMoedas || 0),
     confirmadoPelaRevisao: true
   });
 }
@@ -949,15 +924,9 @@ function confirmarFechamento() {
           :caixa="caixaAberto"
           :resumo="resumoAtual"
           :fechamento="fechamento"
-          :saldo-atual="saldoAtual"
-          :tem-sobra="temSobra"
-          :tem-deficit="temDeficit"
-          :diferenca-fechamento="diferencaFechamento"
-          :total-fechamento-contado="totalFechamentoContado"
+          :contagem-fisica="contagemFisica"
           :fechamento-divergente="fechamentoDivergente"
           :fechamento-com-quebra="fechamentoComQuebra"
-          :fechamento-composicao-informada="fechamentoComposicaoInformada"
-          :fechamento-composicao-invalida="fechamentoComposicaoInvalida"
           :observacao-obrigatoria-pendente="observacaoObrigatoriaPendente"
           :lacre-fechamento-pendente="lacreFechamentoPendente"
           :responsaveis-fechamento-pendentes="responsaveisFechamentoPendentes"
@@ -975,6 +944,7 @@ function confirmarFechamento() {
           @folha-enviada="folhaFechamentoEnviada = $event"
           @anexos-atualizados="anexosFechamento = $event"
           @inicio-ajustado="emit('recarregar')"
+          @contagem="contagemFisica = $event"
         />
 
         <template v-else>
@@ -1121,14 +1091,14 @@ function confirmarFechamento() {
         />
         <CaixaFechamentoConfirmacaoDialog
           :aberto="revisaoFechamentoAberta"
-          :saldo-esperado="saldoAtual"
+          :saldo-esperado="contagemFisica?.esperado ?? 0"
           :observacao="fechamento.observacao"
           :lacre-fechamento="fechamento.lacreFechamento.trim()"
           :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
           :supervisor-responsavel-nome="fechamento.supervisorResponsavelNome.trim()"
-          :valor-total="Number(fechamento.valorTotal || 0)"
-          :valor-especie="Number(fechamento.valorEspecie || 0)"
-          :valor-moedas="Number(fechamento.valorMoedas || 0)"
+          :valor-total="contagemFisica?.total ?? 0"
+          :valor-especie="contagemFisica?.valorEspecie ?? 0"
+          :valor-moedas="contagemFisica?.valorMoedas ?? 0"
           :anexos="anexosFechamento"
           @editar="revisaoFechamentoAberta = false"
           @confirmar="confirmarFechamento"

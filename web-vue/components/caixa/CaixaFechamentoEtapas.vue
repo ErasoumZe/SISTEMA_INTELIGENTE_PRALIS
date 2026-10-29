@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
+import type { ContagemFisicaRelatorio } from "@padaria/shared";
 import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
-import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CampoLacreFechamento from "~/components/caixa/CampoLacreFechamento.vue";
@@ -11,9 +11,6 @@ import CampoLacreFechamento from "~/components/caixa/CampoLacreFechamento.vue";
 type Fechamento = {
   observacao: string;
   lacreFechamento: string;
-  valorTotal: string;
-  valorEspecie: string;
-  valorMoedas: string;
   caixaResponsavelNome: string;
   supervisorResponsavelNome: string;
 };
@@ -21,14 +18,10 @@ type Fechamento = {
 const props = defineProps<{
   caixa: CaixaOperacional;
   fechamento: Fechamento;
-  saldoAtual: number;
-  temDeficit: boolean;
-  diferencaFechamento: number;
-  totalFechamentoContado: number;
+  // R-232 · a contagem foi feita (cega) em Vendas; aqui ela so aparece, nao se conta de novo.
+  contagemFisica: ContagemFisicaRelatorio | null;
   fechamentoDivergente: boolean;
   fechamentoComQuebra: boolean;
-  fechamentoComposicaoInformada: boolean;
-  fechamentoComposicaoInvalida: boolean;
   observacaoObrigatoriaPendente: boolean;
   lacreFechamentoPendente: boolean;
   responsaveisFechamentoPendentes: boolean;
@@ -61,24 +54,19 @@ const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
 const podeSolicitarFechamento = computed(
   () =>
     !props.observacaoObrigatoriaPendente &&
-    !props.fechamentoComposicaoInvalida &&
     !props.lacreFechamentoPendente &&
     !props.responsaveisFechamentoPendentes &&
-    props.fechamentoComposicaoInformada &&
+    Boolean(props.contagemFisica) &&
     props.folhaFechamentoEnviada
 );
 
-const somaComposicao = computed(
-  () => Number(props.fechamento.valorEspecie || 0) + Number(props.fechamento.valorMoedas || 0)
-);
+const diferenca = computed(() => props.contagemFisica?.diferenca ?? 0);
 // Diz POR QUE ainda nao da para encerrar (antes era so "Preencha os campos obrigatorios").
 const motivoPendente = computed(() => {
-  if (props.fechamentoComposicaoInvalida)
-    return `Cédulas + moedas somam ${dinheiro(somaComposicao.value)}, mas o total contado é ${dinheiro(props.totalFechamentoContado)}. Corrija para os dois valores baterem.`;
-  if (!props.fechamentoComposicaoInformada) return "Informe cédulas, moedas e o total contado.";
+  if (!props.contagemFisica) return "Registre a contagem do dinheiro em Vendas e gere o relatório.";
   if (props.lacreFechamentoPendente) return "Informe o lacre de fechamento.";
   if (props.observacaoObrigatoriaPendente) return "Explique a falta na observação.";
-  if (props.responsaveisFechamentoPendentes) return "Informe o supervisor responsável na etapa 1.";
+  if (props.responsaveisFechamentoPendentes) return "Confirme o gerente responsável.";
   if (!props.folhaFechamentoEnviada) return "Anexe a foto da folha de fechamento.";
   return "Preencha os campos obrigatórios para liberar o fechamento.";
 });
@@ -105,73 +93,30 @@ function solicitarFechamento() {
       <div>
         <div class="fechamento-etapas__sobretitulo">Etapa de encerramento</div>
         <h2 id="fechamento-etapas-titulo" class="text-h5">Fechamento do caixa</h2>
-        <p class="text-body-2 mb-0">Conte o físico, anexe a folha obrigatória e confira tudo antes de encerrar.</p>
+        <p class="text-body-2 mb-0">Anexe a folha obrigatória, informe o lacre e confira tudo antes de encerrar.</p>
       </div>
     </header>
 
-    <section class="fechamento-etapas__situacao" aria-label="Situação do fechamento">
+    <section v-if="contagemFisica" class="fechamento-etapas__situacao" aria-label="Contagem registrada em Vendas">
       <v-alert
-        v-if="fechamentoDivergente"
-        :type="diferencaFechamento < 0 ? 'error' : 'warning'"
+        :type="fechamentoDivergente ? (diferenca < 0 ? 'error' : 'warning') : 'success'"
         variant="tonal"
         class="fechamento-etapas__alerta-divergencia"
         data-teste="alerta-quebra"
       >
         <div class="text-subtitle-2 mb-1">
-          Conferência física: {{ dinheiro(totalFechamentoContado) }} contado para {{ dinheiro(saldoAtual) }} esperado
+          Contagem em Vendas: {{ dinheiro(contagemFisica.total) }} contado para
+          {{ dinheiro(contagemFisica.esperado) }} esperado
         </div>
-        <template v-if="diferencaFechamento < 0">
-          A falta de <strong>{{ dinheiro(Math.abs(diferencaFechamento)) }}</strong> gera quebra de caixa e notifica a
-          Tesouraria.
+        <template v-if="diferenca < 0">
+          A falta de <strong>{{ dinheiro(Math.abs(diferenca)) }}</strong> gera quebra de caixa e notifica a Tesouraria.
+          A observação é obrigatória.
         </template>
-        <template v-else>
-          Há sobra de <strong>{{ dinheiro(diferencaFechamento) }}</strong
-          >; não há quebra positiva, mas a Tesouraria será notificada.
+        <template v-else-if="diferenca > 0">
+          Há sobra de <strong>{{ dinheiro(diferenca) }}</strong
+          >; não há quebra positiva, mas a Tesouraria será notificada. A observação é obrigatória.
         </template>
-        A observação é obrigatória e fica registrada com o responsável e o horário do servidor.
-      </v-alert>
-    </section>
-
-    <section
-      class="fechamento-etapas__grupo fechamento-etapas__grupo--contagem"
-      aria-labelledby="contagem-fechamento-titulo"
-    >
-      <header class="fechamento-etapas__grupo-cabecalho">
-        <div>
-          <span>Conferência física</span>
-          <h4 id="contagem-fechamento-titulo">Dinheiro contado</h4>
-        </div>
-        <small>Dinheiro + moedas devem bater com o total declarado.</small>
-      </header>
-      <v-row dense>
-        <v-col cols="12" sm="6" md="4">
-          <CampoDinheiro v-model="fechamento.valorEspecie" label="Dinheiro em cédulas" icone="mdi-cash" />
-        </v-col>
-        <v-col cols="12" sm="6" md="4">
-          <CampoDinheiro v-model="fechamento.valorMoedas" label="Moedas" icone="mdi-circle-multiple-outline" />
-        </v-col>
-        <v-col cols="12" md="4">
-          <CampoDinheiro
-            v-model="fechamento.valorTotal"
-            label="Total contado"
-            icone="mdi-cash-multiple"
-            :error="fechamentoComposicaoInvalida"
-            :error-messages="fechamentoComposicaoInvalida ? 'Total deve ser igual a dinheiro físico mais moedas.' : ''"
-          />
-        </v-col>
-      </v-row>
-      <v-alert
-        v-if="fechamentoComposicaoInvalida"
-        type="error"
-        variant="tonal"
-        density="compact"
-        class="mt-3"
-        role="alert"
-        data-teste="aviso-composicao"
-      >
-        Cédulas + moedas somam <strong>{{ dinheiro(somaComposicao) }}</strong
-        >, mas o total contado é <strong>{{ dinheiro(totalFechamentoContado) }}</strong
-        >. Os dois precisam bater para encerrar.
+        <template v-else>Confere com o sistema.</template>
       </v-alert>
     </section>
 

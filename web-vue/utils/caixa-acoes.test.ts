@@ -171,9 +171,7 @@ describe("fecharCaixaOperacional", () => {
       observacao: "fim",
       lacreFechamento: "FCH-001",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
 
     expect(ok).toBe(true);
@@ -183,9 +181,7 @@ describe("fecharCaixaOperacional", () => {
       observacao: "fim",
       lacreFechamento: "FCH-001",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.notificar).toHaveBeenCalledWith("Caixa fechado com sucesso.");
@@ -200,9 +196,7 @@ describe("fecharCaixaOperacional", () => {
       observacao: null,
       lacreFechamento: "FCH-002",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
 
     expect(ok).toBe(false);
@@ -217,18 +211,14 @@ describe("fecharCaixaOperacional", () => {
       observacao: null,
       lacreFechamento: "FCH-003",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
 
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: null,
       lacreFechamento: "FCH-003",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
   });
 
@@ -239,9 +229,7 @@ describe("fecharCaixaOperacional", () => {
       observacao: null,
       lacreFechamento: "FCH-004",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
 
     expect(ok).toBe(false);

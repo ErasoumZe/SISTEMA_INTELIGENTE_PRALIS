@@ -40,8 +40,6 @@ export type FechamentoPayload = {
   lacreFechamento: string;
   caixaResponsavelNome: string;
   supervisorResponsavelNome: string;
-  valorEspecieFechamento: number;
-  valorMoedasFechamento: number;
   // A tela do Caixa possui uma revisão própria com todos os campos e anexos. Este marcador evita
   // um segundo popup genérico depois que a operadora já confirmou o retrato completo.
   confirmadoPelaRevisao?: true;
@@ -167,9 +165,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
         observacao: payload.observacao,
         lacreFechamento: payload.lacreFechamento,
         caixaResponsavelNome: payload.caixaResponsavelNome,
-        supervisorResponsavelNome: payload.supervisorResponsavelNome,
-        valorEspecieFechamento: payload.valorEspecieFechamento,
-        valorMoedasFechamento: payload.valorMoedasFechamento
+        supervisorResponsavelNome: payload.supervisorResponsavelNome
       });
       await deps.carregarStatusCaixa(deps.empresaId());
       deps.notificar("Caixa fechado com sucesso.");

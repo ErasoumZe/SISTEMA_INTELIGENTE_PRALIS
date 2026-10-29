@@ -7,14 +7,12 @@ import CaixaFechamentoEtapas from "~/components/caixa/CaixaFechamentoEtapas.vue"
 import CaixaFechamentoMaquininha from "~/components/caixa/CaixaFechamentoMaquininha.vue";
 import CaixaFechamentoMovimentacoes from "~/components/caixa/CaixaFechamentoMovimentacoes.vue";
 import CaixaFechamentoRelatorioVendas from "~/components/caixa/CaixaFechamentoRelatorioVendas.vue";
-import CaixaFechamentoResumo from "~/components/caixa/CaixaFechamentoResumo.vue";
+import CaixaGerenteFechamentoDialog from "~/components/caixa/CaixaGerenteFechamentoDialog.vue";
+import type { ContagemFisicaRelatorio } from "@padaria/shared";
 
 type Fechamento = {
   observacao: string;
   lacreFechamento: string;
-  valorTotal: string;
-  valorEspecie: string;
-  valorMoedas: string;
   caixaResponsavelNome: string;
   supervisorResponsavelNome: string;
 };
@@ -30,15 +28,9 @@ const props = defineProps<{
   caixa: CaixaOperacional;
   resumo: ResumoCaixa | null;
   fechamento: Fechamento;
-  saldoAtual: number;
-  temSobra: boolean;
-  temDeficit: boolean;
-  diferencaFechamento: number;
-  totalFechamentoContado: number;
+  contagemFisica: ContagemFisicaRelatorio | null;
   fechamentoDivergente: boolean;
   fechamentoComQuebra: boolean;
-  fechamentoComposicaoInformada: boolean;
-  fechamentoComposicaoInvalida: boolean;
   observacaoObrigatoriaPendente: boolean;
   lacreFechamentoPendente: boolean;
   responsaveisFechamentoPendentes: boolean;
@@ -59,6 +51,7 @@ const emit = defineEmits<{
   (event: "folhaEnviada", valor: boolean): void;
   (event: "anexosAtualizados", anexos: AnexoFechamento[]): void;
   (event: "inicioAjustado"): void;
+  (event: "contagem", contagem: ContagemFisicaRelatorio | null): void;
 }>();
 
 const etapaAtual = ref(1);
@@ -66,32 +59,21 @@ const etapasNavegacaoVisiveis = ref(false);
 const etapas = [
   {
     id: 1,
-    titulo: "Resumo",
-    resumo: "Confirme responsáveis e dados do turno.",
-    passos: [
-      "O responsável pelo caixa é quem abriu (não muda). Informe o supervisor: o gerente que fecha o malote.",
-      "Confira o PDV, o turno, o horário de abertura e a maquininha vinculada.",
-      "Os responsáveis permanecem preenchidos ao voltar de etapa."
-    ],
-    quandoAvancar: "o supervisor responsável estiver informado.",
-    cor: "var(--cx-positive)"
-  },
-  {
-    id: 2,
     titulo: "Vendas",
-    resumo: "Anexe a folha CREARE e confronte vendas e saídas.",
+    resumo: "Conte o dinheiro, anexe a folha CREARE e gere o relatório que compara os três.",
     passos: [
+      "Primeiro conte as cédulas e as moedas da gaveta. O sistema não mostra o valor esperado antes da contagem.",
       "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
       "Revise os campos como estão no cupom: período, troco inicial, formas de pagamento, total, despesas e sangria.",
       "Se o horário da folha não bater com o início das vendas, use Ajustar início.",
       "Gere o relatório para o sistema comparar a folha com as vendas e saídas registradas.",
       "A folha CREARE é diferente da folha do malote usada no fechamento físico."
     ],
-    quandoAvancar: "a foto estiver anexada e o relatório de vendas tiver sido gerado e revisado.",
+    quandoAvancar: "a contagem estiver registrada, a foto anexada e o relatório de vendas gerado.",
     cor: "var(--cat-entradas-base)"
   },
   {
-    id: 3,
+    id: 2,
     titulo: "Maquininha",
     resumo: "Envie a leitura e confira o líquido do turno.",
     passos: [
@@ -105,7 +87,7 @@ const etapas = [
     cor: "var(--cx-brand)"
   },
   {
-    id: 4,
+    id: 3,
     titulo: "Relatório final",
     resumo: "Revise recebimentos, saídas, lacres e diferenças.",
     passos: [
@@ -118,13 +100,13 @@ const etapas = [
     cor: "var(--cat-retiradas-base)"
   },
   {
-    id: 5,
+    id: 4,
     titulo: "Fechamento",
-    resumo: "Conte o físico, anexe o malote e envie à Tesouraria.",
+    resumo: "Anexe a folha do malote, informe o lacre e envie à Tesouraria.",
     passos: [
-      "Conte cédulas e moedas e informe também o total contado; ele deve ser a soma dos dois campos.",
+      "A contagem do dinheiro já foi feita em Vendas; aqui não se conta de novo.",
       "Anexe a folha de fechamento do malote e informe o lacre físico reservado para este fechamento.",
-      "Se a contagem divergir, explique o motivo na observação; o campo aceita preenchimento por voz.",
+      "Se a contagem divergiu, explique o motivo na observação; o campo aceita preenchimento por voz.",
       "Execute retornos programados, se existirem, e só então envie o malote à Tesouraria."
     ],
     quandoAvancar: "o físico, a folha, o lacre e as justificativas obrigatórias estiverem preenchidos.",
@@ -132,9 +114,26 @@ const etapas = [
   }
 ] as const;
 const etapaAtualDefinicao = computed(() => etapas.find((etapa) => etapa.id === etapaAtual.value) ?? etapas[0]);
-const podeAvancarResumo = computed(() =>
-  Boolean(props.fechamento.caixaResponsavelNome.trim() && props.fechamento.supervisorResponsavelNome.trim())
-);
+// R-232 · a etapa "Resumo" saiu: ao entrar no fechamento, um popup rapido confirma o gerente responsavel.
+// A confirmacao vale para este caixa nesta aba (recarregar a tela nao pergunta de novo).
+const chaveGerente = `cicluz:fechamento:gerente:${props.caixa.id}`;
+function lerGerenteConfirmado() {
+  try {
+    return sessionStorage.getItem(chaveGerente) === "1";
+  } catch {
+    return false;
+  }
+}
+const gerenteConfirmado = ref(lerGerenteConfirmado());
+function confirmarGerente() {
+  gerenteConfirmado.value = true;
+  try {
+    sessionStorage.setItem(chaveGerente, "1");
+  } catch {
+    // Sem armazenamento (aba privada): o popup volta a aparecer, sem prejuizo.
+  }
+}
+const TOTAL_ETAPAS = 4;
 const resumo = computed(() => props.resumo);
 
 function formatarHora(dataHora: string | null | undefined) {
@@ -152,7 +151,7 @@ function formatarHora(dataHora: string | null | undefined) {
     data-teste="etapa-fechamento"
   >
     <div class="fechamento-wizard__resumo-mobile">
-      <strong>Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</strong>
+      <strong>Etapa {{ etapaAtual }} de {{ TOTAL_ETAPAS }} · {{ etapaAtualDefinicao.titulo }}</strong>
       <div class="fechamento-wizard__acoes-topo">
         <CaixaFechamentoAjuda :etapa="etapaAtualDefinicao" />
         <v-btn
@@ -172,7 +171,9 @@ function formatarHora(dataHora: string | null | undefined) {
     </div>
     <header id="fechamento-cabecalho" class="fechamento-wizard__cabecalho">
       <div class="fechamento-wizard__etapa-topo">
-        <h2 id="fechamento-wizard-titulo">Etapa {{ etapaAtual }} de 5 · {{ etapaAtualDefinicao.titulo }}</h2>
+        <h2 id="fechamento-wizard-titulo">
+          Etapa {{ etapaAtual }} de {{ TOTAL_ETAPAS }} · {{ etapaAtualDefinicao.titulo }}
+        </h2>
         <div class="fechamento-wizard__acoes-topo">
           <CaixaFechamentoAjuda :etapa="etapaAtualDefinicao" />
           <v-btn
@@ -211,29 +212,29 @@ function formatarHora(dataHora: string | null | undefined) {
         :key="etapa.id"
         :class="{ ativa: etapa.id === etapaAtual, concluida: etapa.id < etapaAtual }"
       />
-      <strong>Etapa {{ etapaAtual }} de 5</strong>
+      <strong>Etapa {{ etapaAtual }} de {{ TOTAL_ETAPAS }}</strong>
     </div>
 
-    <CaixaFechamentoResumo
-      v-if="etapaAtual === 1"
-      :caixa="caixa"
+    <CaixaGerenteFechamentoDialog
+      :model-value="!gerenteConfirmado"
       :fechamento="fechamento"
-      :responsaveis-pendentes="!podeAvancarResumo"
+      @confirmado="confirmarGerente"
     />
 
     <CaixaFechamentoRelatorioVendas
-      v-else-if="etapaAtual === 2"
-      id="fechamento-painel-2"
+      v-if="etapaAtual === 1"
+      id="fechamento-painel-1"
       :caixa-id="caixa.id"
       :abertura-oficial="caixa.abertoEm"
       :inicio-vendas="caixa.dataHoraAbertura"
       @inicio-ajustado="emit('inicioAjustado')"
+      @contagem="emit('contagem', $event)"
     />
 
-    <CaixaFechamentoMaquininha v-else-if="etapaAtual === 3" id="fechamento-painel-3" :caixa="caixa" />
+    <CaixaFechamentoMaquininha v-else-if="etapaAtual === 2" id="fechamento-painel-2" :caixa="caixa" />
 
     <CaixaFechamentoMovimentacoes
-      v-else-if="etapaAtual === 4"
+      v-else-if="etapaAtual === 3"
       :resumo="resumo"
       :caixa-id="caixa.id"
       :pdv-nome="caixa.pdvNome"
@@ -241,17 +242,12 @@ function formatarHora(dataHora: string | null | undefined) {
 
     <CaixaFechamentoEtapas
       v-else
-      id="fechamento-painel-5"
+      id="fechamento-painel-4"
       :caixa="caixa"
       :fechamento="fechamento"
-      :saldo-atual="saldoAtual"
-      :tem-deficit="temDeficit"
-      :diferenca-fechamento="diferencaFechamento"
-      :total-fechamento-contado="totalFechamentoContado"
+      :contagem-fisica="contagemFisica"
       :fechamento-divergente="fechamentoDivergente"
       :fechamento-com-quebra="fechamentoComQuebra"
-      :fechamento-composicao-informada="fechamentoComposicaoInformada"
-      :fechamento-composicao-invalida="fechamentoComposicaoInvalida"
       :observacao-obrigatoria-pendente="observacaoObrigatoriaPendente"
       :lacre-fechamento-pendente="lacreFechamentoPendente"
       :responsaveis-fechamento-pendentes="responsaveisFechamentoPendentes"
@@ -270,7 +266,7 @@ function formatarHora(dataHora: string | null | undefined) {
     />
 
     <footer
-      v-if="etapaAtual < 5"
+      v-if="etapaAtual < TOTAL_ETAPAS"
       class="fechamento-wizard__rodape"
       :class="{ 'fechamento-wizard__rodape--inicio': etapaAtual === 1 }"
     >
@@ -282,27 +278,18 @@ function formatarHora(dataHora: string | null | undefined) {
         v-if="etapaAtual === 1"
         color="success"
         append-icon="mdi-arrow-right"
-        :disabled="!podeAvancarResumo"
-        data-teste="avancar-resumo-fechamento"
+        :disabled="!contagemFisica"
+        data-teste="avancar-vendas-fechamento"
         @click="etapaAtual = 2"
       >
-        Ir para vendas
+        Conferir maquininha
       </v-btn>
       <v-btn
         v-else-if="etapaAtual === 2"
         color="success"
         append-icon="mdi-arrow-right"
-        data-teste="avancar-vendas-fechamento"
-        @click="etapaAtual = 3"
-      >
-        Conferir maquininha
-      </v-btn>
-      <v-btn
-        v-else-if="etapaAtual === 3"
-        color="success"
-        append-icon="mdi-arrow-right"
         data-teste="avancar-maquininha-fechamento"
-        @click="etapaAtual = 4"
+        @click="etapaAtual = 3"
       >
         Ver relatório final
       </v-btn>
@@ -311,13 +298,13 @@ function formatarHora(dataHora: string | null | undefined) {
         color="success"
         append-icon="mdi-arrow-right"
         data-teste="avancar-movimentacoes-fechamento"
-        @click="etapaAtual = 5"
+        @click="etapaAtual = 4"
       >
         Ir para fechamento
       </v-btn>
     </footer>
     <footer v-else class="fechamento-wizard__rodape fechamento-wizard__rodape--ultimo">
-      <v-btn color="secondary" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual = 4"
+      <v-btn color="secondary" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual = 3"
         >Voltar ao relatório final</v-btn
       >
     </footer>
@@ -378,26 +365,22 @@ function formatarHora(dataHora: string | null | undefined) {
 .fechamento-wizard__progresso-mobile {
   display: none;
 }
-.fechamento-wizard :deep(.fechamento-resumo),
 .fechamento-wizard :deep(.relatorio-vendas),
 .fechamento-wizard :deep(.maquininha),
 .fechamento-wizard :deep(.fechamento-movimentacoes),
 .fechamento-wizard :deep(.fechamento-etapas) {
   box-shadow: var(--cx-e-1);
 }
-.fechamento-wizard--etapa-1 :deep(.fechamento-resumo) {
-  border-top: 3px solid var(--cx-positive);
-}
-.fechamento-wizard--etapa-2 :deep(.relatorio-vendas) {
+.fechamento-wizard--etapa-1 :deep(.relatorio-vendas) {
   border-top: 3px solid var(--cat-entradas-base);
 }
-.fechamento-wizard--etapa-3 :deep(.maquininha) {
+.fechamento-wizard--etapa-2 :deep(.maquininha) {
   border-top: 3px solid var(--cx-brand);
 }
-.fechamento-wizard--etapa-4 :deep(.fechamento-movimentacoes) {
+.fechamento-wizard--etapa-3 :deep(.fechamento-movimentacoes) {
   border-top: 3px solid var(--cat-retiradas-base);
 }
-.fechamento-wizard--etapa-5 :deep(.fechamento-etapas) {
+.fechamento-wizard--etapa-4 :deep(.fechamento-etapas) {
   border-top: 3px solid var(--cx-attention);
 }
 .fechamento-wizard__painel {
