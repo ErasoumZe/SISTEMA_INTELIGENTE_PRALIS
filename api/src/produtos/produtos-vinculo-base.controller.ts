@@ -5,6 +5,7 @@ import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas } from "../auth/empresa.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
+import { aplicarGruposOficiais, previaGruposOficiais } from "./produtos-grupos-oficiais.service.js";
 import { aplicarVinculoBase, previaVinculoBase, VinculoBaseError } from "./produtos-vinculo-base.service.js";
 
 const empresa = z.object({ empresaId: z.string().uuid() });
@@ -27,7 +28,10 @@ function responderErro(reply: ReplyHttp, error: DadosExternos) {
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
 
-/** Ligar os produtos da loja a BASE pelo codigo interno (passo da virada, R-222). So administrador. */
+/**
+ * Passos da virada do cadastro (R-222), so administrador, sempre previa + frase + hash:
+ * ligar os produtos da loja a BASE e criar na loja os grupos oficiais e as unidades (fase B1).
+ */
 export async function registrarRotasVinculoBase(app: FastifyInstance): Promise<void> {
   const guarda = { preHandler: exigirPermissao("cadastro_produtos_editar") };
 
@@ -46,6 +50,31 @@ export async function registrarRotasVinculoBase(app: FastifyInstance): Promise<v
       const resultado = await aplicarVinculoBase(empresaId, entrada, ator(request));
       request.log.info({
         evento: "produtos.vinculo_base.aplicado",
+        usuarioId: request.usuarioId,
+        empresaId,
+        ...resultado
+      });
+      return ok(resultado);
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  app.get("/api/produtos/grupos-oficiais/previa", guarda, async (request, reply) => {
+    try {
+      const { empresaId } = empresa.parse(request.query);
+      return ok(await previaGruposOficiais(empresaId, ator(request)));
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  app.post("/api/produtos/grupos-oficiais", guarda, async (request, reply) => {
+    try {
+      const { empresaId, ...entrada } = corpo.parse(request.body);
+      const resultado = await aplicarGruposOficiais(empresaId, entrada, ator(request));
+      request.log.info({
+        evento: "produtos.grupos_oficiais.aplicado",
         usuarioId: request.usuarioId,
         empresaId,
         ...resultado

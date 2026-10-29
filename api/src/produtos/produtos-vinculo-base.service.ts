@@ -46,7 +46,7 @@ export class VinculoBaseError extends Error {
   }
 }
 
-type Ator = { administrador: boolean; empresasPermitidas: string[] };
+export type Ator = { administrador: boolean; empresasPermitidas: string[] };
 
 const numero = (codigo: string | null) => {
   const limpo = String(codigo ?? "").trim();
@@ -57,9 +57,10 @@ const barras = (valor: string | null) =>
     .replace(/\D/gu, "")
     .replace(/^0+(?=\d)/u, "");
 
-async function lojaDaEmpresa(empresaId: string, ator: Ator) {
+/** Passos da virada (ligar à BASE, grupos e unidades oficiais): só o administrador, só em empresa que é loja. */
+export async function lojaDaEmpresa(empresaId: string, ator: Ator) {
   if (!ator.administrador) {
-    throw new VinculoBaseError("Apenas o administrador liga produtos à BASE.", 403, "FORBIDDEN");
+    throw new VinculoBaseError("Apenas o administrador faz este passo da virada.", 403, "FORBIDDEN");
   }
   if (!ator.empresasPermitidas.includes(empresaId)) {
     throw new VinculoBaseError("Empresa não permitida.", 403, "FORBIDDEN_COMPANY");

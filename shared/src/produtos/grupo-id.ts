@@ -60,6 +60,34 @@ export function grupoIdDaEntrada(entrada: {
   return atual;
 }
 
+/** O nome como a pessoa le: sem os separadores invisiveis da planilha e sem espaco duplo, com acento. */
+export const nomeLimpoDeGrupo = (nome: string | null | undefined): string =>
+  String(nome ?? "")
+    .replace(/\p{Cf}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Os grupos oficiais da mesma faixa AC5:AD, para CRIAR os grupos da loja (fase B1, 29/10/2026): nome limpo e
+ * ID, na ordem da planilha. Linha sem ID valido fica de fora; o mesmo grupo repetido entra uma vez.
+ * Devolve `null` sem o cabecalho oficial (fonte invalida).
+ */
+export function gruposOficiaisDaFaixa(linhas: string[][]): Array<{ nome: string; id: string }> | null {
+  if (chaveDeGrupo(linhas[0]?.[0]) !== "NOME GRUPO" || chaveDeGrupo(linhas[0]?.[1]) !== "ID GRUPO") {
+    return null;
+  }
+  const vistos = new Set<string>();
+  const grupos: Array<{ nome: string; id: string }> = [];
+  for (const [nome = "", codigo = ""] of linhas.slice(1)) {
+    const chave = chaveDeGrupo(nome);
+    const id = String(codigo).trim();
+    if (!chave || !/^\d{1,4}$/.test(id) || Number(id) === 0 || vistos.has(chave)) continue;
+    vistos.add(chave);
+    grupos.push({ nome: nomeLimpoDeGrupo(nome), id });
+  }
+  return grupos;
+}
+
 /** ID oficial do grupo, ou `null` quando ausente, ambiguo ou sem fonte. */
 export function grupoIdDoNome(ids: Map<string, string | null> | null, nome: string | null | undefined): string | null {
   const chave = chaveDeGrupo(nome);
