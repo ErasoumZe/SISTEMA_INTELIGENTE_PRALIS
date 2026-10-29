@@ -10,7 +10,6 @@ import { statusTransferenciaSchema, type StatusTransferencia } from "@padaria/sh
 import { ref } from "vue";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import CancelarPlanejamentoRetornoDialog from "./CancelarPlanejamentoRetornoDialog.vue";
-import TransferenciaSemLacreDialog from "~/components/operacoes/TransferenciaSemLacreDialog.vue";
 import TransferenciasFiltros from "./TransferenciasFiltros.vue";
 import TransferenciasLista from "./TransferenciasLista.vue";
 
@@ -37,16 +36,12 @@ const props = withDefaults(
     pagina: number;
     totalPaginas: number;
     podeCriar?: boolean;
-    podeTransferirSemLacre?: boolean;
-    empresaId?: string;
     podeEditar?: boolean;
     podeCancelarPlanejamento?: boolean;
     salvando?: boolean;
   }>(),
   {
     podeCriar: false,
-    podeTransferirSemLacre: false,
-    empresaId: "",
     podeEditar: false,
     podeCancelarPlanejamento: false,
     salvando: false,
@@ -56,7 +51,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (event: "nova"): void;
-  (event: "semLacreCriada"): void;
   (event: "editar", operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
   (event: "update:status-filtro", status: StatusTransferencia | ""): void;
@@ -67,7 +61,6 @@ const emit = defineEmits<{
   ): void;
 }>();
 const cancelandoPlanejamento = ref<OperacaoResumo | null>(null);
-const semLacreAberto = ref(false);
 
 const rotulosStatus: Record<StatusTransferencia, string> = {
   pendente: "Pendente",
@@ -98,19 +91,6 @@ function atualizarStatusFiltro(status: unknown) {
           }}</span
         >
       </template>
-      <!-- R-231 · dinheiro no meio do turno, sem malote: botao proprio, bem visivel, so para quem tem a permissao. -->
-      <template v-if="podeTransferirSemLacre && empresaId" #acoes>
-        <v-btn
-          color="primary"
-          variant="flat"
-          prepend-icon="mdi-cash-fast"
-          class="tes-sem-lacre"
-          data-teste="abrir-transferencia-sem-lacre"
-          @click="semLacreAberto = true"
-        >
-          Transferência sem lacre
-        </v-btn>
-      </template>
     </AppCabecalhoTela>
 
     <v-card class="tes-list-card" rounded="lg" elevation="1">
@@ -136,14 +116,6 @@ function atualizarStatusFiltro(status: unknown) {
         @update:pagina="emit('update:pagina', $event)"
       />
     </v-card>
-
-    <TransferenciaSemLacreDialog
-      v-if="podeTransferirSemLacre && empresaId"
-      v-model="semLacreAberto"
-      :empresa-id="empresaId"
-      :contas="contas"
-      @criada="emit('semLacreCriada')"
-    />
 
     <CancelarPlanejamentoRetornoDialog
       :model-value="Boolean(cancelandoPlanejamento)"
@@ -272,17 +244,6 @@ function atualizarStatusFiltro(status: unknown) {
     grid-template-columns: 1fr;
   }
   .tes-nova {
-    width: 100%;
-  }
-}
-/* R-231 · botao bem visivel, na cor da categoria Transferencias. */
-.tes-sem-lacre {
-  background: var(--cat-transferencias-base, #c2410c) !important;
-  color: #fff !important;
-  font-weight: 700;
-}
-@media (width <= 560px) {
-  .tes-sem-lacre {
     width: 100%;
   }
 }

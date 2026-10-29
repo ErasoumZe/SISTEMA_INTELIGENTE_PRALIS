@@ -3,6 +3,7 @@ import { diaNegocio, paraCentavos } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import { useApi } from "~/composables/useApi";
+import { mensagemErro } from "~/utils/domain";
 
 // Formulário contábil existente; não executa retorno/sangria manual.
 export function useTransferenciaFormulario() {
@@ -15,9 +16,16 @@ export function useTransferenciaFormulario() {
     opcoesEmpresa,
     salvandoOperacao,
     salvarOperacao,
-    abrirOperacao
+    abrirOperacao,
+    podeTransferirSemLacre,
+    aposTransferenciaSemLacre
   } = useWorkspaceContext();
-  const { apiGet } = useApi();
+  const { apiGet, apiPost } = useApi();
+
+  // R-231 · opcao "Sem lacre" da Nova transferencia: suprimento no meio do turno, sem malote. Marcada, a
+  // transferencia vai como comum (sem lacres, sem agendamento/multiplo/prazo) pela rota propria do servidor.
+  const semLacre = ref(false);
+  const podeUsarSemLacre = computed(() => podeTransferirSemLacre.value && !operacaoEditandoId.value);
 
   const aberto = computed({
     get: () => modalOperacaoAberto.value && entidadeNova.value === "transferencia",
@@ -50,8 +58,11 @@ export function useTransferenciaFormulario() {
   const contaDestinoSelecionada = computed(() =>
     opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaDestinoId)
   );
+  // Sem lacre nao e malote: Cofre -> PDV sem lacre nao pede composicao gravada no malote nem lacres.
   const preparandoMaloteParaCaixa = computed(() => {
-    return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value?.ehContaPdv);
+    return (
+      !semLacre.value && Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value?.ehContaPdv)
+    );
   });
   const destinoSemPdv = computed(() => {
     return Boolean(
@@ -130,6 +141,8 @@ export function useTransferenciaFormulario() {
     }
   });
   const totalDigitado = computed(() => (paraCentavos(campoFisico.value) + paraCentavos(campoMoedas.value)) / 100);
+  const fisicoDigitado = computed(() => paraCentavos(campoFisico.value) / 100);
+  const moedasDigitadas = computed(() => paraCentavos(campoMoedas.value) / 100);
 
   watch(preparandoMaloteParaCaixa, (preparando) => {
     erroComposicao.value = "";
@@ -169,6 +182,14 @@ export function useTransferenciaFormulario() {
     },
     { immediate: true }
   );
+  watch(semLacre, (ativo) => {
+    if (!ativo) return;
+    form.value.nLacreDoc = "";
+    erroLacre.value = "";
+    agendamento.value = false;
+    multiploDestino.value = false;
+    tempoConfirmacaoAberto.value = false;
+  });
   watch(lacresRetornoAtivos, (ativo) => {
     if (!ativo) {
       form.value.lacresRetorno = [];
@@ -176,6 +197,7 @@ export function useTransferenciaFormulario() {
     }
   });
   watch(aberto, (estaAberto) => {
+    semLacre.value = false;
     if (!estaAberto) lacresRetornoAtivos.value = false;
   });
   // Ao reabrir uma transferência que já possui bolsas, revela a mesma área para edição.
@@ -223,6 +245,24 @@ export function useTransferenciaFormulario() {
   }
 
   async function revisarTransferencia(criarNova = false) {
+    if (semLacre.value) {
+      if (!form.value.contaOrigemId || !form.value.contaDestinoId) {
+        erroComposicao.value = "Escolha a origem e o destino.";
+        return;
+      }
+      if (contaOrigemSelecionada.value?.ehContaPdv) {
+        erroComposicao.value = "Dinheiro que sai do PDV vai pelo Retorno / sangria.";
+        return;
+      }
+      if (totalDigitado.value <= 0) {
+        erroComposicao.value = "Informe o dinheiro físico ou as moedas.";
+        return;
+      }
+      erroComposicao.value = "";
+      criarNovaAposConfirmacao.value = criarNova;
+      confirmacaoAberta.value = true;
+      return;
+    }
     if (!destinoValido()) return;
     // A transferência imediata sempre pertence ao dia real do ato. Hora exata já é registrada
     // pelo banco em `criadoEm`; se for agendada, a data/hora escolhida fica em `agendadaPara`.
@@ -253,7 +293,33 @@ export function useTransferenciaFormulario() {
     confirmacaoAberta.value = true;
   }
 
+  async function enviarSemLacre() {
+    if (salvandoOperacao.value) return;
+    salvandoOperacao.value = true;
+    try {
+      await apiPost("/api/transferencias/sem-lacre", {
+        empresaId: empresaId.value,
+        contaOrigemId: form.value.contaOrigemId,
+        contaDestinoId: form.value.contaDestinoId,
+        valorEspecieDeclarado: paraCentavos(campoFisico.value) / 100,
+        valorMoedasDeclarado: paraCentavos(campoMoedas.value) / 100,
+        observacao: form.value.observacao.trim() || null
+      });
+    } catch (falha) {
+      erroComposicao.value = mensagemErro(falha);
+      confirmacaoAberta.value = false;
+      return;
+    } finally {
+      salvandoOperacao.value = false;
+    }
+    confirmacaoAberta.value = false;
+    modalOperacaoAberto.value = false;
+    await aposTransferenciaSemLacre();
+    if (criarNovaAposConfirmacao.value) await abrirOperacao("transferencia");
+  }
+
   async function confirmarTransferencia() {
+    if (semLacre.value) return enviarSemLacre();
     const resultado = await salvarOperacao();
     if (!resultado) return;
     confirmacaoAberta.value = false;
@@ -276,6 +342,11 @@ export function useTransferenciaFormulario() {
     campoFisico,
     campoMoedas,
     totalDigitado,
+    semLacre,
+    podeUsarSemLacre,
+    fisicoDigitado,
+    moedasDigitadas,
+    contaDestinoSelecionada,
     erroComposicao,
     erroLacre,
     novoLacreRetorno,

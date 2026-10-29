@@ -1487,9 +1487,13 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
 Dinheiro que a gerência leva do Cofre (ou de outra conta) para um PDV durante o turno, sem malote. **Não é malote**:
 não tem lacre de abertura, de fechamento nem de sangria.
 
-- **Botão próprio**, bem visível no topo de Transferências: "Transferência sem lacre". Quem vê e pode fazer é
-  definido pela permissão **`transferencias_sem_lacre`** (tela de Permissões; o administrador já tem). O malote
-  Cofre → PDV pelo botão comum continua igual (composição + lacres obrigatórios).
+- **Dentro da própria Nova transferência**: uma opção **"Sem lacre"** junto de Agendamento, Múltiplo destino e
+  Tempo de confirmação (sem aba, modal ou botão à parte — pedido do Marco). Marcada, a seção de lacres e as outras
+  opções somem e a transferência vai como comum, sem malote. **Qualquer conta para qualquer conta**, exceto origem
+  conta de PDV (dinheiro que sai do PDV tem caminho único: retorno / sangria). Destino que não é PDV é confirmado por
+  quem opera a conta, na conferência comum. Quem vê a opção é definido pela permissão **`transferencias_sem_lacre`**
+  (coluna "S/Lacre" na grade de Permissões; o administrador já tem; padrão do cargo Gerência). O malote Cofre → PDV
+  sem a opção continua igual (composição + lacres obrigatórios).
 - Informa **dinheiro físico + moedas** (gravados como composição); o valor é a soma. Observação opcional (R-230).
   Sem agendamento, sem múltiplo destino e sem tempo de confirmação.
 - **Destino PDV exige caixa aberto naquele PDV**; sem caixa aberto, recusa ("use o malote"). A transferência fica

@@ -10,6 +10,8 @@ const props = defineProps<{
   lacreMalote: string;
   lacresRetorno: string[];
   lacreFechamentoPlanejado: string;
+  // R-231 · transferencia sem lacre: no lugar dos lacres, diz quem confirma.
+  semLacre?: boolean;
   origem: string;
   destinos: string[];
   agendadaPara: string;
@@ -43,7 +45,10 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
         <v-row dense>
           <v-col cols="12" sm="6"><strong>Origem:</strong> {{ origem }}</v-col>
           <v-col cols="12" sm="6"><strong>Destino:</strong> {{ destinos.join(" · ") }}</v-col>
-          <v-col cols="12"><strong>Lacre do malote:</strong> {{ lacreMalote }}</v-col>
+          <v-col v-if="semLacre" cols="12">
+            <strong>Sem lacre:</strong> sem malote; quem recebe confirma o recebimento.
+          </v-col>
+          <v-col v-else cols="12"><strong>Lacre do malote:</strong> {{ lacreMalote }}</v-col>
           <v-col v-if="lacreFechamentoPlanejado.trim()" cols="12">
             <strong>Lacre reservado para fechamento:</strong> {{ lacreFechamentoPlanejado.trim() }}
           </v-col>
@@ -54,7 +59,7 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
           <v-col v-if="agendadaPara" cols="12"><strong>Agendado para:</strong> {{ agendadaPara }}</v-col>
         </v-row>
 
-        <v-sheet class="mt-4 pa-3" rounded="lg" border>
+        <v-sheet v-if="!semLacre" class="mt-4 pa-3" rounded="lg" border>
           <div class="text-subtitle-2">Lacres de retorno / sangria</div>
           <div class="text-body-2 mt-1">{{ lacresRetorno.length }} lacre(s) preparado(s) dentro do malote.</div>
           <v-chip-group v-if="lacresRetorno.length" class="mt-2">

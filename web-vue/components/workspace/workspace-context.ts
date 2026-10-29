@@ -32,6 +32,9 @@ export type WorkspaceContext = {
   podeOperarTransferenciaSemCaixa: ComputedRef<boolean>;
   podeCriarTransferencia: ComputedRef<boolean>;
   podeEditarTransferencia: ComputedRef<boolean>;
+  // R-231 · opcao "Sem lacre" da Nova transferencia: permissao propria e o que fazer depois de enviar.
+  podeTransferirSemLacre: ComputedRef<boolean>;
+  aposTransferenciaSemLacre: () => Promise<void>;
   carregarStatusCaixa: () => Promise<void>;
   retornarSaldoOperacional: (payload: RetornoSaldoPayload) => Promise<boolean>;
   opcoesEmpresa: ComputedRef<Opcoes>;

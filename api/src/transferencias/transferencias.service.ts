@@ -346,21 +346,21 @@ export async function criarTransferenciaSemLacre(
     if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaOrigemId, tx)) {
       throw new Error("Dinheiro que sai do PDV vai pelo retorno / sangria do Caixa");
     }
-    // So para conta de PDV: e o operador do caixa que confirma o recebimento (R-231). Entre outras contas o lacre
-    // continua obrigatorio.
-    if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
-      throw new Error("Transferencia sem lacre e so para conta de PDV com caixa aberto");
+    // Qualquer conta de destino (Marco, 29/10). Destino PDV: exige o caixa daquele PDV aberto e a linha fica presa a
+    // ele; o operador confirma no Caixa. Outra conta: quem opera a conta confirma, na conferencia comum.
+    let caixaId: string | null = null;
+    if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx)) {
+      // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
+      const caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
+      if (!caixa) {
+        throw new ErroDominio(
+          "O PDV de destino não tem caixa aberto. Sem caixa aberto, o dinheiro vai pelo malote.",
+          409,
+          "PDV_SEM_CAIXA_ABERTO"
+        );
+      }
+      caixaId = caixa.id;
     }
-    // R-164 · o caixa do PDV e o PRIMEIRO lock (FOR SHARE) e precisa estar aberto.
-    const caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
-    if (!caixa) {
-      throw new ErroDominio(
-        "O PDV de destino não tem caixa aberto. Sem caixa aberto, o dinheiro vai pelo malote.",
-        409,
-        "PDV_SEM_CAIXA_ABERTO"
-      );
-    }
-    const caixaId = caixa.id;
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,

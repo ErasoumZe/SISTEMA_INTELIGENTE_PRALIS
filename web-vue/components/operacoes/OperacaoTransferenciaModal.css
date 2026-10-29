@@ -662,3 +662,16 @@
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 }
+/* R-231 · opcao Sem lacre e o aviso do que ela muda. */
+.tr-check-sem-lacre span {
+  font-weight: 700;
+}
+.tr-aviso-sem-lacre {
+  margin: 2px 0 12px 22px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--cat-transferencias-soft, #fff1eb);
+  color: var(--cat-transferencias-tinta, #9c2f07);
+  font-size: 12px;
+  line-height: 1.4;
+}

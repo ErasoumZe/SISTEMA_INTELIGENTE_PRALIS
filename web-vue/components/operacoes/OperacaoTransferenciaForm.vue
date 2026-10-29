@@ -16,6 +16,10 @@ const {
   erroDestino,
   totalSaida,
   campoFisico,
+  semLacre,
+  podeUsarSemLacre,
+  fisicoDigitado,
+  moedasDigitadas,
   campoMoedas,
   totalDigitado,
   erroComposicao,
@@ -24,6 +28,7 @@ const {
   lacresRetornoAtivos,
   confirmacaoAberta,
   contaOrigemSelecionada,
+  contaDestinoSelecionada,
   destinoSemPdv,
   preparandoMaloteParaCaixa,
   valorEspecieDeclarado,
@@ -131,126 +136,143 @@ const {
         </div>
       </section>
 
-      <div class="tr-secao">3 · Lacres</div>
-      <label class="tr-campo tr-campo-lacre-principal">
-        <span class="tr-campo-lbl"
-          >{{ preparandoMaloteParaCaixa ? "Lacre do malote de abertura" : "Lacre do malote" }}
-          <span class="tr-hint">(obrigatório)</span></span
-        >
-        <input
-          v-model="form.nLacreDoc"
-          required
-          class="tr-input tr-input-lacre"
-          placeholder="Ex.: 001"
-          @blur="void verificarLacreDisponivel()"
-        />
-        <span v-if="erroLacre" class="tr-erro" role="alert">{{ erroLacre }}</span>
-        <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
-      </label>
-
-      <template v-if="preparandoMaloteParaCaixa">
-        <label class="tr-campo tr-lacre-fechamento-planejado">
-          <span class="tr-campo-lbl">Lacre do malote de fechamento <span class="tr-hint">(obrigatório)</span></span>
+      <!-- R-231 · sem lacre nao e malote: a secao de lacres some inteira. -->
+      <template v-if="!semLacre">
+        <div class="tr-secao">3 · Lacres</div>
+        <label class="tr-campo tr-campo-lacre-principal">
+          <span class="tr-campo-lbl"
+            >{{ preparandoMaloteParaCaixa ? "Lacre do malote de abertura" : "Lacre do malote" }}
+            <span class="tr-hint">(obrigatório)</span></span
+          >
           <input
-            v-model="form.lacreFechamentoPlanejado"
-            class="tr-input"
-            placeholder="Número do lacre enviado aberto"
-            maxlength="100"
+            v-model="form.nLacreDoc"
+            required
+            class="tr-input tr-input-lacre"
+            placeholder="Ex.: 001"
+            @blur="void verificarLacreDisponivel()"
           />
-          <span class="tr-legenda">
-            Vai aberto dentro do malote principal. O operador verá este número ao abrir e deverá digitá-lo ao fechar o
-            caixa.
-          </span>
+          <span v-if="erroLacre" class="tr-erro" role="alert">{{ erroLacre }}</span>
+          <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
         </label>
-        <div class="tr-lacres-sangria">
-          <label class="tr-check tr-lacres-opcao">
-            <input v-model="lacresRetornoAtivos" type="checkbox" />
-            <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
+
+        <template v-if="preparandoMaloteParaCaixa">
+          <label class="tr-campo tr-lacre-fechamento-planejado">
+            <span class="tr-campo-lbl">Lacre do malote de fechamento <span class="tr-hint">(obrigatório)</span></span>
+            <input
+              v-model="form.lacreFechamentoPlanejado"
+              class="tr-input"
+              placeholder="Número do lacre enviado aberto"
+              maxlength="100"
+            />
+            <span class="tr-legenda">
+              Vai aberto dentro do malote principal. O operador verá este número ao abrir e deverá digitá-lo ao fechar o
+              caixa.
+            </span>
           </label>
-          <div v-if="lacresRetornoAtivos" class="tr-lacres-retorno">
-            <p>Informe os lacres das bolsas abertas que seguem dentro deste malote.</p>
-            <div class="tr-lacre-adicionar">
-              <input
-                v-model="novoLacreRetorno"
-                class="tr-input"
-                placeholder="Número do lacre da bolsa"
-                maxlength="100"
-                @keydown.enter.prevent="adicionarLacreRetorno"
-              />
-              <button
-                type="button"
-                class="tr-lacre-botao"
-                :disabled="!novoLacreRetorno.trim()"
-                @click="adicionarLacreRetorno"
-              >
-                <v-icon size="17">mdi-plus</v-icon> Adicionar lacre
-              </button>
-            </div>
-            <div v-if="form.lacresRetorno.length" class="tr-lacres-lista" aria-label="Lacres de retorno adicionados">
-              <span v-for="(lacre, indice) in form.lacresRetorno" :key="`${lacre}-${indice}`" class="tr-lacre-chip">
-                Bolsa {{ indice + 1 }}: {{ lacre }}
-                <button type="button" :aria-label="`Remover lacre ${lacre}`" @click="removerLacreRetorno(indice)">
-                  <v-icon size="15">mdi-close</v-icon>
+          <div class="tr-lacres-sangria">
+            <label class="tr-check tr-lacres-opcao">
+              <input v-model="lacresRetornoAtivos" type="checkbox" />
+              <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
+            </label>
+            <div v-if="lacresRetornoAtivos" class="tr-lacres-retorno">
+              <p>Informe os lacres das bolsas abertas que seguem dentro deste malote.</p>
+              <div class="tr-lacre-adicionar">
+                <input
+                  v-model="novoLacreRetorno"
+                  class="tr-input"
+                  placeholder="Número do lacre da bolsa"
+                  maxlength="100"
+                  @keydown.enter.prevent="adicionarLacreRetorno"
+                />
+                <button
+                  type="button"
+                  class="tr-lacre-botao"
+                  :disabled="!novoLacreRetorno.trim()"
+                  @click="adicionarLacreRetorno"
+                >
+                  <v-icon size="17">mdi-plus</v-icon> Adicionar lacre
                 </button>
-              </span>
+              </div>
+              <div v-if="form.lacresRetorno.length" class="tr-lacres-lista" aria-label="Lacres de retorno adicionados">
+                <span v-for="(lacre, indice) in form.lacresRetorno" :key="`${lacre}-${indice}`" class="tr-lacre-chip">
+                  Bolsa {{ indice + 1 }}: {{ lacre }}
+                  <button type="button" :aria-label="`Remover lacre ${lacre}`" @click="removerLacreRetorno(indice)">
+                    <v-icon size="15">mdi-close</v-icon>
+                  </button>
+                </span>
+              </div>
+              <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
             </div>
-            <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
           </div>
-        </div>
+        </template>
       </template>
 
-      <label class="tr-check">
-        <input
-          v-model="agendamento"
-          type="checkbox"
-          :disabled="Boolean(operacaoEditandoId)"
-          data-teste="opcao-agendamento"
-        />
-        <span>Agendamento</span>
+      <!-- R-231 · junto das outras opcoes: marcada, a transferencia vai sem malote e sem lacre. -->
+      <label v-if="podeUsarSemLacre" class="tr-check tr-check-sem-lacre">
+        <input v-model="semLacre" type="checkbox" data-teste="opcao-sem-lacre" />
+        <span>Sem lacre <span class="tr-hint">(dinheiro no meio do turno, sem malote)</span></span>
       </label>
-      <label v-if="agendamento" class="tr-campo tr-indent">
-        <span class="tr-campo-lbl">Data Agendamento</span>
-        <input
-          v-model="form.agendadaPara"
-          type="datetime-local"
-          class="tr-input"
-          :disabled="Boolean(operacaoEditandoId)"
-        />
-      </label>
+      <p v-if="semLacre" class="tr-aviso-sem-lacre" role="status" data-teste="aviso-sem-lacre">
+        Vai sem malote e sem lacre. Quem recebe confirma; até lá, o valor não entra no destino.
+        <template v-if="contaDestinoSelecionada?.ehContaPdv">
+          Para o {{ contaDestinoSelecionada.nome }}, o caixa precisa estar aberto agora: o operador confirma no Caixa.
+        </template>
+      </p>
 
-      <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
-           conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
-      <div class="tr-opcoes">
-        <label class="tr-check" :class="{ 'tr-check-desabilitado': tempoConfirmacaoAberto }">
-          <input v-model="multiploDestino" type="checkbox" :disabled="tempoConfirmacaoAberto" />
-          <span>Múltiplo Destino</span>
+      <template v-if="!semLacre">
+        <label class="tr-check">
+          <input
+            v-model="agendamento"
+            type="checkbox"
+            :disabled="Boolean(operacaoEditandoId)"
+            data-teste="opcao-agendamento"
+          />
+          <span>Agendamento</span>
         </label>
-        <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
+        <label v-if="agendamento" class="tr-campo tr-indent">
+          <span class="tr-campo-lbl">Data Agendamento</span>
+          <input
+            v-model="form.agendadaPara"
+            type="datetime-local"
+            class="tr-input"
+            :disabled="Boolean(operacaoEditandoId)"
+          />
+        </label>
+
+        <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
+           conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
+        <div class="tr-opcoes">
+          <label class="tr-check" :class="{ 'tr-check-desabilitado': tempoConfirmacaoAberto }">
+            <input v-model="multiploDestino" type="checkbox" :disabled="tempoConfirmacaoAberto" />
+            <span>Múltiplo Destino</span>
+          </label>
+          <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
              desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
 
-        <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
+          <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
              FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
-        <label class="tr-check" :class="{ 'tr-check-desabilitado': multiploDestino || Boolean(operacaoEditandoId) }">
-          <input
-            v-model="tempoConfirmacaoAberto"
-            type="checkbox"
-            :disabled="multiploDestino || Boolean(operacaoEditandoId)"
-          />
-          <span>Tempo de confirmação</span>
-        </label>
-        <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
-          <span class="tr-campo-lbl">Tempo de confirmação</span>
-          <select v-model="form.tempoConfirmacao" class="tr-input" :disabled="Boolean(operacaoEditandoId)">
-            <option value="5min">5 minutos</option>
-            <option value="10min">10 minutos</option>
-            <option value="30min">30 minutos</option>
-            <option value="1h">1 hora</option>
-            <option value="1dia">1 dia</option>
-            <option value="10dias">10 dias</option>
-            <option value="30dias">30 dias</option>
-          </select>
-        </label>
-      </div>
+          <label class="tr-check" :class="{ 'tr-check-desabilitado': multiploDestino || Boolean(operacaoEditandoId) }">
+            <input
+              v-model="tempoConfirmacaoAberto"
+              type="checkbox"
+              :disabled="multiploDestino || Boolean(operacaoEditandoId)"
+            />
+            <span>Tempo de confirmação</span>
+          </label>
+          <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
+            <span class="tr-campo-lbl">Tempo de confirmação</span>
+            <select v-model="form.tempoConfirmacao" class="tr-input" :disabled="Boolean(operacaoEditandoId)">
+              <option value="5min">5 minutos</option>
+              <option value="10min">10 minutos</option>
+              <option value="30min">30 minutos</option>
+              <option value="1h">1 hora</option>
+              <option value="1dia">1 dia</option>
+              <option value="10dias">10 dias</option>
+              <option value="30dias">30 dias</option>
+            </select>
+          </label>
+        </div>
+      </template>
 
       <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
       <label class="tr-campo">
@@ -276,8 +298,9 @@ const {
     :aberto="confirmacaoAberta"
     :salvando="salvandoOperacao"
     :valor-total="totalSaida"
-    :valor-especie="valorEspecieDeclarado"
-    :valor-moedas="valorMoedasDeclarado"
+    :valor-especie="semLacre ? fisicoDigitado : valorEspecieDeclarado"
+    :valor-moedas="semLacre ? moedasDigitadas : valorMoedasDeclarado"
+    :sem-lacre="semLacre"
     :lacre-malote="form.nLacreDoc"
     :lacres-retorno="form.lacresRetorno"
     :lacre-fechamento-planejado="form.lacreFechamentoPlanejado"

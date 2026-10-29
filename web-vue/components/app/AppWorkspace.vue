@@ -385,6 +385,7 @@ const telasComAcessoDeCargo = computed(() =>
 );
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
+const podeTransferirSemLacre = computed(() => temPermissao("transferencias_sem_lacre"));
 const podeEditarTransferencia = computed(() => temPermissao("transferencias_editar"));
 const podeOperarCaixa = computed(() => temPermissao("caixa_operar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
@@ -2129,6 +2130,8 @@ provide(WORKSPACE_CONTEXT, {
   podeOperarTransferenciaSemCaixa,
   podeCriarTransferencia,
   podeEditarTransferencia,
+  podeTransferirSemLacre,
+  aposTransferenciaSemLacre,
   carregarStatusCaixa,
   retornarSaldoOperacional,
   opcoesEmpresa,
@@ -2283,10 +2286,6 @@ const pageContext = computed(() => ({
   // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
   podeCriarTransferencia: temPermissao("transferencias_criar"),
   podeEditarTransferencia: temPermissao("transferencias_editar"),
-  // R-231 · botao "Transferencia sem lacre" no topo de Transferencias.
-  podeTransferirSemLacre: temPermissao("transferencias_sem_lacre"),
-  aposTransferenciaSemLacre,
-  empresaIdAtual: empresaId.value,
   caixaStatus: caixaStatus.value,
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
