@@ -11,7 +11,6 @@ import { normalizarDataHoraFolhaCreare } from "./folha-creare.js";
 
 export * from "./regras.js";
 export * from "./folha-creare.js";
-export * from "./maquininha-turno.js";
 
 const uuidSchema = z.string().uuid();
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "data deve ser YYYY-MM-DD");
@@ -586,6 +585,8 @@ export const caixaOperacionalSchema = z.object({
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
   turnoNome: z.string().nullable(),
+  // R-229 · turno do posto que abriu o caixa. Nulo nos caixas antigos.
+  turnoCaixa: z.enum(["manha", "tarde"]).nullable().optional(),
   maquininhaId: uuidSchema.nullable(),
   maquininhaApelido: z.string().nullable(),
   maquininhaNumeroSerie: z.string().nullable(),
@@ -608,10 +609,11 @@ export const caixaStatusSchema = z.object({
   resumo: resumoCaixaSchema.nullable(),
   // Presente na consulta do status antes da abertura. A tela usa estes ids para exibir o posto
   // configurado, mas a API continua validando-os no POST de abertura.
+  // R-229 · posto do Caixa do login: PDV + turno do caixa (manha/tarde).
   vinculoOperador: z
     .object({
       pdvId: uuidSchema,
-      turnoId: uuidSchema
+      turnoCaixa: z.enum(["manha", "tarde"])
     })
     .nullable()
     .optional(),

@@ -7,7 +7,6 @@ import {
   pdvs,
   perfisUsuarios,
   setores,
-  turnos,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
@@ -29,6 +28,9 @@ export type UsuarioLinha = {
   cargoIds: string[];
   cargos: string[];
   role: string;
+  // R-229 · posto do Caixa do login (PDV + turno do caixa). Nulo quando nao e conta de posto.
+  postoPdvId: string | null;
+  postoTurnoCaixa: "manha" | "tarde" | null;
 };
 
 // Procedencia por empresa dos metadados agregados. NAO vai para o fio: existe so para o service
@@ -72,6 +74,8 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         setorId: colaboradores.setorId,
         setorNome: setores.nome,
         empresaId: colaboradores.empresaId,
+        pdvPadraoId: colaboradores.pdvPadraoId,
+        turnoCaixa: colaboradores.turnoCaixa,
         // A empresa do SETOR, e nao a do colaborador. `colaboradores.setor_id` e FK simples para
         // `setores`, sem CHECK de mesma empresa, e a rota de colaboradores grava o setor sem validar
         // — entao colaborador da empresa A com setor da empresa B e um estado alcancavel.
@@ -110,6 +114,8 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
       setorId: colaborador?.setorId ?? null,
       setorNome: colaborador?.setorNome ?? null,
       setorEmpresaId: colaborador?.setorEmpresaId ?? null,
+      postoPdvId: colaborador?.turnoCaixa ? colaborador.pdvPadraoId : null,
+      postoTurnoCaixa: colaborador?.turnoCaixa ?? null,
       cargosComEmpresa: cargosDoUsuario.map((cargo) => ({
         id: cargo.cargoId,
         nome: cargo.cargoNome,
@@ -403,20 +409,50 @@ export async function buscarSetorEmpresaRepository(setorId: string, db: Executor
 
 export async function buscarPdvEmpresaRepository(pdvId: string, db: ExecutorBanco = banco) {
   const [pdv] = await db
-    .select({ empresaId: pdvs.empresaId, ativo: pdvs.ativo })
+    .select({ empresaId: pdvs.empresaId, ativo: pdvs.ativo, nome: pdvs.nome, turnosCaixa: pdvs.turnosCaixa })
     .from(pdvs)
     .where(eq(pdvs.id, pdvId))
     .limit(1);
   return pdv ?? null;
 }
 
-export async function buscarTurnoEmpresaRepository(turnoId: string, db: ExecutorBanco = banco) {
-  const [turno] = await db
-    .select({ empresaId: turnos.empresaId, ativo: turnos.ativo })
-    .from(turnos)
-    .where(eq(turnos.id, turnoId))
+// R-229 · quem ja ocupa o posto (PDV + turno do caixa). Um login por posto (indice unico na 0090).
+export async function buscarDonoDoPostoCaixaRepository(
+  input: { empresaId: string; pdvId: string; turnoCaixa: "manha" | "tarde" },
+  db: ExecutorBanco = banco
+) {
+  const [dono] = await db
+    .select({ colaboradorId: colaboradores.id, usuarioId: colaboradores.usuarioId, nome: colaboradores.nome })
+    .from(colaboradores)
+    .where(
+      and(
+        eq(colaboradores.empresaId, input.empresaId),
+        eq(colaboradores.pdvPadraoId, input.pdvId),
+        eq(colaboradores.turnoCaixa, input.turnoCaixa)
+      )
+    )
     .limit(1);
-  return turno ?? null;
+  return dono ?? null;
+}
+
+export async function bloquearColaboradorDoUsuarioRepository(usuarioId: string, db: TransacaoBanco) {
+  const [colaborador] = await db
+    .select({ id: colaboradores.id, empresaId: colaboradores.empresaId })
+    .from(colaboradores)
+    .where(eq(colaboradores.usuarioId, usuarioId))
+    .limit(1)
+    .for("update");
+  return colaborador ?? null;
+}
+
+export async function atualizarPostoCaixaColaboradorRepository(
+  input: { colaboradorId: string; pdvId: string | null; turnoCaixa: "manha" | "tarde" | null },
+  db: TransacaoBanco
+) {
+  await db
+    .update(colaboradores)
+    .set({ pdvPadraoId: input.pdvId, turnoCaixa: input.turnoCaixa })
+    .where(eq(colaboradores.id, input.colaboradorId));
 }
 
 export async function listarEmpresasUsuarioRepository(usuarioId: string, db: ExecutorBanco = banco) {
@@ -443,7 +479,7 @@ export async function salvarColaboradorUsuarioRepository(
     cpf: string | null;
     setorId?: string | null;
     pdvPadraoId?: string | null;
-    turnoPadraoId?: string | null;
+    turnoCaixa?: "manha" | "tarde" | null;
   },
   db: ExecutorBanco = banco
 ) {
@@ -455,7 +491,7 @@ export async function salvarColaboradorUsuarioRepository(
         cpf: input.cpf,
         setorId: input.setorId ?? null,
         pdvPadraoId: input.pdvPadraoId ?? null,
-        turnoPadraoId: input.turnoPadraoId ?? null
+        turnoCaixa: input.turnoCaixa ?? null
       })
       .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
     return {
@@ -474,7 +510,7 @@ export async function salvarColaboradorUsuarioRepository(
       cpf: input.cpf,
       setorId: input.setorId ?? null,
       pdvPadraoId: input.pdvPadraoId ?? null,
-      turnoPadraoId: input.turnoPadraoId ?? null
+      turnoCaixa: input.turnoCaixa ?? null
     })
     .returning({ id: colaboradores.id });
   return criado;

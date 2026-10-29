@@ -30,12 +30,12 @@ import type {
   VendaCanceladaCaixa,
   VendasDoCaixaQuery
 } from "@padaria/shared/caixa";
+import { rotuloTurnoCaixa } from "@padaria/shared/pdvs";
 import {
   conferirEmissaoFolhaCreare,
   conferirInicioFolhaCreare,
   montarResumoCaixa,
   RECUO_MAXIMO_INICIO_VENDAS_MIN,
-  tipoDoTurnoMaquininha,
   saldoFisicoCaixaCentavos,
   statusCaixaSchema
 } from "@padaria/shared/caixa";
@@ -66,6 +66,7 @@ import {
   buscarAnexoFechamentoCaixaRepository,
   buscarRelatorioMaquininhaFechamentoRepository,
   listarRelatoriosMaquininhaDoDiaRepository,
+  buscarCaixaAbertoDoPdvRepository,
   buscarRelatorioVendasFechamentoRepository,
   salvarRelatorioMaquininhaFechamentoRepository,
   salvarRelatorioVendasFechamentoRepository,
@@ -315,9 +316,14 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
 }
 
+// R-229 · o turno mostrado nos relatorios e o do posto (PDV 1 · Tarde); caixa antigo usa o turno do DP.
 function turnoDoRelatorio(caixa: CaixaLinha) {
+  if (caixa.turnoCaixa) return `${caixa.pdvNome} · ${rotuloTurnoCaixa[caixa.turnoCaixa]}`;
   return caixa.turnoNome?.trim() || "Turno não informado na abertura";
 }
+
+const mensagemSemPostoCaixa =
+  "Este login ainda nao tem posto do caixa (PDV e turno). Peca ao administrador para escolher o posto em Usuarios.";
 
 function validarComprovantesParaIa(anexos: Array<{ tipo: string; mimeType: string }>) {
   if (!anexos.length) throw new Error("Anexe ao menos uma foto ou PDF da maquininha antes de ler.");
@@ -345,7 +351,7 @@ function leituraCompleta(leitura: RelatorioMaquininhaIa) {
   return formasRelatorioMaquininha.every((forma) => leitura[forma] !== null);
 }
 
-// R-228 · manha ou tarde pelo TURNO do caixa (etiqueta M/T; sem etiqueta, pela ordem dos caixas), no mesmo PDV,
+// R-229 · manha ou tarde pelo TURNO DO POSTO gravado no caixa (PDV 1 · Manha, PDV 1 · Tarde), no mesmo PDV,
 // maquininha e dia. A leitura que a tarde desconta continua sendo a do ultimo caixa ja fechado do dia (R-210):
 // o relatorio da maquininha e acumulado. O turno resolve o que a ordem sozinha nao via: a tarde SEM a manha
 // fechada do PDV naquele dia (o liquido sairia com as vendas da manha), que agora exige justificativa.
@@ -357,20 +363,20 @@ async function resolverEtapaMaquininha(caixa: CaixaLinha, db?: ExecutorBanco) {
     {
       empresaId: caixa.empresaId,
       pdvId: caixa.pdvId,
-      maquininhaId: caixa.maquininhaId,
       dataMovimento: caixa.dataMovimento,
       fechamentoCaixaId: caixa.id
     },
     db
   );
-  const tipoDe = (turno: { turnoId: string | null; turnoEtiqueta: string | null }) =>
-    turno.turnoId ? tipoDoTurnoMaquininha({ etiqueta: turno.turnoEtiqueta }) : null;
   const etapaGravada = (relatorio: (typeof doDia)[number]) =>
     (relatorio.dadosRevisados as Record<string, DadosExternos> | null)?.["etapaDia"];
-  const precedente = doDia[0] ?? null;
-  const tipo = tipoDe(caixa);
+  // O relatorio e acumulado POR MAQUININHA: so desconta o ultimo da mesma maquininha. Se a maquininha foi
+  // trocada entre os turnos, a tarde nao desconta nada (a outra maquininha tem o proprio acumulado).
+  const precedente = doDia.find((relatorio) => relatorio.maquininhaId === caixa.maquininhaId) ?? null;
+  // Caixa antigo (aberto antes dos postos) nao tem turno do caixa: fica pela ordem dos caixas, como antes.
+  const tipo = caixa.turnoCaixa;
   const etapaDia: "manha" | "tarde" = tipo ?? (precedente ? "tarde" : "manha");
-  const temManha = doDia.some((relatorio) => (tipoDe(relatorio) ?? etapaGravada(relatorio)) === "manha");
+  const temManha = doDia.some((relatorio) => (relatorio.turnoCaixa ?? etapaGravada(relatorio)) === "manha");
   return { etapaDia, precedente, semManha: tipo === "tarde" && !temManha };
 }
 
@@ -797,8 +803,8 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
   return executarEmTransacao(async (tx) => {
     const colaborador = await buscarColaboradorPorUsuarioRepository(perfil.usuarioId, empresaId, tx);
     const vinculoOperador =
-      colaborador?.pdvPadraoId && colaborador.turnoPadraoId
-        ? { pdvId: colaborador.pdvPadraoId, turnoId: colaborador.turnoPadraoId }
+      colaborador?.pdvPadraoId && colaborador.turnoCaixa
+        ? { pdvId: colaborador.pdvPadraoId, turnoCaixa: colaborador.turnoCaixa }
         : null;
     const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
     // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
@@ -1122,8 +1128,8 @@ export async function consultarMaloteParaAbertura(
 ) {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
   const colaborador = await buscarColaboradorPorUsuarioRepository(perfil.usuarioId, empresaId);
-  if (!colaborador?.pdvPadraoId || !colaborador.turnoPadraoId) {
-    throw new Error("Usuario do caixa precisa ter PDV e turno vinculados pelo administrador");
+  if (!colaborador?.pdvPadraoId || !colaborador.turnoCaixa) {
+    throw new ErroDominio(mensagemSemPostoCaixa, 409, "SEM_POSTO_CAIXA");
   }
   if (colaborador.pdvPadraoId !== pdvId) {
     throw new Error("Usuario do caixa so pode consultar o malote do PDV vinculado ao seu cadastro");
@@ -1172,14 +1178,29 @@ async function abrirCaixaEmTransacao(
     if (!usuarioCaixa) throw new Error("Usuario do caixa nao encontrado");
     const colaborador = await buscarColaboradorPorUsuarioRepository(dados.usuarioCaixaId, dados.empresaId, tx);
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
-    if (!colaborador.pdvPadraoId || !colaborador.turnoPadraoId) {
-      throw new Error("Usuario do caixa precisa ter PDV e turno vinculados pelo administrador");
+    // R-229 · o posto (PDV + turno do caixa) vem do cadastro do login, nunca do corpo da abertura.
+    const turnoCaixa = colaborador.turnoCaixa;
+    if (!colaborador.pdvPadraoId || !turnoCaixa) {
+      throw new ErroDominio(mensagemSemPostoCaixa, 409, "SEM_POSTO_CAIXA");
     }
     if (dados.pdvId !== colaborador.pdvPadraoId) {
       throw new Error("Usuario do caixa so pode abrir o PDV vinculado ao seu cadastro");
     }
-    if (dados.turnoId && dados.turnoId !== colaborador.turnoPadraoId) {
-      throw new Error("Usuario do caixa so pode abrir o turno vinculado ao seu cadastro");
+    if (!pdv.turnosCaixa.includes(turnoCaixa)) {
+      throw new ErroDominio(
+        "O turno deste login nao esta marcado no PDV. Ajuste os turnos do caixa em PDVs.",
+        409,
+        "TURNO_CAIXA_FORA_DO_PDV"
+      );
+    }
+    // A manha deste PDV ainda nao terminou o fechamento: a mensagem diz isso, e nao "periodo de outro caixa".
+    const caixaVivoNoPdv = await buscarCaixaAbertoDoPdvRepository(dados.pdvId, tx);
+    if (caixaVivoNoPdv) {
+      throw new ErroDominio(
+        "O caixa anterior deste PDV ainda esta aberto ou em fechamento. Ele precisa fechar antes de abrir este.",
+        409,
+        "CAIXA_ANTERIOR_DO_PDV_ABERTO"
+      );
     }
     // Um operador representa uma unica gaveta sob responsabilidade. Sem esta guarda, o status
     // escolhia o caixa aberto mais recente e, ao fecha-lo, parecia "abrir" silenciosamente outro
@@ -1208,9 +1229,9 @@ async function abrirCaixaEmTransacao(
         colaboradorId: colaborador.id,
         dataHoraAbertura,
         tokenEdicao: gerarTokenEdicao(),
-        // O turno do Caixa e configurado no usuario. A UI pode enviar o mesmo id para exibi-lo,
-        // mas nunca decide a gravacao.
-        turnoId: colaborador.turnoPadraoId,
+        // R-229: o turno do caixa vem do posto do login. `turnoId` (DP) fica so como registro da jornada.
+        turnoId: colaborador.turnoPadraoId ?? null,
+        turnoCaixa,
         observacao: dados.observacao?.trim() || null,
         lacreAbertura: abertura.numeroLacre,
         caixaResponsavelNomeAbertura: dados.caixaResponsavelNome.trim(),
