@@ -43,6 +43,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { podeOperarCaixa } from "./caixa-acesso.js";
+import { lerContagemFisica, registrarContagemFisica } from "./contagem-fisica.js";
 import { exigirSemRecebimentoSemLacrePendente, listarRecebimentosSemLacre } from "./recebimento-sem-lacre.service.js";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
@@ -827,8 +828,16 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     await revincularVendasAoCaixa(travado, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
-    return { ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador };
+    return ocultarFisicoEsperado({ ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador }, perfil);
   });
+}
+
+// R-232 · contagem cega: o operador de caixa (sem `caixas_gerenciar`) nao recebe o fisico esperado do turno — nem o
+// saldo, nem os numeros que o revelam (saldo proprio, proposta de retorno). Gerencia e Tesouraria continuam vendo.
+function ocultarFisicoEsperado(status: CaixaStatus, perfil: PerfilUsuario): CaixaStatus {
+  if (!status.resumo || temPermissao(perfil.permissoes, "caixas_gerenciar")) return status;
+  const { saldoProprio: _saldoProprio, propostaRetorno: _propostaRetorno, ...resumo } = status.resumo;
+  return { ...status, resumo: { ...resumo, saldo: null } };
 }
 
 export async function registrarIndisponibilidadeCaixa(
@@ -1394,11 +1403,21 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (!(await existeFolhaFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx))) {
       throw new Error("Anexe ao menos uma foto da folha de fechamento antes de fechar o caixa");
     }
-    if (!(await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx))) {
+    const relatorioVendas = await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, tx);
+    if (!relatorioVendas) {
       throw new ErroDominio(
         "Gere o relatorio completo de vendas antes de fechar o caixa.",
         409,
         "RELATORIO_VENDAS_OBRIGATORIO"
+      );
+    }
+    // R-232 · a contagem fisica e a gravada em Vendas (cega, antes de ver o esperado), nao uma nova no fim.
+    const contagemFisica = lerContagemFisica(relatorioVendas.dados);
+    if (!contagemFisica) {
+      throw new ErroDominio(
+        "Informe a contagem física (cédulas e moedas) em Vendas e gere o relatório antes de fechar o caixa.",
+        409,
+        "CONTAGEM_FISICA_OBRIGATORIA"
       );
     }
     const relatorioMaquininha = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
@@ -1439,8 +1458,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         "SALDO_FISICO_NEGATIVO"
       );
     }
-    const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
-    const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
+    const valorEspecieFechamentoCentavos = paraCentavos(contagemFisica.valorEspecie);
+    const valorMoedasFechamentoCentavos = paraCentavos(contagemFisica.valorMoedas);
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
     const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
     const observacao = dados.observacao?.trim() || null;
@@ -2315,6 +2334,16 @@ export async function gerarRelatorioVendasFechamento(
       throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
     }
     const totaisOperacionais = await calcularTotaisCaixaCentavos(travado, tx);
+    // R-232 · contagem cega: comparada com o fisico esperado pela MESMA formula do fechamento.
+    const relatorioAnterior = await buscarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
+    const contagemFisica = registrarContagemFisica({
+      contagem: leituraCreare.contagemFisica,
+      justificativa: leituraCreare.justificativaContagem,
+      anterior: lerContagemFisica(relatorioAnterior?.dados),
+      esperadoCentavos: saldoFisicoCaixaCentavos(totaisOperacionais),
+      usuarioId: perfil.usuarioId,
+      agora: new Date()
+    });
     const saidasSemSangria = deCentavos(
       totaisOperacionais.despesas + totaisOperacionais.mercadorias + totaisOperacionais.retiradas
     );
@@ -2381,7 +2410,8 @@ export async function gerarRelatorioVendasFechamento(
         periodoInicio: new Date(travado.dataHoraAbertura),
         periodoFim: new Date(travado.dataHoraFechamento ?? new Date()),
         dados: {
-          versao: 4,
+          versao: 5,
+          contagemFisica,
           vendas: {
             quantidade: primeiraPagina.totais.quantidade,
             totalGeral: primeiraPagina.totais.totalGeral,
