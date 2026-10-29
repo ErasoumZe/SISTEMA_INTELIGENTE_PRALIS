@@ -11,6 +11,7 @@ import { normalizarDataHoraFolhaCreare } from "./folha-creare.js";
 
 export * from "./regras.js";
 export * from "./folha-creare.js";
+export * from "./maquininha-turno.js";
 
 const uuidSchema = z.string().uuid();
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "data deve ser YYYY-MM-DD");
@@ -181,7 +182,10 @@ export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 // A maquininha continua sendo a escolhida na abertura; a foto apenas sugere valores revisáveis.
 export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
   anexoId: uuidSchema,
-  leituraAcumulada: relatorioMaquininhaIaSchema
+  leituraAcumulada: relatorioMaquininhaIaSchema,
+  // R-228: caixa da TARDE sem a manha do PDV fechada no dia. O relatorio e acumulado, entao sem a manha o
+  // liquido nao desconta nada; salvar exige explicar o que aconteceu.
+  justificativaSemManha: z.string().trim().min(5, "Explique por que nao ha manha").max(300).nullable().default(null)
 });
 export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
 

@@ -164,6 +164,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       turnoNome: turnos.nome,
+      turnoEtiqueta: turnos.etiqueta,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -212,6 +213,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       turnoNome: turnos.nome,
+      turnoEtiqueta: turnos.etiqueta,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -2051,12 +2053,16 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   return relatorio ?? null;
 }
 
-export async function buscarRelatorioMaquininhaPrecedenteRepository(
+// R-228 · relatorios da maquininha ja FECHADOS no mesmo PDV, maquininha e dia, do mais recente ao mais antigo,
+// com o turno de cada caixa (para achar a manha deste PDV hoje).
+export async function listarRelatoriosMaquininhaDoDiaRepository(
   input: { empresaId: string; pdvId: string; maquininhaId: string; dataMovimento: string; fechamentoCaixaId: string },
   db: ExecutorBanco = banco
 ) {
-  const [relatorio] = await db
+  return db
     .select({
+      turnoId: fechamentosCaixa.turnoId,
+      turnoEtiqueta: turnos.etiqueta,
       id: fechamentosCaixaRelatoriosMaquininha.id,
       fechamentoCaixaId: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
       creditoFinal: fechamentosCaixaRelatoriosMaquininha.creditoFinal,
@@ -2069,6 +2075,7 @@ export async function buscarRelatorioMaquininhaPrecedenteRepository(
     })
     .from(fechamentosCaixaRelatoriosMaquininha)
     .innerJoin(fechamentosCaixa, eq(fechamentosCaixa.id, fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(
       and(
         eq(fechamentosCaixaRelatoriosMaquininha.empresaId, input.empresaId),
@@ -2080,9 +2087,7 @@ export async function buscarRelatorioMaquininhaPrecedenteRepository(
         eq(fechamentosCaixaRelatoriosMaquininha.versao, 6)
       )
     )
-    .orderBy(desc(fechamentosCaixa.fechadoEm))
-    .limit(1);
-  return relatorio ?? null;
+    .orderBy(desc(fechamentosCaixa.fechadoEm));
 }
 
 // A leitura inicial de um turno é sempre a leitura final do último fechamento concluído da

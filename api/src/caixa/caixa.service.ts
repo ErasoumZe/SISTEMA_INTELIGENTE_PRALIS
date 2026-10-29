@@ -35,6 +35,7 @@ import {
   conferirInicioFolhaCreare,
   montarResumoCaixa,
   RECUO_MAXIMO_INICIO_VENDAS_MIN,
+  tipoDoTurnoMaquininha,
   saldoFisicoCaixaCentavos,
   statusCaixaSchema
 } from "@padaria/shared/caixa";
@@ -64,7 +65,7 @@ import {
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
   buscarRelatorioMaquininhaFechamentoRepository,
-  buscarRelatorioMaquininhaPrecedenteRepository,
+  listarRelatoriosMaquininhaDoDiaRepository,
   buscarRelatorioVendasFechamentoRepository,
   salvarRelatorioMaquininhaFechamentoRepository,
   salvarRelatorioVendasFechamentoRepository,
@@ -344,6 +345,35 @@ function leituraCompleta(leitura: RelatorioMaquininhaIa) {
   return formasRelatorioMaquininha.every((forma) => leitura[forma] !== null);
 }
 
+// R-228 · manha ou tarde pelo TURNO do caixa (etiqueta M/T; sem etiqueta, pela ordem dos caixas), no mesmo PDV,
+// maquininha e dia. A leitura que a tarde desconta continua sendo a do ultimo caixa ja fechado do dia (R-210):
+// o relatorio da maquininha e acumulado. O turno resolve o que a ordem sozinha nao via: a tarde SEM a manha
+// fechada do PDV naquele dia (o liquido sairia com as vendas da manha), que agora exige justificativa.
+async function resolverEtapaMaquininha(caixa: CaixaLinha, db?: ExecutorBanco) {
+  if (!caixa.maquininhaId || !caixa.pdvId || !caixa.dataMovimento) {
+    return { etapaDia: "manha" as const, precedente: null, semManha: false };
+  }
+  const doDia = await listarRelatoriosMaquininhaDoDiaRepository(
+    {
+      empresaId: caixa.empresaId,
+      pdvId: caixa.pdvId,
+      maquininhaId: caixa.maquininhaId,
+      dataMovimento: caixa.dataMovimento,
+      fechamentoCaixaId: caixa.id
+    },
+    db
+  );
+  const tipoDe = (turno: { turnoId: string | null; turnoEtiqueta: string | null }) =>
+    turno.turnoId ? tipoDoTurnoMaquininha({ etiqueta: turno.turnoEtiqueta }) : null;
+  const etapaGravada = (relatorio: (typeof doDia)[number]) =>
+    (relatorio.dadosRevisados as Record<string, DadosExternos> | null)?.["etapaDia"];
+  const precedente = doDia[0] ?? null;
+  const tipo = tipoDe(caixa);
+  const etapaDia: "manha" | "tarde" = tipo ?? (precedente ? "tarde" : "manha");
+  const temManha = doDia.some((relatorio) => (tipoDe(relatorio) ?? etapaGravada(relatorio)) === "manha");
+  return { etapaDia, precedente, semManha: tipo === "tarde" && !temManha };
+}
+
 function normalizarNumeroMaquininha(numero: string) {
   return numero.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 }
@@ -351,20 +381,12 @@ function normalizarNumeroMaquininha(numero: string) {
 export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
   const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
   const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
-  const precedente =
-    !caixa.maquininhaId || !caixa.pdvId || !caixa.dataMovimento
-      ? null
-      : await buscarRelatorioMaquininhaPrecedenteRepository({
-          empresaId: caixa.empresaId,
-          pdvId: caixa.pdvId,
-          maquininhaId: caixa.maquininhaId,
-          dataMovimento: caixa.dataMovimento,
-          fechamentoCaixaId: caixa.id
-        });
+  const { etapaDia, precedente, semManha } = await resolverEtapaMaquininha(caixa);
   const dadosPrecedentes = precedente?.dadosRevisados as Record<string, DadosExternos> | undefined;
   return {
     turnoNome: relatorio?.turnoNome ?? turnoDoRelatorio(caixa),
-    etapaDia: precedente ? "tarde" : "manha",
+    etapaDia,
+    semManha,
     leituraReferencia: precedente
       ? {
           fechamentoCaixaId: precedente.fechamentoCaixaId,
@@ -389,22 +411,13 @@ export async function analisarRelatorioMaquininhaFechamento(caixaId: string, ane
   const comprovante = anexos.find((anexo) => anexo.id === anexoId && anexo.tipo === "comprovante_cartao");
   if (!comprovante) throw new Error("Comprovante da maquininha nao encontrado");
   validarComprovantesParaIa([comprovante]);
-  const precedente =
-    caixa.maquininhaId && caixa.pdvId && caixa.dataMovimento
-      ? await buscarRelatorioMaquininhaPrecedenteRepository({
-          empresaId: caixa.empresaId,
-          pdvId: caixa.pdvId,
-          maquininhaId: caixa.maquininhaId,
-          dataMovimento: caixa.dataMovimento,
-          fechamentoCaixaId: caixa.id
-        })
-      : null;
+  const { etapaDia } = await resolverEtapaMaquininha(caixa);
   const simulada = env.NODE_ENV === "development" && env.GEMINI_MAQUININHA_SIMULADA;
   if (simulada) {
     const numeroVinculado = caixa.maquininhaNumeroSerie?.trim() ?? null;
     return {
       turnoNome: turnoDoRelatorio(caixa),
-      sugestao: leituraRelatorioMaquininhaSimulada(precedente ? "tarde" : "manha", numeroVinculado),
+      sugestao: leituraRelatorioMaquininhaSimulada(etapaDia, numeroVinculado),
       anexoConsiderado: comprovante.id,
       numeroLidoDivergente: false,
       simulada: true
@@ -511,16 +524,15 @@ export async function salvarRelatorioMaquininhaFechamento(
     if (!(await travarPdvDaAberturaRepository(caixa.pdvId, caixa.empresaId, tx))) {
       throw new Error("PDV nao encontrado");
     }
-    const precedente = await buscarRelatorioMaquininhaPrecedenteRepository(
-      {
-        empresaId: caixa.empresaId,
-        pdvId: caixa.pdvId,
-        maquininhaId,
-        dataMovimento: caixa.dataMovimento,
-        fechamentoCaixaId: caixa.id
-      },
-      tx
-    );
+    const { etapaDia, precedente, semManha } = await resolverEtapaMaquininha(caixa, tx);
+    const justificativaSemManha = dados.justificativaSemManha?.trim() || null;
+    if (semManha && !justificativaSemManha) {
+      throw new ErroDominio(
+        "Não encontramos o caixa da manhã deste PDV hoje. Explique o que aconteceu antes de salvar a tarde.",
+        422,
+        "MANHA_NAO_ENCONTRADA"
+      );
+    }
     const dadosPrecedentes = precedente?.dadosRevisados as Record<string, DadosExternos> | undefined;
     if (dadosPrecedentes?.["etapaDia"] === "tarde") {
       throw new ErroDominio(
@@ -567,7 +579,10 @@ export async function salvarRelatorioMaquininhaFechamento(
         dadosRevisados: {
           versao: 6,
           numeroMaquininha,
-          etapaDia: precedente ? "tarde" : "manha",
+          etapaDia,
+          // R-228: tarde salva sem a manha do PDV no dia (liquido sem desconto), com a explicacao.
+          semManha,
+          justificativaSemManha: semManha ? justificativaSemManha : null,
           anexoId: dados.anexoId,
           leituraReferencia: leituraReferencia ?? null,
           leituraAcumulada: dados.leituraAcumulada,
