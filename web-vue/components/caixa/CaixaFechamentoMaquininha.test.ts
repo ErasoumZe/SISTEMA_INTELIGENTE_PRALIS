@@ -28,7 +28,7 @@ const campo = {
 
 function montar() {
   return mount(CaixaFechamentoMaquininha, {
-    props: { caixa: { id: "cx-1" } as CaixaOperacional },
+    props: { caixa: { id: "cx-1", pdvNome: "PDV 1" } as CaixaOperacional },
     global: {
       stubs: {
         CapturaCameraDialog: true,
@@ -134,5 +134,35 @@ describe("CaixaFechamentoMaquininha · leitura salva", () => {
         correcaoManual: { justificativa: "IA leu 947,05 mas o cupom mostra 947,50", campos: ["Crédito"] }
       }
     });
+  });
+});
+
+describe("CaixaFechamentoMaquininha · manha e tarde (R-227)", () => {
+  it("manha: os dois paineis abertos e o da tarde avisa que so vem depois que a manha fechar", async () => {
+    apiGet.mockResolvedValue({ etapaDia: "manha", leituraReferencia: null, relatorio: null });
+    const wrapper = montar();
+    await flushPromises();
+    expect(wrapper.get('[data-teste="maquininha-aviso-turno"]').text()).toContain("relatório da manhã do PDV 1");
+    expect(wrapper.get('[data-teste="maquininha-aviso-tarde"]').text()).toContain(
+      "só pode ser feito depois que o caixa da manhã deste PDV fechar"
+    );
+  });
+
+  it("tarde: diz que desconta sozinho a manha deste PDV e mostra a leitura da manha", async () => {
+    apiGet.mockResolvedValue({
+      etapaDia: "tarde",
+      leituraReferencia: {
+        leitura: { documentoLegivel: true, credito: 100, debito: 50, pix: 20, voucher: 10 },
+        fechadoEm: "2026-10-29T16:00:00.000Z"
+      },
+      relatorio: null
+    });
+    const wrapper = montar();
+    await flushPromises();
+    const aviso = wrapper.get('[data-teste="maquininha-aviso-turno"]').text();
+    expect(aviso).toContain("relatório da tarde do PDV 1");
+    expect(aviso).toContain("desconta sozinho a leitura da manhã");
+    expect(wrapper.text()).toContain("Leitura acumulada da manhã");
+    expect(wrapper.find('[data-teste="maquininha-aviso-tarde"]').exists()).toBe(false);
   });
 });

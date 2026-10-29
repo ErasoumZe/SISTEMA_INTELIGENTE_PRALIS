@@ -206,4 +206,55 @@ describe("Maquininha - manha e tarde do mesmo PDV", () => {
       json<{ data: { relatorioMaquininha: Record<string, unknown> } }>(dossie).data.relatorioMaquininha
     ).toMatchObject({ creditoInicial: "100.00", creditoFinal: "160.00" });
   });
+
+  // R-227: cada PDV tem a sua manha (PDV 1 manha/tarde, PDV 2 manha/tarde...). A tarde de um PDV nunca usa a
+  // leitura de outro PDV, e no dia seguinte o primeiro caixa volta a ser manha (o acumulado da maquininha zera).
+  it("nao mistura PDVs: cada tarde desconta so a manha do proprio PDV, e no dia seguinte volta a ser manha", async () => {
+    const pdvA = await prepararPdvEMaquininha("ISO-A");
+    const pdvB = await prepararPdvEMaquininha("ISO-B");
+    const etapa = async (caixaId: string) => {
+      const consulta = await chamar(cookieCaixa, "GET", `/api/caixa/${caixaId}/relatorio-maquininha`);
+      expect(consulta.statusCode, consulta.body).toBe(200);
+      return json<{
+        data: { etapaDia: string; leituraReferencia: { leitura: { credito: number } } | null };
+      }>(consulta).data;
+    };
+
+    // PDV A manha: acumulado 100 / 50 / 20 / 10.
+    const manhaA = await abrirCaixa(pdvA, "2026-07-30T08:00", "ISO manha A");
+    const payloadManhaA = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: manhaA.caixaId,
+      caixaResponsavelNome: "Caixa ISO"
+    });
+    expect((await salvarLeitura(manhaA.caixaId, leitura(100, 50, 20, 10))).statusCode).toBe(200);
+    expect((await chamar(cookieCaixa, "POST", `/api/caixa/${manhaA.caixaId}/fechar`, payloadManhaA)).statusCode).toBe(
+      204
+    );
+
+    // PDV B, primeiro caixa do dia: e manha e nao enxerga a manha do PDV A.
+    const manhaB = await abrirCaixa(pdvB, "2026-07-30T08:30", "ISO manha B");
+    expect(await etapa(manhaB.caixaId)).toMatchObject({ etapaDia: "manha", leituraReferencia: null });
+    const payloadManhaB = await prepararPayloadFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: manhaB.caixaId,
+      caixaResponsavelNome: "Caixa ISO"
+    });
+    expect((await chamar(cookieCaixa, "POST", `/api/caixa/${manhaB.caixaId}/fechar`, payloadManhaB)).statusCode).toBe(
+      204
+    );
+
+    // PDV A tarde: desconta a manha do PROPRIO PDV (credito 100), mesmo o PDV B tendo fechado depois.
+    await executarSql("update lacres set numero = numero || '-MANHA' where numero like $1", [`TESTE-%-${pdvA.pdvId}`]);
+    const tardeA = await abrirCaixa(pdvA, "2026-07-30T14:00", "ISO tarde A");
+    const tarde = await etapa(tardeA.caixaId);
+    expect(tarde.etapaDia).toBe("tarde");
+    expect(tarde.leituraReferencia?.leitura.credito).toBe(100);
+
+    // Dia seguinte: o mesmo PDV volta a ser manha, sem desconto (a manha de ontem nao conta mais).
+    await executarSql("update fechamentos_caixa set data_movimento = data_movimento + 1 where id = $1", [
+      tardeA.caixaId
+    ]);
+    expect(await etapa(tardeA.caixaId)).toMatchObject({ etapaDia: "manha", leituraReferencia: null });
+  });
 });

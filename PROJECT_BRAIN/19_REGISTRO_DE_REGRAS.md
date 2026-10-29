@@ -1430,6 +1430,20 @@ ser alterado. No encerramento, só o **Supervisor responsável** é informado: o
 servidor grava como responsável do fechamento o responsável da abertura, mesmo que a tela envie outro nome. Caixa
 antigo sem nome na abertura: o campo fica livre na tela e o servidor usa o nome enviado.
 
+### R-227 — Maquininha manhã e tarde: os dois painéis abertos, cada PDV isolado (Marco, 29/10/2026)
+
+Complementa a R-210. Na etapa Maquininha os painéis **Manhã** e **Tarde** ficam sempre abertos; o turno que não é o
+deste caixa mostra o aviso do que fazer (a tarde **só pode ser feita depois que o caixa da manhã do PDV fechar** e é
+feita pelo caixa da tarde). O sistema decide sozinho se o caixa é manhã ou tarde, sem o operador escolher:
+
+- **Tarde** = existe, no **mesmo PDV**, com a **mesma maquininha** e no **mesmo dia de negócio**, um caixa já fechado
+  com o relatório da maquininha. A tarde desconta a leitura acumulada dessa manhã (líquido = acumulado − manhã).
+- **Cada PDV é isolado**: PDV 1 manhã/tarde, PDV 2 manhã/tarde, PDV 3 e PDV 4 não se misturam (a busca é pelo PDV e
+  pela maquininha do caixa). A tarde de um PDV nunca usa a manhã de outro.
+- **Dia seguinte**: não existe manhã fechada naquele dia, então o primeiro caixa volta a ser manhã, sem desconto
+  (o acumulado da maquininha também zera). Um terceiro caixa no mesmo PDV e dia é recusado.
+- O banco só permite um caixa aberto por PDV, então a tarde só abre depois que a manhã fechou.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

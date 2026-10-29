@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CaixaOperacional } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
+import { formatarDataHora } from "~/utils/formatacao";
 import { formatarCampoDinheiro, numeroDoCampo } from "~/utils/campo-dinheiro";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
 import CaixaCorrecaoManual from "~/components/caixa/CaixaCorrecaoManual.vue";
@@ -34,7 +35,10 @@ const camera = useTemplateRef<HTMLInputElement>("camera");
 const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(camera);
 const galeria = useTemplateRef<HTMLInputElement>("galeria");
 const etapa = ref<"manha" | "tarde">("manha");
-const paineisAbertos = ref<string[]>(["manha"]);
+// Manha e tarde ficam sempre abertos (R-227): o turno que nao e o deste caixa mostra o aviso do que fazer.
+const paineisAbertos = ref<string[]>(["manha", "tarde"]);
+// Quando a manha deste PDV fechou (a tarde desconta essa leitura).
+const manhaFechadaEm = ref<string | null>(null);
 const anexoId = ref("");
 const base = ref<Editavel | null>(null);
 const leitura = ref<Editavel>(novaLeitura(null));
@@ -133,12 +137,13 @@ async function carregar() {
   try {
     const resposta = await apiGet<{
       etapaDia: "manha" | "tarde";
-      leituraReferencia: { leitura: unknown } | null;
+      leituraReferencia: { leitura: unknown; fechadoEm: string | null } | null;
       relatorio: { dadosRevisados: Record<string, unknown> } | null;
     }>(`/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha`);
     etapa.value = resposta.etapaDia;
-    paineisAbertos.value = [etapa.value];
+    paineisAbertos.value = ["manha", "tarde"];
     base.value = resposta.leituraReferencia?.leitura ? novaLeitura(resposta.leituraReferencia.leitura) : null;
+    manhaFechadaEm.value = resposta.leituraReferencia?.fechadoEm ?? null;
     const dados = resposta.relatorio?.dadosRevisados;
     if (dados?.anexoId && dados.leituraAcumulada) {
       anexoId.value = String(dados.anexoId);
@@ -223,9 +228,18 @@ watch(
       </div>
       <v-chip :color="salvo ? 'success' : 'warning'" size="small">{{ salvo ? "Revisado" : "Pendente" }}</v-chip>
     </header>
-    <v-alert v-if="base" type="info" density="compact" variant="tonal" class="mb-4"
-      >A leitura da manhã pertence a este PDV e a esta máquina. A tarde sempre calcula acumulado menos manhã.</v-alert
-    >
+    <v-alert type="info" density="compact" variant="tonal" class="mb-4" data-teste="maquininha-aviso-turno">
+      <template v-if="etapa === 'tarde'">
+        <strong>Este é o relatório da tarde do {{ caixa.pdvNome }}.</strong> O sistema desconta sozinho a leitura da
+        manhã deste PDV e desta maquininha<template v-if="manhaFechadaEm">
+          (manhã fechada em {{ formatarDataHora(manhaFechadaEm) }})</template
+        >. Não precisa fazer conta: envie o relatório acumulado do dia.
+      </template>
+      <template v-else>
+        <strong>Este é o relatório da manhã do {{ caixa.pdvNome }}.</strong> Envie o relatório da maquininha. O da tarde
+        é feito pelo caixa da tarde deste PDV, depois que esta manhã fechar. No dia seguinte tudo começa do zero.
+      </template>
+    </v-alert>
     <v-expansion-panels v-model="paineisAbertos" multiple class="maquininha__paineis">
       <v-expansion-panel
         v-for="painel in paineis"
@@ -240,8 +254,8 @@ watch(
               painel.chave === etapa
                 ? painel.subtitulo
                 : painel.chave === "manha" && base
-                  ? "Leitura já conferida"
-                  : "Disponível após o turno da manhã"
+                  ? "Leitura da manhã deste PDV, já fechada"
+                  : "Feito pelo caixa da tarde, depois que a manhã fechar"
             }}</small></span
           ></v-expansion-panel-title
         >
@@ -256,8 +270,9 @@ watch(
             </div></template
           >
           <template v-else-if="painel.chave !== etapa"
-            ><v-alert type="info" density="compact" variant="tonal"
-              >O turno da tarde será liberado automaticamente quando a manhã deste PDV estiver fechada.</v-alert
+            ><v-alert type="warning" density="compact" variant="tonal" data-teste="maquininha-aviso-tarde"
+              >O relatório da tarde só pode ser feito depois que o caixa da manhã deste PDV fechar. Ele é feito pelo
+              caixa da tarde e desconta sozinho a leitura da manhã.</v-alert
             ></template
           >
           <template v-else>
