@@ -93,4 +93,88 @@ describe("produtos - ligar produtos da loja a BASE", () => {
     expect(await baseDe(ids["dois"]!)).toBeNull();
     expect(await baseDe(ids["semBase"]!)).toBeNull();
   });
+
+  // 29/10/2026 (fase A): os produtos que a integracao do PDV criou so tem `codigo` (o codigo do PDV:
+  // EAN ou codigo interno, com zeros a esquerda). Eles passam a ligar pela BASE e a receber dela o
+  // codigo interno, o codigo de barras e o nome — sem mexer em preco, grupo ou fiscal.
+  it("Deve_LigarPeloCodigoDoPdv_ETrazerCodigosENomeDaBase", async () => {
+    const doPdv = async (nome: string, codigo: string) =>
+      (await consultarUm<{ id: string }>(
+        "insert into produtos (empresa_id, descricao, codigo) values ($1, $2, $3) returning id",
+        [idsTeste.empresaA, nome, codigo]
+      ))!.id;
+    const kapoBase = await base("vinculo-kapo", "VINCULO KAPO OFICIAL", "13995", "7894900573799");
+    const boloBase = await base("vinculo-bolo-pdv", "VINCULO BOLO OFICIAL", "13996", "13996");
+    await base("vinculo-dup", "VINCULO DUP OFICIAL", "13997", null);
+    const ocupadaBase = await base("vinculo-ocupada", "VINCULO OCUPADA OFICIAL", "13998", "7891230000098");
+    const outraBase = await base("vinculo-outra", "VINCULO OUTRA OFICIAL", "13999", null);
+    const kapo = await doPdv("VINCULO KAPO MARAC UN", "07894900573799");
+    const bolo = await doPdv("VINCULO BOLO UN", "00000000013996");
+    const dupA = await doPdv("VINCULO DUP A", "13997");
+    const dupB = await doPdv("VINCULO DUP B", "00000000013997");
+    const ocupa = await doPdv("VINCULO OCUPA PDV", "7891230000098");
+    // Outro produto da loja, ja ligado, segura o codigo interno 13998 (unico por loja no banco).
+    await executarSql(
+      "insert into produtos (empresa_id, descricao, codigo_interno, produto_base_id) values ($1, $2, '13998', $3)",
+      [idsTeste.empresaA, "VINCULO JA TEM 13998", outraBase]
+    );
+
+    const previa = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/vinculo-base/previa?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie }
+    });
+    expect(previa.statusCode, previa.body).toBe(200);
+    const dados = json<{
+      data: {
+        amostra: Array<{ produtoId: string; codigoInterno: string | null; codigoBarras: string | null }>;
+        exemplosSemVinculo: Array<{ produtoId: string; motivo: string }>;
+        hashPlano: string;
+      };
+    }>(previa).data;
+    const motivo = (id: string) => dados.exemplosSemVinculo.find((p) => p.produtoId === id)?.motivo;
+    expect(dados.amostra.find((p) => p.produtoId === kapo)).toMatchObject({
+      codigoInterno: "13995",
+      codigoBarras: "7894900573799"
+    });
+    expect(dados.amostra.some((p) => p.produtoId === bolo)).toBe(true);
+    expect(motivo(dupA)).toBe("codigo-disputado");
+    expect(motivo(dupB)).toBe("codigo-disputado");
+    expect(motivo(ocupa)).toBe("codigo-ocupado");
+
+    const aplicado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos/vinculo-base",
+      headers: { cookie },
+      payload: { empresaId: idsTeste.empresaA, confirmacao: FRASE, hashPlano: dados.hashPlano }
+    });
+    expect(aplicado.statusCode, aplicado.body).toBe(200);
+    const linha = (id: string) =>
+      consultarUm<{
+        b: string | null;
+        ci: string | null;
+        cb: string | null;
+        nome: string | null;
+        descricao: string;
+        codigo: string | null;
+      }>(
+        `select produto_base_id as b, codigo_interno as ci, codigo_barras as cb, nome_catalogo as nome, descricao, codigo
+           from produtos where id = $1`,
+        [id]
+      );
+    expect(await linha(kapo)).toEqual({
+      b: kapoBase,
+      ci: "13995",
+      cb: "7894900573799",
+      nome: "VINCULO KAPO OFICIAL",
+      // O que veio do PDV fica como estava: a venda continua achando o produto pelo vinculo salvo.
+      descricao: "VINCULO KAPO MARAC UN",
+      codigo: "07894900573799"
+    });
+    expect((await linha(bolo))?.b).toBe(boloBase);
+    expect((await linha(dupA))?.b).toBeNull();
+    expect((await linha(dupB))?.b).toBeNull();
+    expect((await linha(ocupa))?.b).toBeNull();
+    expect(ocupadaBase).toBeTruthy();
+  });
 });
