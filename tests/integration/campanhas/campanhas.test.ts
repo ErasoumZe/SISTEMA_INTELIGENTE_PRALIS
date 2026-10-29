@@ -260,10 +260,9 @@ describe("campanhas de bonificacao", () => {
     });
     expect(ativacao.statusCode, ativacao.body).toBe(204);
 
-    const usuarioCaixa = await consultarUm<{ id: string }>(
-      'select id from "user" where lower(email) = lower($1)',
-      ["caixa.integracao@padaria.local"]
-    );
+    const usuarioCaixa = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+      "caixa.integracao@padaria.local"
+    ]);
     if (!usuarioCaixa) throw new Error("operador de caixa nao encontrado na fixture");
     const usuarioCaixaId = usuarioCaixa.id;
 
@@ -333,24 +332,33 @@ describe("campanhas de bonificacao", () => {
     expect(repetidas, "uma campanha nao duplica o sino do mesmo usuario").toHaveLength(1);
 
     // Mesmo usuario em outro PDV, outra empresa ou fora da data da campanha nao recebe nada.
-    await notificarCampanhasNaAberturaDeCaixa({
-      empresaId,
-      pdvId: idsTeste.pdvLivre,
-      usuarioId: usuarioCaixaId,
-      dia: hoje
-    }, banco);
-    await notificarCampanhasNaAberturaDeCaixa({
-      empresaId: idsTeste.empresaB,
-      pdvId,
-      usuarioId: usuarioCaixaId,
-      dia: hoje
-    }, banco);
-    await notificarCampanhasNaAberturaDeCaixa({
-      empresaId,
-      pdvId,
-      usuarioId: usuarioCaixaId,
-      dia: "2000-01-01"
-    }, banco);
+    await notificarCampanhasNaAberturaDeCaixa(
+      {
+        empresaId,
+        pdvId: idsTeste.pdvLivre,
+        usuarioId: usuarioCaixaId,
+        dia: hoje
+      },
+      banco
+    );
+    await notificarCampanhasNaAberturaDeCaixa(
+      {
+        empresaId: idsTeste.empresaB,
+        pdvId,
+        usuarioId: usuarioCaixaId,
+        dia: hoje
+      },
+      banco
+    );
+    await notificarCampanhasNaAberturaDeCaixa(
+      {
+        empresaId,
+        pdvId,
+        usuarioId: usuarioCaixaId,
+        dia: "2000-01-01"
+      },
+      banco
+    );
     const foraDoEscopo = await consultarTodos<{ id: string }>(
       `select id from notificacoes
        where empresa_id = $1 and tipo = 'campanha' and destinatario_usuario_id = $2 and referencia_id = $3`,

@@ -616,9 +616,7 @@ describe("caixa integration", () => {
       payload: {
         lacreFechamento: "FCH-INEXISTENTE",
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 0,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       }
     });
     const fecharFechado = await contexto.app.inject({
@@ -628,9 +626,7 @@ describe("caixa integration", () => {
       payload: {
         lacreFechamento: "FCH-JA-FECHADO",
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 0,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       }
     });
 

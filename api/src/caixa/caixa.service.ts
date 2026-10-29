@@ -2280,7 +2280,10 @@ export async function obterRelatorioVendasFechamento(caixaId: string, perfil: Pe
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-  const relatorio = await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId);
+  // R-232 · inclui o invalidado: a tela de Vendas precisa da contagem travada mesmo sem relatorio valido.
+  const relatorio = await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, undefined, {
+    incluirInvalidado: true
+  });
   return relatorio ? serializarRelatorioVendasFechamento(relatorio) : null;
 }
 
@@ -2335,7 +2338,9 @@ export async function gerarRelatorioVendasFechamento(
     }
     const totaisOperacionais = await calcularTotaisCaixaCentavos(travado, tx);
     // R-232 · contagem cega: comparada com o fisico esperado pela MESMA formula do fechamento.
-    const relatorioAnterior = await buscarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
+    const relatorioAnterior = await buscarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx, {
+      incluirInvalidado: true
+    });
     const contagemFisica = registrarContagemFisica({
       contagem: leituraCreare.contagemFisica,
       justificativa: leituraCreare.justificativaContagem,

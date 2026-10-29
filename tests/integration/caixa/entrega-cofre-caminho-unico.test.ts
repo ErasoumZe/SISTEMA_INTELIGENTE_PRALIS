@@ -56,8 +56,6 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
           lacreFechamento: `FCH-CAMINHO-${url}`,
           caixaResponsavelNome: usuariosTeste.caixa.nome,
           supervisorResponsavelNome: "Supervisor de teste",
-          valorEspecieFechamento: 0,
-          valorMoedasFechamento: 0,
           ...payload
         }
       : payload;
@@ -263,10 +261,13 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
 
     // `agendada` nunca contou como saida (`transferenciaContaComoSaida`), entao o saldo do turno
     // ignora a linha e o fechamento apura os R$ 200 da venda como sobra a devolver.
-    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId });
+    await prepararFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: fx.caixaId,
+      contagem: { valorEspecie: 200 }
+    });
     const fechar = await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, {
       lacreFechamento: fx.lacreFechamento,
-      valorEspecieFechamento: 200,
       observacao: "Turno com ordem legada"
     });
     expect(fechar.statusCode, fechar.body).toBe(204);

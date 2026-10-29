@@ -2,11 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import {
-  abrirCaixaDoOperador,
-  criarRetornoValido,
-  prepararPayloadFechamentoValido
-} from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, criarRetornoValido, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,

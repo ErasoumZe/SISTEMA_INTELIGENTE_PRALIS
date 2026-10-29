@@ -170,7 +170,13 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   }
 
   function movimentosDoCaixa(caixaId: string) {
-    return consultarTodos<{ id: string; tipo: string; valor_original: string; status: string; n_lacre_doc: string | null }>(
+    return consultarTodos<{
+      id: string;
+      tipo: string;
+      valor_original: string;
+      status: string;
+      n_lacre_doc: string | null;
+    }>(
       "select id, tipo, valor_original, status, n_lacre_doc from transferencias where caixa_id = $1 and tipo in ('retorno', 'sangria') order by criado_em",
       [caixaId]
     );
@@ -328,24 +334,24 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // primeira validacao, sem nunca exercitar a corrida.
   it("dois fechamentos SIMULTANEOS: um vence, o outro falha, e so um retorno final e criado", async () => {
     const fx = await abrirCaixaComSaldo("b1-corrida", "2026-06-15T08:00", 90);
-    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
+    await prepararFechamentoValido(contexto.app, {
+      cookieOperador: cookieAdmin,
+      caixaId: fx.caixaId,
+      contagem: { valorEspecie: 190, valorMoedas: 0 }
+    });
 
     const [a, b] = await Promise.all([
       post(`/api/caixa/${fx.caixaId}/fechar`, {
         observacao: "Corrida A",
         lacreFechamento: fx.lacreFechamento,
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 190,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       }),
       post(`/api/caixa/${fx.caixaId}/fechar`, {
         observacao: "Corrida B",
         lacreFechamento: fx.lacreFechamento,
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 190,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       })
     ]);
 
@@ -388,15 +394,17 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // encontra caixa aberto e para antes de criar qualquer coisa.
   it("fechamento repetido nao cria um segundo retorno final", async () => {
     const fx = await abrirCaixaComSaldo("idem-fechamento", "2026-06-07T08:00", 70);
-    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
+    await prepararFechamentoValido(contexto.app, {
+      cookieOperador: cookieAdmin,
+      caixaId: fx.caixaId,
+      contagem: { valorEspecie: 170, valorMoedas: 0 }
+    });
 
     const primeiro = await post(`/api/caixa/${fx.caixaId}/fechar`, {
       observacao: "Fechamento",
       lacreFechamento: fx.lacreFechamento,
       caixaResponsavelNome: "Administrador de teste",
-      supervisorResponsavelNome: "Supervisor de teste",
-      valorEspecieFechamento: 170,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor de teste"
     });
     expect(primeiro.statusCode, primeiro.body).toBe(204);
 
@@ -404,9 +412,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       observacao: "Fechamento",
       lacreFechamento: fx.lacreFechamento,
       caixaResponsavelNome: "Administrador de teste",
-      supervisorResponsavelNome: "Supervisor de teste",
-      valorEspecieFechamento: 170,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor de teste"
     });
     assertProblem(segundo, 409, "FECHAMENTO_NAO_INICIADO");
 
@@ -558,14 +564,16 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       expect(avulsa.body).toMatch(/responsavel/iu);
 
       // Fechamento COM sobra entrega dinheiro -> bloqueado.
-      await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: fx.caixaId });
+      await prepararFechamentoValido(contexto.app, {
+        cookieOperador: cookieAdmin,
+        caixaId: fx.caixaId,
+        contagem: { valorEspecie: 200, valorMoedas: 0 }
+      });
       const comSobra = await post(`/api/caixa/${fx.caixaId}/fechar`, {
         observacao: "Com sobra",
         lacreFechamento: fx.lacreFechamento,
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 200,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       });
       assertProblem(comSobra, 400);
       expect(comSobra.body).toMatch(/responsavel/iu);
@@ -637,9 +645,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
         observacao: "Sem sobra",
         lacreFechamento: fx.lacreFechamento,
         caixaResponsavelNome: "Administrador de teste",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 0,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       });
       expect(fechar.statusCode, fechar.body).toBe(204);
       expect(await movimentosDoCaixa(fx.caixaId)).toHaveLength(1);

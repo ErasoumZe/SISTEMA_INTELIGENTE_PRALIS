@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, prepararPayloadFechamentoValido, universoDoCaixa } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  prepararPayloadFechamentoValido,
+  registrarContagemFisica,
+  universoDoCaixa
+} from "../../setup/caixa.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -132,11 +137,16 @@ describe("P0 - lancamento x fechamento do caixa", () => {
     return json<{ data: { id: string } }>(venda).data.id;
   }
 
-  async function fecharCaixaInject(caixaId: string, payload: object = {}) {
+  // R-232 · `contagem` (opcional) e o dinheiro contado registrado em Vendas antes de fechar.
+  async function fecharCaixaInject(caixaId: string, opcoes: { observacao?: string; contagem?: number } = {}) {
+    const { contagem, ...payload } = opcoes;
     const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
       cookieOperador: cookieCaixa,
       caixaId
     });
+    if (contagem !== undefined) {
+      await registrarContagemFisica(contexto.app, { cookieOperador: cookieCaixa, caixaId, valorEspecie: contagem });
+    }
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
@@ -576,7 +586,7 @@ describe("P0 - lancamento x fechamento do caixa", () => {
       // O fechamento chega depois e tem de ENTRAR NA FILA atras do lancamento em voo.
       const fechamento = fecharCaixaInject(fx.caixaId, {
         observacao: "contagem apos a despesa concorrente",
-        valorEspecieFechamento: 45
+        contagem: 45
       });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
@@ -652,7 +662,7 @@ describe("P0 - lancamento x fechamento do caixa", () => {
 
       const fechamento = fecharCaixaInject(fx.caixaId, {
         observacao: "contagem apos a despesa editada",
-        valorEspecieFechamento: 45
+        contagem: 45
       });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 

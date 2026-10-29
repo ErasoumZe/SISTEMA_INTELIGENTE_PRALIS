@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, prepararPayloadFechamentoValido, registrarContagemFisica } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
@@ -90,13 +90,22 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     });
   }
 
-  async function fecharCaixa(caixaId: string, payload: Record<string, unknown> = {}, cookie = cookieCaixa) {
+  // R-232 · `contagem` (opcional) e o dinheiro contado registrado em Vendas; sem ela, a fixture conta o esperado.
+  async function fecharCaixa(
+    caixaId: string,
+    payload: Record<string, unknown> & { contagem?: number } = {},
+    cookie = cookieCaixa
+  ) {
+    const { contagem, ...resto } = payload;
     const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
       cookieOperador: cookieCaixa,
       caixaId,
       caixaResponsavelNome: "Caixa etapa2"
     });
-    return request(cookie, "POST", `/api/caixa/${caixaId}/fechar`, { ...fechamentoFisico, ...payload });
+    if (contagem !== undefined) {
+      await registrarContagemFisica(contexto.app, { cookieOperador: cookieCaixa, caixaId, valorEspecie: contagem });
+    }
+    return request(cookie, "POST", `/api/caixa/${caixaId}/fechar`, { ...fechamentoFisico, ...resto });
   }
 
   it("libera Tesouraria sem caixa e mantem o cargo Caixa bloqueado sem caixa", async () => {
@@ -160,8 +169,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
 
     const fechado = await fecharCaixa(caixaId, {
       observacao: "Faltou dinheiro na conferência",
-      valorEspecieFechamento: 75.32,
-      valorMoedasFechamento: 0
+      contagem: 75.32
     });
     expect(fechado.statusCode, fechado.body).toBe(204);
 
@@ -224,7 +232,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
 
     const fechado = await fecharCaixa(
       caixaId,
-      { observacao: "Gerente conferiu a falta do operador", valorEspecieFechamento: 90.88, valorMoedasFechamento: 0 },
+      { observacao: "Gerente conferiu a falta do operador", contagem: 90.88 },
       cookieGerente
     );
     expect(fechado.statusCode, fechado.body).toBe(204);

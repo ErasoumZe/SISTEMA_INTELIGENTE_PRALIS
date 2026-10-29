@@ -11,16 +11,12 @@ describe("contrato de lacre de fechamento do caixa", () => {
       fecharCaixaPayloadSchema.parse({
         lacreFechamento: "FCH-001",
         caixaResponsavelNome: "Caixa teste",
-        supervisorResponsavelNome: "Supervisor teste",
-        valorEspecieFechamento: 0,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor teste"
       })
     ).toEqual({
       lacreFechamento: "FCH-001",
       caixaResponsavelNome: "Caixa teste",
-      supervisorResponsavelNome: "Supervisor teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor teste"
     });
   });
 });

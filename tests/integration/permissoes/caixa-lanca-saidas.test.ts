@@ -226,8 +226,6 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
       lacreFechamento,
       caixaResponsavelNome: "Operador R-121",
       supervisorResponsavelNome: "Supervisor de teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0,
       observacao: "Contagem fisica zero no fechamento do teste"
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
@@ -259,8 +257,6 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
       lacreFechamento: caixaNegativo.lacreFechamento,
       caixaResponsavelNome: "Operador R-121",
       supervisorResponsavelNome: "Supervisor de teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0,
       observacao: "Saldo fisico negativo deve ser corrigido antes do fechamento"
     });
     assertProblem(fechar, 409);

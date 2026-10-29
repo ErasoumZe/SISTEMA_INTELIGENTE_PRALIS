@@ -183,9 +183,7 @@ describe("caixa - transferencia de retorno (M2)", () => {
       observacao: "Fechamento com retorno",
       lacreFechamento,
       caixaResponsavelNome: "Operador de teste",
-      supervisorResponsavelNome: "Supervisor de teste",
-      valorEspecieFechamento: 0,
-      valorMoedasFechamento: 0
+      supervisorResponsavelNome: "Supervisor de teste"
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });

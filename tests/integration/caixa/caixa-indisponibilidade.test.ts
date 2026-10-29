@@ -22,7 +22,10 @@ describe("indisponibilidade do computador do PDV", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieCaixa] = await Promise.all([cookieSessao(contexto.app, "admin"), cookieSessao(contexto.app, "caixa")]);
+    [cookieAdmin, cookieCaixa] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "caixa")
+    ]);
   }, 120_000);
 
   afterAll(async () => {

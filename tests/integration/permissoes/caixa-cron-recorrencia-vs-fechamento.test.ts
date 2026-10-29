@@ -6,6 +6,7 @@ import {
   abrirCaixaDoOperador,
   encerrarCaixaSeedAdminParaTeste,
   prepararPayloadFechamentoValido,
+  registrarContagemFisica,
   universoDoCaixa
 } from "../../setup/caixa.js";
 import {
@@ -72,16 +73,20 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
     expect(venda.statusCode, venda.body).toBe(201);
   }
 
-  async function fecharCaixaInject(caixaId: string, cookie: string, payload: object = {}) {
+  // R-232 · `contagem` (opcional) e o dinheiro contado registrado em Vendas antes de fechar.
+  async function fecharCaixaInject(caixaId: string, cookie: string, opcoes: { contagem?: number } = {}) {
     const fechamentoFisico = await prepararPayloadFechamentoValido(contexto.app, {
       cookieOperador: cookie,
       caixaId
     });
+    if (opcoes.contagem !== undefined) {
+      await registrarContagemFisica(contexto.app, { cookieOperador: cookie, caixaId, valorEspecie: opcoes.contagem });
+    }
     return contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload: { ...fechamentoFisico, ...payload }
+      payload: fechamentoFisico
     });
   }
 
@@ -156,7 +161,7 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
 
       // O cron vence a corrida e efetiva R$ 55 antes do corte: do malote de R$ 100 restam
       // R$ 45 em especie. A contagem precisa representar o fisico real, nao o retrato pre-cron.
-      const fechamento = fecharCaixaInject(fx.caixaId, cookieCaixa, { valorEspecieFechamento: 45 });
+      const fechamento = fecharCaixaInject(fx.caixaId, cookieCaixa, { contagem: 45 });
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
       await bloqueador.cliente.query("commit");
