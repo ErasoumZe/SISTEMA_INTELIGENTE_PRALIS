@@ -2,6 +2,7 @@
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import ProdutoFilaPlanilha from "~/components/produtos/ProdutoFilaPlanilha.vue";
+import ProdutoGruposOficiais from "~/components/produtos/ProdutoGruposOficiais.vue";
 import ProdutoPanoramaFiscal from "~/components/produtos/ProdutoPanoramaFiscal.vue";
 import ProdutoVinculoBase from "~/components/produtos/ProdutoVinculoBase.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
@@ -157,6 +158,12 @@ onMounted(async () => {
           </v-col>
         </v-row>
 
+        <ProdutoGruposOficiais
+          v-if="sessao.perfil?.role === 'usuario_admin'"
+          class="mb-4"
+          :empresas="empresas"
+          :empresa-inicial="sessao.perfil?.empresaId ?? empresas[0]?.id ?? ''"
+        />
         <ProdutoVinculoBase
           v-if="sessao.perfil?.role === 'usuario_admin'"
           class="mb-4"
