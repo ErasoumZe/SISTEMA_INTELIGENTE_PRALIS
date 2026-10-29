@@ -1497,7 +1497,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         observacao: observacao || caixa.observacao,
         fechadoPor: perfil.usuarioId,
         lacreFechamento: dados.lacreFechamento,
-        caixaResponsavelNomeFechamento: dados.caixaResponsavelNome.trim(),
+        // R-226: o responsavel pelo caixa no fechamento e quem abriu; so o supervisor muda no encerramento.
+        caixaResponsavelNomeFechamento: caixa.caixaResponsavelNomeAbertura?.trim() || dados.caixaResponsavelNome.trim(),
         supervisorResponsavelNomeFechamento: dados.supervisorResponsavelNome.trim(),
         totais,
         saldoCentavos: 0,

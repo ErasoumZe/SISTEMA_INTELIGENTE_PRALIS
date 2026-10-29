@@ -151,7 +151,7 @@ describe("produtos - TXT do PDV CREARE", () => {
     );
     const entrega = await pedir(`/api/creare/lotes/${loteId}/entrega?loja=TNP`, { token: TOKEN, corpo: { sha256 } });
     expect(entrega.statusCode, entrega.body).toBe(200);
-    expect(json<{ data: { jaEntregue: boolean } }>(entrega).data.jaEntregue).toBe(false);
+    expect(json<{ data: { alreadyDelivered: boolean } }>(entrega).data.alreadyDelivered).toBe(false);
 
     // Tudo entregue: nada pendente.
     expect((await pedir("/api/creare/produtos.txt?loja=TNP&modo=pendentes", { token: TOKEN })).statusCode).toBe(204);
@@ -170,9 +170,9 @@ describe("produtos - TXT do PDV CREARE", () => {
         corpo: { sha256: sha }
       });
     const confirmado = await confirmar(String(seguinte.headers["x-creare-sha256"]));
-    expect(json<{ data: { jaConfirmado: boolean } }>(confirmado).data.jaConfirmado).toBe(false);
+    expect(json<{ data: { alreadyConfirmed: boolean } }>(confirmado).data.alreadyConfirmed).toBe(false);
     const deNovo = await confirmar(String(seguinte.headers["x-creare-sha256"]));
-    expect(json<{ data: { jaConfirmado: boolean } }>(deNovo).data.jaConfirmado).toBe(true);
+    expect(json<{ data: { alreadyConfirmed: boolean } }>(deNovo).data.alreadyConfirmed).toBe(true);
     const cursor = await consultarUm<{ total: number }>(
       "select count(*)::int as total from creare_exportacao_confirmacoes where produto_id = $1",
       [produtoId]

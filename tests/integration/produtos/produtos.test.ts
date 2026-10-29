@@ -369,6 +369,53 @@ describe("produtos integration", () => {
     expect(await importar(forcado)).toBe("ignorado");
   });
 
+  // R1 (doc 56): o paralelo so confere nome/EAN repetido na CRIACAO. Na edicao a loja mexia so no preco de
+  // um produto de nome repetido (ha 246 no catalogo) e caia em "Cadastrar mesmo assim".
+  it("Deve_SalvarEdicao_Quando_NomeRepeteOutroProdutoDaLoja", async () => {
+    const unidade = await contexto.app.inject({
+      method: "POST",
+      url: "/api/unidades-medida",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Unidade R1", sigla: "ur" }
+    });
+    const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
+    const produto = (descricao: string) => ({
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+      descricao,
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      conversoes: []
+    });
+
+    const primeiro = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, produto("PRODUTO NOME R1 ORIGINAL"));
+    expect(primeiro.statusCode, primeiro.body).toBe(201);
+    const segundo = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, produto("PRODUTO NOME R1 OUTRO"));
+    expect(segundo.statusCode, segundo.body).toBe(201);
+    const segundoId = json<{ data: { id: string } }>(segundo).data.id;
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos/${segundoId}`,
+      headers: { cookie: cookieAdmin }
+    });
+    const { codigo, codigoBarras } = json<{ data: { codigo: string | null; codigoBarras: string | null } }>(
+      detalhe
+    ).data;
+
+    const editado = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/produtos/${segundoId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        ...produto("PRODUTO NOME R1 ORIGINAL"),
+        nomeCatalogo: "PRODUTO NOME R1 ORIGINAL",
+        codigo,
+        codigoBarras
+      }
+    });
+    expect(editado.statusCode, editado.body).toBe(204);
+  });
+
   it("Deve_Retornar403_Quando_CriarProdutoEmEmpresaNaoPermitida", async () => {
     const resposta = await cadastrarProdutoNaLoja(contexto.app, cookieAdmin, {
       empresaId: idsTeste.empresaB,

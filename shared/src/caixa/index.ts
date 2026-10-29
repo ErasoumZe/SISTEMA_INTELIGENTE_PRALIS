@@ -172,7 +172,8 @@ export const relatorioMaquininhaIaSchema = z.object({
   voucher: valorRelatorioMaquininhaSchema,
   detalhes: detalhesRelatorioMaquininhaSchema.default({ credito: [], debito: [], pix: [], voucher: [] }),
   camposDuvidosos: z.array(z.string().trim().max(100)).max(30).default([]),
-  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([]),
+  correcaoManual: correcaoManualLeituraSchema
 });
 export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 

@@ -943,3 +943,64 @@ só no banco local.
 11. Apontar o robô da loja para o ERP.
 12. Se algo falhar: desligar as flags do ERP e religar o app. Os dados do ERP continuam lá. Nunca os dois
     escrevendo ao mesmo tempo.
+
+### Paridade com o "cadastro de produtos paralelo" (28/10/2026)
+
+**Nome:** José passou a chamar o app da loja (SISTEMA_PRALIS_PRODUTOS) de **"cadastro de produtos paralelo"**. É a
+referência: está em uso na padaria há pelo menos um mês, e o cadastro do ERP deve **funcionar igual** a ele.
+
+**Revisão:** três revisões independentes, só de leitura (formulário; lista/BASE/manutenção; regras/integrações/config),
+mais a conferência de produção pela API.
+
+- O inventário completo, com arquivo:linha dos dois lados, está no cofre Obsidian PRALIS, notas 42 e 44.
+- Os motores foram copiados literalmente e estão iguais: TXT de 363 posições, lotes e contrato do robô, mapa da
+  planilha, código interno, fiscal na gravação e herança.
+- O que falta está em volta dos motores: configuração, algumas regras do servidor, a tela e os dados.
+
+**Produção em 28/10:**
+
+- A TNP do paralelo é a empresa **"Padaria Principal"**. A "Pralis - TNP" é teste do Marco e fica fora. A LI não existe
+  no ERP.
+- A Padaria Principal tem 1.320 produtos vindos da integração de vendas, sem código interno, grupo nem preço.
+- A BASE está vazia.
+- As regras fiscais estão **indisponíveis**: o compose não repassava `GOOGLE_PRODUTOS_*` / `CREARE_*` (corrigido na PR A).
+
+**Decisões de José (28/10/2026), aprovadas junto com o plano:**
+
+- **D1:** a loja pode trocar a foto e a transformação de produto herdado da BASE, como no paralelo.
+- **D2:** aprovadas duas rotas novas:
+  - classificação fiscal ao vivo (F3);
+  - busca exata por EAN, para o aviso ao digitar (F4/R2).
+- **D3:** ao trocar o grupo, o produto grava a margem do grupo como margem própria, como o paralelo. Sem isso o TXT
+  manda R$ 0,10 ao PDV. A fórmula do preço não muda.
+- **D4:** a tela fica igual à do paralelo. Saem do formulário o que só o ERP tinha:
+  - código externo;
+  - "Grupo oficial (ID externo)" digitado (passa a ser resolvido pelo nome);
+  - os 26 campos fiscais (ficam os 8 do paralelo);
+  - várias promoções com validade (fica uma);
+  - curva ABC, área e estoque digitados na BASE.
+- **D5:** entre a carga da BASE e a virada, a carga é refeita logo antes da virada. Assim o que o paralelo cadastrar
+  nesse intervalo também entra.
+- **D6:** o primeiro TXT depois da virada manda o catálogo inteiro. Aceito, depois de conferir inválidos e colisões
+  em `/api/produtos/creare/saude`.
+- **D7, aberta:** quais cargos da loja recebem `cadastro_produtos_visualizar`, `_editar` e `_criar`.
+
+**Plano, uma PR por bloco:**
+
+- **A, configuração:** compose e `.env.example` com as 16 variáveis; downloads da Manutenção pela URL da API.
+- **B, regras:**
+  - duplicidade só ao criar;
+  - ID do grupo pelo nome;
+  - margem do grupo gravada;
+  - listas fixas com `z.enum`;
+  - unificados fora do TXT;
+  - nomes da resposta de entrega.
+- **C, formulário igual ao paralelo.**
+- **D, lista, importar e menu.**
+- **E, as duas rotas novas.**
+
+Depois: teste em produção com as flags desligadas, e a virada pelo roteiro acima, acrescida de mais três pontos:
+
+- o robô com `PRALIS_API_BASE` terminando em `/api`;
+- o cursor do TXT;
+- a carga refeita logo antes.
