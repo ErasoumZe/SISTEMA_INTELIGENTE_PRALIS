@@ -45,6 +45,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: envOpcionalNaoVazio,
   GOOGLE_CLIENT_SECRET: envOpcionalNaoVazio,
   GOOGLE_REFRESH_TOKEN: envOpcionalNaoVazio,
+  // Conta de servico (a MESMA do "cadastro de produtos paralelo"). Usada quando o OAuth acima esta vazio.
+  // A chave e segredo: so no painel do Coolify. O formato (\n literal, CRLF, espacos) e normalizado na leitura.
+  GOOGLE_SERVICE_ACCOUNT_EMAIL: envOpcionalNaoVazio,
+  GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: envOpcionalNaoVazio,
   GOOGLE_DRIVE_FOLDER_ID: envOpcionalNaoVazio,
   GOOGLE_SPREADSHEET_ID: envOpcionalNaoVazio,
   // Cadastro de Produtos (R-222): a MESMA planilha que o app oficial da loja le, so leitura. Sem o ID

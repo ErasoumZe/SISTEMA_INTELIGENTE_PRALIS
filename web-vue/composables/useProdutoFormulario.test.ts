@@ -1,4 +1,4 @@
-import { computed, effectScope, nextTick, ref, watch } from "vue";
+import { computed, effectScope, nextTick, onScopeDispose, ref, watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErroApiCliente } from "./useApi";
 import { useProdutoFormulario, type ModoDoProduto } from "./useProdutoFormulario";
@@ -45,6 +45,7 @@ beforeEach(() => {
   vi.stubGlobal("ref", ref);
   vi.stubGlobal("computed", computed);
   vi.stubGlobal("watch", watch);
+  vi.stubGlobal("onScopeDispose", onScopeDispose);
   vi.stubGlobal("useApi", () => ({ apiGet, apiPost, apiPut, apiDelete, apiUrl: "" }));
 });
 

@@ -4,34 +4,38 @@
  * (regra da planilha) e o servidor reclassifica ao salvar. Os demais campos fiscais nao aparecem, mas
  * continuam no payload com o valor que vieram: esconder nao pode apagar dado.
  *
- * Sem endpoint de classificacao ao vivo, "NCM achado pela regra" e a origem GRAVADA (planilha por
- * produto ou PLU da balanca) — vale a ultima gravacao, nao a tela antes de salvar.
+ * Classificacao AO VIVO (F3): `classificacao` e o que a gravacao aplicaria com o grupo, o EAN e o nome da
+ * tela (`/api/produtos/fiscal/classificar`), como o `automaticFiscal` do paralelo. O NCM trava quando a
+ * regra o acha. Sem ela (consultando, ou sem grupo) vale a regra do grupo e o fiscal gravado.
  */
-import type { RegraFiscalGrupo } from "@padaria/shared";
+import type { ClassificacaoFiscal, RegraFiscalGrupo } from "@padaria/shared";
 import ProdutoCartao from "~/components/produtos/ProdutoCartao.vue";
 import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
-import {
-  estadoFiscalNaTela,
-  ncmAchadoPelaRegra,
-  percentualFiscal,
-  rotuloDaOrigemFiscal
-} from "~/utils/produto-fiscal-tela";
+import { estadoFiscalNaTela, percentualFiscal, rotuloDaOrigemFiscal } from "~/utils/produto-fiscal-tela";
 
 const props = defineProps<{
   form: ProdutoForm;
   /** Regra fiscal do grupo escolhido (planilha oficial). */
   regraDoGrupo: RegraFiscalGrupo | null;
+  /** Classificacao ao vivo do servidor (`null` enquanto consulta ou sem grupo). */
+  classificacao: ClassificacaoFiscal | null;
+  classificando: boolean;
   ehAdmin: boolean;
   /** Administrador e a tela nao esta em leitura: digita NCM, CEST e categoria (ONLY_ADMIN_FISCAL). */
   fiscalEditavel: boolean;
-  /** O grupo mudou desde que o produto foi aberto: a fonte gravada deixa de valer ate salvar. */
-  grupoMudou: boolean;
   dica: (campo: string) => string | undefined;
 }>();
 
 const estado = computed(() => estadoFiscalNaTela(props.form.fiscal.estado, props.form.fiscal.motivo));
-const ncmTravado = computed(() => !props.fiscalEditavel || ncmAchadoPelaRegra(props.form.fiscal.origemFiscal));
-const fonte = computed(() => (props.grupoMudou ? "" : rotuloDaOrigemFiscal(props.form.fiscal.origemFiscal)));
+/** O que a regra aplicaria: a classificacao ao vivo, ou a regra do grupo enquanto ela nao chega. */
+const automatico = computed(() => props.classificacao ?? props.regraDoGrupo);
+const ncmDaRegra = computed(() => props.classificacao?.ncm ?? null);
+const ncmTravado = computed(() => !props.fiscalEditavel || Boolean(ncmDaRegra.value));
+const fonte = computed(() => (props.classificacao ? rotuloDaOrigemFiscal(props.classificacao.origem) : ""));
+/** So o NCM digitado vai para o formulario; o achado pela regra e mostrado (o servidor grava ao salvar). */
+function digitarNcm(valor: string) {
+  if (!ncmTravado.value) props.form.fiscal.ncm = valor;
+}
 </script>
 
 <template>
@@ -53,21 +57,23 @@ const fonte = computed(() => (props.grupoMudou ? "" : rotuloDaOrigemFiscal(props
       Os dados fiscais são definidos pelo administrador e calculados a partir do grupo. Trocar o grupo aqui recalcula os
       impostos automaticamente.
     </v-alert>
-    <v-alert v-if="regraDoGrupo" type="info" variant="tonal" density="compact">
-      Regra automática: {{ regraDoGrupo.tributacaoSimples }} · CST {{ regraDoGrupo.cstPisCofins }} · Simples
-      {{ percentualFiscal(regraDoGrupo.aliquotaSimples) }} · ICMS RE {{ percentualFiscal(regraDoGrupo.icmsRe) }}
-      <div v-if="regraDoGrupo.baseFiscal" class="text-caption mt-1">{{ regraDoGrupo.baseFiscal }}</div>
+    <v-alert v-if="automatico" type="info" variant="tonal" density="compact">
+      Regra automática: {{ automatico.tributacaoSimples }} · CST {{ automatico.cstPisCofins }} · Simples
+      {{ percentualFiscal(automatico.aliquotaSimples) }} · ICMS RE {{ percentualFiscal(automatico.icmsRe) }}
+      <div v-if="automatico.baseFiscal" class="text-caption mt-1">{{ automatico.baseFiscal }}</div>
       <div v-if="fonte" class="text-caption mt-1">Fonte: {{ fonte }}</div>
     </v-alert>
 
     <v-row dense>
       <v-col cols="12" sm="6">
         <v-text-field
-          v-model="form.fiscal.ncm"
+          :model-value="ncmDaRegra ?? form.fiscal.ncm"
           label="NCM (automático quando encontrado)"
+          :loading="classificando"
           :readonly="ncmTravado"
           :class="{ cartao__previa: ncmTravado }"
           :hint="dica('ncm')"
+          @update:model-value="digitarNcm"
         />
       </v-col>
       <v-col cols="12" sm="6">
@@ -90,7 +96,7 @@ const fonte = computed(() => (props.grupoMudou ? "" : rotuloDaOrigemFiscal(props
       </v-col>
       <v-col cols="12" sm="6">
         <v-text-field
-          :model-value="regraDoGrupo?.cstPisCofins ?? form.fiscal.cstPisCofins"
+          :model-value="automatico?.cstPisCofins ?? form.fiscal.cstPisCofins"
           label="CST PIS/COFINS (automático)"
           readonly
           class="cartao__previa"
@@ -98,20 +104,35 @@ const fonte = computed(() => (props.grupoMudou ? "" : rotuloDaOrigemFiscal(props
       </v-col>
       <v-col cols="6" sm="4">
         <v-text-field
-          :model-value="form.fiscal.cstReforma || '—'"
+          :model-value="classificacao?.cstReforma || form.fiscal.cstReforma || '—'"
           label="CST reforma"
           readonly
           class="cartao__previa"
         />
       </v-col>
       <v-col cols="6" sm="4">
-        <v-text-field :model-value="form.fiscal.cClassTrib || '—'" label="cClassTrib" readonly class="cartao__previa" />
+        <v-text-field
+          :model-value="classificacao?.cClassTrib || form.fiscal.cClassTrib || '—'"
+          label="cClassTrib"
+          readonly
+          class="cartao__previa"
+        />
       </v-col>
       <v-col cols="6" sm="4">
-        <v-text-field :model-value="form.fiscal.aliquotaIbs" label="IBS %" readonly class="cartao__previa" />
+        <v-text-field
+          :model-value="classificacao?.aliquotaIbs ?? form.fiscal.aliquotaIbs"
+          label="IBS %"
+          readonly
+          class="cartao__previa"
+        />
       </v-col>
       <v-col cols="6" sm="4">
-        <v-text-field :model-value="form.fiscal.aliquotaCbs" label="CBS %" readonly class="cartao__previa" />
+        <v-text-field
+          :model-value="classificacao?.aliquotaCbs ?? form.fiscal.aliquotaCbs"
+          label="CBS %"
+          readonly
+          class="cartao__previa"
+        />
       </v-col>
     </v-row>
   </ProdutoCartao>

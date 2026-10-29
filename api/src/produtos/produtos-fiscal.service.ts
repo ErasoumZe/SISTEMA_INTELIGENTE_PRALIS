@@ -16,6 +16,8 @@ import {
 import { env } from "../env.js";
 import { GoogleSheetsService } from "../google/google-sheets.service.js";
 import { deParaDeTodasAsLojasRepository } from "./produtos-sia-depara.repository.js";
+import { contextoDaClassificacaoRepository } from "./produtos-fiscal.repository.js";
+import { apenasDigitos } from "../utils.js";
 
 /**
  * Leitura das regras fiscais — IGUAL ao `TaxRuleService` do app oficial (R-222): as mesmas abas e faixas da
@@ -144,6 +146,27 @@ export async function tabelasFiscais(): Promise<TabelasFiscais> {
 export async function classificarProdutoFiscal(entrada: EntradaFiscal): Promise<ResultadoFiscal> {
   const tabelas = await tabelasFiscais().catch(() => null);
   return classificarFiscal(tabelas, entrada);
+}
+
+/**
+ * Classificacao fiscal AO VIVO para o formulario (F3, decisao D2 de Jose; oficial
+ * `/apoio/classificacao-fiscal`). Mesmas entradas que a gravacao da loja monta em `salvarProduto`
+ * (nome do grupo da empresa, EAN so com digitos, nome do catalogo, loja pelo prefixo da empresa) e o
+ * MESMO motor — e NAO grava nada. Grupo de outra empresa nao e achado: sai como grupo invalido.
+ */
+export async function classificarFiscalAoVivo(entrada: {
+  empresaId: string;
+  nome?: string | null | undefined;
+  codigoBarras?: string | null | undefined;
+  grupoMercadoriaId?: string | null | undefined;
+}): Promise<ResultadoFiscal> {
+  const contexto = await contextoDaClassificacaoRepository(entrada.empresaId, entrada.grupoMercadoriaId ?? null);
+  return classificarProdutoFiscal({
+    nome: entrada.nome?.trim() || null,
+    codigoBarras: apenasDigitos(entrada.codigoBarras) ?? entrada.codigoBarras?.trim() ?? null,
+    grupo: contexto.grupoNome,
+    loja: lojaFiscalDaEmpresa(contexto.matriculaPrefixo)
+  });
 }
 
 /** Margem padrao (fracao) do grupo pela regra fiscal; 0 sem grupo, sem regra, sem margem ou fonte fora. */

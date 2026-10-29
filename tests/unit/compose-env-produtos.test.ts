@@ -12,7 +12,7 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const envTs = readFileSync(join(raiz, "api", "src", "env.ts"), "utf8");
 const compose = readFileSync(join(raiz, "infra", "docker-compose.coolify.yml"), "utf8");
 
-const DO_CADASTRO = /^\s{2}((?:GOOGLE_PRODUTOS|CREARE)_[A-Z_]+):/gm;
+const DO_CADASTRO = /^\s{2}((?:GOOGLE_PRODUTOS|GOOGLE_SERVICE_ACCOUNT|CREARE)_[A-Z_]+):/gm;
 const lidasPeloEnv = [...envTs.matchAll(DO_CADASTRO)].map((m) => m[1]!);
 
 /** Linhas do bloco `environment` do servico api (ate o proximo servico). */
