@@ -1,6 +1,13 @@
 import { computed, ref } from "vue";
 import type { ContagemFisicaRelatorio } from "@padaria/shared";
-import type { ContagemEmEdicao } from "~/components/caixa/CaixaContagemFisica.vue";
+
+// O que o operador esta digitando no passo 1 de Vendas (strings dos campos de dinheiro).
+export type ContagemEmEdicao = {
+  valorEspecie: string;
+  valorMoedas: string;
+  justificativa: string;
+  corrigindo: boolean;
+};
 
 // R-232 · contagem fisica cega em Vendas: o que esta sendo digitado e o que ja foi gravado no relatorio (trava ao
 // gerar). Sem contagem gravada, o envio leva o digitado; gravada e sem correcao, reenvia a mesma (o servidor nao pede

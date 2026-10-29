@@ -854,7 +854,8 @@ describe("caixa integration", () => {
     });
 
     assertProblem(resposta, 400);
-    expect(resposta.body).toMatch(/acima do saldo/i);
+    // R-232 · para o operador a mensagem nao revela o disponivel; para a gerencia, revela.
+    expect(resposta.body).toMatch(/acima do (saldo|dinheiro)/i);
 
     const depois = await consultarUm<{ total: string }>(
       "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",

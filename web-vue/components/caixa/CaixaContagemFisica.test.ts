@@ -60,16 +60,18 @@ describe("CaixaContagemFisica", () => {
     await tela.find("[data-teste='contagem-moedas']").setValue("7");
     expect(tela.text()).toContain("87,00");
     expect(tela.text()).not.toContain("Esperado");
-    expect(tela.find("[data-teste='contagem-comparacao']").exists()).toBe(false);
+    expect(tela.find("[data-teste='contagem-registrada']").exists()).toBe(false);
   });
 
-  it("depois de gravar: trava, compara com o esperado e mostra a falta", () => {
+  it("depois de gravar: trava e mostra só o que foi digitado — nada de esperado nem falta/sobra", () => {
     const { tela } = montar(gravada);
     expect(tela.find("[data-teste='contagem-cedulas']").exists()).toBe(false);
-    const comparacao = tela.get("[data-teste='contagem-comparacao']").text();
-    expect(comparacao).toContain("95,00");
-    expect(comparacao).toContain("100,00");
-    expect(comparacao).toContain("Falta");
+    const registrada = tela.get("[data-teste='contagem-registrada']").text();
+    expect(registrada).toContain("90,00");
+    expect(registrada).toContain("5,00");
+    expect(registrada).toContain("95,00");
+    expect(tela.text()).not.toContain("100,00");
+    expect(tela.text()).not.toMatch(/esperado|falta|sobra/i);
   });
 
   it("corrigir reabre os campos e pede justificativa", async () => {

@@ -48,10 +48,10 @@ describe("caixa - contagem física cega (R-232)", () => {
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     const resumo = json<{ data: { resumo: Record<string, unknown> } }>(resposta).data.resumo;
-    expect(resumo.saldo).toBeNull();
+    expect(resumo["saldo"]).toBeNull();
     expect(resumo).not.toHaveProperty("saldoProprio");
     expect(resumo).not.toHaveProperty("propostaRetorno");
-    expect(resumo.totalEntradas).toEqual(expect.any(Number));
+    expect(resumo["totalEntradas"]).toEqual(expect.any(Number));
   });
 
   it("a contagem fica no relatório, trava e só muda com justificativa (com histórico); o fechamento usa ela", async () => {

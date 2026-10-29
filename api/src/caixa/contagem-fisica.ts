@@ -1,5 +1,9 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import type { ContagemFisicaRelatorio, ContagemFisicaEntrada } from "@padaria/shared/caixa";
+import {
+  contagemFisicaRelatorioSchema,
+  type ContagemFisicaEntrada,
+  type ContagemFisicaRelatorio
+} from "@padaria/shared/caixa";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import { ErroDominio } from "../erros.js";
 
@@ -8,13 +12,10 @@ import { ErroDominio } from "../erros.js";
 // motivo ficam no historico para a Tesouraria. O fechamento usa ESTA contagem (nao recebe outra no fim).
 
 /** Le a contagem gravada no `dados` do relatorio de vendas (ou null se o relatorio e anterior a R-232). */
-export function lerContagemFisica(dados: DadosExternos | null | undefined): ContagemFisicaRelatorio | null {
+export function lerContagemFisica(dados: DadosExternos): ContagemFisicaRelatorio | null {
   if (!dados || typeof dados !== "object" || Array.isArray(dados)) return null;
-  const contagem = (dados as Record<string, DadosExternos>)["contagemFisica"];
-  if (!contagem || typeof contagem !== "object" || Array.isArray(contagem)) return null;
-  const registro = contagem as Record<string, DadosExternos>;
-  if (typeof registro["valorEspecie"] !== "number" || typeof registro["valorMoedas"] !== "number") return null;
-  return contagem as unknown as ContagemFisicaRelatorio;
+  const lida = contagemFisicaRelatorioSchema.safeParse((dados as Record<string, DadosExternos>)["contagemFisica"]);
+  return lida.success ? lida.data : null;
 }
 
 /**

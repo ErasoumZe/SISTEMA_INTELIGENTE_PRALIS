@@ -60,9 +60,9 @@ const etapas = [
   {
     id: 1,
     titulo: "Vendas",
-    resumo: "Conte o dinheiro, anexe a folha CREARE e gere o relatório que compara os três.",
+    resumo: "Digite o dinheiro do malote, anexe a folha CREARE e gere o relatório de vendas.",
     passos: [
-      "Primeiro conte as cédulas e as moedas da gaveta. O sistema não mostra o valor esperado antes da contagem.",
+      "Primeiro digite as cédulas e as moedas com que você fecha a gaveta (o que vai no malote de fechamento).",
       "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
       "Revise os campos como estão no cupom: período, troco inicial, formas de pagamento, total, despesas e sangria.",
       "Se o horário da folha não bater com o início das vendas, use Ajustar início.",

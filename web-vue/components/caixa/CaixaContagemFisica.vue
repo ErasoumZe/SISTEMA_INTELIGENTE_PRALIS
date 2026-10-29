@@ -1,19 +1,13 @@
 <script setup lang="ts">
-// R-232 · contagem fisica cega: primeiro passo de Vendas. O operador conta cedulas e moedas SEM ver o esperado (assim
-// nao sabe se sobra ou falta antes de contar). Depois de gerar o relatorio, a contagem trava e aparece a comparacao;
-// corrigir exige justificativa, e original, corrigido e motivo vao para a Tesouraria.
+// R-232 · primeiro passo de Vendas: o operador digita o dinheiro com que fecha a gaveta (o que vai no malote de
+// fechamento), igual era na etapa final. Aqui nada vem do sistema: o esperado e a falta/sobra so aparecem na etapa
+// final. Depois de gerar o relatorio, o valor trava; corrigir exige justificativa, que vai para a Tesouraria.
 import { computed } from "vue";
 import type { ContagemFisicaRelatorio } from "@padaria/shared";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-
-export type ContagemEmEdicao = {
-  valorEspecie: string;
-  valorMoedas: string;
-  justificativa: string;
-  corrigindo: boolean;
-};
+import type { ContagemEmEdicao } from "~/composables/useContagemFisicaVendas";
 
 const props = defineProps<{ registrada: ContagemFisicaRelatorio | null }>();
 const contagem = defineModel<ContagemEmEdicao>({ required: true });
@@ -25,14 +19,6 @@ const totalDigitado = computed(
       Math.round(Number(contagem.value.valorMoedas || 0) * 100)) /
     100
 );
-const situacao = computed(() => {
-  const diferenca = props.registrada?.diferenca ?? 0;
-  if (diferenca === 0) return { cor: "success", texto: "Confere com o sistema", icone: "mdi-check-circle" };
-  if (diferenca < 0)
-    return { cor: "error", texto: `Falta ${dinheiro(Math.abs(diferenca))}`, icone: "mdi-alert-circle" };
-  return { cor: "warning", texto: `Sobra ${dinheiro(diferenca)}`, icone: "mdi-alert" };
-});
-
 function corrigir() {
   if (!props.registrada) return;
   contagem.value = {
@@ -52,12 +38,11 @@ function cancelarCorrecao() {
     <header class="contagem__topo">
       <span class="contagem__passo">1</span>
       <div>
-        <h4 id="contagem-titulo">Dinheiro na gaveta</h4>
+        <h4 id="contagem-titulo">Dinheiro do fechamento da gaveta</h4>
         <p v-if="editando && !registrada">
-          Conte as cédulas e as moedas <strong>antes de qualquer outra coisa</strong>. O sistema não mostra o valor
-          esperado: ele só compara depois que você gerar o relatório.
+          Digite as cédulas e as moedas com que você fecha a gaveta, o que vai no <strong>malote de fechamento</strong>.
         </p>
-        <p v-else-if="!editando">Contagem registrada. Para mudar, use “Corrigir contagem” e explique o motivo.</p>
+        <p v-else-if="!editando">Valor registrado. Para mudar, use “Corrigir contagem” e explique o motivo.</p>
         <p v-else>Corrigindo a contagem. A correção e o motivo vão para a Tesouraria.</p>
       </div>
     </header>
@@ -93,20 +78,18 @@ function cancelarCorrecao() {
     </template>
 
     <template v-else-if="registrada">
-      <div class="contagem__comparacao" data-teste="contagem-comparacao">
+      <div class="contagem__registrada" data-teste="contagem-registrada">
         <div>
-          <span>Contado</span>
+          <span>Cédulas</span>
+          <strong>{{ dinheiro(registrada.valorEspecie) }}</strong>
+        </div>
+        <div>
+          <span>Moedas</span>
+          <strong>{{ dinheiro(registrada.valorMoedas) }}</strong>
+        </div>
+        <div>
+          <span>Total do malote</span>
           <strong>{{ dinheiro(registrada.total) }}</strong>
-          <small>Cédulas {{ dinheiro(registrada.valorEspecie) }} · Moedas {{ dinheiro(registrada.valorMoedas) }}</small>
-        </div>
-        <div>
-          <span>Esperado pelo sistema</span>
-          <strong>{{ dinheiro(registrada.esperado) }}</strong>
-          <small>Calculado com as movimentações do turno</small>
-        </div>
-        <div :class="`contagem__situacao contagem__situacao--${situacao.cor}`">
-          <v-icon :icon="situacao.icone" size="20" />
-          <strong>{{ situacao.texto }}</strong>
         </div>
       </div>
       <ul v-if="registrada.correcoes.length" class="contagem__correcoes" aria-label="Correções da contagem">
@@ -170,7 +153,7 @@ function cancelarCorrecao() {
   margin-top: 14px;
 }
 .contagem__total,
-.contagem__comparacao > div {
+.contagem__registrada > div {
   display: grid;
   gap: 2px;
   padding: 10px 12px;
@@ -178,35 +161,21 @@ function cancelarCorrecao() {
   background: var(--cx-surface-sunken);
 }
 .contagem__total span,
-.contagem__comparacao span,
-.contagem__comparacao small {
+.contagem__registrada span,
+.contagem__registrada small {
   color: var(--cx-ink-soft);
   font-size: 0.78rem;
 }
 .contagem__total strong,
-.contagem__comparacao strong {
+.contagem__registrada strong {
   font-size: 1.15rem;
   font-variant-numeric: tabular-nums;
 }
-.contagem__comparacao {
+.contagem__registrada {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 14px;
-}
-.contagem__situacao {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
-}
-.contagem__situacao--success {
-  color: var(--cx-positive);
-}
-.contagem__situacao--error {
-  color: var(--cx-negative, #b42318);
-}
-.contagem__situacao--warning {
-  color: var(--cx-attention);
 }
 .contagem__correcoes {
   margin: 10px 0 0;
@@ -216,7 +185,7 @@ function cancelarCorrecao() {
 }
 @media (max-width: 720px) {
   .contagem__campos,
-  .contagem__comparacao {
+  .contagem__registrada {
     grid-template-columns: 1fr;
   }
   .contagem :deep(.v-btn) {

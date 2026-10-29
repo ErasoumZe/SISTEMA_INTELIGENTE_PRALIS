@@ -228,15 +228,17 @@ watch(
   <section class="relatorio-vendas" aria-labelledby="vendas-turno-titulo">
     <div class="relatorio-vendas__cabecalho">
       <div>
-        <span class="relatorio-vendas__sobretitulo">Etapa 2 · vendas</span>
+        <span class="relatorio-vendas__sobretitulo">Etapa 1 · vendas</span>
         <h3 id="vendas-turno-titulo">Vendas do turno</h3>
-        <p>Conte o dinheiro da gaveta, anexe a folha do CREARE e gere o relatório que compara os três.</p>
+        <p>
+          Digite o dinheiro do fechamento da gaveta, anexe a folha do CREARE e gere o relatório de vendas do sistema.
+        </p>
       </div>
     </div>
 
     <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
 
-    <!-- R-232 · 1) contagem cega, 2) folha do CREARE, 3) gerar o relatorio que compara os tres. -->
+    <!-- R-232 · 1) dinheiro do malote digitado, 2) folha do CREARE, 3) relatorio de vendas do sistema x folha. -->
     <CaixaContagemFisica v-model="contagem" :registrada="contagemRegistrada" />
 
     <section class="relatorio-vendas__anexo mt-4" aria-label="Relatório de vendas do CREARE">
