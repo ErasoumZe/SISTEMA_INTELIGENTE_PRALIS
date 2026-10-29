@@ -442,4 +442,3 @@ export * from "./semelhanca-de-nome.js";
 export * from "./codigo-cadastro.js";
 export * from "./custo-mer.js";
 export * from "./grupo-id.js";
-export * from "./codigo-barras.js";

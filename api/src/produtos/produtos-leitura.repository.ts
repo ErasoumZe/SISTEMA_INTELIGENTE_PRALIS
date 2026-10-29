@@ -15,7 +15,7 @@ import {
   type SQLWrapper
 } from "drizzle-orm";
 import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
-import { variantesDeCodigoDeBarras } from "@padaria/shared/produtos";
+import { candidatosDeCodigo } from "@padaria/shared/produtos";
 import type { OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
 import {
   empresas,
@@ -43,14 +43,14 @@ function termoDeBusca(bruto: string): string {
 }
 
 /**
- * EAN por IGUALDADE com as variantes do oficial (`barcodeCandidates`): sem zeros a esquerda dos dois
+ * EAN por IGUALDADE com `candidatosDeCodigo` (o `barcodeCandidates` do oficial): sem zeros a esquerda dos dois
  * lados e etiqueta de balanca achando o PLU. Pedaco de EAN nao acha mais nada — codigo de barras e
  * identidade, nao texto de busca. Busca com LETRA nao gera condicao de EAN: "item 03" viraria o EAN
  * "403" e traria outro produto (o oficial tira os digitos de qualquer texto).
  */
 export function codigoDeBarrasIgualA(coluna: SQLWrapper, busca: string): SQL | undefined {
   if (/\p{L}/u.test(busca)) return undefined;
-  const variantes = variantesDeCodigoDeBarras(busca);
+  const variantes = candidatosDeCodigo(busca);
   return variantes.length ? inArray(codigoBarrasSemZerosIniciais(coluna), variantes) : undefined;
 }
 
