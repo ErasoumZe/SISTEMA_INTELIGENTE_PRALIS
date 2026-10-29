@@ -12,6 +12,7 @@ import type {
   PreviaCatalogoBase,
   ResumoCargaCentral
 } from "~/types/produtos-central";
+import { cargaTemGrupos } from "~/utils/produtos-central-carga";
 
 const { apiGet, apiPost, apiUpload, carregarSessao } = useApi();
 const router = useRouter();
@@ -60,6 +61,12 @@ async function carregarCargas() {
 }
 async function carregarGrupos() {
   if (!cargaId.value) return;
+  // Carga so com fontes enviadas: nao ha grupos ainda, e pedir faria o erro do servidor cobrir o sucesso.
+  if (!cargaTemGrupos(cargas.value.find((item) => item.id === cargaId.value)?.estado)) {
+    grupos.value = [];
+    total.value = 0;
+    return;
+  }
   const query = new URLSearchParams({ page: String(pagina.value), pageSize: String(pageSize) });
   if (busca.value.trim()) query.set("busca", busca.value.trim());
   if (loja.value) query.set("loja", loja.value);
