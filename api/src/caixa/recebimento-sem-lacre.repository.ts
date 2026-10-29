@@ -79,7 +79,14 @@ export async function resolverRecebimentoSemLacreRepository(
             confirmadoPor: input.usuarioId,
             atualizadoEm: input.agora
           }
-        : { status: "cancelada", atualizadoEm: input.agora }
+        : // `transferencias_cancelamento_check`: quem, quando e por que andam juntos.
+          {
+            status: "cancelada",
+            canceladoPor: input.usuarioId,
+            canceladoEm: input.agora,
+            motivoCancelamento: "Não recebido no PDV (transferência sem lacre)",
+            atualizadoEm: input.agora
+          }
     )
     .where(
       and(eq(transferencias.id, input.transferenciaId), recebimentoSemLacrePendente(input.caixaId, input.pdvContaId))
