@@ -708,11 +708,13 @@ describe("caixa integration", () => {
       pdvId,
       nome: "Concorrencia caixa"
     });
+    // R-229 · um posto por login: o gerente fica com a tarde do mesmo PDV.
     await vincularOperadorAoPdvETurno(contexto.app, {
       cookieAdmin,
       usuarioId: usuarioGerenteId,
       pdvId,
-      nome: "Concorrencia gerente"
+      nome: "Concorrencia gerente",
+      turnoCaixa: "tarde"
     });
 
     const payloadCaixa = await prepararAberturaFisica(pdvId, contaId, usuarioCaixaId, "Abertura A");
@@ -730,8 +732,9 @@ describe("caixa integration", () => {
       abertura(payloadGerente, cookieGerente)
     ]);
 
+    // Quem chega depois encontra o caixa do PDV aberto: 409 "caixa anterior deste PDV" (R-229).
     const statuses = [primeira.statusCode, segunda.statusCode].sort();
-    expect(statuses).toEqual([201, 400]);
+    expect(statuses).toEqual([201, 409]);
     const abertos = await consultarUm<{ total: number }>(
       "select count(*)::int as total from fechamentos_caixa where pdv_id = $1 and status = 'aberto'",
       [pdvId]

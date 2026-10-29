@@ -35,10 +35,10 @@ export async function salvarPdv(id: string | null, body: DadosExternos) {
         const vinculados = await listarPostosVinculadosRepository(id, removidos, tx);
         if (vinculados.length) {
           const nomes = vinculados.map((item) => `${item.nome} (${rotuloTurnoCaixa[item.turnoCaixa!]})`).join(", ");
-          falharValidacao(`O turno do caixa tem login de posto vinculado: ${nomes}. Troque o posto em Usuarios antes.`);
+          falharValidacao(`O turno do caixa tem login de posto vinculado: ${nomes}. Troque o posto em Usuários antes.`);
         }
         if (await buscarCaixaAbertoDoPdvRepository(id, tx)) {
-          falharValidacao("PDV com caixa aberto ou em fechamento: os turnos do caixa nao podem ser alterados agora");
+          falharValidacao("PDV com caixa aberto ou em fechamento: os turnos do caixa não podem ser alterados agora");
         }
       }
     }

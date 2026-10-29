@@ -1451,7 +1451,8 @@ volta a ser só do DP (jornada, feriado, Questor, admissão).
 
 - **PDVs:** cada PDV tem **Turnos do caixa** (Manhã e/ou Tarde, padrão os dois). Cada turno marcado é um **posto**:
   PDV 1 · Manhã, PDV 1 · Tarde… para os 4 PDVs. Não se desmarca um turno com login de posto nele nem com caixa aberto.
-- **Usuários:** o login de PDV escolhe o **Posto do caixa** e só precisa de nome, e-mail e senha (sem setor e cargo).
+- **Usuários:** o login de PDV escolhe o **Posto do caixa** e precisa de nome, e-mail, senha e **cargo** (já vem
+  sugerido o cargo "Caixa"; as permissões de operar o Caixa vêm do cargo). **Sem setor.**
   **Um login por posto.** O posto de um login existente é trocado (ou tirado) pela rota própria, nunca com caixa
   aberto ou em fechamento daquele login.
 - **Abertura:** exige o posto do login (PDV + turno do caixa), grava `fechamentos_caixa.turno_caixa` e só abre

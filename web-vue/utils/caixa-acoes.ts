@@ -23,7 +23,6 @@ export type DepsAcoesCaixa = {
 export type AberturaCaixaPayload = {
   pdvId: string;
   usuarioCaixaId: string;
-  turnoId?: string | null;
   maquininhaId?: string | null;
   lacreAbertura: string;
   caixaResponsavelNome: string;
@@ -79,7 +78,8 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function abrirCaixaOperacional(payload: AberturaCaixaPayload): Promise<boolean> {
-    if (!payload.confirmadoPeloResumo &&
+    if (
+      !payload.confirmadoPeloResumo &&
       !(await deps.confirmar("Confirma a abertura deste caixa para o turno informado?", "Abrir caixa", "Abrir caixa"))
     ) {
       return false;

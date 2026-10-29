@@ -88,7 +88,6 @@ import {
   criarLacreRetornoRepository,
   criarQuebraCaixaRepository,
   criarTransferenciaCofreRepository,
-  existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   existePlanejamentoRetornoAgendadoRepository,
   executarPlanejamentoRetornoRepository,
@@ -235,7 +234,8 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
-    turnoNome: caixa.turnoNome ?? null,
+    // R-229 · caixa de posto mostra "PDV 1 · Tarde"; caixa antigo, o turno do DP.
+    turnoNome: caixa.turnoCaixa ? turnoDoRelatorio(caixa) : (caixa.turnoNome ?? null),
     maquininhaId: caixa.maquininhaId ?? null,
     maquininhaApelido: caixa.maquininhaApelido ?? null,
     maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
@@ -323,7 +323,7 @@ function turnoDoRelatorio(caixa: CaixaLinha) {
 }
 
 const mensagemSemPostoCaixa =
-  "Este login ainda nao tem posto do caixa (PDV e turno). Peca ao administrador para escolher o posto em Usuarios.";
+  "Este login ainda não tem posto do caixa (PDV e turno). Peça ao administrador para escolher o posto em Usuários.";
 
 function validarComprovantesParaIa(anexos: Array<{ tipo: string; mimeType: string }>) {
   if (!anexos.length) throw new Error("Anexe ao menos uma foto ou PDF da maquininha antes de ler.");
@@ -1188,18 +1188,9 @@ async function abrirCaixaEmTransacao(
     }
     if (!pdv.turnosCaixa.includes(turnoCaixa)) {
       throw new ErroDominio(
-        "O turno deste login nao esta marcado no PDV. Ajuste os turnos do caixa em PDVs.",
+        "O turno deste login não está marcado no PDV. Ajuste os turnos do caixa em PDVs.",
         409,
         "TURNO_CAIXA_FORA_DO_PDV"
-      );
-    }
-    // A manha deste PDV ainda nao terminou o fechamento: a mensagem diz isso, e nao "periodo de outro caixa".
-    const caixaVivoNoPdv = await buscarCaixaAbertoDoPdvRepository(dados.pdvId, tx);
-    if (caixaVivoNoPdv) {
-      throw new ErroDominio(
-        "O caixa anterior deste PDV ainda esta aberto ou em fechamento. Ele precisa fechar antes de abrir este.",
-        409,
-        "CAIXA_ANTERIOR_DO_PDV_ABERTO"
       );
     }
     // Um operador representa uma unica gaveta sob responsabilidade. Sem esta guarda, o status
@@ -1209,7 +1200,15 @@ async function abrirCaixaEmTransacao(
     if (await buscarCaixaAbertoUsuarioRepository(dados.empresaId, dados.usuarioCaixaId, tx)) {
       throw new Error(erroOperadorComCaixaAberto);
     }
-    if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
+    // R-229 · o caixa anterior deste PDV (ex.: a manha) ainda nao terminou o fechamento: a mensagem diz isso, e
+    // nao "periodo de outro caixa". Vem depois da guarda do operador: o caixa aberto pode ser o dele mesmo.
+    if (await buscarCaixaAbertoDoPdvRepository(dados.pdvId, tx)) {
+      throw new ErroDominio(
+        "O caixa anterior deste PDV ainda está aberto ou em fechamento. Ele precisa fechar antes de abrir este.",
+        409,
+        "CAIXA_ANTERIOR_DO_PDV_ABERTO"
+      );
+    }
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
     if (!(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {
       throw new Error("Maquininha nao encontrada ou inativa");

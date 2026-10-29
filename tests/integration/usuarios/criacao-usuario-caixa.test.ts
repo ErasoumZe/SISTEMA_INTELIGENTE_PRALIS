@@ -71,7 +71,8 @@ describe("B-01 · criacao de usuario de Caixa", () => {
         nome: "Operador de Caixa B01",
         cpf: opcoes.cpf ?? null,
         setorId: opcoes.semCargo ? null : idsTeste.setorA,
-        cargoId: opcoes.semCargo ? null : idsTeste.cargoCaixa,
+        // O login de posto dispensa setor, mas tem cargo: e dele que vem a permissao de operar o Caixa.
+        cargoId: idsTeste.cargoCaixa,
         pdvPadraoId: opcoes.pdvPadraoId ?? null,
         turnoCaixa: opcoes.turnoCaixa ?? null
       }
@@ -160,7 +161,7 @@ describe("B-01 · criacao de usuario de Caixa", () => {
   });
 
   // R-229 · o posto do Caixa e PDV + turno do caixa; o login de posto nao precisa de setor nem cargo.
-  it("cria o login de posto (PDV · Tarde) so com e-mail e senha, sem setor e cargo", async () => {
+  it("cria o login de posto (PDV · Tarde) com e-mail, senha e cargo, sem setor", async () => {
     await executarSql(
       "update colaboradores set turno_caixa = null where pdv_padrao_id = $1 and turno_caixa = 'tarde'",
       [idsTeste.pdvLivre]
@@ -188,7 +189,7 @@ describe("B-01 · criacao de usuario de Caixa", () => {
       })
     );
     expect(outro.statusCode, outro.body).toBe(409);
-    expect(outro.body).toMatch(/ja esta no login de/);
+    expect(outro.body).toMatch(/já está no login de/);
 
     // O PDV nao desmarca a tarde com o login de posto vinculado.
     const pdv = await consultarUm<{ nome: string; conta_id: string }>("select nome, conta_id from pdvs where id = $1", [

@@ -82,14 +82,26 @@ describe("formCadastroDeLinha", () => {
     });
   });
 
-  // R-229 · login de posto do Caixa: so posto, e-mail e senha (dispensa setor e cargo).
-  it("login de posto do caixa dispensa setor e cargo e envia PDV + turno do caixa", () => {
+  // R-229 · login de posto do Caixa: dispensa setor; o cargo continua (permissoes do Caixa vem dele).
+  it("login de posto do caixa dispensa setor, exige cargo e envia PDV + turno do caixa", () => {
     const form = formCadastroVazio();
     form.postoCaixa = "pdv-1|tarde";
+    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("cargo");
+    form.novoColaboradorCargoId = "cargo-caixa";
     expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({
-      novoColaborador: { pdvPadraoId: "pdv-1", turnoCaixa: "tarde", cargoId: null, setorId: null }
+      novoColaborador: { pdvPadraoId: "pdv-1", turnoCaixa: "tarde", cargoId: "cargo-caixa", setorId: null }
     });
+    // O X do select grava null: e "sem posto", nunca erro.
+    expect(() => bloqueioCadastroUsuario("usuarios", { ...form, postoCaixa: null as unknown as string })).not.toThrow();
+  });
+
+  it("PDV sem nenhum turno do caixa e bloqueado na tela", () => {
+    const form = formCadastroVazio();
+    form.turnosCaixa = [];
+    expect(bloqueioCadastroUsuario("pdv", form)).toContain("turno do caixa");
+    form.turnosCaixa = ["manha"];
+    expect(bloqueioCadastroUsuario("pdv", form)).toBeNull();
   });
 
   it("edicao de usuario nao tenta criar outro colaborador", () => {

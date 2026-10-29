@@ -549,7 +549,12 @@ export async function vincularUsuarioColaboradorRepository(
   db?: ExecutorBanco
 ) {
   await executarComTransacaoOpcional(db, async (db) => {
-    await db.update(colaboradores).set({ usuarioId: null }).where(eq(colaboradores.usuarioId, usuarioId));
+    // R-229 · a pessoa que deixa o login tambem larga o posto do Caixa: posto sem login ficaria "ocupado" para
+    // sempre (a troca de posto e por login) e travaria o turno no PDV.
+    await db
+      .update(colaboradores)
+      .set({ usuarioId: null, turnoCaixa: null })
+      .where(and(eq(colaboradores.usuarioId, usuarioId), ne(colaboradores.id, colaboradorId)));
     await db.update(colaboradores).set({ usuarioId }).where(eq(colaboradores.id, colaboradorId));
   });
 }

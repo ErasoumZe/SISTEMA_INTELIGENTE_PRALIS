@@ -62,6 +62,7 @@ import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padari
 import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { turnoNomeDoCaixaSql } from "./turno-do-caixa.sql.js";
 
 const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
 
@@ -2381,7 +2382,7 @@ export async function listarHistoricoCaixaRepository(
       colaboradorId: fechamentosCaixa.colaboradorId,
       colaboradorNome: colaboradores.nome,
       turnoId: fechamentosCaixa.turnoId,
-      turnoNome: turnos.nome,
+      turnoNome: turnoNomeDoCaixaSql,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,

@@ -112,10 +112,14 @@ export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
 
 export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
+export const MENSAGEM_PDV_SEM_TURNO_CAIXA = "Marque ao menos um turno do caixa (Manhã ou Tarde).";
 
 /** "pdvId|manha" -> { pdvId, turnoCaixa }. Vazio ou invalido = sem posto. */
-export function lerPostoCaixa(valor: string): { pdvId: string; turnoCaixa: "manha" | "tarde" } | null {
-  const [pdvId, turnoCaixa] = valor.split("|");
+export function lerPostoCaixa(
+  valor: string | null | undefined
+): { pdvId: string; turnoCaixa: "manha" | "tarde" } | null {
+  // O X do select (clearable) grava `null`: e "sem posto", nunca erro.
+  const [pdvId, turnoCaixa] = (valor ?? "").split("|");
   if (!pdvId || (turnoCaixa !== "manha" && turnoCaixa !== "tarde")) return null;
   return { pdvId, turnoCaixa };
 }
@@ -131,19 +135,23 @@ export function bloqueioCadastroUsuario(
     | "novoColaboradorSetorId"
     | "novoColaboradorCargoId"
     | "postoCaixa"
+    | "turnosCaixa"
   >,
   edicao = false
 ): string | null {
+  // R-229 · PDV sem turno do caixa nao tem posto: o servidor recusa lista vazia, a tela avisa antes.
+  if (tela === "pdv") return form.turnosCaixa.length ? null : MENSAGEM_PDV_SEM_TURNO_CAIXA;
   if (tela !== "usuarios") return null;
   if (!form.role) return MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
   // Criar o login e a pessoa operacional e um unico ato. Setor e cargo alimentam a resolucao de
   // permissoes (setor -> cargo -> usuario). CPF e opcional: quando informado, apenas evita criar
   // um segundo colaborador com o mesmo documento. Deixar o servidor descobrir a ausência de setor
   // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
-  // R-229 · login de posto do Caixa (PDV · turno) e so e-mail e senha: dispensa setor e cargo.
+  // R-229 · login de posto do Caixa (PDV · turno) dispensa setor. O cargo continua: e dele que vem a permissao
+  // de operar o Caixa.
   const contaDePosto = Boolean(lerPostoCaixa(form.postoCaixa));
   if (form.novoColaborador && !contaDePosto && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
-  if (form.novoColaborador && !contaDePosto && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
+  if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
   // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
   // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
@@ -273,7 +281,8 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         // criar login e colaborador com nomes diferentes sem explicar qual apareceria no sistema.
         nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
-        setorId: form.novoColaboradorSetorId || null,
+        // Login de posto (R-229): o setor fica escondido na tela, entao nao viaja.
+        setorId: lerPostoCaixa(form.postoCaixa) ? null : form.novoColaboradorSetorId || null,
         cargoId: form.novoColaboradorCargoId || null,
         pdvPadraoId: lerPostoCaixa(form.postoCaixa)?.pdvId ?? null,
         turnoCaixa: lerPostoCaixa(form.postoCaixa)?.turnoCaixa ?? null

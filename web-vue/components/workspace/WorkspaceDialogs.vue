@@ -55,16 +55,48 @@ const perfisAcessoUsuario = computed(() => [
     : [])
 ]);
 // R-229 · postos do Caixa: cada PDV ativo com os turnos do caixa marcados (PDV 1 · Manhã, PDV 1 · Tarde).
-const postosCaixaOpcoes = computed(() =>
-  opcoesEmpresa.value.pdvs
+// Posto ja ocupado por outro login aparece desabilitado com o nome de quem esta nele; o posto atual deste login
+// sempre aparece, mesmo com o PDV inativo ou o turno desmarcado (senao o select mostraria o valor cru).
+const postosCaixaOpcoes = computed(() => {
+  const rotuloTurno = (turno: string) => (turno === "manha" ? "Manhã" : "Tarde");
+  const donos = new Map(
+    (opcoesEmpresa.value.usuarios ?? [])
+      .filter((usuario) => usuario.postoPdvId && usuario.postoTurnoCaixa)
+      .map((usuario) => [`${usuario.postoPdvId}|${usuario.postoTurnoCaixa}`, usuario])
+  );
+  const opcoesPosto = opcoesEmpresa.value.pdvs
     .filter((pdv) => pdv.ativo !== false)
     .flatMap((pdv) =>
-      (pdv.turnosCaixa ?? ["manha", "tarde"]).map((turno) => ({
-        id: `${pdv.id}|${turno}`,
-        nome: `${pdv.nome} · ${turno === "manha" ? "Manhã" : "Tarde"}`
-      }))
-    )
-);
+      (pdv.turnosCaixa ?? ["manha", "tarde"]).map((turno) => {
+        const id = `${pdv.id}|${turno}`;
+        const dono = donos.get(id);
+        const deOutro = dono && (dono.usuarioId ?? dono.id) !== cadastroEditandoId.value;
+        return {
+          id,
+          nome: `${pdv.nome} · ${rotuloTurno(turno)}${deOutro ? ` (já é de ${dono.nome})` : ""}`,
+          props: { disabled: Boolean(deOutro) }
+        };
+      })
+    );
+  const atual = formCadastro.value.postoCaixa;
+  if (atual && !opcoesPosto.some((opcao) => opcao.id === atual)) {
+    const [pdvId, turno] = atual.split("|");
+    const pdv = opcoesEmpresa.value.pdvs.find((item) => item.id === pdvId);
+    opcoesPosto.unshift({
+      id: atual,
+      nome: `${pdv?.nome ?? "PDV"} · ${rotuloTurno(turno ?? "")} (indisponível)`,
+      props: { disabled: false }
+    });
+  }
+  return opcoesPosto;
+});
+// R-229 · escolher o posto ja sugere o cargo "Caixa" (as permissoes do Caixa vem do cargo); o admin pode trocar.
+function escolherPostoCaixa(valor: string | null) {
+  formCadastro.value.postoCaixa = valor ?? "";
+  if (!valor || formCadastro.value.novoColaboradorCargoId || !formCadastro.value.novoColaborador) return;
+  const cargoCaixa = opcoesEmpresa.value.cargos.find((cargo) => /caixa/i.test(cargo.nome));
+  if (cargoCaixa) formCadastro.value.novoColaboradorCargoId = cargoCaixa.id;
+}
 const pessoasParaSelectUsuario = computed(() =>
   colaboradoresSelectUsuario.value.map((pessoa) =>
     pessoa.id === "__novo__" ? { ...pessoa, nome: "Cadastrar novo colaborador" } : pessoa
@@ -352,23 +384,13 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
           <v-col v-if="cadastroTela === 'pdv'" cols="12">
-            <fieldset class="pdv-turnos-caixa" data-teste="pdv-turnos-caixa">
+            <fieldset class="pdv-turnos-caixa" data-teste="pdv-turnos-caixa" aria-describedby="pdv-turnos-caixa-ajuda">
               <legend>Turnos do caixa</legend>
-              <p>Cada turno marcado vira um posto (ex.: PDV 1 · Manhã) para criar o login em Usuários.</p>
-              <v-checkbox
-                v-model="formCadastro.turnosCaixa"
-                value="manha"
-                label="Manhã"
-                hide-details
-                density="compact"
-              />
-              <v-checkbox
-                v-model="formCadastro.turnosCaixa"
-                value="tarde"
-                label="Tarde"
-                hide-details
-                density="compact"
-              />
+              <p id="pdv-turnos-caixa-ajuda">
+                Cada turno marcado vira um posto (ex.: PDV 1 · Manhã) para criar o login em Usuários.
+              </p>
+              <v-checkbox v-model="formCadastro.turnosCaixa" value="manha" label="Manhã" hide-details />
+              <v-checkbox v-model="formCadastro.turnosCaixa" value="tarde" label="Tarde" hide-details />
             </fieldset>
           </v-col>
           <v-col v-if="cadastroTela === 'socios_gestores'" cols="12" md="4">
@@ -425,25 +447,26 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
           </v-col>
           <v-col v-if="cadastroTela === 'usuarios' && (formCadastro.novoColaborador || cadastroEditandoId)" cols="12">
             <v-select
-              v-model="formCadastro.postoCaixa"
+              :model-value="formCadastro.postoCaixa"
               :items="postosCaixaOpcoes"
               item-title="nome"
               item-value="id"
               label="Posto do caixa"
               clearable
               data-teste="usuario-posto-caixa"
+              @update:model-value="escolherPostoCaixa"
               hint="Login de PDV: escolha o posto (ex.: PDV 1 · Manhã). Gerência e tesouraria deixam vazio."
               persistent-hint
             />
           </v-col>
-          <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador && !formCadastro.postoCaixa">
-            <v-col cols="12">
+          <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador">
+            <v-col v-if="!formCadastro.postoCaixa" cols="12">
               <v-alert type="info" variant="tonal" density="compact">
                 O login e o colaborador serão criados juntos. Setor e cargo definem os acessos herdados; depois você
                 poderá ajustar exceções individuais.
               </v-alert>
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col v-if="!formCadastro.postoCaixa" cols="12" md="6">
               <v-select
                 v-model="formCadastro.novoColaboradorSetorId"
                 :items="opcoesEmpresa.setores"
@@ -688,7 +711,7 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
 /* R-229 · turnos do caixa no cadastro do PDV. */
 .pdv-turnos-caixa {
   padding: 8px 12px 4px;
-  border: 1px solid var(--cx-line, rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--cx-line);
   border-radius: 8px;
 }
 .pdv-turnos-caixa legend {
@@ -697,7 +720,7 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
 }
 .pdv-turnos-caixa p {
   margin: 0 0 4px;
-  font-size: 0.8rem;
-  opacity: 0.75;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
 }
 </style>

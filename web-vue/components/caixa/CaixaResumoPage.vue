@@ -39,7 +39,6 @@ const emit = defineEmits<{
     payload: {
       pdvId: string;
       usuarioCaixaId: string;
-      turnoId?: string | null;
       maquininhaId: string;
       lacreAbertura: string;
       caixaResponsavelNome: string;
@@ -649,7 +648,6 @@ function confirmarFechamento() {
                   :model-value="turnoDoPosto"
                   label="Turno do caixa"
                   readonly
-                  disabled
                   data-teste="caixa-turno-do-posto"
                 />
               </v-col>
