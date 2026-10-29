@@ -4,6 +4,7 @@ import { lancamentosRecorrencias } from "@padaria/db/schema/lancamento";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { diaNegocio } from "@padaria/shared/datas";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
@@ -22,7 +23,9 @@ export async function cancelarSerieRecorrencia(
   dominio: DominioRecorrencia,
   empresaId: string,
   perfil: PerfilUsuario,
-  hoje = new Date().toISOString().slice(0, 10)
+  // Dia de negocio em Sao Paulo (BUG B): em UTC, das 21h a meia-noite o "hoje" ja seria amanha e a
+  // parcela de amanha deixaria de ser futura (nao seria cancelada).
+  hoje = diaNegocio(new Date())
 ) {
   exigirPermissaoLancamento(perfil.permissoes, permissoes[dominio]);
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
