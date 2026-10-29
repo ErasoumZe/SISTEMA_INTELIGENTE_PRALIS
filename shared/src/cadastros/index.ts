@@ -57,6 +57,8 @@ export type CadastroForm = {
   marca: string;
   contaId: string;
   ativo: boolean;
+  /** R-229 · turnos do caixa do PDV (postos): "manha" e/ou "tarde". */
+  turnosCaixa: string[];
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId: string;
   tipoAreaSetor: "area" | "setor";
@@ -74,8 +76,12 @@ export type CadastroForm = {
   novoColaboradorCpf: string;
   novoColaboradorSetorId: string;
   novoColaboradorCargoId: string;
-  novoColaboradorPdvPadraoId: string;
-  novoColaboradorTurnoPadraoId: string;
+  /**
+   * R-229 · posto do Caixa do login: "pdvId|manha" ou "pdvId|tarde" ("" = sem posto). Na criacao vai no
+   * novo colaborador; na edicao, a tela compara com `postoCaixaOriginal` e troca pela rota propria.
+   */
+  postoCaixa: string;
+  postoCaixaOriginal: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
@@ -106,8 +112,13 @@ export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
 
 export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
 export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
-export const MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO =
-  "Para vincular ao Caixa, selecione o PDV e o turno juntos.";
+
+/** "pdvId|manha" -> { pdvId, turnoCaixa }. Vazio ou invalido = sem posto. */
+export function lerPostoCaixa(valor: string): { pdvId: string; turnoCaixa: "manha" | "tarde" } | null {
+  const [pdvId, turnoCaixa] = valor.split("|");
+  if (!pdvId || (turnoCaixa !== "manha" && turnoCaixa !== "tarde")) return null;
+  return { pdvId, turnoCaixa };
+}
 
 export function bloqueioCadastroUsuario(
   tela: string,
@@ -119,8 +130,7 @@ export function bloqueioCadastroUsuario(
     | "novoColaborador"
     | "novoColaboradorSetorId"
     | "novoColaboradorCargoId"
-    | "novoColaboradorPdvPadraoId"
-    | "novoColaboradorTurnoPadraoId"
+    | "postoCaixa"
   >,
   edicao = false
 ): string | null {
@@ -130,11 +140,10 @@ export function bloqueioCadastroUsuario(
   // permissoes (setor -> cargo -> usuario). CPF e opcional: quando informado, apenas evita criar
   // um segundo colaborador com o mesmo documento. Deixar o servidor descobrir a ausência de setor
   // ou cargo somente depois do clique produzia uma tela que parecia salvável, mas nunca concluía.
-  if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
-  if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
-  if (form.novoColaborador && Boolean(form.novoColaboradorPdvPadraoId) !== Boolean(form.novoColaboradorTurnoPadraoId)) {
-    return MENSAGEM_NOVO_USUARIO_VINCULO_CAIXA_INCOMPLETO;
-  }
+  // R-229 · login de posto do Caixa (PDV · turno) e so e-mail e senha: dispensa setor e cargo.
+  const contaDePosto = Boolean(lerPostoCaixa(form.postoCaixa));
+  if (form.novoColaborador && !contaDePosto && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
+  if (form.novoColaborador && !contaDePosto && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
   // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
   // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
@@ -163,7 +172,15 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       usuariosIds: form.usuariosIds ?? []
     };
   if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
-  if (tela === "pdv") return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
+  if (tela === "pdv")
+    return {
+      empresaId,
+      nome: form.nome,
+      contaId: form.contaId,
+      ativo: form.ativo,
+      // Sem turno marcado nao viaja: o servidor recusa lista vazia e, ausente, mantem o que esta gravado.
+      ...(form.turnosCaixa.length ? { turnosCaixa: form.turnosCaixa } : {})
+    };
   if (tela === "maquininhas")
     return { empresaId, numeroSerie: form.numeroSerie, apelido: form.nome, ativo: form.ativo };
   if (tela === "grupos")
@@ -257,9 +274,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId,
-        pdvPadraoId: form.novoColaboradorPdvPadraoId || null,
-        turnoPadraoId: form.novoColaboradorTurnoPadraoId || null
+        cargoId: form.novoColaboradorCargoId || null,
+        pdvPadraoId: lerPostoCaixa(form.postoCaixa)?.pdvId ?? null,
+        turnoCaixa: lerPostoCaixa(form.postoCaixa)?.turnoCaixa ?? null
       };
     } else {
       // Mesma regra de `empresaIds`: colaborador vazio NAO viaja. A listagem recorta `colaboradorId`

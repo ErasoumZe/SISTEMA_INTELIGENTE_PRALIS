@@ -56,7 +56,10 @@ export function useCadastroView(params: {
         nome: item.nome,
         conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
         contaId: item.contaId,
-        ativo: item.ativo === false ? "Não" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim",
+        // R-229 · coluna exibida e campo do formulario de edicao.
+        turnos_do_caixa: (item.turnosCaixa ?? []).map((turno) => (turno === "manha" ? "Manhã" : "Tarde")).join(", "),
+        turnosCaixa: (item.turnosCaixa ?? []).join(",")
       }));
     if (tela === "fornecedores")
       return listas.fornecedores.map((item) => ({
@@ -177,6 +180,14 @@ export function useCadastroView(params: {
         // Sem o campo, o formulario fica com a lista VAZIA e o payload OMITE `empresaIds`
         // (shared/src/cadastros/index.ts) — o servidor entao PRESERVA os vinculos gravados.
         colaboradorId: item.colaboradorId,
+        // R-229 · posto do Caixa (PDV · turno): coluna exibida e valor "pdvId|turno" do formulario.
+        posto_do_caixa:
+          item.postoPdvId && item.postoTurnoCaixa
+            ? `${listas.pdvs.find((pdv) => pdv.id === item.postoPdvId)?.nome ?? "PDV"} · ${
+                item.postoTurnoCaixa === "manha" ? "Manhã" : "Tarde"
+              }`
+            : "",
+        postoCaixa: item.postoPdvId && item.postoTurnoCaixa ? `${item.postoPdvId}|${item.postoTurnoCaixa}` : "",
         cargos: item.cargos?.join(", ") ?? "",
         setor: item.setorNome ?? item.descricao,
         setorId: item.setorId ?? undefined
@@ -262,13 +273,13 @@ export function useCadastroView(params: {
       // Fundo = ponto de partida declarado; Saldo atual = derivado dos movimentos (D8).
       contas: ["Nome", "Fundo", "Saldo atual"],
       formas_pagamento: ["Nome"],
-      pdv: ["Nome", "Conta", "Ativo"],
+      pdv: ["Nome", "Conta", "Turnos do caixa", "Ativo"],
       grupos: ["Nome", "Tipo"],
       unidades: ["Nome", "Sigla"],
       patrimonio: ["Tipo", "Sigla", "Nome", "Marca", "Setor"],
       turnos: ["Nome", "Etiqueta", "Dias", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
-      usuarios: ["Nome", "Email", "Perfil", "Setor", "Cargos"],
+      usuarios: ["Nome", "Email", "Perfil", "Posto do caixa", "Setor", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento", "WhatsApp"],

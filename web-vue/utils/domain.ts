@@ -11,7 +11,7 @@ import {
   type TemaAplicacao
 } from "@padaria/shared";
 // M3/ADR-002: serializacao formulario -> payload agora mora no shared; fachada para o front.
-export { bloqueioCadastroUsuario, cadastroPayload, numeroCampoOuNulo } from "@padaria/shared";
+export { bloqueioCadastroUsuario, cadastroPayload, lerPostoCaixa, numeroCampoOuNulo } from "@padaria/shared";
 import type {
   AcaoNovo,
   CadastroForm,
@@ -832,6 +832,7 @@ export function formCadastroVazio(): CadastroForm {
     diasSemanaTurno: [],
     marca: "",
     contaId: "",
+    turnosCaixa: ["manha", "tarde"],
     ativo: true,
     tipoGrupo: "despesa",
     grupoPaiId: "",
@@ -853,8 +854,8 @@ export function formCadastroVazio(): CadastroForm {
     novoColaboradorCpf: "",
     novoColaboradorSetorId: "",
     novoColaboradorCargoId: "",
-    novoColaboradorPdvPadraoId: "",
-    novoColaboradorTurnoPadraoId: "",
+    postoCaixa: "",
+    postoCaixaOriginal: "",
     cargoId: "",
     empresaIds: [],
     tipoPermissao: "cargo",
@@ -1016,6 +1017,10 @@ export function formCadastroDeLinha(
     marca: linha.marca ?? "",
     contaId: linha.contaId ?? "",
     ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
+    // R-229 · PDV reaberto mostra os turnos do caixa gravados; login reaberto mostra o posto.
+    turnosCaixa: linha.turnosCaixa ? linha.turnosCaixa.split(",").filter(Boolean) : [],
+    postoCaixa: linha.postoCaixa ?? "",
+    postoCaixaOriginal: linha.postoCaixa ?? "",
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
     grupoPaiId: linha.grupoPaiId ?? "",
     tipoAreaSetor:

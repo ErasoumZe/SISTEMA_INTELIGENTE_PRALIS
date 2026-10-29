@@ -77,7 +77,13 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
     }
 
     if (tela === "pdv") {
-      upsertOpcao(opcoes.pdvs, { ...itemBase, nome: form.nome, contaId: form.contaId, ativo: form.ativo });
+      upsertOpcao(opcoes.pdvs, {
+        ...itemBase,
+        nome: form.nome,
+        contaId: form.contaId,
+        ativo: form.ativo,
+        turnosCaixa: [...form.turnosCaixa]
+      });
       return true;
     }
 

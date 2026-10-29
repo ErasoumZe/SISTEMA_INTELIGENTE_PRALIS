@@ -52,6 +52,7 @@ import {
 import {
   bloqueioCadastroUsuario,
   cadastroPayload,
+  lerPostoCaixa,
   dinheiro,
   endpointOperacaoPorEntidade,
   formCadastroDeLinha,
@@ -1812,6 +1813,10 @@ async function salvarCadastro() {
         throw error;
       }
     }
+    // R-229 · login que ja existe: o posto do Caixa e trocado pela rota propria, depois do salvar.
+    if (telaSalva === "usuarios" && idEditando && formSnapshot.postoCaixa !== formSnapshot.postoCaixaOriginal) {
+      await apiPut(`/api/usuarios/${idEditando}/posto-caixa`, { posto: lerPostoCaixa(formSnapshot.postoCaixa) });
+    }
     // S-06: `opcoes` e a fonte das ocultas no proximo save e nao e recarregada nesta tela. Sem
     // sincronizar aqui, um segundo save da sessao parte de um retrato velho. Grava-se DEPOIS do
     // 2xx e a partir do `formSnapshot` (o objeto que foi enviado), nao do `formCadastro`, cujos
@@ -1916,14 +1921,12 @@ function atualizarColaboradorUsuario(valor: string) {
     formCadastro.value.colaboradorId = "";
     if (!formCadastro.value.novoColaboradorNome) formCadastro.value.novoColaboradorNome = formCadastro.value.nome;
     formCadastro.value.novoColaboradorSetorId = formCadastro.value.setorId || "";
-    formCadastro.value.novoColaboradorPdvPadraoId = "";
-    formCadastro.value.novoColaboradorTurnoPadraoId = "";
+    formCadastro.value.postoCaixa = "";
     return;
   }
   formCadastro.value.novoColaborador = false;
   formCadastro.value.colaboradorId = valor;
-  formCadastro.value.novoColaboradorPdvPadraoId = "";
-  formCadastro.value.novoColaboradorTurnoPadraoId = "";
+  formCadastro.value.postoCaixa = "";
 }
 
 // Acoes assincronas de tema: orquestracao extraida para utils/tema-acoes.ts (factory testavel).

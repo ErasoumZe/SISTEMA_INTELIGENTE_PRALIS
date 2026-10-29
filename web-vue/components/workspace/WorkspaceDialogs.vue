@@ -54,6 +54,17 @@ const perfisAcessoUsuario = computed(() => [
     ? [{ title: "Admin legado — mantenha apenas para contas antigas", value: "admin" }]
     : [])
 ]);
+// R-229 · postos do Caixa: cada PDV ativo com os turnos do caixa marcados (PDV 1 · Manhã, PDV 1 · Tarde).
+const postosCaixaOpcoes = computed(() =>
+  opcoesEmpresa.value.pdvs
+    .filter((pdv) => pdv.ativo !== false)
+    .flatMap((pdv) =>
+      (pdv.turnosCaixa ?? ["manha", "tarde"]).map((turno) => ({
+        id: `${pdv.id}|${turno}`,
+        nome: `${pdv.nome} · ${turno === "manha" ? "Manhã" : "Tarde"}`
+      }))
+    )
+);
 const pessoasParaSelectUsuario = computed(() =>
   colaboradoresSelectUsuario.value.map((pessoa) =>
     pessoa.id === "__novo__" ? { ...pessoa, nome: "Cadastrar novo colaborador" } : pessoa
@@ -340,6 +351,26 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
           <v-col v-if="cadastroTela === 'pdv'" cols="12" md="4">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
+          <v-col v-if="cadastroTela === 'pdv'" cols="12">
+            <fieldset class="pdv-turnos-caixa" data-teste="pdv-turnos-caixa">
+              <legend>Turnos do caixa</legend>
+              <p>Cada turno marcado vira um posto (ex.: PDV 1 · Manhã) para criar o login em Usuários.</p>
+              <v-checkbox
+                v-model="formCadastro.turnosCaixa"
+                value="manha"
+                label="Manhã"
+                hide-details
+                density="compact"
+              />
+              <v-checkbox
+                v-model="formCadastro.turnosCaixa"
+                value="tarde"
+                label="Tarde"
+                hide-details
+                density="compact"
+              />
+            </fieldset>
+          </v-col>
           <v-col v-if="cadastroTela === 'socios_gestores'" cols="12" md="4">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
@@ -392,12 +423,24 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               @update:model-value="atualizarColaboradorUsuario(String($event || ''))"
             />
           </v-col>
-          <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador">
+          <v-col v-if="cadastroTela === 'usuarios' && (formCadastro.novoColaborador || cadastroEditandoId)" cols="12">
+            <v-select
+              v-model="formCadastro.postoCaixa"
+              :items="postosCaixaOpcoes"
+              item-title="nome"
+              item-value="id"
+              label="Posto do caixa"
+              clearable
+              data-teste="usuario-posto-caixa"
+              hint="Login de PDV: escolha o posto (ex.: PDV 1 · Manhã). Gerência e tesouraria deixam vazio."
+              persistent-hint
+            />
+          </v-col>
+          <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador && !formCadastro.postoCaixa">
             <v-col cols="12">
               <v-alert type="info" variant="tonal" density="compact">
                 O login e o colaborador serão criados juntos. Setor e cargo definem os acessos herdados; depois você
-                poderá ajustar exceções individuais. Para operador de Caixa, vincule o PDV e o turno abaixo; para
-                gerência e tesouraria, deixe ambos vazios.
+                poderá ajustar exceções individuais.
               </v-alert>
             </v-col>
             <v-col cols="12" md="6">
@@ -416,30 +459,6 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
                 item-title="nome"
                 item-value="id"
                 label="Cargo inicial *"
-              />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formCadastro.novoColaboradorPdvPadraoId"
-                :items="opcoesEmpresa.pdvs"
-                item-title="nome"
-                item-value="id"
-                label="PDV vinculado ao Caixa"
-                clearable
-                hint="Preencha junto com o turno para travar a abertura neste PDV."
-                persistent-hint
-              />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formCadastro.novoColaboradorTurnoPadraoId"
-                :items="opcoesEmpresa.turnos"
-                item-title="nome"
-                item-value="id"
-                label="Turno vinculado ao Caixa"
-                clearable
-                hint="Preencha junto com o PDV. O usuário de Caixa não poderá escolher outro turno."
-                persistent-hint
               />
             </v-col>
           </template>
@@ -664,3 +683,21 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+/* R-229 · turnos do caixa no cadastro do PDV. */
+.pdv-turnos-caixa {
+  padding: 8px 12px 4px;
+  border: 1px solid var(--cx-line, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+}
+.pdv-turnos-caixa legend {
+  padding: 0 4px;
+  font-weight: 700;
+}
+.pdv-turnos-caixa p {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+</style>

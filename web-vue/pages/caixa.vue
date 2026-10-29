@@ -15,7 +15,6 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :empresa-id="ctx.empresaAtiva?.id ?? ''"
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :formas-pagamento="ctx.opcoesEmpresa.formasPagamento"
-      :turnos="ctx.opcoesEmpresa.turnos"
       :maquininhas="ctx.opcoesEmpresa.maquininhas"
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuário'"

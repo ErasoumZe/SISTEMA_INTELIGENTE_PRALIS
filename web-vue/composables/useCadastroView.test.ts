@@ -106,7 +106,14 @@ describe("useCadastroView · usuários e acessos", () => {
       formCadastro: ref(formCadastroVazio())
     });
 
-    expect(cadastro.colunasCadastro("usuarios")).toEqual(["Nome", "Email", "Perfil", "Setor", "Cargos"]);
+    expect(cadastro.colunasCadastro("usuarios")).toEqual([
+      "Nome",
+      "Email",
+      "Perfil",
+      "Posto do caixa",
+      "Setor",
+      "Cargos"
+    ]);
     expect(cadastro.dadosCadastro("usuarios")[0]).toMatchObject({
       perfil: "Usuário comum",
       setor: "Tesouraria",

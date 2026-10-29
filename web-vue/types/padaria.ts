@@ -117,6 +117,10 @@ export type Opcao = {
   etiqueta?: string | null;
   diasSemana?: string[] | null;
   turnoPadraoId?: string | null;
+  // R-229 · postos do Caixa: turnos do caixa do PDV e o posto (PDV + turno) do login.
+  turnosCaixa?: string[] | null;
+  postoPdvId?: string | null;
+  postoTurnoCaixa?: "manha" | "tarde" | null;
   diaDaSemana?: string;
   horaEntrada?: string;
   cargaHorariaDiariaEmMinutos?: number;
@@ -353,7 +357,7 @@ export type PlanejamentoRetorno = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
-  vinculoOperador?: { pdvId: string; turnoId: string } | null;
+  vinculoOperador?: { pdvId: string; turnoCaixa: "manha" | "tarde" } | null;
   lacreFechamentoReservado: string | null;
   indisponibilidadeAberta?: {
     id: string;

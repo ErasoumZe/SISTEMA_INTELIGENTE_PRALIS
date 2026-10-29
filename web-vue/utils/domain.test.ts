@@ -78,14 +78,17 @@ describe("formCadastroDeLinha", () => {
     form.novoColaboradorCargoId = "cargo-1";
     expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({
-      novoColaborador: { pdvPadraoId: null, turnoPadraoId: null }
+      novoColaborador: { pdvPadraoId: null, turnoCaixa: null }
     });
-    form.novoColaboradorPdvPadraoId = "pdv-1";
-    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("PDV e o turno juntos");
-    form.novoColaboradorTurnoPadraoId = "turno-manha";
+  });
+
+  // R-229 · login de posto do Caixa: so posto, e-mail e senha (dispensa setor e cargo).
+  it("login de posto do caixa dispensa setor e cargo e envia PDV + turno do caixa", () => {
+    const form = formCadastroVazio();
+    form.postoCaixa = "pdv-1|tarde";
     expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({
-      novoColaborador: { pdvPadraoId: "pdv-1", turnoPadraoId: "turno-manha" }
+      novoColaborador: { pdvPadraoId: "pdv-1", turnoCaixa: "tarde", cargoId: null, setorId: null }
     });
   });
 

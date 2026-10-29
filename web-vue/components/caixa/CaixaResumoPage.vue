@@ -27,7 +27,6 @@ const props = defineProps<{
   empresaId: string;
   pdvs: Opcao[];
   formasPagamento?: Opcao[];
-  turnos?: Opcao[];
   maquininhas?: Opcao[];
   usuarioId: string;
   usuarioNome: string;
@@ -70,8 +69,7 @@ const emit = defineEmits<{
 }>();
 
 const abertura = reactive({
-  pdvId: "",
-  turnoId: ""
+  pdvId: ""
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({
@@ -241,7 +239,11 @@ const maquininhasSelect = computed(() =>
   }))
 );
 const pdvSelecionado = computed(() => props.pdvs.find((item) => item.id === abertura.pdvId));
-const turnoSelecionado = computed(() => (props.turnos ?? []).find((item) => item.id === abertura.turnoId));
+// R-229 · o turno do caixa vem do posto do login (PDV 1 · Manha / Tarde), nao do turno do DP.
+const turnoDoPosto = computed(() => {
+  const turno = vinculoOperador.value?.turnoCaixa;
+  return turno === "manha" ? "Manhã" : turno === "tarde" ? "Tarde" : "";
+});
 const maquininhaSelecionada = computed(() =>
   (props.maquininhas ?? []).find((item) => item.id === aberturaExtra.maquininhaId)
 );
@@ -347,7 +349,6 @@ watch(
   (vinculo) => {
     if (!vinculo) return;
     abertura.pdvId = vinculo.pdvId;
-    abertura.turnoId = vinculo.turnoId;
   },
   { immediate: true }
 );
@@ -450,7 +451,6 @@ function dadosAbertura() {
   return {
     pdvId: abertura.pdvId,
     usuarioCaixaId: props.usuarioId,
-    turnoId: abertura.turnoId || null,
     maquininhaId: aberturaExtra.maquininhaId,
     lacreAbertura: aberturaExtra.numeroLacre.trim(),
     caixaResponsavelNome: aberturaExtra.caixaResponsavelNome.trim(),
@@ -620,10 +620,18 @@ function confirmarFechamento() {
           <section class="caixa-abertura__etapa">
             <div class="caixa-abertura__etapa-cabecalho">
               <span>1</span>
-              <div><strong>Onde você vai operar</strong><small>Selecione o ponto de venda e o turno.</small></div>
+              <div><strong>Onde você vai operar</strong><small>O posto do caixa deste login.</small></div>
             </div>
-            <v-alert v-if="!vinculoOperador" type="warning" variant="tonal" density="compact" class="mb-3">
-              A abertura sera liberada apos o vinculo de PDV e turno pelo administrador.
+            <v-alert
+              v-if="!vinculoOperador"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-3"
+              data-teste="caixa-sem-posto"
+            >
+              Este login ainda não tem posto do caixa (PDV e turno). Peça ao administrador para escolher o posto em
+              Usuários.
             </v-alert>
             <v-row dense>
               <v-col cols="12" md="6">
@@ -637,13 +645,12 @@ function confirmarFechamento() {
                 />
               </v-col>
               <v-col cols="12" md="6">
-                <v-select
-                  v-model="abertura.turnoId"
-                  :items="turnos ?? []"
-                  item-title="nome"
-                  item-value="id"
-                  :label="vinculoOperador ? 'Turno vinculado' : 'Turno'"
-                  :disabled="Boolean(vinculoOperador)"
+                <v-text-field
+                  :model-value="turnoDoPosto"
+                  label="Turno do caixa"
+                  readonly
+                  disabled
+                  data-teste="caixa-turno-do-posto"
                 />
               </v-col>
             </v-row>
@@ -872,7 +879,7 @@ function confirmarFechamento() {
         v-model:aberto="confirmacaoAberturaAberta"
         :salvando="Boolean(salvando)"
         :pdv-nome="pdvSelecionado?.nome ?? 'Não informado'"
-        :turno-nome="turnoSelecionado?.nome ?? ''"
+        :turno-nome="turnoDoPosto"
         :lacre="aberturaExtra.numeroLacre"
         :caixa-responsavel="aberturaExtra.caixaResponsavelNome"
         :supervisor="aberturaExtra.supervisorResponsavelNome"
