@@ -678,9 +678,10 @@ describe("caixa integration", () => {
     });
 
     assertProblem(pdvInvalido, 400);
-    assertProblem(pdvJaAberto, 400);
+    // R-229 · PDV com caixa ainda aberto (ex.: a manhã): 409 dizendo que o caixa anterior precisa fechar.
+    assertProblem(pdvJaAberto, 409);
     expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV.*encontrado/i);
-    expect(json<{ title: string }>(pdvJaAberto).title).toMatch(/abertura.*outro caixa/i);
+    expect(json<{ title: string }>(pdvJaAberto).title).toMatch(/caixa anterior deste PDV/i);
   });
 
   it("Deve_AbrirApenasUmCaixa_Quando_AberturasConcorremNoMesmoPdv", async () => {
