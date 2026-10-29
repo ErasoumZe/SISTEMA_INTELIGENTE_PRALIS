@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm } from "../../setup/integracao.js";
 
 function payloadVendaIntegrada(
   idVenda: string,
@@ -287,6 +287,47 @@ describe("integracoes integration", () => {
     );
     expect(registro?.registro_sistema_id).toBeTruthy();
     expect(venda?.identificador_externo).toBe(identificador);
+  });
+
+  // 29/10/2026 (José): o que passa no caixa tem de cair no produto do CADASTRO. O PDV manda o codigo de
+  // barras com zeros a esquerda (ou o codigo interno, quando o produto nao tem EAN); o produto copiado
+  // do paralelo tem codigo_interno e codigo_barras, e o campo `codigo` vazio. Antes a venda procurava so
+  // `codigo` exato ou o nome, nao achava e criava um produto novo (duplicata).
+  it("Deve_AcharProdutoDoCadastro_PeloCodigoDeBarrasOuInternoDoPdv_SemCriarDuplicata", async () => {
+    const kapo = await consultarUm<{ id: string }>(
+      `insert into produtos (empresa_id, codigo_interno, codigo_barras, descricao)
+       values ($1, '13195', '7894900573701', 'KAPO MARACUJA 200ML') returning id`,
+      [idsTeste.empresaA]
+    );
+    const bolo = await consultarUm<{ id: string }>(
+      `insert into produtos (empresa_id, codigo_interno, codigo_barras, descricao)
+       values ($1, '13196', null, 'BOLO TESTE PDV CODIGO INTERNO') returning id`,
+      [idsTeste.empresaA]
+    );
+    const contar = () =>
+      consultarUm<{ total: number }>("select count(*)::int as total from produtos where empresa_id = $1", [
+        idsTeste.empresaA
+      ]);
+    const antes = await contar();
+    const payload = payloadVendaIntegrada("VENDA-ACHA-PRODUTO-CODIGO");
+    const [modelo] = payload.ItensVenda;
+    payload.ItensVenda = [
+      { ...modelo!, idRegistro: "ACHA-1", idProduto: "07894900573701", descricaoProduto: "KAPO MARAC UN" },
+      { ...modelo!, idRegistro: "ACHA-2", idProduto: "00000000013196", descricaoProduto: "BOLO UN" }
+    ];
+    assertOk(await receber(payload));
+
+    const itens = await consultarTodos<{ produto_automacao_id: string; produto_id: string | null }>(
+      `select vp.produto_automacao_id, vp.produto_id
+         from vendas_produtos vp join vendas v on v.id = vp.venda_id
+        where v.identificador_externo = $1 order by vp.produto_automacao_id`,
+      ["VENDA-ACHA-PRODUTO-CODIGO"]
+    );
+    expect(itens).toEqual([
+      { produto_automacao_id: "00000000013196", produto_id: bolo!.id },
+      { produto_automacao_id: "07894900573701", produto_id: kapo!.id }
+    ]);
+    expect((await contar())?.total).toBe(antes?.total);
   });
 
   it("Deve_RetornarSemNovidadeEAtualizado_Quando_ReenviarPayloadIntegrado", async () => {

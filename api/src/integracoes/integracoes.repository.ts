@@ -1,4 +1,5 @@
 import type { DadosExternos } from "@padaria/shared/api";
+import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
 import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sum, type SQL } from "drizzle-orm";
 import {
   clientes,
@@ -590,6 +591,28 @@ export async function buscarProdutoAutomaticoRepository(
   descricao: string,
   db: ExecutorBanco = banco
 ) {
+  // 1) O CADASTRO: o PDV manda o codigo de barras (ou o codigo interno, quando nao ha EAN) com zeros a
+  //    esquerda. Compara sem os zeros (mesma regra da busca por codigo de barras do cadastro) com
+  //    codigo_interno e codigo_barras. So vale se UM produto casar: produto em dobro na loja nao e
+  //    decidido aqui.
+  const chave = /^\d+$/u.test(identificadorExterno.trim()) ? identificadorExterno.trim().replace(/^0+/u, "") : "";
+  if (chave) {
+    const doCadastro = await db
+      .select({ id: produtos.id })
+      .from(produtos)
+      .where(
+        and(
+          eq(produtos.empresaId, empresaId),
+          or(
+            eq(codigoBarrasSemZerosIniciais(produtos.codigoInterno), chave),
+            eq(codigoBarrasSemZerosIniciais(produtos.codigoBarras), chave)
+          )
+        )
+      )
+      .limit(2);
+    if (doCadastro.length === 1) return doCadastro[0]!;
+  }
+  // 2) Legado: produtos criados pela propria integracao guardam o codigo do PDV em `codigo`.
   const [porCodigo] = await db
     .select({ id: produtos.id })
     .from(produtos)
