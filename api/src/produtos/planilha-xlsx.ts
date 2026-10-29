@@ -6,7 +6,8 @@ import type { JsonValue } from "@padaria/shared/api";
  * Leitura de XLSX sem biblioteca de planilha: o arquivo e um zip de XML. Lido como TEXTO, celula a
  * celula, com teto de tamanho descompactado (zip bomb) e caminho de aba conferido (sem `..`).
  */
-const TAMANHO_MAXIMO_DESCOMPACTADO = 50 * 1024 * 1024;
+// 29/10/2026: o backup do cadastro (14.613 produtos) ja descompacta em 34,8 MB; 50 MB estouraria logo.
+const TAMANHO_MAXIMO_DESCOMPACTADO = 150 * 1024 * 1024;
 const parserXml = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -126,7 +127,7 @@ export function lerAbasXlsx(bytes: Buffer, rotulo: string): Map<string, string[]
   }
   const tamanhoTotal = zip.getEntries().reduce((soma, entrada) => soma + entrada.header.size, 0);
   if (tamanhoTotal > TAMANHO_MAXIMO_DESCOMPACTADO) {
-    throw new Error(`O ${rotulo} excede o limite de 50 MB descompactado.`);
+    throw new Error(`O ${rotulo} excede o limite de 150 MB descompactado.`);
   }
   return lerPlanilhas(zip, stringsCompartilhadas(zip));
 }

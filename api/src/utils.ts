@@ -64,3 +64,10 @@ export function validarImportacaoEntreEmpresas(
 export function validarExportacaoParaEmpresa(empresaDestinoId: string, perfil?: PerfilComEmpresa) {
   if (perfil && !podeAcessarEmpresa(perfil, empresaDestinoId)) throw new Error("Empresa nao permitida");
 }
+
+/**
+ * Teto de upload de planilha e backup (29/10/2026). O teto global de 10 MB barrou o backup completo do
+ * cadastro de produtos (10,9 MB, 14.613 produtos) e ja tinha barrado planilha de 10,6 MB antes.
+ * Fotos e comprovantes continuam com o proprio teto de 10 MB, declarado na rota.
+ */
+export const LIMITE_UPLOAD_PLANILHA_BYTES = 50 * 1024 * 1024;

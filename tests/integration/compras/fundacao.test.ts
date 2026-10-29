@@ -538,8 +538,9 @@ describe("fundacao do novo Compras integration", () => {
     expect(recusadaPorExtensao.statusCode).toBe(400);
     expect(json<{ code?: string }>(recusadaPorExtensao).code).toBe("PRICE_BASE_FILE_TYPE");
 
-    // Acima de 10 MB: a mensagem diz o motivo (antes: "Requisição inválida", sem pista do tamanho).
-    const grande = multipartXlsx("base.xlsx", Buffer.alloc(10 * 1024 * 1024 + 1024));
+    // Acima de 50 MB: a mensagem diz o motivo (antes: "Requisição inválida", sem pista do tamanho).
+    // O teto era 10 MB ate 29/10/2026; o backup do cadastro de produtos tem 10,9 MB.
+    const grande = multipartXlsx("base.xlsx", Buffer.alloc(50 * 1024 * 1024 + 1024));
     const recusadaPorTamanho = await contexto.app.inject({
       method: "POST",
       url: `/api/compras/precos-base/importacoes/analisar-arquivo?empresaId=${idsTeste.empresaA}`,
@@ -549,8 +550,20 @@ describe("fundacao do novo Compras integration", () => {
     expect(recusadaPorTamanho.statusCode).toBe(413);
     expect(json<{ code?: string; title?: string }>(recusadaPorTamanho)).toMatchObject({
       code: "FILE_TOO_LARGE",
-      title: "Arquivo acima do limite de 10 MB"
+      title:
+        "Arquivo grande demais para este envio. Planilhas e backups aceitam até 50 MB; fotos e comprovantes, menos."
     });
+
+    // 11 MB estourava o teto antigo de 10 MB: agora chega ao leitor, que recusa por nao ser um ZIP.
+    const acimaDoTetoAntigo = multipartXlsx("base.xlsx", Buffer.alloc(11 * 1024 * 1024));
+    const lidaAcimaDoTetoAntigo = await contexto.app.inject({
+      method: "POST",
+      url: `/api/compras/precos-base/importacoes/analisar-arquivo?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin, "content-type": `multipart/form-data; boundary=${acimaDoTetoAntigo.boundary}` },
+      payload: acimaDoTetoAntigo.corpo
+    });
+    expect(lidaAcimaDoTetoAntigo.statusCode, lidaAcimaDoTetoAntigo.body).toBe(400);
+    expect(json<{ code?: string }>(lidaAcimaDoTetoAntigo).code).not.toBe("FILE_TOO_LARGE");
 
     // Extensao certa e conteudo invalido: antes virava 500 "Erro interno" com alerta no Sentry.
     const conteudo = multipartXlsx("base.xlsx", Buffer.from("isto nao e um zip"));

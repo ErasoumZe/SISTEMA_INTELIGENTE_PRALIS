@@ -1,3 +1,4 @@
+import { LIMITE_UPLOAD_PLANILHA_BYTES } from "../utils.js";
 import type { FastifyInstance } from "fastify";
 import {
   analisarImportacaoPrecoBaseSchema,
@@ -101,7 +102,7 @@ export async function registrarRotasComprasFundacao(app: FastifyInstance): Promi
     { preHandler: exigirPermissao("compras_preco_base_importar") },
     async (request, reply) => {
       const { empresaId } = importacoesPrecoBaseQuerySchema.parse(request.query);
-      const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
+      const arquivo = await request.file({ limits: { fileSize: LIMITE_UPLOAD_PLANILHA_BYTES, files: 1, fields: 0 } });
       if (!arquivo) throw erroValidacao("Arquivo .xlsx obrigatorio", "PRICE_BASE_FILE_REQUIRED");
       if (!arquivo.filename.toLocaleLowerCase("pt-BR").endsWith(".xlsx"))
         throw erroValidacao("Envie uma planilha no formato .xlsx", "PRICE_BASE_FILE_TYPE");
