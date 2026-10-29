@@ -23,6 +23,8 @@ const props = defineProps<{
   /** De onde a tela mostra a foto gravada (rota + id) e o arquivo escolhido ainda nao salvo. */
   origemDaFoto: { rota: string; id: string | null };
   fotoPendente: File | null;
+  /** F4: outro produto ja tem este EAN (aviso ao digitar; nao bloqueia o salvar). */
+  eanRepetido: { nome: string; codigoInterno: string | null; rota: string } | null;
   dica: (campo: string) => string | undefined;
 }>();
 const emit = defineEmits<{ "foto-escolher": [arquivo: File]; "foto-remover": [] }>();
@@ -89,6 +91,10 @@ const scannerAberto = ref(false);
           class="cx-num"
           @click:append-inner="scannerAberto = true"
         />
+        <v-alert v-if="eanRepetido" type="warning" variant="tonal" density="compact" class="mt-1">
+          Já existe <strong>{{ eanRepetido.nome }}</strong> com este código de barras neste catálogo. Confira antes de
+          cadastrar de novo — <NuxtLink :to="eanRepetido.rota" target="_blank">abrir o existente</NuxtLink>.
+        </v-alert>
       </v-col>
       <v-col v-if="produtoId" cols="12" sm="6">
         <v-text-field

@@ -35,6 +35,7 @@ import {
   salvarProduto
 } from "./produtos.service.js";
 import { alterarStatusDeProdutos, StatusEmLoteNaoPermitidoError } from "./produtos-status.service.js";
+import { produtosComMesmoCodigoDeBarras } from "./produtos-codigo-barras.service.js";
 import { FiscalSoAdministradorError } from "./produtos-fiscal-gravacao.js";
 import { herancaDaCopia } from "./produtos-base.service.js";
 import { BackfillSoAdministradorError, executarBackfillFiscal } from "./produtos-fiscal-backfill.service.js";
@@ -47,7 +48,26 @@ const corpoBackfill = z.object({
   empresaId: z.string().uuid().optional(),
   produtoId: z.string().uuid().optional()
 });
-import { FonteFiscalIndisponivelError, listarRegrasFiscaisPorGrupo } from "./produtos-fiscal.service.js";
+
+/** Busca exata por EAN para o aviso ao digitar (F4). */
+const queryPorCodigoDeBarras = z.object({
+  codigoBarras: z.string().trim().min(1).max(60),
+  catalogo: z.enum(["loja", "base"]).default("loja"),
+  empresaId: z.string().uuid().optional()
+});
+
+/** Entrada da classificacao ao vivo: o que o formulario tem na tela (F3). */
+const corpoClassificacaoFiscal = z.object({
+  empresaId: z.string().uuid(),
+  nome: z.string().trim().max(200).nullable().optional(),
+  codigoBarras: z.string().trim().max(60).nullable().optional(),
+  grupoMercadoriaId: z.string().uuid().nullable().optional()
+});
+import {
+  classificarFiscalAoVivo,
+  FonteFiscalIndisponivelError,
+  listarRegrasFiscaisPorGrupo
+} from "./produtos-fiscal.service.js";
 
 /**
  * Rastro do ator sem tabela nova: `produtos.criado_por` guarda quem CRIOU (imutavel na edicao) e o
@@ -192,6 +212,41 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       throw error;
     }
   });
+
+  /**
+   * Classificacao fiscal AO VIVO (F3, decisao D2): o que a gravacao aplicaria com este grupo, EAN e nome,
+   * sem gravar nada. Mesma permissao de quem edita produto; a empresa tem de estar no escopo do ator.
+   */
+  app.post(
+    "/api/produtos/fiscal/classificar",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const corpo = corpoClassificacaoFiscal.parse(request.body);
+      if (!request.perfilUsuario || !podeAcessarEmpresa(request.perfilUsuario, corpo.empresaId)) {
+        return erro(reply, 403, "Empresa não permitida.", "FORBIDDEN_COMPANY");
+      }
+      return ok(await classificarFiscalAoVivo(corpo));
+    }
+  );
+
+  /**
+   * Busca EXATA por EAN para o aviso ao digitar (F4/R2, decisao D2). `catalogo=base` procura no catalogo
+   * BASE (onde o produto novo nasce); senao, na empresa, que tem de estar no escopo do ator.
+   */
+  app.get(
+    "/api/produtos/por-codigo-barras",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      const query = queryPorCodigoDeBarras.parse(request.query);
+      if (query.catalogo === "loja") {
+        if (!query.empresaId) return erro(reply, 400, "Informe a empresa.", "INVALID_COMPANY");
+        if (!request.perfilUsuario || !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {
+          return erro(reply, 403, "Empresa não permitida.", "FORBIDDEN_COMPANY");
+        }
+      }
+      return ok(await produtosComMesmoCodigoDeBarras(query));
+    }
+  );
 
   app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
     const query = produtosListaQuerySchema.parse(request.query);

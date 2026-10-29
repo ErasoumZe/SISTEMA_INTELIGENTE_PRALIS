@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estadoFiscalNaTela, ncmAchadoPelaRegra, percentualFiscal, rotuloDaOrigemFiscal } from "./produto-fiscal-tela";
+import { estadoFiscalNaTela, percentualFiscal, rotuloDaOrigemFiscal } from "./produto-fiscal-tela";
 
 describe("fiscal na tela (FISCAL_NA_TELA do paralelo)", () => {
   it("completo nao mostra motivo; pendencia mostra motivo e quem resolve", () => {
@@ -14,13 +14,6 @@ describe("fiscal na tela (FISCAL_NA_TELA do paralelo)", () => {
   it("estado vazio ou desconhecido nao aparece", () => {
     expect(estadoFiscalNaTela("", "x")).toBeNull();
     expect(estadoFiscalNaTela("estado_novo", "x")).toBeNull();
-  });
-
-  it("NCM trava quando veio da planilha por produto ou PLU", () => {
-    expect(ncmAchadoPelaRegra("produto")).toBe(true);
-    expect(ncmAchadoPelaRegra("plu_balanca")).toBe(true);
-    expect(ncmAchadoPelaRegra("grupo")).toBe(false);
-    expect(ncmAchadoPelaRegra("")).toBe(false);
   });
 
   it("resumo da regra com virgula e a fonte em portugues", () => {

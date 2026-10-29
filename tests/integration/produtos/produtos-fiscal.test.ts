@@ -329,6 +329,83 @@ describe("produtos - fiscal pelo grupo (igual ao app oficial)", () => {
     expect(await fiscalDo(id)).toMatchObject({ cst_pis_cofins: "6", tributacao_simples: "ALÍQUOTA ZERO" });
   });
 
+  // F3 (decisao D2): classificacao AO VIVO — o mesmo motor da gravacao, sem gravar nada.
+  const classificar = (cookie: string, corpo: Record<string, unknown>) =>
+    contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos/fiscal/classificar",
+      headers: { cookie },
+      payload: corpo
+    });
+  type Classificacao = {
+    data: { estado: string; classificacao: { ncm: string | null; origem: string; cstPisCofins: string } | null };
+  };
+
+  it("Deve_ClassificarAoVivo_ComOMesmoMotorDaGravacao_SemGravarNada", async () => {
+    definirFontesFiscaisParaTeste({ leitor: planilhaFalsa({ ecf: [LINHA_ECF] }) });
+    const contar = async () =>
+      consultarUm<{ produtos: string; fiscais: string }>(
+        "select (select count(*) from produtos) as produtos, (select count(*) from produtos_fiscal) as fiscais"
+      );
+    const antes = await contar();
+
+    // EAN achado na planilha por produto: NCM e origem "produto" (e o que trava o NCM na tela).
+    const porEan = await classificar(cookieGerente, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: grupoFiscal,
+      codigoBarras: "7891000000017",
+      nome: "PAO FISCAL TESTE"
+    });
+    expect(porEan.statusCode, porEan.body).toBe(200);
+    expect(json<Classificacao>(porEan).data.classificacao).toMatchObject({
+      ncm: "19059090",
+      origem: "produto",
+      cstPisCofins: "1"
+    });
+
+    // Zeros a esquerda no EAN nao mudam o resultado.
+    const comZeros = await classificar(cookieGerente, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: grupoFiscal,
+      codigoBarras: "0007891000000017"
+    });
+    expect(json<Classificacao>(comZeros).data.classificacao).toMatchObject({ ncm: "19059090", origem: "produto" });
+
+    // Sem EAN conhecido vale so a regra do grupo, sem NCM.
+    const soGrupo = await classificar(cookieGerente, { empresaId: idsTeste.empresaA, grupoMercadoriaId: outroGrupo });
+    expect(json<Classificacao>(soGrupo).data.classificacao).toMatchObject({
+      ncm: null,
+      origem: "grupo",
+      cstPisCofins: "6"
+    });
+
+    // Grupo de OUTRA empresa nao e achado: sai como grupo invalido, sem vazar a regra dele.
+    const grupoDeFora = await classificar(cookieGerente, {
+      empresaId: idsTeste.empresaA,
+      grupoMercadoriaId: idsTeste.grupoMercadoriaB
+    });
+    expect(json<Classificacao>(grupoDeFora).data).toMatchObject({
+      estado: "pendente_grupo_invalido",
+      classificacao: null
+    });
+
+    expect(await contar()).toEqual(antes);
+  });
+
+  it("Deve_RecusarClassificacaoAoVivo_SemPermissaoDeEditar_OuEmEmpresaForaDoEscopo", async () => {
+    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    assertProblem(
+      await classificar(cookieCaixa, { empresaId: idsTeste.empresaA, grupoMercadoriaId: grupoFiscal }),
+      403,
+      "INSUFFICIENT_PERMISSION"
+    );
+    assertProblem(
+      await classificar(cookieAdmin, { empresaId: idsTeste.empresaB, grupoMercadoriaId: idsTeste.grupoMercadoriaB }),
+      403,
+      "FORBIDDEN_COMPANY"
+    );
+  });
+
   afterAll(async () => {
     await executarSql("delete from produtos where descricao like 'PAO %'");
     await executarSql("delete from produtos_catalogo_base where nome like 'PAO %'");
