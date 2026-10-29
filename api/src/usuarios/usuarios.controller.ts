@@ -6,7 +6,7 @@ import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/ap
 import { exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
-import { listarUsuarios, salvarUsuario } from "./usuarios.service.js";
+import { definirPostoCaixaUsuario, listarUsuarios, salvarUsuario } from "./usuarios.service.js";
 
 function empresasNaoPermitidas(body: DadosExternos, perfil: Parameters<typeof podeAcessarEmpresa>[0] | undefined) {
   const empresasBody = empresasDoUsuarioPayload(body);
@@ -54,4 +54,20 @@ export async function registrarRotasUsuarios(app: FastifyInstance): Promise<void
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  // R-229 · trocar ou tirar o posto do Caixa (PDV + turno do caixa) de um login existente.
+  app.put(
+    "/api/usuarios/:id/posto-caixa",
+    { preHandler: exigirPermissao("cadastro_usuarios_editar") },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        await definirPostoCaixaUsuario(id, request.body, request.perfilUsuario!);
+        return semConteudo(reply);
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
 }

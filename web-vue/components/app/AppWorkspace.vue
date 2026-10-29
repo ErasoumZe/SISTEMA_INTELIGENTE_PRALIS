@@ -52,6 +52,7 @@ import {
 import {
   bloqueioCadastroUsuario,
   cadastroPayload,
+  lerPostoCaixa,
   dinheiro,
   endpointOperacaoPorEntidade,
   formCadastroDeLinha,
@@ -1812,6 +1813,20 @@ async function salvarCadastro() {
         throw error;
       }
     }
+    // R-229 · login que ja existe: o posto do Caixa e trocado pela rota propria, depois do salvar. Se a troca
+    // falhar (caixa aberto, posto ocupado), os dados do login ja foram gravados: a tela diz isso com o motivo.
+    const postoMudou =
+      telaSalva === "usuarios" &&
+      Boolean(idEditando) &&
+      (formSnapshot.postoCaixa || "") !== (formSnapshot.postoCaixaOriginal || "");
+    let falhaPosto = "";
+    if (postoMudou) {
+      try {
+        await apiPut(`/api/usuarios/${idEditando}/posto-caixa`, { posto: lerPostoCaixa(formSnapshot.postoCaixa) });
+      } catch (error) {
+        falhaPosto = mensagemErro(error);
+      }
+    }
     // S-06: `opcoes` e a fonte das ocultas no proximo save e nao e recarregada nesta tela. Sem
     // sincronizar aqui, um segundo save da sessao parte de um retrato velho. Grava-se DEPOIS do
     // 2xx e a partir do `formSnapshot` (o objeto que foi enviado), nao do `formCadastro`, cujos
@@ -1821,7 +1836,8 @@ async function salvarCadastro() {
     }
     modalCadastroAberto.value = false;
     const idSalvo = idEditando || resultado?.id;
-    if (!atualizarCadastroLocal(telaSalva, formSnapshot, idSalvo)) {
+    // Posto trocado (ou tentado): a lista vem do servidor, para a coluna e o proximo formulario nao mentirem.
+    if (postoMudou || !atualizarCadastroLocal(telaSalva, formSnapshot, idSalvo)) {
       const empresaParaRecarregar = telaSalva === "empresas" && resultado?.id ? resultado.id : empresaId.value;
       await carregarDadosTela(telaSalva, empresaParaRecarregar);
     }
@@ -1831,7 +1847,9 @@ async function salvarCadastro() {
     // `false` significa que o passo era aplicavel, mas o editor nao carregou; nesse caso ele ja
     // exibiu o erro especifico e uma mensagem generica aqui esconderia a causa. `null` e o fluxo
     // normal dos demais cadastros (e do administrador total).
-    if (configuracaoGuiada === null) {
+    if (falhaPosto) {
+      notificar(`Dados do login salvos, mas o posto do caixa não foi trocado: ${falhaPosto}`, "error");
+    } else if (configuracaoGuiada === null) {
       notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     }
   } catch (error) {
@@ -1916,14 +1934,12 @@ function atualizarColaboradorUsuario(valor: string) {
     formCadastro.value.colaboradorId = "";
     if (!formCadastro.value.novoColaboradorNome) formCadastro.value.novoColaboradorNome = formCadastro.value.nome;
     formCadastro.value.novoColaboradorSetorId = formCadastro.value.setorId || "";
-    formCadastro.value.novoColaboradorPdvPadraoId = "";
-    formCadastro.value.novoColaboradorTurnoPadraoId = "";
+    formCadastro.value.postoCaixa = "";
     return;
   }
   formCadastro.value.novoColaborador = false;
   formCadastro.value.colaboradorId = valor;
-  formCadastro.value.novoColaboradorPdvPadraoId = "";
-  formCadastro.value.novoColaboradorTurnoPadraoId = "";
+  formCadastro.value.postoCaixa = "";
 }
 
 // Acoes assincronas de tema: orquestracao extraida para utils/tema-acoes.ts (factory testavel).

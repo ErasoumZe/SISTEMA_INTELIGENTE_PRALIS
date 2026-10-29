@@ -166,3 +166,31 @@ describe("CaixaFechamentoMaquininha · manha e tarde (R-227)", () => {
     expect(wrapper.find('[data-teste="maquininha-aviso-tarde"]').exists()).toBe(false);
   });
 });
+
+describe("CaixaFechamentoMaquininha · tarde sem manha (R-229)", () => {
+  it("avisa e so libera salvar com a justificativa, que vai no envio", async () => {
+    apiGet.mockResolvedValue({
+      etapaDia: "tarde",
+      semManha: true,
+      leituraReferencia: null,
+      relatorio: {
+        dadosRevisados: {
+          anexoId: "anexo-1",
+          leituraAcumulada: { documentoLegivel: false, credito: 160, debito: 80, pix: 45, voucher: 25 }
+        }
+      }
+    });
+    const apiPut = vi.fn().mockResolvedValue({});
+    vi.stubGlobal("useApi", () => ({ apiUrl: "", apiGet, apiPost, apiPut }));
+    const wrapper = montar();
+    await flushPromises();
+    expect(wrapper.get('[data-teste="maquininha-sem-manha"]').text()).toContain("caixa da manhã do PDV 1");
+    const salvar = wrapper.findAll("button").find((botao) => botao.text().includes("Salvar leitura"))!;
+    expect(salvar.attributes("disabled")).toBeDefined();
+    await wrapper.get('[data-teste="justificativa-sem-manha"]').setValue("A manhã não abriu caixa hoje");
+    expect(salvar.attributes("disabled")).toBeUndefined();
+    await salvar.trigger("click");
+    await flushPromises();
+    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({ justificativaSemManha: "A manhã não abriu caixa hoje" });
+  });
+});

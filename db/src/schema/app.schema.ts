@@ -448,11 +448,21 @@ export const pdvs = pgTable(
       .notNull()
       .references(() => contas.id),
     ativo: boolean("ativo").notNull().default(true),
+    // R-229 · turnos do caixa deste PDV (postos: PDV 1 · Manha, PDV 1 · Tarde). Separados dos turnos do DP.
+    turnosCaixa: text("turnos_caixa")
+      .array()
+      .$type<("manha" | "tarde")[]>()
+      .notNull()
+      .default(sql`ARRAY['manha','tarde']::text[]`),
     criadoEm,
     atualizadoEm
   },
   (table) => [
     unique("pdvs_empresa_nome_unica").on(table.empresaId, table.nome),
+    check(
+      "pdvs_turnos_caixa_check",
+      sql`${table.turnosCaixa} <@ ARRAY['manha','tarde']::text[] and cardinality(${table.turnosCaixa}) >= 1`
+    ),
     // Alvo das FKs compostas de campanhas e mensagens administrativas. Sem este par, uma linha
     // filha poderia apontar para um PDV de OUTRA empresa sem o banco reclamar — o mesmo motivo de
     // `vendas_id_empresa_unica` e `fechamentos_caixa_id_empresa_unica` existirem.
@@ -587,7 +597,10 @@ export const colaboradores = pgTable(
     // Vinculo operacional do Caixa. Quando preenchidos, PDV e turno nao sao escolhas do operador na
     // abertura: a sessao abre exclusivamente o posto e o turno configurados pelo administrador.
     pdvPadraoId: uuid("pdv_padrao_id").references(() => pdvs.id, { onDelete: "set null" }),
+    // Turno do DP (jornada, admissao, Questor). Nao decide mais nada no Caixa (R-229).
     turnoPadraoId: uuid("turno_padrao_id").references(() => turnos.id, { onDelete: "set null" }),
+    // R-229 · conta de posto do Caixa: o posto e PDV (pdv_padrao_id) + turno do caixa. Um login por posto.
+    turnoCaixa: text("turno_caixa").$type<"manha" | "tarde">(),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
@@ -602,7 +615,14 @@ export const colaboradores = pgTable(
     uniqueIndex("colaboradores_usuario_id_unico")
       .on(table.usuarioId)
       .where(sql`${table.usuarioId} is not null`),
-    index("colaboradores_empresa_pdv_padrao_idx").on(table.empresaId, table.pdvPadraoId)
+    index("colaboradores_empresa_pdv_padrao_idx").on(table.empresaId, table.pdvPadraoId),
+    check(
+      "colaboradores_turno_caixa_check",
+      sql`${table.turnoCaixa} is null or (${table.turnoCaixa} in ('manha', 'tarde') and ${table.pdvPadraoId} is not null)`
+    ),
+    uniqueIndex("colaboradores_posto_caixa_unico_idx")
+      .on(table.empresaId, table.pdvPadraoId, table.turnoCaixa)
+      .where(sql`${table.turnoCaixa} is not null`)
   ]
 );
 
@@ -3459,6 +3479,8 @@ export const fechamentosCaixa = pgTable(
     // Turno da abertura (pre-selecionado pelo turno padrao do colaborador). Filtro/relatorio;
     // NAO governa o vinculo de vendas — quem manda e o periodo [abertura, fechamento] do caixa.
     turnoId: uuid("turno_id").references(() => turnos.id, { onDelete: "set null" }),
+    // R-229 · turno do posto que abriu o caixa (manha/tarde): decide a etapa da maquininha.
+    turnoCaixa: text("turno_caixa").$type<"manha" | "tarde">(),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId),
     usuarioCaixaId: text("usuario_caixa_id").references(() => perfisUsuarios.usuarioId),
     colaboradorId: uuid("colaborador_id")
@@ -3508,6 +3530,10 @@ export const fechamentosCaixa = pgTable(
   },
   (table) => [
     check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'em_fechamento', 'fechado', 'ajustado')`),
+    check(
+      "fechamentos_caixa_turno_caixa_check",
+      sql`${table.turnoCaixa} is null or ${table.turnoCaixa} in ('manha', 'tarde')`
+    ),
     check(
       "fechamentos_caixa_composicao_fechamento_check",
       sql`(${table.valorFisicoEsperadoFechamento} is null

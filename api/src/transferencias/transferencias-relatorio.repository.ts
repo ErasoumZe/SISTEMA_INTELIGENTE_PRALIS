@@ -5,6 +5,7 @@ import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
 import type { TransferenciaDto, TransferenciasQuery } from "@padaria/shared/transferencias";
 import { banco } from "../banco/conexao.js";
+import { turnoNomeDoCaixaSql } from "../caixa/turno-do-caixa.sql.js";
 import { ehRetornoDoCaixa } from "./entrega-cofre.repository.js";
 import { filtrosEmpresa, numeroDecimal } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
@@ -147,7 +148,7 @@ export async function listarTransferenciasRepository(
       caixaOperadorNome: fechamentosCaixa.caixaResponsavelNomeAbertura,
       caixaSupervisorNome: fechamentosCaixa.supervisorResponsavelNomeAbertura,
       caixaLacreFechamento: fechamentosCaixa.lacreFechamento,
-      turnoNome: turnos.nome
+      turnoNome: turnoNomeDoCaixaSql
     })
     .from(transferencias)
     .innerJoin(origem, eq(origem.id, transferencias.contaOrigemId))

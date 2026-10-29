@@ -181,7 +181,10 @@ export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
 // A maquininha continua sendo a escolhida na abertura; a foto apenas sugere valores revisáveis.
 export const salvarRelatorioMaquininhaFechamentoSchema = z.object({
   anexoId: uuidSchema,
-  leituraAcumulada: relatorioMaquininhaIaSchema
+  leituraAcumulada: relatorioMaquininhaIaSchema,
+  // R-228: caixa da TARDE sem a manha do PDV fechada no dia. O relatorio e acumulado, entao sem a manha o
+  // liquido nao desconta nada; salvar exige explicar o que aconteceu.
+  justificativaSemManha: z.string().trim().min(5, "Explique por que nao ha manha").max(300).nullable().default(null)
 });
 export type RelatorioMaquininhaFechamento = z.infer<typeof salvarRelatorioMaquininhaFechamentoSchema>;
 
@@ -582,6 +585,8 @@ export const caixaOperacionalSchema = z.object({
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
   turnoNome: z.string().nullable(),
+  // R-229 · turno do posto que abriu o caixa. Nulo nos caixas antigos.
+  turnoCaixa: z.enum(["manha", "tarde"]).nullable().optional(),
   maquininhaId: uuidSchema.nullable(),
   maquininhaApelido: z.string().nullable(),
   maquininhaNumeroSerie: z.string().nullable(),
@@ -604,10 +609,11 @@ export const caixaStatusSchema = z.object({
   resumo: resumoCaixaSchema.nullable(),
   // Presente na consulta do status antes da abertura. A tela usa estes ids para exibir o posto
   // configurado, mas a API continua validando-os no POST de abertura.
+  // R-229 · posto do Caixa do login: PDV + turno do caixa (manha/tarde).
   vinculoOperador: z
     .object({
       pdvId: uuidSchema,
-      turnoId: uuidSchema
+      turnoCaixa: z.enum(["manha", "tarde"])
     })
     .nullable()
     .optional(),

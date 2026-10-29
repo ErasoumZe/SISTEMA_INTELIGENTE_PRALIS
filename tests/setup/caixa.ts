@@ -53,6 +53,24 @@ export function registrarEncerramentoCaixaParaTeste(caixaId: string) {
   });
 }
 
+// R-229 · o posto (PDV + turno do caixa) e unico: quem estava nele antes neste banco de teste sai do posto,
+// para o caso seguinte nao colidir com o indice. O turno do DP segue gravado so como jornada.
+export async function vincularPostoCaixaParaTeste(
+  colaboradorId: string,
+  pdvId: string,
+  turnoId: string | null,
+  turnoCaixa: "manha" | "tarde"
+) {
+  await executarSql(
+    "update colaboradores set turno_caixa = null where pdv_padrao_id = $1 and turno_caixa = $2 and id <> $3",
+    [pdvId, turnoCaixa, colaboradorId]
+  );
+  await executarSql(
+    "update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2, turno_caixa = $3 where id = $4",
+    [pdvId, turnoId, turnoCaixa, colaboradorId]
+  );
+}
+
 export async function vincularOperadorAoPdvETurno(
   app: FastifyInstance,
   entrada: {
@@ -61,6 +79,8 @@ export async function vincularOperadorAoPdvETurno(
     pdvId: string;
     nome: string;
     empresaId?: string;
+    // R-229 · turno do posto do Caixa (PDV · Manha/Tarde). Padrao: manha.
+    turnoCaixa?: "manha" | "tarde";
   }
 ): Promise<{ turnoId: string; colaboradorId: string }> {
   const empresaId = entrada.empresaId ?? idsTeste.empresaA;
@@ -82,11 +102,7 @@ export async function vincularOperadorAoPdvETurno(
     [entrada.usuarioId, empresaId]
   );
   if (!colaborador) throw new Error(`Colaborador do operador ${entrada.usuarioId} nao encontrado`);
-  await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
-    entrada.pdvId,
-    turnoId,
-    colaborador.id
-  ]);
+  await vincularPostoCaixaParaTeste(colaborador.id, entrada.pdvId, turnoId, entrada.turnoCaixa ?? "manha");
   return { turnoId, colaboradorId: colaborador.id };
 }
 
@@ -122,6 +138,8 @@ export async function abrirCaixaDoOperador(
     lacreFechamento?: string;
     // Alguns cenarios verificam o vinculo de uma maquininha previamente cadastrada.
     maquininhaId?: string;
+    // R-229 · turno do posto do Caixa (PDV · Manha/Tarde) do operador. Padrao: manha.
+    turnoCaixa?: "manha" | "tarde";
     // Suites que compartilham um unico caixa no beforeAll deixam o container
     // descartar o estado ao final; onTestFinished so e valido dentro de um it.
     registrarLimpeza?: boolean;
@@ -190,11 +208,7 @@ export async function abrirCaixaDoOperador(
     [usuario.id, empresaId]
   );
   if (!colaborador) throw new Error(`Colaborador do operador ${entrada.emailOperador} nao encontrado`);
-  await executarSql("update colaboradores set pdv_padrao_id = $1, turno_padrao_id = $2 where id = $3", [
-    pdvId,
-    turnoId,
-    colaborador.id
-  ]);
+  await vincularPostoCaixaParaTeste(colaborador.id, pdvId, turnoId, entrada.turnoCaixa ?? "manha");
 
   // A abertura da referencia 5174 sempre registra a maquininha vinculada e consome um malote
   // pendente identificado por lacre. A fixture precisa montar esse estado pelo mesmo contrato

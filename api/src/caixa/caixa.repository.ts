@@ -62,6 +62,7 @@ import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padari
 import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { turnoNomeDoCaixaSql } from "./turno-do-caixa.sql.js";
 
 const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
 
@@ -73,7 +74,8 @@ export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: strin
       nome: pdvs.nome,
       codigo: pdvs.codigo,
       contaId: pdvs.contaId,
-      ativo: pdvs.ativo
+      ativo: pdvs.ativo,
+      turnosCaixa: pdvs.turnosCaixa
     })
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
@@ -98,7 +100,8 @@ export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: st
       nome: pdvs.nome,
       codigo: pdvs.codigo,
       contaId: pdvs.contaId,
-      ativo: pdvs.ativo
+      ativo: pdvs.ativo,
+      turnosCaixa: pdvs.turnosCaixa
     })
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
@@ -121,7 +124,8 @@ export async function buscarColaboradorPorUsuarioRepository(
       nome: colaboradores.nome,
       usuarioId: colaboradores.usuarioId,
       pdvPadraoId: colaboradores.pdvPadraoId,
-      turnoPadraoId: colaboradores.turnoPadraoId
+      turnoPadraoId: colaboradores.turnoPadraoId,
+      turnoCaixa: colaboradores.turnoCaixa
     })
     .from(colaboradores)
     .where(and(...filtros))
@@ -164,6 +168,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       turnoNome: turnos.nome,
+      turnoCaixa: fechamentosCaixa.turnoCaixa,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -212,6 +217,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       turnoNome: turnos.nome,
+      turnoCaixa: fechamentosCaixa.turnoCaixa,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -337,6 +343,7 @@ export async function criarCaixaRepository(
     dataHoraAbertura: Date;
     tokenEdicao: string;
     turnoId: string | null;
+    turnoCaixa: "manha" | "tarde";
     observacao: string | null;
     // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. R-001: o
     // fundo NAO e emprestimo, entao dividaCofre nasce zero (coluna legado, ver 18 D-08).
@@ -356,6 +363,7 @@ export async function criarCaixaRepository(
       usuarioCaixaId: input.usuarioCaixaId,
       colaboradorId: input.colaboradorId,
       turnoId: input.turnoId,
+      turnoCaixa: input.turnoCaixa,
       dataMovimento: diaNegocio(input.dataHoraAbertura),
       dataHoraAbertura: input.dataHoraAbertura,
       // R-184: horario operacional e carimbo de auditoria usam o mesmo instante do servidor.
@@ -2051,12 +2059,16 @@ export async function buscarRelatorioMaquininhaFechamentoRepository(
   return relatorio ?? null;
 }
 
-export async function buscarRelatorioMaquininhaPrecedenteRepository(
-  input: { empresaId: string; pdvId: string; maquininhaId: string; dataMovimento: string; fechamentoCaixaId: string },
+// R-229 · relatorios da maquininha ja FECHADOS no mesmo PDV e dia (qualquer maquininha), do mais recente ao mais
+// antigo, com o turno do caixa e a maquininha de cada um: a manha e do PDV; o desconto e da mesma maquininha.
+export async function listarRelatoriosMaquininhaDoDiaRepository(
+  input: { empresaId: string; pdvId: string; dataMovimento: string; fechamentoCaixaId: string },
   db: ExecutorBanco = banco
 ) {
-  const [relatorio] = await db
+  return db
     .select({
+      turnoCaixa: fechamentosCaixa.turnoCaixa,
+      maquininhaId: fechamentosCaixa.maquininhaId,
       id: fechamentosCaixaRelatoriosMaquininha.id,
       fechamentoCaixaId: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
       creditoFinal: fechamentosCaixaRelatoriosMaquininha.creditoFinal,
@@ -2073,16 +2085,13 @@ export async function buscarRelatorioMaquininhaPrecedenteRepository(
       and(
         eq(fechamentosCaixaRelatoriosMaquininha.empresaId, input.empresaId),
         eq(fechamentosCaixa.pdvId, input.pdvId),
-        eq(fechamentosCaixa.maquininhaId, input.maquininhaId),
         eq(fechamentosCaixa.dataMovimento, input.dataMovimento),
         eq(fechamentosCaixa.status, "fechado"),
         ne(fechamentosCaixa.id, input.fechamentoCaixaId),
         eq(fechamentosCaixaRelatoriosMaquininha.versao, 6)
       )
     )
-    .orderBy(desc(fechamentosCaixa.fechadoEm))
-    .limit(1);
-  return relatorio ?? null;
+    .orderBy(desc(fechamentosCaixa.fechadoEm));
 }
 
 // A leitura inicial de um turno é sempre a leitura final do último fechamento concluído da
@@ -2373,7 +2382,7 @@ export async function listarHistoricoCaixaRepository(
       colaboradorId: fechamentosCaixa.colaboradorId,
       colaboradorNome: colaboradores.nome,
       turnoId: fechamentosCaixa.turnoId,
-      turnoNome: turnos.nome,
+      turnoNome: turnoNomeDoCaixaSql,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechamentoIniciadoEm: fechamentosCaixa.fechamentoIniciadoEm,

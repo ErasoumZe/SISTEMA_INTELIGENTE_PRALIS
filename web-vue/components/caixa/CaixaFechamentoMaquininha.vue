@@ -58,11 +58,15 @@ const camposAlterados = computed(() => {
     ({ chave }) => travadoEm(lida, chave) && valorMonetario(leitura.value[chave]) !== valorMonetario(lida[chave])
   );
 });
+// R-229 · caixa da tarde sem a manha do PDV fechada hoje: o relatorio e acumulado, entao salvar exige explicar.
+const semManha = ref(false);
+const justificativaSemManha = ref("");
 const podeSalvar = computed(
   () =>
     Boolean(anexoId.value) &&
     campos.every(({ chave }) => valorMonetario(leitura.value[chave]) !== null) &&
-    (!camposAlterados.value.length || justificativa.value.trim().length >= 5)
+    (!camposAlterados.value.length || justificativa.value.trim().length >= 5) &&
+    (!semManha.value || justificativaSemManha.value.trim().length >= 5)
 );
 function definirLeitura(nova: Editavel) {
   leitura.value = nova;
@@ -137,6 +141,7 @@ async function carregar() {
   try {
     const resposta = await apiGet<{
       etapaDia: "manha" | "tarde";
+      semManha?: boolean;
       leituraReferencia: { leitura: unknown; fechadoEm: string | null } | null;
       relatorio: { dadosRevisados: Record<string, unknown> } | null;
     }>(`/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha`);
@@ -144,6 +149,7 @@ async function carregar() {
     paineisAbertos.value = ["manha", "tarde"];
     base.value = resposta.leituraReferencia?.leitura ? novaLeitura(resposta.leituraReferencia.leitura) : null;
     manhaFechadaEm.value = resposta.leituraReferencia?.fechadoEm ?? null;
+    semManha.value = resposta.semManha === true;
     const dados = resposta.relatorio?.dadosRevisados;
     if (dados?.anexoId && dados.leituraAcumulada) {
       anexoId.value = String(dados.anexoId);
@@ -201,7 +207,8 @@ async function salvar() {
   try {
     await apiPut(`/api/caixa/${encodeURIComponent(props.caixa.id)}/relatorio-maquininha`, {
       anexoId: anexoId.value,
-      leituraAcumulada: leituraParaApi()
+      leituraAcumulada: leituraParaApi(),
+      justificativaSemManha: semManha.value ? justificativaSemManha.value.trim() : null
     });
     salvo.value = true;
     await carregar();
@@ -239,6 +246,28 @@ watch(
         <strong>Este é o relatório da manhã do {{ caixa.pdvNome }}.</strong> Envie o relatório da maquininha. O da tarde
         é feito pelo caixa da tarde deste PDV, depois que esta manhã fechar. No dia seguinte tudo começa do zero.
       </template>
+    </v-alert>
+    <v-alert
+      v-if="semManha"
+      type="warning"
+      density="compact"
+      variant="tonal"
+      class="mb-4"
+      data-teste="maquininha-sem-manha"
+    >
+      <strong>Não encontramos o caixa da manhã do {{ caixa.pdvNome }} hoje.</strong> O relatório da maquininha é
+      acumulado desde cedo: sem a manhã, a tarde não desconta nada. Avise a gerência e explique antes de salvar.
+      <v-textarea
+        v-model="justificativaSemManha"
+        class="mt-3"
+        label="Por que não há manhã hoje?"
+        rows="2"
+        auto-grow
+        counter="300"
+        maxlength="300"
+        :error="justificativaSemManha.trim().length > 0 && justificativaSemManha.trim().length < 5"
+        data-teste="justificativa-sem-manha"
+      />
     </v-alert>
     <v-expansion-panels v-model="paineisAbertos" multiple class="maquininha__paineis">
       <v-expansion-panel

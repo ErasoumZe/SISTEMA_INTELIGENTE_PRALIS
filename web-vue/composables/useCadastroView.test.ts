@@ -84,6 +84,29 @@ describe("useCadastroView · tela de Contas (#172)", () => {
   });
 });
 
+// Mesmo contrato do #172 na tela de Maquininhas: a linha gravava `nome`/`numeroSerie` e a tabela procurava
+// `apelido`/`numero_de_serie`, entao apelido e serial apareciam como travessao.
+describe("useCadastroView · tela de Maquininhas", () => {
+  it("apelido e número de série aparecem na tabela", () => {
+    const opcoes = {
+      ...opcoesVazias(),
+      maquininhas: [{ id: "m-1", apelido: "Caixa 1 · MAQ.cx1", numeroSerie: "J9D1" }]
+    };
+    const { colunasCadastro, dadosCadastro } = useCadastroView({
+      opcoes,
+      opcoesEmpresa: opcoes,
+      empresas: [],
+      permissoesPagina: { itens: [], total: 0, page: 1, pageSize: 10 },
+      formCadastro: ref(formCadastroVazio())
+    });
+    const linha = dadosCadastro("maquininhas")[0]!;
+
+    expect(colunasCadastro("maquininhas").filter((coluna) => celula(linha, coluna) === "-")).toEqual([]);
+    expect(celula(linha, "Apelido")).toBe("Caixa 1 · MAQ.cx1");
+    expect(celula(linha, "Número de série")).toBe("J9D1");
+  });
+});
+
 describe("useCadastroView · usuários e acessos", () => {
   it("mostra o perfil com nome humano e inclui setor na lista de usuarios", () => {
     const opcoes = opcoesVazias();
@@ -106,7 +129,14 @@ describe("useCadastroView · usuários e acessos", () => {
       formCadastro: ref(formCadastroVazio())
     });
 
-    expect(cadastro.colunasCadastro("usuarios")).toEqual(["Nome", "Email", "Perfil", "Setor", "Cargos"]);
+    expect(cadastro.colunasCadastro("usuarios")).toEqual([
+      "Nome",
+      "Email",
+      "Perfil",
+      "Posto do caixa",
+      "Setor",
+      "Cargos"
+    ]);
     expect(cadastro.dadosCadastro("usuarios")[0]).toMatchObject({
       perfil: "Usuário comum",
       setor: "Tesouraria",

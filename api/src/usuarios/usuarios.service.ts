@@ -2,13 +2,23 @@ import { APIError } from "better-auth";
 import { hashPassword } from "better-auth/crypto";
 import type { DadosExternos } from "@padaria/shared/api";
 import type { RoleUsuario } from "@padaria/shared";
-import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
+import { postoCaixaUsuarioPayloadSchema, usuarioPayloadSchema } from "@padaria/shared/usuarios";
+import { rotuloTurnoCaixa } from "@padaria/shared/pdvs";
 import { diaNegocio } from "@padaria/shared/datas";
 import { auth, senhaMinimaAutenticacao } from "../auth/config.js";
 import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
-import { conflito, erroValidacao, falhaTecnica, naoEncontrado, proibido } from "../erros.js";
+import {
+  codigoPostgresDoErro,
+  conflito,
+  erroValidacao,
+  type ErroEncadeado,
+  falhaTecnica,
+  naoEncontrado,
+  proibido
+} from "../erros.js";
 import { capturarErro } from "../observabilidade.js";
+import { buscarCaixaAbertoUsuarioRepository } from "../caixa/caixa.repository.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
@@ -17,10 +27,12 @@ import {
   buscarCargoEmpresaRepository,
   bloquearColaboradorPorCpfRepository,
   bloquearColaboradorUsuarioRepository,
+  bloquearColaboradorDoUsuarioRepository,
+  atualizarPostoCaixaColaboradorRepository,
+  buscarDonoDoPostoCaixaRepository,
   buscarColaboradorUsuarioRepository,
   buscarPdvEmpresaRepository,
   buscarSetorEmpresaRepository,
-  buscarTurnoEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
   colaboradorTemCargoAtivoRepository,
   existeEmailUsuarioRepository,
@@ -88,6 +100,9 @@ export function recortarUsuariosPorEmpresas(
         email: usuario.email,
         whatsapp: usuario.whatsapp,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
+        // O posto e do colaborador: fora do escopo dele, sai junto.
+        postoPdvId: colaboradorVisivel ? usuario.postoPdvId : null,
+        postoTurnoCaixa: colaboradorVisivel ? usuario.postoTurnoCaixa : null,
         setorId: setorVisivel ? usuario.setorId : null,
         setorNome: setorVisivel ? usuario.setorNome : null,
         cargoIds: cargosVisiveis.map((cargo) => cargo.id),
@@ -260,6 +275,67 @@ function empresasUsuario(empresaId: string | undefined, empresaIds: string[] | u
 }
 
 // Sem o ramo `!perfil` de antes: ele liberava qualquer empresa para quem chamasse sem ator.
+// R-229 · o posto do Caixa (PDV + turno do caixa) precisa existir, estar ativo, ter o turno marcado no PDV e
+// estar livre (um login por posto). `exceto` = o proprio colaborador, na troca de posto.
+async function validarPostoCaixa(
+  empresaId: string,
+  pdvId: string,
+  turnoCaixa: "manha" | "tarde",
+  exceto: string | null,
+  db?: TransacaoBanco
+) {
+  const pdv = await buscarPdvEmpresaRepository(pdvId, db);
+  if (!pdv || pdv.empresaId !== empresaId) falharValidacao("PDV não pertence à empresa");
+  if (!pdv.ativo) falharValidacao("PDV inativo não pode ser vinculado ao Caixa");
+  const rotulo = `${pdv.nome} · ${rotuloTurnoCaixa[turnoCaixa]}`;
+  if (!pdv.turnosCaixa.includes(turnoCaixa)) {
+    falharValidacao(`O ${pdv.nome} não tem o turno ${rotuloTurnoCaixa[turnoCaixa]} no caixa. Marque o turno em PDVs.`);
+  }
+  const dono = await buscarDonoDoPostoCaixaRepository({ empresaId, pdvId, turnoCaixa }, db);
+  if (dono && dono.colaboradorId !== exceto) {
+    throw conflito(`O posto ${rotulo} já está no login de ${dono.nome}.`, "POSTO_CAIXA_OCUPADO");
+  }
+}
+
+// Duas atribuicoes ao mesmo posto ao mesmo tempo: as duas passam pela checagem acima e o indice unico da 0090
+// recusa a segunda (23505). Para o operador, e o mesmo "posto ocupado", nao um erro interno.
+function postoOcupadoNaCorrida(erro: ErroEncadeado) {
+  if (codigoPostgresDoErro(erro) !== "23505") return false;
+  let atual: ErroEncadeado | undefined = erro;
+  for (let nivel = 0; nivel < 10 && atual && typeof atual === "object"; nivel += 1) {
+    if ((atual as { constraint?: string }).constraint === "colaboradores_posto_caixa_unico_idx") return true;
+    atual = atual.cause;
+  }
+  return false;
+}
+
+// R-229 · trocar (ou tirar) o posto do Caixa de um login que ja existe. Nunca com caixa aberto ou em
+// fechamento deste login: o status passaria a mostrar o posto novo enquanto o caixa segue no antigo.
+export async function definirPostoCaixaUsuario(usuarioId: string, body: DadosExternos, ator: PerfilAtor) {
+  const { posto } = postoCaixaUsuarioPayloadSchema.parse(body);
+  try {
+    return await executarEmTransacao(async (tx) => {
+      // Mesma trava e mesmas regras de alvo da edicao do login (escopo de empresa, alvo privilegiado).
+      await autorizarEdicaoUsuario(usuarioId, undefined, ator, tx);
+      const colaborador = await bloquearColaboradorDoUsuarioRepository(usuarioId, tx);
+      if (!colaborador) throw naoEncontrado("Este login não tem colaborador vinculado", "COLABORADOR_NAO_ENCONTRADO");
+      if (!empresaNoEscopo(ator, colaborador.empresaId)) throw empresaNaoPermitida();
+      if (await buscarCaixaAbertoUsuarioRepository(colaborador.empresaId, usuarioId, tx)) {
+        throw conflito("Feche o caixa aberto deste login antes de trocar o posto.", "CAIXA_ABERTO_NO_POSTO");
+      }
+      if (posto) await validarPostoCaixa(colaborador.empresaId, posto.pdvId, posto.turnoCaixa, colaborador.id, tx);
+      await atualizarPostoCaixaColaboradorRepository(
+        { colaboradorId: colaborador.id, pdvId: posto?.pdvId ?? null, turnoCaixa: posto?.turnoCaixa ?? null },
+        tx
+      );
+    });
+  } catch (erro) {
+    if (postoOcupadoNaCorrida(erro as ErroEncadeado))
+      throw conflito("Esse posto acabou de ser dado a outro login.", "POSTO_CAIXA_OCUPADO");
+    throw erro;
+  }
+}
+
 function empresaNoEscopo(perfil: PerfilComEmpresa, empresaId: string): boolean {
   return podeAcessarEmpresa(perfil, empresaId);
 }
@@ -318,24 +394,21 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   const colaboradorPreLido = dados.colaboradorId ? await buscarColaboradorUsuarioRepository(dados.colaboradorId) : null;
   if (novoColaborador) {
     if (!empresaNoEscopo(ator, novoColaborador.empresaId)) throw empresaNaoPermitida();
-    const cargo = await buscarCargoEmpresaRepository(novoColaborador.cargoId);
-    if (!cargo || cargo.empresaId !== novoColaborador.empresaId) falharValidacao("Cargo nao pertence a empresa");
+    // O cargo continua obrigatorio, inclusive no login de posto (R-229): as permissoes do Caixa vem do cargo.
+    if (!novoColaborador.cargoId) falharValidacao("Cargo obrigatorio");
+    if (novoColaborador.cargoId) {
+      const cargo = await buscarCargoEmpresaRepository(novoColaborador.cargoId);
+      if (!cargo || cargo.empresaId !== novoColaborador.empresaId) falharValidacao("Cargo nao pertence a empresa");
+    }
     if (novoColaborador.setorId) {
       const setor = await buscarSetorEmpresaRepository(novoColaborador.setorId);
       if (!setor || setor.empresaId !== novoColaborador.empresaId) falharValidacao("Setor nao pertence a empresa");
     }
-    if (Boolean(novoColaborador.pdvPadraoId) !== Boolean(novoColaborador.turnoPadraoId)) {
-      falharValidacao("Informe PDV e turno juntos para vincular um usuario ao Caixa");
+    if (Boolean(novoColaborador.pdvPadraoId) !== Boolean(novoColaborador.turnoCaixa)) {
+      falharValidacao("Escolha o posto do caixa (PDV e turno) para vincular um usuario ao Caixa");
     }
-    if (novoColaborador.pdvPadraoId) {
-      const pdv = await buscarPdvEmpresaRepository(novoColaborador.pdvPadraoId);
-      if (!pdv || pdv.empresaId !== novoColaborador.empresaId) falharValidacao("PDV nao pertence a empresa");
-      if (!pdv.ativo) falharValidacao("PDV inativo nao pode ser vinculado ao Caixa");
-    }
-    if (novoColaborador.turnoPadraoId) {
-      const turno = await buscarTurnoEmpresaRepository(novoColaborador.turnoPadraoId);
-      if (!turno || turno.empresaId !== novoColaborador.empresaId) falharValidacao("Turno nao pertence a empresa");
-      if (!turno.ativo) falharValidacao("Turno inativo nao pode ser vinculado ao Caixa");
+    if (novoColaborador.pdvPadraoId && novoColaborador.turnoCaixa) {
+      await validarPostoCaixa(novoColaborador.empresaId, novoColaborador.pdvPadraoId, novoColaborador.turnoCaixa, null);
     }
   } else if (!preservarColaborador) {
     if (!colaboradorPreLido) falharValidacao("Colaborador nao encontrado");
@@ -385,13 +458,15 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   const role = dados.role ?? (id ? undefined : "usuario_comum");
 
   async function garantirCargoAtivo(colaboradorId: string, tx: TransacaoBanco) {
+    const cargoId = novoColaborador?.cargoId;
+    if (!novoColaborador || !cargoId) return;
     if (await colaboradorTemCargoAtivoRepository(colaboradorId, tx)) return;
     await salvarCargoColaboradorUsuarioRepository(
       {
-        empresaId: novoColaborador!.empresaId,
+        empresaId: novoColaborador.empresaId,
         colaboradorId,
-        setorId: novoColaborador!.setorId,
-        cargoId: novoColaborador!.cargoId,
+        setorId: novoColaborador.setorId,
+        cargoId,
         remuneracaoMinuto: 1,
         dataInicio: diaNegocio(new Date()),
         ativo: true
@@ -456,23 +531,24 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         cpf: novoColaborador.cpf,
         setorId: novoColaborador.setorId,
         pdvPadraoId: novoColaborador.pdvPadraoId ?? null,
-        turnoPadraoId: novoColaborador.turnoPadraoId ?? null
+        turnoCaixa: novoColaborador.turnoCaixa ?? null
       },
       tx
     );
     if (!criado) falharValidacao("Nao foi possivel cadastrar o colaborador");
-    await salvarCargoColaboradorUsuarioRepository(
-      {
-        empresaId: novoColaborador.empresaId,
-        colaboradorId: criado.id,
-        setorId: novoColaborador.setorId,
-        cargoId: novoColaborador.cargoId,
-        remuneracaoMinuto: 1,
-        dataInicio: diaNegocio(new Date()),
-        ativo: true
-      },
-      tx
-    );
+    if (novoColaborador.cargoId)
+      await salvarCargoColaboradorUsuarioRepository(
+        {
+          empresaId: novoColaborador.empresaId,
+          colaboradorId: criado.id,
+          setorId: novoColaborador.setorId,
+          cargoId: novoColaborador.cargoId,
+          remuneracaoMinuto: 1,
+          dataInicio: diaNegocio(new Date()),
+          ativo: true
+        },
+        tx
+      );
     return {
       id: criado.id,
       empresaId: novoColaborador.empresaId,

@@ -1444,6 +1444,27 @@ feita pelo caixa da tarde). O sistema decide sozinho se o caixa é manhã ou tar
   (o acumulado da maquininha também zera). Um terceiro caixa no mesmo PDV e dia é recusado.
 - O banco só permite um caixa aberto por PDV, então a tarde só abre depois que a manhã fechou.
 
+### R-229 — Postos do caixa: PDV + turno do caixa, separados dos turnos do DP (Marco, 29/10/2026)
+
+**Supera** o uso do turno do DP (`turno_padrao_id`) no Caixa e o rascunho R-228 (etiqueta do turno). A tela Turnos
+volta a ser só do DP (jornada, feriado, Questor, admissão).
+
+- **PDVs:** cada PDV tem **Turnos do caixa** (Manhã e/ou Tarde, padrão os dois). Cada turno marcado é um **posto**:
+  PDV 1 · Manhã, PDV 1 · Tarde… para os 4 PDVs. Não se desmarca um turno com login de posto nele nem com caixa aberto.
+- **Usuários:** o login de PDV escolhe o **Posto do caixa** e precisa de nome, e-mail, senha e **cargo** (já vem
+  sugerido o cargo "Caixa"; as permissões de operar o Caixa vêm do cargo). **Sem setor.**
+  **Um login por posto.** O posto de um login existente é trocado (ou tirado) pela rota própria, nunca com caixa
+  aberto ou em fechamento daquele login.
+- **Abertura:** exige o posto do login (PDV + turno do caixa), grava `fechamentos_caixa.turno_caixa` e só abre
+  depois que o caixa anterior do mesmo PDV fechou. Login sem posto recebe "Peça ao administrador para escolher o
+  posto em Usuários".
+- **Maquininha (complementa R-210/R-227):** manhã ou tarde = turno do posto gravado no caixa. "Existe manhã hoje?"
+  olha o PDV no dia (`data_movimento`) com qualquer maquininha; o desconto da tarde é o último relatório fechado da
+  **mesma maquininha** naquele PDV e dia (o acumulado é por aparelho). Tarde sem manhã fechada salva só com
+  justificativa (gravada; líquido sem desconto). Caixa antigo, sem turno do caixa, segue pela ordem.
+- Relatórios mostram o turno como "PDV 1 · Tarde". Migration 0090 (só acrescenta colunas). As contas de posto que
+  já existiam ficam sem posto até alguém escolher em Usuários (sem `UPDATE` automático).
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

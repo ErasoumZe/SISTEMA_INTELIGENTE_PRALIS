@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { rolesUsuario } from "../autenticacao/index.js";
 import type { DadosExternos } from "../api/index.js";
+import { turnoCaixaSchema } from "../pdvs/index.js";
 
 export { empresaQuerySchema as usuariosQuerySchema } from "../api/index.js";
 
@@ -11,11 +12,18 @@ export const usuarioNovoColaboradorPayloadSchema = z.object({
   nome: z.string().min(1),
   cpf: z.string().optional().nullable(),
   setorId: uuidSchema.optional().nullable(),
-  cargoId: uuidSchema,
-  // Vínculo operacional opcional para contas globais; obrigatório no momento de abrir Caixa.
+  // Conta de posto do Caixa (R-229) nao precisa de cargo: e um login de PDV, nao um funcionario do DP.
+  cargoId: uuidSchema.optional().nullable(),
+  // R-229 · posto do Caixa = PDV + turno do caixa (manha/tarde). Os dois juntos; obrigatorio so para abrir Caixa.
   pdvPadraoId: uuidSchema.optional().nullable(),
-  turnoPadraoId: uuidSchema.optional().nullable()
+  turnoCaixa: turnoCaixaSchema.optional().nullable()
 });
+
+// R-229 · trocar (ou tirar) o posto do Caixa de um login que ja existe. `null` = tirar o posto.
+export const postoCaixaUsuarioPayloadSchema = z.object({
+  posto: z.object({ pdvId: uuidSchema, turnoCaixa: turnoCaixaSchema }).nullable()
+});
+export type PostoCaixaUsuarioPayload = z.infer<typeof postoCaixaUsuarioPayloadSchema>;
 
 export const usuarioPayloadSchema = z.object({
   empresaId: uuidSchema.optional(),

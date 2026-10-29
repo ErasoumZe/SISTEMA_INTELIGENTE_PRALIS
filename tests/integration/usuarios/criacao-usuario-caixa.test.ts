@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // B-01 (CX-M02) · Criar usuario de operacao/Caixa.
 //
@@ -51,7 +51,8 @@ describe("B-01 · criacao de usuario de Caixa", () => {
       colaboradorId?: string;
       empresaId?: string;
       pdvPadraoId?: string | null;
-      turnoPadraoId?: string | null;
+      turnoCaixa?: "manha" | "tarde" | null;
+      semCargo?: boolean;
     } = {}
   ) {
     const empresaId = opcoes.empresaId ?? idsTeste.empresaA;
@@ -69,10 +70,11 @@ describe("B-01 · criacao de usuario de Caixa", () => {
         empresaId,
         nome: "Operador de Caixa B01",
         cpf: opcoes.cpf ?? null,
-        setorId: idsTeste.setorA,
+        setorId: opcoes.semCargo ? null : idsTeste.setorA,
+        // O login de posto dispensa setor, mas tem cargo: e dele que vem a permissao de operar o Caixa.
         cargoId: idsTeste.cargoCaixa,
         pdvPadraoId: opcoes.pdvPadraoId ?? null,
-        turnoPadraoId: opcoes.turnoPadraoId ?? null
+        turnoCaixa: opcoes.turnoCaixa ?? null
       }
     };
   }
@@ -158,35 +160,71 @@ describe("B-01 · criacao de usuario de Caixa", () => {
     expect(colaboradores).toHaveLength(1);
   });
 
-  it("vincula o novo operador ao PDV e turno da propria empresa", async () => {
-    const turno = await contexto.app.inject({
-      method: "POST",
-      url: "/api/turnos",
-      headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Turno usuario Caixa B01", horaInicio: "06:00", horaFim: "14:00" }
-    });
-    expect(turno.statusCode, turno.body).toBe(201);
-    const turnoId = json<{ data: { id: string } }>(turno).data.id;
-    const email = "b01.caixa.pdv-turno@padaria.local";
-
-    const resposta = await criarUsuario(payloadTela(email, { pdvPadraoId: idsTeste.pdvLivre, turnoPadraoId: turnoId }));
+  // R-229 · o posto do Caixa e PDV + turno do caixa; o login de posto nao precisa de setor nem cargo.
+  it("cria o login de posto (PDV · Tarde) com e-mail, senha e cargo, sem setor", async () => {
+    await executarSql(
+      "update colaboradores set turno_caixa = null where pdv_padrao_id = $1 and turno_caixa = 'tarde'",
+      [idsTeste.pdvLivre]
+    );
+    const email = "b01.caixa.posto-tarde@padaria.local";
+    const resposta = await criarUsuario(
+      payloadTela(email, { pdvPadraoId: idsTeste.pdvLivre, turnoCaixa: "tarde", semCargo: true })
+    );
     expect(resposta.statusCode, resposta.body).toBe(201);
-
-    const vinculo = await consultarUm<{ pdv_padrao_id: string | null; turno_padrao_id: string | null }>(
-      `select c.pdv_padrao_id, c.turno_padrao_id
+    const vinculo = await consultarUm<{ pdv_padrao_id: string | null; turno_caixa: string | null }>(
+      `select c.pdv_padrao_id, c.turno_caixa
        from colaboradores c
        join "user" u on u.id = c.usuario_id
        where u.email = $1`,
       [email]
     );
-    expect(vinculo).toEqual({ pdv_padrao_id: idsTeste.pdvLivre, turno_padrao_id: turnoId });
+    expect(vinculo).toEqual({ pdv_padrao_id: idsTeste.pdvLivre, turno_caixa: "tarde" });
+
+    // O mesmo posto nao aceita um segundo login: 409 com o nome de quem ja esta nele.
+    const outro = await criarUsuario(
+      payloadTela("b01.caixa.posto-tarde-2@padaria.local", {
+        pdvPadraoId: idsTeste.pdvLivre,
+        turnoCaixa: "tarde",
+        semCargo: true
+      })
+    );
+    expect(outro.statusCode, outro.body).toBe(409);
+    expect(outro.body).toMatch(/já está no login de/);
+
+    // O PDV nao desmarca a tarde com o login de posto vinculado.
+    const pdv = await consultarUm<{ nome: string; conta_id: string }>("select nome, conta_id from pdvs where id = $1", [
+      idsTeste.pdvLivre
+    ]);
+    const desmarcar = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/pdvs/${idsTeste.pdvLivre}`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: pdv!.nome, contaId: pdv!.conta_id, turnosCaixa: ["manha"] }
+    });
+    expect(desmarcar.statusCode, desmarcar.body).toBe(400);
+    expect(desmarcar.body).toMatch(/login de posto vinculado/);
+
+    // Trocar o posto de um login que ja existe: rota propria. Tirar o posto libera a tarde.
+    const usuario = await consultarUm<{ id: string }>('select id from "user" where email = $1', [email]);
+    const tirar = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/usuarios/${usuario!.id}/posto-caixa`,
+      headers: { cookie: cookieAdmin },
+      payload: { posto: null }
+    });
+    expect(tirar.statusCode, tirar.body).toBe(204);
+    const depois = await consultarUm<{ turno_caixa: string | null }>(
+      'select c.turno_caixa from colaboradores c join "user" u on u.id = c.usuario_id where u.email = $1',
+      [email]
+    );
+    expect(depois?.turno_caixa).toBeNull();
   });
 
-  it("recusa vinculo de Caixa incompleto antes de criar o usuario", async () => {
+  it("recusa posto do Caixa incompleto antes de criar o usuario", async () => {
     const email = "b01.caixa.vinculo-incompleto@padaria.local";
     const resposta = await criarUsuario(payloadTela(email, { pdvPadraoId: idsTeste.pdvLivre }));
     expect(resposta.statusCode, resposta.body).toBe(400);
-    expect(resposta.body).toContain("PDV e turno juntos");
+    expect(resposta.body).toContain("Escolha o posto do caixa");
     expect(await contarUsuarios(email)).toBe(0);
   });
 
