@@ -1,21 +1,6 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import {
-  and,
-  count,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  ne,
-  or,
-  sql,
-  sum,
-  type SQL
-} from "drizzle-orm";
+import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sum, type SQL } from "drizzle-orm";
 import {
   clientes,
   contas,
@@ -607,19 +592,21 @@ export async function buscarProdutoAutomaticoRepository(
   db: ExecutorBanco = banco
 ) {
   // 1) O CADASTRO: o PDV manda o codigo de barras (ou o codigo interno, quando nao ha EAN) com zeros a
-  //    esquerda. Compara so os digitos, sem os zeros, com codigo_interno e codigo_barras. So vale se
-  //    UM produto casar: produto em dobro na loja nao e decidido aqui.
-  const chave = identificadorExterno.replace(/\D/gu, "").replace(/^0+(?=\d)/u, "");
-  if (chave && chave !== "0") {
-    const digitos = (coluna: typeof produtos.codigoInterno | typeof produtos.codigoBarras) =>
-      sql`ltrim(regexp_replace(coalesce(${coluna}, ''), '[^0-9]', '', 'g'), '0')`;
+  //    esquerda. Compara sem os zeros (mesma regra da busca por codigo de barras do cadastro) com
+  //    codigo_interno e codigo_barras. So vale se UM produto casar: produto em dobro na loja nao e
+  //    decidido aqui.
+  const chave = /^\d+$/u.test(identificadorExterno.trim()) ? identificadorExterno.trim().replace(/^0+/u, "") : "";
+  if (chave) {
     const doCadastro = await db
       .select({ id: produtos.id })
       .from(produtos)
       .where(
         and(
           eq(produtos.empresaId, empresaId),
-          or(sql`${digitos(produtos.codigoInterno)} = ${chave}`, sql`${digitos(produtos.codigoBarras)} = ${chave}`)
+          or(
+            eq(codigoBarrasSemZerosIniciais(produtos.codigoInterno), chave),
+            eq(codigoBarrasSemZerosIniciais(produtos.codigoBarras), chave)
+          )
         )
       )
       .limit(2);
