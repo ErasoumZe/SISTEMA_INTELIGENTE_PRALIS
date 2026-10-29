@@ -1008,3 +1008,51 @@ Depois: teste em produção com as flags desligadas, e a virada pelo roteiro aci
 - o robô com `PRALIS_API_BASE` terminando em `/api`;
 - o cursor do TXT;
 - a carga refeita logo antes.
+
+### Carga da BASE e fase A em produção (29/10/2026)
+
+**Feito em produção, com OK do José em cada passo:**
+
+- **Backup do paralelo:** dava 500, porque buscava os produtos todos de uma vez. Corrigido no paralelo (PR #161, busca
+  em lotes de 25). O backup tem 14.613 produtos: BASE 7.415, TNP 7.197, LI 1.
+- **Limite de envio:** passou de 10 para 50 MB em planilhas e backups (PR #233). Foto e comprovante continuam com o
+  teto de cada rota. O leitor de XLSX aceita até 150 MB descompactados.
+- **Central:** o aviso falso "Valide as fontes…" depois de enviar o arquivo foi corrigido (PR #234).
+- **BASE importada:** 7.415 novos, sem ID nem código interno repetido e sem colisão com produto da loja.
+  - 2 EANs se repetem dentro da BASE e 46 produtos estão sem NCM; os dois vêm assim do paralelo.
+  - Só 2.374 estão ativos. 4.365 estão no grupo "MER INATIVOS" e 171 em "MER PATRIMONIO NÃO VENDAS".
+- **A venda do PDV acha o produto do cadastro (PR #236):**
+  - o código que o PDV manda é o EAN, ou o código interno quando não há EAN, com zeros à esquerda;
+  - a busca compara esse código, sem os zeros, com o código interno e o código de barras da loja;
+  - só aceita quando **um** produto casa;
+  - o vínculo da integração já salvo continua tendo prioridade.
+- **Fase A (PR #238):** "Ligar os produtos da loja à BASE" passou a usar o código do PDV quando o produto não tem
+  código interno.
+  - Ao ligar, o produto recebe da BASE o código interno, o código de barras e o nome do catálogo, só onde estavam vazios.
+  - Preço, grupo, fiscal, descrição e o código do PDV não mudam; o histórico de vendas fica no mesmo produto.
+  - **Resultado:** 1.182 de 1.324 produtos da Padaria Principal ligados.
+  - **Ficaram soltos:** 90 em dobro (45 itens, ex.: `12535` e `00000000012535`), 50 fora da BASE, 1 ambíguo e 1 sem código.
+
+**Decisões do José (29/10/2026):**
+
+- O paralelo é a fonte oficial. O produto que passa no caixa tem de ser o produto do cadastro, com o mesmo código
+  interno e o mesmo EAN.
+- Os produtos que a integração criou **não são apagados**. As vendas, o estoque, os pedidos e as compras apontam para
+  eles, e apagar exigiria reescrever o histórico. Eles viram os do paralelo pelo vínculo (fase A).
+- **"Criar automaticamente"** (Integrações → Dicionário → Regras automáticas → linha "produto") só será desligado
+  depois que a loja tiver os produtos do paralelo (fase B). A **chave** da aba Chaves nunca deve ser inativada: ela
+  corta a entrada de todas as vendas.
+- **Próxima implementação:** a venda baixa o estoque do produto vendido, e o produto passa a ter estoque mínimo e
+  máximo. Depende da venda apontar para o produto certo, que agora acontece.
+
+**Fase B (a planejar, com prévia e OK antes de gravar):**
+
+1. Criar na loja os grupos oficiais da planilha (aba GRUPOS/REF.).
+   - Hoje a loja tem 3 grupos de mercadoria e a BASE usa 62.
+   - Os nomes do paralelo trazem caracteres invisíveis (U+2060), que duplicam grupos.
+2. Criar as unidades que faltam: G, CX, FD, PCT, ML e LT.
+3. Completar o grupo e o fiscal dos 1.182 já ligados.
+4. Copiar para a loja os produtos **ativos** do paralelo que ainda faltam (cerca de 1.400).
+   - Copiar os 4.365 inativos ainda depende de decisão; a recomendação é não copiar.
+5. Resolver à mão os 90 em dobro e os 50 fora da BASE.
+6. Desligar "criar automaticamente".
