@@ -1,0 +1,131 @@
+/* A LINGUETA: presa na borda direita, no meio da altura, longe da barra de baixo do celular e dos botoes
+   de acao do topo. Fechada mostra so o simbolo; com o mouse em cima, o rotulo "Duvidas" desliza para fora.
+   44px de alvo (toque), mesmo com o visual estreito. */
+.duvidas-gatilho {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 1003;
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--cx-sp-2) var(--cx-sp-2) var(--cx-sp-2) 10px;
+  border: 1px solid var(--cx-line);
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  background: var(--cx-surface-raised);
+  color: var(--cx-ink);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--cx-ink) 14%, transparent);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    padding var(--cx-dur-2) var(--cx-ease-out),
+    background-color var(--cx-dur-2) var(--cx-ease);
+}
+.duvidas-gatilho img {
+  display: block;
+  flex: 0 0 auto;
+}
+.duvidas-gatilho__rotulo {
+  overflow: hidden;
+  max-width: 0;
+  font-size: var(--cx-fs-caption);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: max-width var(--cx-dur-3) var(--cx-ease-out);
+}
+.duvidas-gatilho:hover,
+.duvidas-gatilho:focus-visible {
+  padding-right: var(--cx-sp-3);
+  background: var(--cx-brand-wash);
+}
+.duvidas-gatilho:hover .duvidas-gatilho__rotulo,
+.duvidas-gatilho:focus-visible .duvidas-gatilho__rotulo {
+  max-width: 80px;
+}
+.duvidas-gatilho:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+.duvidas-gatilho--aberto {
+  visibility: hidden;
+}
+
+.duvidas :deep(.v-navigation-drawer__content) {
+  display: flex;
+  flex-direction: column;
+}
+.duvidas__topo {
+  display: flex;
+  gap: var(--cx-sp-3);
+  align-items: center;
+  padding: var(--cx-sp-4) var(--cx-sp-4) var(--cx-sp-3);
+}
+.duvidas__topo > div {
+  flex: 1;
+  min-width: 0;
+}
+.duvidas__topo h2 {
+  margin: 0;
+  font-size: var(--cx-fs-title);
+  line-height: 1.2;
+}
+.duvidas__topo p,
+.duvidas__contagem,
+.duvidas__rodape {
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+.duvidas__busca {
+  padding: 0 var(--cx-sp-4);
+}
+.duvidas__temas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-3) var(--cx-sp-4) 0;
+}
+.duvidas__contagem {
+  padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-1);
+}
+.duvidas__lista {
+  flex: 1;
+  padding: 0 var(--cx-sp-2);
+}
+.duvidas__pergunta {
+  display: grid;
+  gap: 2px;
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.duvidas__pergunta small {
+  color: var(--cx-brand-text);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.duvidas :deep(.v-expansion-panel-text__wrapper) {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-body);
+  line-height: 1.5;
+}
+.duvidas__vazio {
+  margin: var(--cx-sp-6) var(--cx-sp-4);
+  color: var(--cx-ink-soft);
+  text-align: center;
+}
+.duvidas__rodape {
+  padding: var(--cx-sp-3) var(--cx-sp-4) var(--cx-sp-4);
+  border-top: 1px solid var(--cx-line-soft);
+}
+
+@media (max-width: 600px) {
+  .duvidas.v-navigation-drawer {
+    width: 100% !important;
+  }
+}

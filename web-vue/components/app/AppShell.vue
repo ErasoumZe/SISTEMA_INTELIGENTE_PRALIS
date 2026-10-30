@@ -5,6 +5,7 @@ import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppSidebar from "~/components/app/AppSidebar.vue";
 import AppMobileBottomNav from "~/components/app/AppMobileBottomNav.vue";
+import AppDuvidas from "~/components/app/AppDuvidas.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
@@ -419,5 +420,6 @@ onMounted(() => {
       @abrir-saidas="emit('abrirSaidas')"
       @abrir-transferencias="emit('abrirTransferencias')"
     />
+    <AppDuvidas />
   </v-layout>
 </template>
