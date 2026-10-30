@@ -20,6 +20,9 @@ import {
   validarCargaCentral
 } from "./produtos-central.service.js";
 import { importarCatalogoBase, ImportacaoCatalogoBaseInvalidaError } from "./produtos-catalogo-base.service.js";
+import { aplicarLojaPeloBackup, previaLojaPeloBackup } from "./produtos-central-loja.service.js";
+import { VinculoBaseError } from "./produtos-vinculo-base.service.js";
+import { empresasPermitidas } from "../auth/empresa.js";
 
 const paramsCarga = z.object({ cargaId: z.string().uuid() });
 const paramsGrupo = z.object({ cargaId: z.string().uuid(), grupoId: z.string().uuid() });
@@ -27,6 +30,12 @@ const queryFonte = z.object({ fonte: z.enum(FONTES_CENTRAL) });
 const corpoDecisao = z.object({
   acao: z.enum(["nao_e_o_mesmo", "ignorado"]),
   observacao: z.string().trim().max(500).optional()
+});
+const queryEmpresa = z.object({ empresaId: z.string().uuid() });
+const corpoAplicarLoja = queryEmpresa.extend({
+  confirmacao: z.string().min(1).max(80),
+  hashPlano: z.string().regex(/^[a-f0-9]{64}$/u),
+  cursor: z.number().int().min(0).default(0)
 });
 const queryGrupos = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -59,7 +68,17 @@ function responderErroCentral(reply: FastifyReply, causa: DadosExternos) {
     return erro(reply, 409, causa.message, "BASE_IMPORT_CONFLICT");
   if (causa instanceof ErroBackupPralisCentral) return erro(reply, 400, causa.message, "PRALIS_BACKUP_INVALID");
   if (causa instanceof ErroFonteCentral) return erro(reply, 400, causa.message, causa.code);
+  if (causa instanceof VinculoBaseError) return erro(reply, causa.status, causa.message, causa.code);
   throw causa;
+}
+
+function atorDaVirada(perfil: NonNullable<FastifyRequest["perfilUsuario"]>) {
+  return {
+    administrador: perfil.role === "usuario_admin",
+    empresasPermitidas: empresasPermitidas(perfil),
+    usuarioId: perfil.usuarioId,
+    nome: perfil.nome
+  };
 }
 
 export async function registrarRotasProdutosCentral(app: FastifyInstance): Promise<void> {
@@ -197,6 +216,44 @@ export async function registrarRotasProdutosCentral(app: FastifyInstance): Promi
         usuarioId: perfil.usuarioId
       });
       return criadoId(reply, decisao.id, { acao: decisao.acao, criadoEm: decisao.criadoEm.toISOString() });
+    } catch (causa) {
+      return responderErroCentral(reply, causa);
+    }
+  });
+
+  // Fase B2 da virada: a loja passa a ter os produtos dela como estao no backup do paralelo.
+  app.get("/api/produtos/central/cargas/:cargaId/loja/previa", async (request, reply) => {
+    const perfil = await exigirAdmin(request, reply);
+    if (!perfil) return;
+    const { cargaId } = paramsCarga.parse(request.params);
+    const { empresaId } = queryEmpresa.parse(request.query);
+    try {
+      return ok(await previaLojaPeloBackup(cargaId, empresaId, atorDaVirada(perfil)));
+    } catch (causa) {
+      return responderErroCentral(reply, causa);
+    }
+  });
+
+  app.post("/api/produtos/central/cargas/:cargaId/loja/aplicar", async (request, reply) => {
+    const perfil = await exigirAdmin(request, reply);
+    if (!perfil) return;
+    const { cargaId } = paramsCarga.parse(request.params);
+    const { empresaId, ...entrada } = corpoAplicarLoja.parse(request.body);
+    try {
+      const resultado = await aplicarLojaPeloBackup(cargaId, empresaId, entrada, atorDaVirada(perfil));
+      request.log.info({
+        evento: "produtos.central.loja.aplicada",
+        cargaId,
+        empresaId,
+        usuarioId: perfil.usuarioId,
+        cursor: entrada.cursor,
+        processados: resultado.processados,
+        criados: resultado.criados,
+        atualizados: resultado.atualizados,
+        ignorados: resultado.ignorados,
+        falhas: resultado.falhas.length
+      });
+      return ok(resultado);
     } catch (causa) {
       return responderErroCentral(reply, causa);
     }
