@@ -4,7 +4,6 @@ import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import { formatarCampoDinheiro, numeroDoCampo } from "~/utils/campo-dinheiro";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
-import CaixaCorrecaoManual from "~/components/caixa/CaixaCorrecaoManual.vue";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 
 type Forma = "credito" | "debito" | "pix" | "voucher";
@@ -47,17 +46,6 @@ const enviando = ref(false),
   erro = ref(""),
   aviso = ref(""),
   salvo = ref(false);
-// O que a IA leu (ou o que foi salvo): base para saber se o operador mudou algum valor travado.
-const original = ref<Editavel | null>(null);
-const corrigindo = ref(false);
-const justificativa = ref("");
-const camposAlterados = computed(() => {
-  const lida = original.value;
-  if (!lida) return [];
-  return campos.filter(
-    ({ chave }) => travadoEm(lida, chave) && valorMonetario(leitura.value[chave]) !== valorMonetario(lida[chave])
-  );
-});
 // R-229 · caixa da tarde sem a manha do PDV fechada hoje: o relatorio e acumulado, entao salvar exige explicar.
 const semManha = ref(false);
 const justificativaSemManha = ref("");
@@ -65,14 +53,10 @@ const podeSalvar = computed(
   () =>
     Boolean(anexoId.value) &&
     campos.every(({ chave }) => valorMonetario(leitura.value[chave]) !== null) &&
-    (!camposAlterados.value.length || justificativa.value.trim().length >= 5) &&
     (!semManha.value || justificativaSemManha.value.trim().length >= 5)
 );
 function definirLeitura(nova: Editavel) {
   leitura.value = nova;
-  original.value = { ...nova };
-  corrigindo.value = false;
-  justificativa.value = "";
 }
 // "947,05", "2.552,61" (digitado) e "947.05" (payload) valem; vazio, lixo ou negativo nao.
 function valorMonetario(valor: unknown) {
@@ -83,12 +67,11 @@ function valorMonetario(valor: unknown) {
 function textoMonetario(valor: unknown) {
   return typeof valor === "number" && Number.isFinite(valor) ? formatarCampoDinheiro(valor) : "";
 }
-// Valor lido pela IA fica travado; so o que ela nao leu (ou marcou como duvidoso) e digitado.
-function travadoEm(dados: Editavel, chave: Forma) {
-  return dados.documentoLegivel && Boolean(dados[chave].trim()) && !dados.camposDuvidosos.includes(chave);
-}
+// Valor lido pela IA fica travado e NAO se corrige (Marco, 29/10): so o que ela nao leu (ou marcou como duvidoso)
+// e digitado. Se a IA nao leu nada, o operador digita tudo.
 function travado(chave: Forma) {
-  return !corrigindo.value && travadoEm(leitura.value, chave);
+  const dados = leitura.value;
+  return dados.documentoLegivel && Boolean(dados[chave].trim()) && !dados.camposDuvidosos.includes(chave);
 }
 function novaLeitura(valor: unknown): Editavel {
   const dados = valor && typeof valor === "object" ? (valor as Record<string, unknown>) : {};
@@ -115,10 +98,8 @@ function novaLeitura(valor: unknown): Editavel {
 function leituraParaApi(): Leitura {
   return {
     ...leitura.value,
-    // Mudou valor lido pela IA: grava quais campos e por que; senao mantem a correcao ja registrada.
-    correcaoManual: camposAlterados.value.length
-      ? { justificativa: justificativa.value.trim(), campos: camposAlterados.value.map(({ titulo }) => titulo) }
-      : leitura.value.correcaoManual,
+    // Sem correcao manual na maquininha; uma correcao antiga (de antes da regra) continua registrada.
+    correcaoManual: leitura.value.correcaoManual,
     credito: valorMonetario(leitura.value.credito),
     debito: valorMonetario(leitura.value.debito),
     pix: valorMonetario(leitura.value.pix),
@@ -330,13 +311,6 @@ watch(
                 :data-teste="`maquininha-campo-${campo.chave}`"
               />
             </div>
-            <CaixaCorrecaoManual
-              v-model:corrigindo="corrigindo"
-              v-model:justificativa="justificativa"
-              :tem-travados="campos.some(({ chave }) => travadoEm(leitura, chave))"
-              :alterados="camposAlterados.map(({ titulo }) => titulo)"
-              :salva="leitura.correcaoManual"
-            />
             <section class="maquininha__liquidos">
               <h4>{{ etapa === "manha" ? "Total da manhã" : "Líquido da tarde" }}</h4>
               <div>

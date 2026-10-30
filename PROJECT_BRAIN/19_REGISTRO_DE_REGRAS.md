@@ -1506,6 +1506,27 @@ não tem lacre de abertura, de fechamento nem de sangria.
   outra.
 - Sem migration: gravada como `suprimento` com `n_lacre_doc` nulo e `caixa_id` do PDV.
 
+### R-232 — Fechamento do caixa reorganizado: contagem cega primeiro, relatório final auditável (Marco, 29/10/2026)
+
+Conversa do Marco com o tesoureiro. Entregas em ordem: Maquininha → Vendas → Relatório final → Tesouraria; a
+sangria (sem passar por Transferências, só no relatório de fechamento) fica por último.
+
+- **Sai a etapa "Resumo"**. Ao entrar em Vendas, um popup rápido confirma o gerente responsável (é o mesmo? confirma;
+  não é? digita o nome) e segue direto.
+- **Vendas, nesta ordem**: 1) **contagem física** (cédulas + moedas) digitada **sem ver o esperado** — a operadora não
+  pode saber se sobra ou falta antes de contar (sobra iria para o bolso; falta seria coberta ou viraria venda falsa); 2) a **folha** CREARE (editar só com justificativa, como hoje); 3) **gerar o relatório de vendas** comparando os 3
+  (físico × folha × sistema). "Ajustar início" continua para quando o horário da folha não bate com a abertura/
+  fechamento. A contagem **trava ao gerar o relatório**; corrigir exige justificativa, e valor original, corrigido e
+  motivo vão para a Tesouraria. A contagem sai da última etapa.
+- **Maquininha**: sem "Corrigir manualmente". O que a IA leu fica travado; o que ela não leu é digitado.
+  (A trava hoje é só na tela; travar no servidor exige guardar a leitura da IA — migration, a decidir.)
+- **Relatório final**: organizado por categoria, responsivo, com textos de diferença claros. **Voltar para uma etapa
+  anterior exige justificativa**, que vai para o relatório de fechamento da Tesouraria. Observação por áudio ou texto.
+  **PDV desligado**: pergunta obrigatória "O computador do PDV desligou neste turno?"; se sim e não foi registrado pelo
+  botão, horário aproximado + justificativas prontas + áudio/texto; se foi registrado, mostra o registro.
+- **Fechamento (última etapa)**: folha do malote + lacre de fechamento + observação nova (se houver).
+- Tudo isso aparece completo no **relatório de fechamento da Tesouraria**.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

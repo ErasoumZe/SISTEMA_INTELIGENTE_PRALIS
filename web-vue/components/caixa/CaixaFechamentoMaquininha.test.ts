@@ -103,7 +103,8 @@ describe("CaixaFechamentoMaquininha · leitura salva", () => {
     expect(voucher.attributes("readonly")).toBeUndefined();
   });
 
-  it("corrigir manualmente: destrava, exige justificativa se mudar e envia os campos alterados", async () => {
+  // Marco, 29/10: o que a IA leu nao se corrige mais (sem "Corrigir manualmente"); so o que ela nao leu e digitado.
+  it("valor lido pela IA fica travado e não há como corrigir", async () => {
     apiGet.mockResolvedValue({
       etapaDia: "manha",
       leituraReferencia: null,
@@ -114,26 +115,13 @@ describe("CaixaFechamentoMaquininha · leitura salva", () => {
         }
       }
     });
-    const apiPut = vi.fn().mockResolvedValue({});
-    vi.stubGlobal("useApi", () => ({ apiUrl: "", apiGet, apiPost, apiPut }));
     const wrapper = montar();
     await flushPromises();
-    await wrapper.get('[data-teste="botao-corrigir-manualmente"]').trigger("click");
-    const credito = wrapper.get('[data-teste="maquininha-campo-credito"]');
-    expect(credito.attributes("readonly")).toBeUndefined();
-    await credito.setValue("947,50");
-    const salvar = wrapper.findAll("button").find((botao) => botao.text().includes("Salvar leitura"))!;
-    expect(salvar.attributes("disabled")).toBeDefined();
-    await wrapper.get('[data-teste="justificativa-correcao"]').setValue("IA leu 947,05 mas o cupom mostra 947,50");
-    expect(salvar.attributes("disabled")).toBeUndefined();
-    await salvar.trigger("click");
-    await flushPromises();
-    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({
-      leituraAcumulada: {
-        credito: 947.5,
-        correcaoManual: { justificativa: "IA leu 947,05 mas o cupom mostra 947,50", campos: ["Crédito"] }
-      }
-    });
+    for (const forma of ["credito", "debito", "pix", "voucher"]) {
+      expect(wrapper.get(`[data-teste="maquininha-campo-${forma}"]`).attributes("readonly")).toBeDefined();
+    }
+    expect(wrapper.find('[data-teste="botao-corrigir-manualmente"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Corrigir manualmente");
   });
 });
 
