@@ -133,7 +133,8 @@ export async function criarProdutoDeEstoque(contexto: ContextoCompras, produto: 
       estoqueMax: produto.estoqueMax,
       setorEstoque: produto.setorEstoque
     },
-    { areaEstoque: produto.areaEstoque ?? null, curvaAbc: produto.curvaAbc ?? null },
+    // Doc 59: produto de estoque dos testes de Compras e pedido, entao nasce liberado para compra.
+    { areaEstoque: produto.areaEstoque ?? null, curvaAbc: produto.curvaAbc ?? null, liberadoCompra: true },
     contexto.empresaId
   );
   return produtoId;
