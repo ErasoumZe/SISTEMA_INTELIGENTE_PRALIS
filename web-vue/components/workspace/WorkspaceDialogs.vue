@@ -296,6 +296,15 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
             />
           </v-col>
           <v-col v-if="cadastroTela === 'fornecedores'" cols="12" md="6">
+            <v-text-field
+              v-model="formCadastro.categoria"
+              label="Categoria"
+              maxlength="80"
+              hint="Ex.: Bebidas, Laticínios, Embalagens."
+              persistent-hint
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'fornecedores'" cols="12" md="6">
             <v-switch
               v-model="formCadastro.ativo"
               color="primary"

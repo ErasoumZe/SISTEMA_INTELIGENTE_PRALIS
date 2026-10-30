@@ -39,6 +39,8 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   const tipo = ref<string | null>(null);
   const grupoMercadoriaId = ref<string | null>(null);
   const setorEstoque = ref<string | null>(null);
+  // Doc 59: liberados, nao liberados ou pendentes (liberado com o cadastro de compra incompleto).
+  const compra = ref<string | null>(null);
   const ordenar = ref<OrdenacaoProdutos>("recentes");
 
   const paginacao = reactive<PaginacaoDaLista>({ page: 1, pageSize: 12, total: 0, totalPages: 1 });
@@ -51,6 +53,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
         tipo.value,
         grupoMercadoriaId.value,
         setorEstoque.value,
+        compra.value,
         somenteVendidos.value
       ].filter(Boolean).length + (ordenar.value === "recentes" ? 0 : 1)
   );
@@ -62,6 +65,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     tipo.value = null;
     grupoMercadoriaId.value = null;
     setorEstoque.value = null;
+    compra.value = null;
     ordenar.value = "recentes";
     busca.value = "";
   }
@@ -79,6 +83,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     if (tipo.value) parametros.set("tipo", tipo.value);
     if (grupoMercadoriaId.value) parametros.set("grupoMercadoriaId", grupoMercadoriaId.value);
     if (setorEstoque.value) parametros.set("setorEstoque", setorEstoque.value);
+    if (compra.value) parametros.set("compra", compra.value);
     return parametros.toString();
   }
 
@@ -126,7 +131,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
       void carregar();
     }, ATRASO_DA_BUSCA);
   });
-  watch([status, somenteVendidos, tipo, grupoMercadoriaId, setorEstoque, ordenar], () => {
+  watch([status, somenteVendidos, tipo, grupoMercadoriaId, setorEstoque, compra, ordenar], () => {
     paginacao.page = 1;
     void carregar();
   });
@@ -154,6 +159,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     tipo,
     grupoMercadoriaId,
     setorEstoque,
+    compra,
     ordenar,
     paginacao,
     quantidadeDeFiltros,

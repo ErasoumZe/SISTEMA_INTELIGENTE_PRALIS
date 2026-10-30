@@ -185,6 +185,7 @@ onMounted(async () => {
             v-model:tipo="lista.tipo.value"
             v-model:grupo="lista.grupoMercadoriaId.value"
             v-model:setor="lista.setorEstoque.value"
+            v-model:compra="lista.compra.value"
             v-model:ordenar="lista.ordenar.value"
             :opcoes="lista.opcoesDeFiltro.value"
             :tem-filtro-ou-busca="lista.temFiltroOuBusca.value"

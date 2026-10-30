@@ -230,6 +230,7 @@ onBeforeUnmount(() => window.removeEventListener("beforeunload", avisarAoSair));
           :foto-pendente="formulario.fotoPendente.value"
           :ean-repetido="formulario.eanRepetido.value"
           :dica="dicaDoProduto"
+          :na-base="modo === 'base'"
           @foto-escolher="formulario.fotoPendente.value = $event"
           @foto-remover="removerFoto"
         />

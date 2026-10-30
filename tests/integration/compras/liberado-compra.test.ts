@@ -90,24 +90,32 @@ describe("produto liberado para compra e categoria do fornecedor (doc 59)", () =
     expect(opcoes).not.toContain(naoLiberado);
   });
 
-  it("regravar o produto sem o campo nao desliga a liberacao", async () => {
-    const detalhe = json<{ data: Record<string, unknown> }>(await pedir("GET", `/api/produtos/${completo}`)).data;
+  it("regravar o produto sem o campo nao desliga a liberacao; o formulario desliga", async () => {
+    const detalhe = json<{ data: { liberadoCompra: boolean } }>(await pedir("GET", `/api/produtos/${pendente}`)).data;
     expect(detalhe.liberadoCompra).toBe(true);
-    const marcado = await pedir("PUT", `/api/produtos/${pendente}`, {
+    const payload = {
       empresaId: idsTeste.empresaA,
       descricao: "Doc59 D59-PEND",
       codigo: "D59-PEND",
       grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
       unidadeIndividualId: idsTeste.unidade,
-      quantidadeIndividual: 1,
-      liberadoCompra: false
-    });
-    expect(marcado.statusCode, marcado.body).toBe(204);
-    const linha = await consultarUm<{ liberado: boolean }>(
-      "select liberado_compra as liberado from produtos where id = $1",
-      [pendente]
-    );
-    expect(linha?.liberado).toBe(false);
+      quantidadeIndividual: 1
+    };
+    const liberado = async () =>
+      (
+        await consultarUm<{ liberado: boolean }>("select liberado_compra as liberado from produtos where id = $1", [
+          pendente
+        ])
+      )?.liberado;
+
+    // Como a copia da BASE e a fase B2 regravam: sem o campo, a liberacao fica.
+    const semCampo = await pedir("PUT", `/api/produtos/${pendente}`, payload);
+    expect(semCampo.statusCode, semCampo.body).toBe(204);
+    expect(await liberado()).toBe(true);
+
+    const desligado = await pedir("PUT", `/api/produtos/${pendente}`, { ...payload, liberadoCompra: false });
+    expect(desligado.statusCode, desligado.body).toBe(204);
+    expect(await liberado()).toBe(false);
   });
 
   it("salva a categoria do fornecedor e nao a perde quando ela nao vem", async () => {

@@ -93,6 +93,7 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
         nome: form.nome,
         documento: form.documento || undefined,
         whatsapp: form.whatsapp || undefined,
+        categoria: form.categoria || null,
         // A situacao entra no cache para a proxima abertura nao perder o inativo (fio de edicao).
         situacao: form.ativo ? "ativo" : "inativo"
       });
