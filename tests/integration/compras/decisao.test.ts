@@ -39,7 +39,7 @@ describe("fila de decisao e excecao integration (E6)", () => {
       [FORN_A, idsTeste.empresaA, FORN_B]
     );
     await executarSql(
-      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao) values ($1,$2,$3,$4,'PROD-DEC-2','Produto sem base') on conflict (id) do nothing",
+      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, liberado_compra) values ($1,$2,$3,$4,'PROD-DEC-2','Produto sem base', true) on conflict (id) do nothing",
       [PRODUTO_2, idsTeste.empresaA, idsTeste.grupoMercadoriaInsumos, idsTeste.unidade]
     );
     await executarSql(

@@ -145,7 +145,7 @@ describe("fundacao do novo Compras integration", () => {
     ]);
     // Segundo produto com a MESMA descricao: e o que cria ambiguidade real de dois candidatos.
     await executarSql(
-      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao) values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing",
+      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, liberado_compra) values ($1, $2, $3, $4, $5, $6, true) on conflict (id) do nothing",
       [
         PRODUTO_GEMEO,
         idsTeste.empresaA,
@@ -440,7 +440,7 @@ describe("fundacao do novo Compras integration", () => {
       idsTeste.produto
     ]);
     await executarSql(
-      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, status) values ($1, $2, $3, $4, $5, $6, 'inativo') on conflict (id) do nothing",
+      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, status, liberado_compra) values ($1, $2, $3, $4, $5, $6, 'inativo', true) on conflict (id) do nothing",
       [
         PRODUTO_GEMEO,
         idsTeste.empresaA,
