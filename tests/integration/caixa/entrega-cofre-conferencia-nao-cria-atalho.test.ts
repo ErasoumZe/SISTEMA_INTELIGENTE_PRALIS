@@ -174,7 +174,11 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
   it("Deve_PermitirAConferencia_Quando_ElaEhDaEntregaCanonicaAoCofre", async () => {
     const fx = await novoCaixa("P1 conferencia canonica");
     await venda(500);
-    const entrega = await criarRetornoValido(contexto.app, { cookieOperador: cookieCaixa, caixaId: fx.caixaId, valor: 200 });
+    const entrega = await criarRetornoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: fx.caixaId,
+      valor: 200
+    });
     const movimento = await consultarUm<{ id: string }>(
       "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [fx.caixaId]

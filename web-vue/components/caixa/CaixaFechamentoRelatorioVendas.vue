@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { VendaCanceladaCaixa } from "@padaria/shared";
+import type { ContagemFisicaRelatorio, VendaCanceladaCaixa } from "@padaria/shared";
+import CaixaContagemFisica from "~/components/caixa/CaixaContagemFisica.vue";
+import { useContagemFisicaVendas } from "~/composables/useContagemFisicaVendas";
 import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/utils/caixa-fechamento";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
@@ -14,6 +16,9 @@ import { useLeituraFolhaCreare } from "~/composables/useLeituraFolhaCreare";
 
 type DadosRelatorioVendas = {
   versao?: number;
+  // R-232 · contagem cega gravada com o relatorio. `invalidado`: folha trocada/inicio ajustado — so a contagem ficou.
+  invalidado?: boolean;
+  contagemFisica?: ContagemFisicaRelatorio;
   vendas: TotaisRelatorioVendas;
   canceladas: VendaCanceladaCaixa[];
   // A comparacao da folha com o Pralis e mostrada no Relatorio final; aqui so volta a leitura revisada.
@@ -28,7 +33,10 @@ type RelatorioGerado = {
 type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
 // `aberturaOficial`/`inicioVendas`: opcionais para nao quebrar quem ainda nao passa (o ajuste so aparece com eles).
 const props = defineProps<{ caixaId: string; aberturaOficial?: string; inicioVendas?: string }>();
-const emit = defineEmits<{ (event: "inicioAjustado"): void }>();
+const emit = defineEmits<{
+  (event: "inicioAjustado"): void;
+  (event: "contagem", contagem: ContagemFisicaRelatorio | null): void;
+}>();
 const { apiUrl, apiGet, apiPost } = useApi();
 const cameraCreare = useTemplateRef<HTMLInputElement>("cameraCreare");
 const { aberta: cameraAberta, abrir: abrirCamera, aoCapturar, aoIndisponivel } = useCapturaCamera(cameraCreare);
@@ -45,6 +53,14 @@ const anexoCreareEnviado = ref(false);
 const enviandoCreare = ref(false);
 const anexoCreareId = ref("");
 let consultaAtual = 0;
+// R-232 · contagem cega (passo 1): trava ao gerar; corrigir pede justificativa.
+const {
+  contagem,
+  registrada: contagemRegistrada,
+  pronta: contagemPronta,
+  registrar: registrarContagem,
+  paraEnvio: contagemParaEnvio
+} = useContagemFisicaVendas((registrada) => emit("contagem", registrada));
 const {
   leitura: leituraCreare,
   sugestao: sugestaoCreare,
@@ -78,6 +94,12 @@ const inicioFolha = computed(() =>
 );
 
 function aplicarRelatorio(relatorio: RelatorioGerado) {
+  registrarContagem(relatorio.dados.contagemFisica ?? null);
+  // Relatorio invalidado: so a contagem continua valendo; o relatorio precisa ser gerado de novo.
+  if (relatorio.dados.invalidado) {
+    limparRelatorio();
+    return;
+  }
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
   canceladas.value = relatorio.dados.canceladas;
@@ -146,7 +168,8 @@ async function gerarRelatorio() {
       anexoCreareId.value
         ? {
             anexoId: anexoCreareId.value,
-            leituraCreare: paraEnvio()
+            leituraCreare: paraEnvio(),
+            ...contagemParaEnvio()
           }
         : {}
     );
@@ -205,17 +228,22 @@ watch(
   <section class="relatorio-vendas" aria-labelledby="vendas-turno-titulo">
     <div class="relatorio-vendas__cabecalho">
       <div>
-        <span class="relatorio-vendas__sobretitulo">Etapa 2 · vendas</span>
+        <span class="relatorio-vendas__sobretitulo">Etapa 1 · vendas</span>
         <h3 id="vendas-turno-titulo">Vendas do turno</h3>
-        <p>Consolide os pagamentos e as vendas canceladas deste caixa.</p>
+        <p>
+          Digite o dinheiro do fechamento da gaveta, anexe a folha do CREARE e gere o relatório de vendas do sistema.
+        </p>
       </div>
     </div>
 
     <v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert>
 
+    <!-- R-232 · 1) dinheiro do malote digitado, 2) folha do CREARE, 3) relatorio de vendas do sistema x folha. -->
+    <CaixaContagemFisica v-model="contagem" :registrada="contagemRegistrada" />
+
     <section class="relatorio-vendas__anexo mt-4" aria-label="Relatório de vendas do CREARE">
       <div>
-        <strong>Relatório de vendas do CREARE</strong>
+        <strong><span class="relatorio-vendas__passo">2</span> Folha de vendas do CREARE</strong>
         <p>Anexe a folha do turno. Ela é separada da folha de fechamento do malote.</p>
       </div>
       <div>
@@ -282,11 +310,18 @@ watch(
       color="primary"
       prepend-icon="mdi-file-chart-outline"
       :loading="carregando"
-      :disabled="!anexoCreareEnviado || enviandoCreare || !leituraPronta || faltaJustificativa"
+      :disabled="!anexoCreareEnviado || enviandoCreare || !leituraPronta || faltaJustificativa || !contagemPronta"
       data-teste="gerar-relatorio-vendas"
       @click="gerarRelatorio"
-      >Gerar relatório de vendas</v-btn
+      ><span class="relatorio-vendas__passo relatorio-vendas__passo--botao">3</span> Gerar relatório de vendas</v-btn
     >
+    <p v-if="!contagemPronta" class="relatorio-vendas__lendo mt-2" role="status">
+      {{
+        contagem.corrigindo
+          ? "Explique por que a contagem mudou para gerar de novo."
+          : "Informe cédulas e moedas no passo 1 para gerar o relatório."
+      }}
+    </p>
 
     <template v-if="gerado && totais">
       <v-alert type="success" variant="tonal" density="comfortable" class="mt-4">
@@ -307,89 +342,4 @@ watch(
   </section>
 </template>
 
-<style scoped>
-.relatorio-vendas {
-  padding: clamp(16px, 3vw, 28px);
-  border: 1px solid var(--cx-line);
-  border-radius: 16px;
-  background: var(--cx-surface);
-}
-.relatorio-vendas__cabecalho {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.relatorio-vendas__sobretitulo {
-  color: var(--cat-entradas-tinta);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.relatorio-vendas h3,
-.relatorio-vendas h4 {
-  margin: 0;
-}
-.relatorio-vendas__cabecalho p {
-  margin: 6px 0 0;
-  color: var(--cx-ink-soft);
-}
-.relatorio-vendas__lendo {
-  margin: 0;
-  color: var(--cx-ink-soft);
-}
-.relatorio-vendas__gerar {
-  background: var(--cat-entradas-base) !important;
-  color: var(--cx-canvas) !important;
-}
-.relatorio-vendas__anexo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 14px;
-  border: 1px solid var(--cx-line);
-  border-radius: 12px;
-  background: var(--cx-surface-sunken);
-}
-.relatorio-vendas__anexo p {
-  margin: 4px 0 0;
-}
-.relatorio-vendas__anexo > div:last-of-type {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.relatorio-vendas__anexo small {
-  grid-column: 1 / -1;
-}
-@media (max-width: 720px) {
-  .relatorio-vendas__cabecalho {
-    flex-direction: column;
-  }
-  .relatorio-vendas__anexo {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 420px) {
-  .relatorio-vendas__cabecalho :deep(.v-btn) {
-    width: 100%;
-    min-height: 48px;
-  }
-  .relatorio-vendas__anexo :deep(.v-btn) {
-    width: 100%;
-    min-height: 48px;
-  }
-}
-@media (max-width: 600px) {
-  .relatorio-vendas__gerar {
-    width: 100%;
-    min-height: 48px;
-  }
-  .relatorio-vendas__anexo :deep(.v-btn) {
-    width: 100%;
-    min-height: 48px;
-  }
-}
-</style>
+<style src="./CaixaFechamentoRelatorioVendas.css" scoped></style>

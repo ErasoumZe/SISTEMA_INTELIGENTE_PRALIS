@@ -210,7 +210,7 @@ watch(
   <section class="maquininha" aria-labelledby="maquininha-titulo">
     <header class="maquininha__cabecalho">
       <div>
-        <span>Etapa 3 · maquininha</span>
+        <span>Etapa 2 · maquininha</span>
         <h3 id="maquininha-titulo">Relatórios da maquininha</h3>
         <p>Abra o turno atual para registrar a foto. Os dois turnos ficam no mesmo lugar para conferência.</p>
       </div>

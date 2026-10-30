@@ -284,14 +284,68 @@ export async function abrirCaixaDoOperador(
   return { caixaId, contaId, pdvId, usuarioId: usuario.id, lacreRetorno, lacreFechamento };
 }
 
+const LEITURA_CREARE_ZERADA = {
+  documentoLegivel: true,
+  trocoInicial: 0,
+  credito: 0,
+  debito: 0,
+  dinheiro: 0,
+  pix: 0,
+  voucher: 0,
+  total: 0,
+  despesas: 0,
+  sangria: 0
+};
+
 /**
- * Leva um caixa aberto ate a ultima etapa antes da contagem/fechamento, usando as mesmas rotas
- * publicas da operacao: inicia o fechamento, anexa a folha e os dois comprovantes, gera CREARE e
- * salva a leitura completa da maquininha. Nao fecha o caixa nem escolhe a contagem fisica.
+ * R-232 · registra (ou corrige) a contagem fisica cega, como a operadora faz em Vendas: gera de novo o relatorio de
+ * vendas com a contagem. Corrigir uma contagem ja gravada exige justificativa (a fixture manda uma). Devolve o
+ * fisico esperado pelo sistema naquele instante.
+ */
+export async function registrarContagemFisica(
+  app: FastifyInstance,
+  entrada: {
+    cookieOperador: string;
+    caixaId: string;
+    valorEspecie: number;
+    valorMoedas?: number;
+    anexoCreareId?: string;
+  }
+) {
+  let anexoId = entrada.anexoCreareId;
+  if (!anexoId) {
+    const atual = await app.inject({
+      method: "GET",
+      url: `/api/caixa/${entrada.caixaId}/relatorio-vendas`,
+      headers: { cookie: entrada.cookieOperador }
+    });
+    expect(atual.statusCode, atual.body).toBe(200);
+    anexoId = json<{ data: { dados: { creare: { anexoId: string } } } }>(atual).data.dados.creare.anexoId;
+  }
+  const resposta = await app.inject({
+    method: "POST",
+    url: `/api/caixa/${entrada.caixaId}/relatorio-vendas`,
+    headers: { cookie: entrada.cookieOperador },
+    payload: {
+      anexoId,
+      leituraCreare: LEITURA_CREARE_ZERADA,
+      contagemFisica: { valorEspecie: entrada.valorEspecie, valorMoedas: entrada.valorMoedas ?? 0 },
+      justificativaContagem: "Recontagem registrada pela fixture de teste"
+    }
+  });
+  expect(resposta.statusCode, resposta.body).toBe(200);
+  return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica
+    .esperado;
+}
+
+/**
+ * Leva um caixa aberto ate a ultima etapa antes do fechamento, usando as mesmas rotas
+ * publicas da operacao: inicia o fechamento, anexa a folha e os dois comprovantes, gera CREARE (com a contagem
+ * fisica, R-232) e salva a leitura completa da maquininha. Nao fecha o caixa. Sem `contagem`, registra zero.
  */
 export async function prepararFechamentoValido(
   app: FastifyInstance,
-  entrada: { cookieOperador: string; caixaId: string }
+  entrada: { cookieOperador: string; caixaId: string; contagem?: { valorEspecie: number; valorMoedas?: number } }
 ) {
   const inicio = await app.inject({
     method: "POST",
@@ -322,21 +376,16 @@ export async function prepararFechamentoValido(
     headers: { cookie: entrada.cookieOperador },
     payload: {
       anexoId: anexoCreareId,
-      leituraCreare: {
-        documentoLegivel: true,
-        trocoInicial: 0,
-        credito: 0,
-        debito: 0,
-        dinheiro: 0,
-        pix: 0,
-        voucher: 0,
-        total: 0,
-        despesas: 0,
-        sangria: 0
+      leituraCreare: LEITURA_CREARE_ZERADA,
+      contagemFisica: {
+        valorEspecie: entrada.contagem?.valorEspecie ?? 0,
+        valorMoedas: entrada.contagem?.valorMoedas ?? 0
       }
     }
   });
   expect(relatorioVendas.statusCode, relatorioVendas.body).toBe(200);
+  const esperado = json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(relatorioVendas).data.dados
+    .contagemFisica.esperado;
 
   const leitura = {
     documentoLegivel: true,
@@ -358,7 +407,7 @@ export async function prepararFechamentoValido(
     payload: { anexoId: anexoMaquininhaId, leituraAcumulada: leitura }
   });
   expect(relatorioMaquininha.statusCode, relatorioMaquininha.body).toBe(200);
-  return { folhaId, anexoMaquininhaId, anexoCreareId };
+  return { folhaId, anexoMaquininhaId, anexoCreareId, esperado };
 }
 
 /**
@@ -385,11 +434,7 @@ export async function prepararPayloadFechamentoValido(
   });
   expect(status.statusCode, status.body).toBe(200);
   const dadosStatus = json<{
-    data: {
-      caixaAberto: { id: string } | null;
-      resumo: { saldo: number } | null;
-      lacreFechamentoReservado: string | null;
-    };
+    data: { caixaAberto: { id: string } | null; lacreFechamentoReservado: string | null };
   }>(status).data;
   if (dadosStatus.caixaAberto?.id !== entrada.caixaId) {
     throw new Error(`Fixture de fechamento esperava o caixa ${entrada.caixaId} aberto para o operador`);
@@ -397,20 +442,22 @@ export async function prepararPayloadFechamentoValido(
   if (!dadosStatus.lacreFechamentoReservado) {
     throw new Error("Fixture de fechamento sem lacre reservado pelo malote de abertura");
   }
-  const saldo = dadosStatus.resumo?.saldo;
-  if (typeof saldo !== "number" || !Number.isFinite(saldo) || saldo < 0) {
+
+  // R-232 · a contagem fica no relatorio de vendas. A fixture representa o fisico real: conta o que o sistema
+  // espera (o operador nao ve o saldo; a fixture le o esperado devolvido pelo proprio relatorio e recorrige).
+  const { anexoCreareId, esperado } = await prepararFechamentoValido(app, entrada);
+  if (!Number.isFinite(esperado) || esperado < 0) {
     throw new Error(
       "Fixture de fechamento recebeu saldo fisico invalido; o cenario deve corrigir a saida antes de fechar"
     );
   }
-
-  await prepararFechamentoValido(app, entrada);
+  if (esperado !== 0) {
+    await registrarContagemFisica(app, { ...entrada, valorEspecie: esperado, valorMoedas: 0, anexoCreareId });
+  }
   return {
     lacreFechamento: dadosStatus.lacreFechamentoReservado,
     caixaResponsavelNome: entrada.caixaResponsavelNome ?? "Operador de teste",
     supervisorResponsavelNome: entrada.supervisorResponsavelNome ?? "Supervisor de teste",
-    valorEspecieFechamento: saldo,
-    valorMoedasFechamento: 0,
     observacao: entrada.observacao ?? "Fechamento fisico da fixture"
   };
 }

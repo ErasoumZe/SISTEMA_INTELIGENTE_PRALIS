@@ -104,7 +104,7 @@ watch(
     aria-labelledby="movimentacoes-fechamento-titulo"
     data-teste="fechamento-movimentacoes"
   >
-    <span class="fechamento-movimentacoes__sobretitulo">Etapa 4 · relatório final</span>
+    <span class="fechamento-movimentacoes__sobretitulo">Etapa 3 · relatório final</span>
     <h3 id="movimentacoes-fechamento-titulo">Relatório final do turno</h3>
     <p class="text-body-2 text-medium-emphasis">Vendas, maquininha e movimentos registrados neste caixa.</p>
 

@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, prepararPayloadFechamentoValido } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  encerrarCaixaSeedAdminParaTeste,
+  prepararPayloadFechamentoValido
+} from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
@@ -244,7 +248,10 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     if (!caixaDoCenarioCompleto) throw new Error("Caixa do cenario completo nao foi criado");
     const fechamento = await post(
       `/api/caixa/${caixaDoCenarioCompleto}/fechar`,
-      await prepararPayloadFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId: caixaDoCenarioCompleto })
+      await prepararPayloadFechamentoValido(contexto.app, {
+        cookieOperador: cookieAdmin,
+        caixaId: caixaDoCenarioCompleto
+      })
     );
     expect(fechamento.statusCode, fechamento.body).toBe(204);
     caixaDoCenarioCompleto = null;

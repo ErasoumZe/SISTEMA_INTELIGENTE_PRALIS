@@ -2193,10 +2193,23 @@ export async function invalidarRelatorioMaquininhaFechamentoRepository(
     );
 }
 
+// R-232 · relatorio invalidado (folha trocada, inicio ajustado) nao e apagado: guarda so a contagem fisica cega, para
+// ela continuar travada. Para fechar o caixa e para a Tesouraria ele nao existe; a tela de Vendas e a nova geracao o
+// leem (`incluirInvalidado`) para mostrar e manter a contagem.
+function relatorioInvalidado(dados: DadosExternos) {
+  return Boolean(
+    dados &&
+    typeof dados === "object" &&
+    !Array.isArray(dados) &&
+    (dados as Record<string, DadosExternos>)["invalidado"] === true
+  );
+}
+
 export async function buscarRelatorioVendasFechamentoRepository(
   fechamentoCaixaId: string,
   empresaId: string,
-  db: ExecutorBanco = banco
+  db: ExecutorBanco = banco,
+  opcoes: { incluirInvalidado?: boolean } = {}
 ) {
   const [relatorio] = await db
     .select({
@@ -2213,7 +2226,8 @@ export async function buscarRelatorioVendasFechamentoRepository(
       )
     )
     .limit(1);
-  return relatorio ?? null;
+  if (!relatorio) return null;
+  return !opcoes.incluirInvalidado && relatorioInvalidado(relatorio.dados) ? null : relatorio;
 }
 
 export async function salvarRelatorioVendasFechamentoRepository(
@@ -2255,14 +2269,28 @@ export async function invalidarRelatorioVendasFechamentoRepository(
   empresaId: string,
   db: ExecutorBanco = banco
 ) {
+  const doCaixa = and(
+    eq(fechamentosCaixaRelatoriosVendas.fechamentoCaixaId, fechamentoCaixaId),
+    eq(fechamentosCaixaRelatoriosVendas.empresaId, empresaId)
+  );
+  const [atual] = await db
+    .select({ dados: fechamentosCaixaRelatoriosVendas.dados })
+    .from(fechamentosCaixaRelatoriosVendas)
+    .where(doCaixa)
+    .limit(1);
+  const contagemFisica =
+    atual?.dados && typeof atual.dados === "object" && !Array.isArray(atual.dados)
+      ? (atual.dados as Record<string, DadosExternos>)["contagemFisica"]
+      : undefined;
+  // Sem contagem (relatorio anterior a R-232): apaga como sempre. Com contagem: preserva so ela, travada.
+  if (!contagemFisica) {
+    await db.delete(fechamentosCaixaRelatoriosVendas).where(doCaixa);
+    return;
+  }
   await db
-    .delete(fechamentosCaixaRelatoriosVendas)
-    .where(
-      and(
-        eq(fechamentosCaixaRelatoriosVendas.fechamentoCaixaId, fechamentoCaixaId),
-        eq(fechamentosCaixaRelatoriosVendas.empresaId, empresaId)
-      )
-    );
+    .update(fechamentosCaixaRelatoriosVendas)
+    .set({ dados: { invalidado: true, contagemFisica: contagemFisica as JsonValue } })
+    .where(doCaixa);
 }
 
 // A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira

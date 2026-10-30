@@ -54,12 +54,15 @@ describe("contrato da prova CREARE", () => {
     observacoes: []
   };
 
-  it("exige foto e leitura revisada para gerar o relatório de vendas", () => {
+  it("exige foto, leitura revisada e o dinheiro do malote para gerar o relatório de vendas", () => {
     expect(gerarRelatorioVendasFechamentoSchema.safeParse({}).success).toBe(false);
+    const semContagem = { anexoId: "11111111-1111-4111-8111-111111111111", leituraCreare };
+    // R-232 · o dinheiro do fechamento da gaveta e digitado no passo 1 de Vendas e vai junto ao gerar.
+    expect(gerarRelatorioVendasFechamentoSchema.safeParse(semContagem).success).toBe(false);
     expect(
       gerarRelatorioVendasFechamentoSchema.safeParse({
-        anexoId: "11111111-1111-4111-8111-111111111111",
-        leituraCreare
+        ...semContagem,
+        contagemFisica: { valorEspecie: 600, valorMoedas: 20 }
       }).success
     ).toBe(true);
   });

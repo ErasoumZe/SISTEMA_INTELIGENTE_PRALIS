@@ -88,9 +88,7 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     return inject("POST", `/api/transferencias/${transferenciaId}/recusar-conferencia`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
       motivo: "Conferencia do cofre",
-      ...(valorRecebido === undefined
-        ? {}
-        : { valorEspecieContado: valorRecebido, valorMoedasContado: 0 }),
+      ...(valorRecebido === undefined ? {} : { valorEspecieContado: valorRecebido, valorMoedasContado: 0 }),
       ...payload
     });
   }
@@ -381,9 +379,7 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const quebras = await quebrasDoFechamento(fx.caixaId);
-    expect(quebras).toEqual([
-      { valor: "-20.00", transferencia_id: entrega, usuario_id: fx.usuarioId }
-    ]);
+    expect(quebras).toEqual([{ valor: "-20.00", transferencia_id: entrega, usuario_id: fx.usuarioId }]);
   });
 
   // R-179/Fatia 3 · aqui ficava o RED-8, que exigia a checagem de elegibilidade nas DUAS copias:

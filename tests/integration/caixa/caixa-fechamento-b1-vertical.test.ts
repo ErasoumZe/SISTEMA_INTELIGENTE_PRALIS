@@ -63,9 +63,7 @@ describe("caixa - fechamento B1 vertical", () => {
       payload: {
         lacreFechamento: caixa.lacreFechamento,
         caixaResponsavelNome: "Fluxo B1",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 0,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       }
     });
     expect(fechamento.statusCode, fechamento.body).toBe(204);

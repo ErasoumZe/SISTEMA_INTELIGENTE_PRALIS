@@ -87,7 +87,12 @@ function esperado(formas: FormaPagamento[]) {
     .sort((a, b) => b.centavos - a.centavos || a.forma.localeCompare(b.forma));
 }
 
-function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPagamento[], dataHoraVenda = dataVendaAtual()) {
+function payloadDividido(
+  idVenda: string,
+  totalCentavos: number,
+  formas: FormaPagamento[],
+  dataHoraVenda = dataVendaAtual()
+) {
   const valorTotal = totalCentavos / 100;
   return {
     DadosIntegracao: { origem: "vitest-d06" },
@@ -244,7 +249,12 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
   }
 
   // Cria a venda do cenario e devolve o que ela gravou. Cada teste chama a sua.
-  async function criarVendaPropria(identificador: string, total: number, formas: FormaPagamento[], dataHoraVenda?: string) {
+  async function criarVendaPropria(
+    identificador: string,
+    total: number,
+    formas: FormaPagamento[],
+    dataHoraVenda?: string
+  ) {
     const resultado = await enviarVenda(payloadDividido(identificador, total, formas, dataHoraVenda));
     expect(resultado.status, `${identificador} deveria nascer nesta execucao`).toBe("criado");
 

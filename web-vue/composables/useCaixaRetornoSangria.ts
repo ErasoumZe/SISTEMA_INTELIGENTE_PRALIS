@@ -39,8 +39,11 @@ export function useCaixaRetornoSangria(deps: Dependencias) {
       0
     )
   );
+  // R-232 · `null` para o operador de caixa (ele nao ve o fisico esperado): sem teto na tela; o servidor valida.
   const saldoLivre = computed(() =>
-    deCentavos(Math.max(0, paraCentavos(saldoAtual.value) - totalPlanejadoCentavos.value))
+    deps.status.value?.resumo?.saldo === null
+      ? null
+      : deCentavos(Math.max(0, paraCentavos(saldoAtual.value) - totalPlanejadoCentavos.value))
   );
   // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
   // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
@@ -100,12 +103,14 @@ export function useCaixaRetornoSangria(deps: Dependencias) {
   // recalcula o teto sob trava — o numero que a tela viu nunca e prova de nada.
   const valorEntregaEfetivo = computed(() => {
     const digitado = Number(entrega.valor || 0);
-    return digitado > 0 ? digitado : saldoLivre.value;
+    return digitado > 0 ? digitado : (saldoLivre.value ?? 0);
   });
   // D1 na TELA: o servidor continua sendo a autoridade (ele recalcula sob trava), mas deixar o
   // operador disparar um valor que ja se sabe impossivel so gera 400 e desconfianca. Aqui o aviso
   // e imediato e o botao nao dispara.
-  const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > saldoLivre.value);
+  const entregaAcimaDoSaldoLivre = computed(
+    () => saldoLivre.value !== null && valorEntregaEfetivo.value > saldoLivre.value
+  );
   const entregaComposicaoInvalida = computed(
     () => Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
   );
@@ -135,7 +140,7 @@ export function useCaixaRetornoSangria(deps: Dependencias) {
 
   const mensagemErroEntrega = computed(() => {
     if (!entregaIniciada.value) return "";
-    if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value)}.`;
+    if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value ?? 0)}.`;
     if (entregaComposicaoInvalida.value) return "Dinheiro físico + moedas deve ser igual ao valor entregue.";
     if (lacreEntregaPendente.value) return "Informe o lacre do retorno / sangria.";
     if (!entrega.responsavelNome.trim()) return "Informe o responsável pela sangria.";

@@ -82,7 +82,12 @@ describe("Caixa - comparacao da folha do CREARE (R-225)", () => {
         method: "POST",
         url: `/api/caixa/${caixa.caixaId}/relatorio-vendas`,
         headers: { cookie: cookieCaixa },
-        payload: { anexoId, leituraCreare: { documentoLegivel: true, ...leituraCreare } }
+        // R-232 · a contagem fisica vai junto; a mesma contagem a cada geracao nao pede justificativa.
+        payload: {
+          anexoId,
+          leituraCreare: { documentoLegivel: true, ...leituraCreare },
+          contagemFisica: { valorEspecie: 0, valorMoedas: 0 }
+        }
       });
       expect(resposta.statusCode, resposta.body).toBe(200);
       return json<{ data: RelatorioGerado }>(resposta).data.dados;
@@ -90,7 +95,7 @@ describe("Caixa - comparacao da folha do CREARE (R-225)", () => {
 
     // Folha sem valores: tudo pendente; o Pralis vai junto para a tela mostrar ao lado.
     const vazio = await gerar({});
-    expect(vazio.versao).toBe(4);
+    expect(vazio.versao).toBe(5);
     expect(new Set(Object.values(vazio.creare.comparacao))).toEqual(new Set(["pendente"]));
     expect(vazio.creare.pralis["total"]).toBe(12.5);
     expect(Object.keys(vazio.creare.comparacao).sort()).toEqual(

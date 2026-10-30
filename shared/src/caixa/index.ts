@@ -128,14 +128,47 @@ export const vendasDoCaixaQuerySchema = z
 // tela viu e o que o banco tem. O lacre do retorno e por movimento (D5) e continua opcional
 // (R-026). O lacre do fechamento (R-200) e outro objeto fisico e sempre obrigatorio, inclusive
 // sem retorno financeiro.
+// R-232 · a contagem fisica nao vem mais aqui: ela e o primeiro passo de Vendas e fica gravada no relatorio de
+// vendas (contagem cega). O fechamento usa a contagem gravada.
 export const fecharCaixaPayloadSchema = z.object({
   observacao: z.string().trim().max(500).optional().nullable(),
   lacreFechamento: z.string().trim().min(1, "Lacre de fechamento obrigatorio"),
   caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
-  supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
-  valorEspecieFechamento: z.coerce.number().nonnegative(),
-  valorMoedasFechamento: z.coerce.number().nonnegative()
+  supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160)
 });
+
+// R-232 · contagem fisica cega (cedulas + moedas), digitada antes de ver o esperado.
+const dinheiroContadoSchema = z.coerce
+  .number()
+  .nonnegative()
+  .max(1_000_000)
+  .refine((valor) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6, "Use no maximo duas casas decimais");
+export const contagemFisicaEntradaSchema = z.object({
+  valorEspecie: dinheiroContadoSchema,
+  valorMoedas: dinheiroContadoSchema
+});
+export type ContagemFisicaEntrada = z.infer<typeof contagemFisicaEntradaSchema>;
+// Gravada no relatorio de vendas: o que foi contado, o esperado pelo sistema naquele instante e as correcoes
+// (cada uma com o valor anterior, o novo e o motivo). O primeiro registro nunca e apagado.
+export const contagemFisicaRelatorioSchema = z.object({
+  valorEspecie: z.number(),
+  valorMoedas: z.number(),
+  total: z.number(),
+  esperado: z.number(),
+  diferenca: z.number(),
+  registradaEm: z.string(),
+  registradaPor: z.string(),
+  correcoes: z.array(
+    z.object({
+      de: z.object({ valorEspecie: z.number(), valorMoedas: z.number() }),
+      para: z.object({ valorEspecie: z.number(), valorMoedas: z.number() }),
+      justificativa: z.string(),
+      em: z.string(),
+      por: z.string()
+    })
+  )
+});
+export type ContagemFisicaRelatorio = z.infer<typeof contagemFisicaRelatorioSchema>;
 
 // Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
 // no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
@@ -248,6 +281,9 @@ export const relatorioVendasCreareSchema = z.object({
 export type RelatorioVendasCreare = z.infer<typeof relatorioVendasCreareSchema>;
 export const gerarRelatorioVendasFechamentoSchema = z.object({
   anexoId: uuidSchema,
+  // R-232 · contagem cega: obrigatoria ao gerar; mudar uma contagem ja gravada exige justificativa.
+  contagemFisica: contagemFisicaEntradaSchema,
+  justificativaContagem: z.string().trim().max(300).optional().nullable(),
   // Recusa o modelo antigo na entrada e devolve a leitura sem essas chaves.
   leituraCreare: relatorioVendasCreareSchema
     .extend({ totalBruto: campoModeloAntigoCreare, resultadoFinal: campoModeloAntigoCreare })
@@ -440,7 +476,9 @@ export const resumoCaixaSchema = z.object({
   saldoProprio: z.number().optional(),
   // propostaRetorno (R3/M2): sobra em especie a devolver ao cofre no fechamento (= saldo fisico se > 0).
   propostaRetorno: z.number().optional(),
-  saldo: z.number(),
+  // R-232 · `null` para o operador de caixa (quem nao tem `caixas_gerenciar`): ele nao ve o fisico esperado durante o
+  // turno, senao a contagem cega do fechamento perde o sentido. Gerencia e Tesouraria continuam vendo.
+  saldo: z.number().nullable(),
   // Subtotais informativos das vendas do turno. Ausente apenas em consumidores legados que nao
   // calcularam a divisao; a API do caixa aberto sempre preenche.
   porFormaPagamento: z

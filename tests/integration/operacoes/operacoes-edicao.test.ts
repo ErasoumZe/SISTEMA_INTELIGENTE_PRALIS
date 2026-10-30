@@ -280,7 +280,11 @@ describe("operacoes edicao integration", () => {
       }
     });
 
-    await prepararFechamentoValido(contexto.app, { cookieOperador: cookieAdmin, caixaId });
+    await prepararFechamentoValido(contexto.app, {
+      cookieOperador: cookieAdmin,
+      caixaId,
+      contagem: { valorEspecie: 93, valorMoedas: 0 }
+    });
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
@@ -289,9 +293,7 @@ describe("operacoes edicao integration", () => {
         observacao: "Fechado apos edicoes",
         lacreFechamento,
         caixaResponsavelNome: "Caixa edicao",
-        supervisorResponsavelNome: "Supervisor de teste",
-        valorEspecieFechamento: 93,
-        valorMoedasFechamento: 0
+        supervisorResponsavelNome: "Supervisor de teste"
       }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
