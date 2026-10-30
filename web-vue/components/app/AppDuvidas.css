@@ -128,4 +128,18 @@
   .duvidas.v-navigation-drawer {
     width: 100% !important;
   }
+  /* No celular os 10 assuntos quebrando em linhas empurram as perguntas para fora da tela: viram uma
+     faixa que rola de lado. */
+  .duvidas__temas {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: var(--cx-sp-1);
+    scrollbar-width: none;
+  }
+  .duvidas__temas > * {
+    flex: 0 0 auto;
+  }
 }
