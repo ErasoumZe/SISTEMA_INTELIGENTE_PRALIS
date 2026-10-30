@@ -133,7 +133,7 @@ export async function validarGrupoAgendaRepository(empresaId: string, grupoId: s
 export async function produtosDaEmpresaRepository(empresaId: string, produtoIds: string[], db: ExecutorBanco = banco) {
   if (!produtoIds.length) return [];
   return db
-    .select({ id: produtos.id })
+    .select({ id: produtos.id, descricao: produtos.descricao, liberadoCompra: produtos.liberadoCompra })
     .from(produtos)
     .where(and(eq(produtos.empresaId, empresaId), inArray(produtos.id, produtoIds)));
 }

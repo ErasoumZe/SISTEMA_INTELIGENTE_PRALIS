@@ -9,7 +9,12 @@ export const estoqueProdutosQuerySchema = z.object({
   areaEstoque: z.string().trim().min(1).max(120).optional(),
   localVenda: z.string().trim().min(1).max(120).optional(),
   localEstoque: z.string().trim().min(1).max(120).optional(),
-  curvaAbc: curvaAbcSchema.optional()
+  curvaAbc: curvaAbcSchema.optional(),
+  // Doc 59: so o produto liberado para compra entra no pedido.
+  liberadoCompra: z
+    .enum(["true", "false"])
+    .transform((valor) => valor === "true")
+    .optional()
 });
 
 export const estoqueMovimentosQuerySchema = z.object({
