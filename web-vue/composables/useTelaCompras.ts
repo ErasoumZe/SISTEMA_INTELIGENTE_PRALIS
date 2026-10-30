@@ -4,7 +4,7 @@ import { usePermissoes } from "~/composables/usePermissoes";
 import { mensagemErro } from "~/utils/domain";
 
 /**
- * O esqueleto das telas de Compras (Cotacao por fornecedor, Pedidos finalizados): sessao, empresa escolhida,
+ * O esqueleto das telas de Compras (Cotacao por fornecedor, Pedidos a receber): sessao, empresa escolhida,
  * permissoes do menu e a mensagem passageira. `carregarDados` roda ao abrir e ao trocar de empresa.
  */
 export function useTelaCompras(semPermissao: string, carregarDados: () => Promise<void>) {

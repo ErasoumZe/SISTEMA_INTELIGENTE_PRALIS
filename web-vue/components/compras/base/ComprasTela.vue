@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Moldura das telas de Compras: o mesmo ritmo vertical e os mesmos padrões de controle em todos os módulos
- * (Estoque, Conferência, Agendamento, Solicitação, Cotação, Pedidos finalizados). Botão em texto normal — caixa
+ * (Estoque, Conferência, Agendamento, Solicitação, Cotação, Pedidos a receber). Botão em texto normal — caixa
  * alta e letras espaçadas deixavam as telas pesadas — e campos com contorno. Os padrões valem também nos
  * diálogos abertos dentro da tela (o provider segue a árvore de componentes, não o DOM).
  */

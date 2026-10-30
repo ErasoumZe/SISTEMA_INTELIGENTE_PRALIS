@@ -135,7 +135,7 @@ onMounted(async () => {
     <ComprasTela>
       <AppCabecalhoTela
         titulo="Agendamento de pedidos"
-        subtitulo="Escolha os produtos, a repetição e o responsável. Na data, ele confere na Solicitação de compra e envia."
+        subtitulo="Escolha os produtos, a repetição e o responsável. Na data, ele faz o pedido na Solicitação de compra."
       >
         <template v-if="podeGerir && !formAberto" #acoes>
           <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="novo">Novo agendamento</v-btn>
