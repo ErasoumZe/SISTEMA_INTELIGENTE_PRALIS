@@ -459,6 +459,8 @@ export async function detalharProdutoBase(
     marca: payload.marca ?? null,
     compraAproximada: payload.compraAproximada,
     habilitarAjuda: payload.habilitarAjuda,
+    // A BASE e catalogo, nao loja: liberar para compra e decisao de cada loja.
+    liberadoCompra: false,
     quantidadeIndividual: String(payload.quantidadeIndividual),
     embalagem: payload.embalagem ?? null,
     cDe: payload.cDe ?? null,

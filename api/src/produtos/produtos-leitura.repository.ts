@@ -8,7 +8,10 @@ import {
   ilike,
   inArray,
   isNotNull,
+  isNull,
+  lte,
   ne,
+  not,
   or,
   sql,
   type SQL,
@@ -16,9 +19,10 @@ import {
 } from "drizzle-orm";
 import { codigoBarrasSemZerosIniciais } from "@padaria/db/expressions";
 import { candidatosDeCodigo } from "@padaria/shared/produtos";
-import type { OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
+import type { CompraProdutoFiltro, OrdenacaoProdutos, ProdutoOpcao, ProdutoResumo } from "@padaria/shared/produtos";
 import {
   empresas,
+  fornecedoresProdutos,
   gruposMercadorias,
   perfisUsuarios,
   produtos,
@@ -62,6 +66,7 @@ export interface FiltroListaProdutos {
   grupoMercadoriaId?: string | undefined;
   setorEstoque?: string | undefined;
   somenteVendidos?: boolean | undefined;
+  compra?: CompraProdutoFiltro | undefined;
   ordenar: OrdenacaoProdutos;
   page: number;
   pageSize: number;
@@ -73,6 +78,7 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
   if (filtro.tipo) condicoes.push(eq(produtos.tipo, filtro.tipo));
   if (filtro.grupoMercadoriaId) condicoes.push(eq(produtos.grupoMercadoriaId, filtro.grupoMercadoriaId));
   if (filtro.setorEstoque) condicoes.push(eq(produtos.setorEstoque, filtro.setorEstoque));
+  if (filtro.compra) condicoes.push(condicaoDeCompra(filtro.compra));
   if (filtro.somenteVendidos) {
     const codigoBarrasCorrespondente = and(
       isNotNull(produtos.codigoBarras),
@@ -111,6 +117,25 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
     );
   }
   return and(...condicoes);
+}
+
+/**
+ * Doc 59 (Rodrigo, 29/10/2026): pendente = liberado para compra com o cadastro de compra incompleto: sem como
+ * se compra (embalagem com 1 unidade), sem estoque minimo ou maximo, ou sem fornecedor aprovado.
+ */
+function condicaoDeCompra(compra: CompraProdutoFiltro): SQL | undefined {
+  if (compra === "nao_liberados") return eq(produtos.liberadoCompra, false);
+  if (compra === "liberados") return eq(produtos.liberadoCompra, true);
+  const comFornecedor = exists(
+    banco
+      .select({ encontrado: fornecedoresProdutos.id })
+      .from(fornecedoresProdutos)
+      .where(and(eq(fornecedoresProdutos.produtoId, produtos.id), eq(fornecedoresProdutos.status, "aprovado")))
+  );
+  return and(
+    eq(produtos.liberadoCompra, true),
+    or(lte(produtos.quantidadeCaixa, 1), isNull(produtos.estoqueMin), isNull(produtos.estoqueMax), not(comFornecedor))
+  );
 }
 
 /** As SEIS ordenacoes do contrato. `codigoInterno` e zero-padded, entao ordem textual = numerica. */
@@ -159,6 +184,7 @@ export async function listarProdutosPaginadoRepository(
       marca: produtos.marca,
       compraAproximada: produtos.compraAproximada,
       habilitarAjuda: produtos.habilitarAjuda,
+      liberadoCompra: produtos.liberadoCompra,
       tipo: produtos.tipo,
       status: produtos.status,
       grupoMercadoriaId: produtos.grupoMercadoriaId,
@@ -408,6 +434,7 @@ export async function opcoesDeProdutoRepository(entrada: {
   busca?: string | undefined;
   ids: string[];
   limite: number;
+  soLiberadosParaCompra?: boolean | undefined;
 }): Promise<ProdutoOpcao[]> {
   const filtroDeTexto = entrada.busca
     ? or(
@@ -418,6 +445,8 @@ export async function opcoesDeProdutoRepository(entrada: {
       )
     : undefined;
   const selecionados = entrada.ids.length ? inArray(produtos.id, entrada.ids) : undefined;
+  // Doc 59: no Compras so o liberado para compra e oferecido; o ja selecionado continua hidratando.
+  const liberado = entrada.soLiberadosParaCompra ? or(eq(produtos.liberadoCompra, true), selecionados) : undefined;
 
   return (
     banco
@@ -434,7 +463,7 @@ export async function opcoesDeProdutoRepository(entrada: {
       // quem tem apenas `mercadorias_visualizar`, e `produtos-listagem.test.ts` fixa exatamente
       // estas seis chaves para nao vazar custo, margem e preco. Contexto de estoque para montar
       // pedido vem de `/api/compras/estoque`, que exige `estoque_produtos_visualizar`.
-      .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados)))
+      .where(and(inArray(produtos.empresaId, entrada.escopoEmpresas), or(filtroDeTexto, selecionados), liberado))
       .orderBy(asc(produtos.descricao))
       .limit(entrada.limite)
   );

@@ -263,6 +263,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
         grupoMercadoriaId: query.grupoMercadoriaId,
         setorEstoque: query.setorEstoque,
         somenteVendidos: query.somenteVendidos,
+        compra: query.compra,
         ordenar: query.ordenar,
         page: query.page,
         pageSize: query.pageSize
@@ -289,7 +290,14 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        return ok(await listarOpcoesDeProduto({ escopoEmpresas, busca: query.busca, ids: query.ids }));
+        return ok(
+          await listarOpcoesDeProduto({
+            escopoEmpresas,
+            busca: query.busca,
+            ids: query.ids,
+            soLiberadosParaCompra: query.liberadoCompra
+          })
+        );
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
