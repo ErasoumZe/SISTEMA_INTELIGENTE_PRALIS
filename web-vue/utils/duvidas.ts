@@ -42,17 +42,48 @@ export function normalizarBusca(texto: string): string {
     .trim();
 }
 
-// Toda palavra digitada precisa aparecer na pergunta, na resposta ou nas palavras-chave. Pergunta que
-// casa no titulo vem antes da que so casa na resposta.
+// Palavras que toda pergunta tem ("o que eu faco se a...") e nao dizem o assunto.
+const PALAVRAS_VAZIAS = new Set(
+  (
+    "a o as os um uma uns umas de da do das dos e em no na nos nas por pra para com sem que se eu me meu minha " +
+    "voce ele ela isso esse essa este esta aqui ali la ja nao sim mas como qual quais quando onde porque por que " +
+    "faco fazer faz agora tem ter ta esta estou foi ser sou era pode posso consigo devo preciso deu da dar"
+  ).split(" ")
+);
+
+// Corta o fim da palavra para "recebi" achar "recebimento" e "lacres" achar "lacre". Palavra curta fica inteira.
+const raiz = (palavra: string) => (palavra.length <= 4 ? palavra : palavra.slice(0, Math.max(4, palavra.length - 2)));
+
+// O operador escreve a duvida como fala, em frase inteira. Conta quantas palavras com assunto aparecem na
+// pergunta (vale o dobro), na resposta ou nas palavras-chave; precisa casar pelo menos metade delas. As
+// mais parecidas vem primeiro.
 export function buscarDuvidas(duvidas: readonly Duvida[], termo: string): Duvida[] {
-  const palavras = normalizarBusca(termo).split(/\s+/).filter(Boolean);
-  if (!palavras.length) return [...duvidas];
+  const raizes = [
+    ...new Set(
+      normalizarBusca(termo)
+        .split(/[^a-z0-9]+/)
+        .filter((palavra) => palavra.length > 1 && !PALAVRAS_VAZIAS.has(palavra))
+        .map(raiz)
+    )
+  ];
+  if (!raizes.length) return [];
+  const minimo = Math.ceil(raizes.length / 2);
   const pontuadas: Array<{ duvida: Duvida; pontos: number }> = [];
   for (const duvida of duvidas) {
     const titulo = normalizarBusca(duvida.pergunta);
     const corpo = normalizarBusca([duvida.resposta, ...(duvida.palavras ?? [])].join(" "));
-    if (!palavras.every((palavra) => titulo.includes(palavra) || corpo.includes(palavra))) continue;
-    pontuadas.push({ duvida, pontos: palavras.filter((palavra) => titulo.includes(palavra)).length });
+    let casadas = 0;
+    let pontos = 0;
+    for (const r of raizes) {
+      if (titulo.includes(r)) {
+        casadas += 1;
+        pontos += 2;
+      } else if (corpo.includes(r)) {
+        casadas += 1;
+        pontos += 1;
+      }
+    }
+    if (casadas >= minimo) pontuadas.push({ duvida, pontos });
   }
   return pontuadas.sort((a, b) => b.pontos - a.pontos).map((item) => item.duvida);
 }

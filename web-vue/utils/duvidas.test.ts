@@ -18,13 +18,17 @@ describe("busca de dúvidas", () => {
     expect(buscarDuvidas(base, "contagem").map((d) => d.id)).toEqual(["a", "b"]);
   });
 
-  it("acha pelas palavras-chave e exige todas as palavras", () => {
+  it("acha pelas palavras-chave", () => {
     expect(buscarDuvidas(base, "digitei errado").map((d) => d.id)).toEqual(["c"]);
-    expect(buscarDuvidas(base, "sangria malote")).toEqual([]);
   });
 
-  it("busca vazia devolve tudo", () => {
-    expect(buscarDuvidas(base, "   ")).toHaveLength(3);
+  it("entende a frase inteira, do jeito que a pessoa fala", () => {
+    expect(buscarDuvidas(base, "o que eu faço se errei a contagem do malote?")[0]?.id).toBe("a");
+  });
+
+  it("só palavras vazias ou nada escrito não acha nada", () => {
+    expect(buscarDuvidas(base, "   ")).toEqual([]);
+    expect(buscarDuvidas(base, "o que eu faço?")).toEqual([]);
   });
 });
 
@@ -38,6 +42,17 @@ describe("base de dúvidas do caixa", () => {
       expect(duvida.pergunta.trim().length).toBeGreaterThan(5);
       expect(duvida.resposta.trim().length).toBeGreaterThan(10);
     }
+  });
+
+  it("perguntas reais do caixa caem na resposta certa", () => {
+    const topo = (frase: string) =>
+      buscarDuvidas(DUVIDAS_CAIXA, frase)
+        .slice(0, 3)
+        .map((d) => d.id);
+    expect(topo("disseram que mandaram dinheiro mas não recebi")).toContain("turno-nao-recebi");
+    expect(topo("como faço sangria")).toContain("turno-sangria-como");
+    expect(topo("errei a contagem")).toContain("vendas-errei-contagem");
+    expect(topo("a maquininha mostra mais cartão")).toContain("maquininha-cartao-a-mais");
   });
 
   it("toda etapa do fechamento tem pergunta", () => {

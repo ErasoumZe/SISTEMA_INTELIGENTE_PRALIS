@@ -1,8 +1,7 @@
 <script setup lang="ts">
-// Bolinha de duvidas no canto de baixo + janelinha de chat com perguntas e respostas prontas (sem IA). A
-// conversa comeca no assunto em que a pessoa esta (etapa do fechamento, caixa...). A bolinha usa a imagem
-// parada da marca: simbolo animado em toda tela, o turno inteiro, distrai quem esta no caixa. O animado
-// aparece so no topo da janela aberta.
+// Bolinha de duvidas no canto de baixo + janelinha "pergunte e veja a resposta" (sem IA). Mostra uma coisa
+// por vez: o campo para escrever, ate 3 opcoes quando a pergunta nao e certeira, ou a resposta. A bolinha
+// usa a imagem parada da marca: simbolo animado em toda tela, o turno inteiro, distrai quem esta no caixa.
 import { computed, nextTick, ref, watch } from "vue";
 import AppLogoAnimada from "~/components/app/AppLogoAnimada.vue";
 import { useChatDuvidas } from "~/composables/useChatDuvidas";
@@ -23,40 +22,26 @@ const props = withDefaults(
 const SIMBOLO = "/cicluz/cicluz-simbolo.png";
 const aberto = ref(false);
 const texto = ref("");
-const conversa = ref<HTMLElement | null>(null);
-const janela = ref<HTMLElement | null>(null);
+const campo = ref<HTMLInputElement | null>(null);
 const bolinha = ref<HTMLButtonElement | null>(null);
 
 const chat = useChatDuvidas(props.duvidas);
-const { mensagens, tituloDoTema } = chat;
+const { tela, comuns } = chat;
 const { tema: temaMarcado } = useDuvidasContexto();
 const rota = useRoute();
-// Fora do fechamento, quem esta no caixa costuma perguntar do turno; nas outras telas, oferece os assuntos.
+// Fora do fechamento, quem esta no caixa costuma perguntar do turno.
 const temaDoContexto = computed<TemaDuvida | null>(
   () => temaMarcado.value ?? (rota.path.startsWith("/caixa") ? "turno" : null)
 );
 
-// O foco vai para a janela, e nao para o campo: no celular, focar o campo abriria o teclado por cima das
-// perguntas prontas, que sao o caminho mais rapido.
+// Perguntar e o caminho principal, entao o campo ja vem focado.
 watch(aberto, async (agora) => {
   if (!agora) return;
   texto.value = "";
   chat.iniciar(temaDoContexto.value);
   await nextTick();
-  janela.value?.focus();
+  campo.value?.focus();
 });
-
-// A cada troca, a pergunta feita sobe para o topo da conversa e a resposta aparece logo abaixo dela.
-watch(
-  () => mensagens.value.length,
-  async (total, antes) => {
-    if (!antes || total <= 1) return;
-    await nextTick();
-    const itens = conversa.value?.querySelectorAll<HTMLElement>("[data-de='voce']");
-    const ultima = itens?.[itens.length - 1];
-    if (conversa.value && ultima) conversa.value.scrollTop = ultima.offsetTop - 8;
-  }
-);
 
 function fechar() {
   aberto.value = false;
@@ -64,7 +49,12 @@ function fechar() {
 }
 function enviar() {
   chat.perguntar(texto.value);
+}
+async function outraPergunta() {
   texto.value = "";
+  chat.voltar();
+  await nextTick();
+  campo.value?.focus();
 }
 </script>
 
@@ -74,79 +64,84 @@ function enviar() {
       <section
         v-if="aberto"
         id="duvidas-chat"
-        ref="janela"
         class="duvidas__janela"
         role="dialog"
         aria-label="Dúvidas sobre o caixa"
-        tabindex="-1"
         data-teste="duvidas-painel"
         @keydown.esc="fechar"
       >
         <header class="duvidas__topo">
           <AppLogoAnimada :size="30" :glow-intensity="0.12" />
-          <div class="duvidas__titulo">
-            <h2>Dúvidas</h2>
-            <p>Respostas rápidas sobre o caixa</p>
-          </div>
-          <button type="button" class="duvidas__acao" aria-label="Ver os assuntos" @click="chat.verAssuntos()">
-            <v-icon icon="mdi-format-list-bulleted" size="20" />
-          </button>
+          <h2>Qual é a sua dúvida?</h2>
           <button type="button" class="duvidas__acao" aria-label="Fechar dúvidas" @click="fechar">
             <v-icon icon="mdi-close" size="20" />
           </button>
         </header>
 
-        <ol ref="conversa" class="duvidas__conversa" aria-live="polite">
-          <li
-            v-for="mensagem in mensagens"
-            :key="mensagem.id"
-            :class="`msg msg--${mensagem.de}`"
-            :data-de="mensagem.de"
-          >
-            <p class="msg__balao">
-              <strong v-if="mensagem.titulo">{{ mensagem.titulo }}</strong>
-              {{ mensagem.texto }}
-            </p>
-            <div v-if="mensagem.sugestoes" class="msg__opcoes">
+        <form class="duvidas__envio" @submit.prevent="enviar">
+          <input
+            ref="campo"
+            v-model="texto"
+            type="text"
+            maxlength="120"
+            placeholder="Ex.: errei a contagem do malote"
+            aria-label="Escreva sua dúvida"
+            autocomplete="off"
+            enterkeyhint="search"
+            data-teste="duvidas-busca"
+          />
+          <button type="submit" class="duvidas__enviar" aria-label="Perguntar" :disabled="!texto.trim()">
+            <v-icon icon="mdi-arrow-right" size="20" />
+          </button>
+        </form>
+
+        <div class="duvidas__corpo" aria-live="polite" data-teste="duvidas-corpo">
+          <Transition name="duvidas-troca" mode="out-in">
+            <div v-if="tela.tipo === 'resposta'" :key="`r-${tela.duvida.id}`" data-teste="duvidas-resposta">
+              <h3 class="duvidas__pergunta">{{ tela.duvida.pergunta }}</h3>
+              <p class="duvidas__resposta">{{ tela.duvida.resposta }}</p>
+              <button type="button" class="duvidas__link" data-teste="duvidas-outra" @click="outraPergunta">
+                <v-icon icon="mdi-arrow-left" size="16" /> Fazer outra pergunta
+              </button>
+            </div>
+
+            <div v-else-if="tela.tipo === 'opcoes'" :key="`o-${tela.termo}`">
+              <p class="duvidas__rotulo">É alguma destas?</p>
               <button
-                v-for="duvida in mensagem.sugestoes"
+                v-for="duvida in tela.duvidas"
                 :key="duvida.id"
                 type="button"
+                class="duvidas__opcao"
                 :data-teste="`duvida-${duvida.id}`"
-                @click="chat.escolherDuvida(duvida)"
+                @click="chat.escolher(duvida)"
+              >
+                {{ duvida.pergunta }}
+              </button>
+              <p class="duvidas__dica">Nenhuma? Escreva de outro jeito ou chame o gerente do turno.</p>
+            </div>
+
+            <div v-else-if="tela.tipo === 'nada'" :key="`n-${tela.termo}`" data-teste="duvidas-vazio">
+              <p class="duvidas__resposta">
+                Não achei essa dúvida. Tente com outras palavras (ex.: “sangria”, “lacre”, “maquininha”) ou chame o
+                gerente do turno.
+              </p>
+            </div>
+
+            <div v-else key="inicio">
+              <p class="duvidas__rotulo">Mais perguntadas aqui</p>
+              <button
+                v-for="duvida in comuns"
+                :key="duvida.id"
+                type="button"
+                class="duvidas__opcao"
+                :data-teste="`duvida-${duvida.id}`"
+                @click="chat.escolher(duvida)"
               >
                 {{ duvida.pergunta }}
               </button>
             </div>
-            <div v-if="mensagem.temas" class="msg__opcoes msg__opcoes--temas">
-              <button
-                v-for="tema in mensagem.temas"
-                :key="tema"
-                type="button"
-                :data-teste="`duvidas-tema-${tema}`"
-                @click="chat.escolherTema(tema)"
-              >
-                {{ tituloDoTema(tema) }}
-              </button>
-            </div>
-          </li>
-        </ol>
-
-        <form class="duvidas__envio" @submit.prevent="enviar">
-          <input
-            v-model="texto"
-            type="text"
-            maxlength="120"
-            placeholder="Escreva sua dúvida"
-            aria-label="Escreva sua dúvida"
-            autocomplete="off"
-            enterkeyhint="send"
-            data-teste="duvidas-busca"
-          />
-          <button type="submit" class="duvidas__enviar" aria-label="Enviar" :disabled="!texto.trim()">
-            <v-icon icon="mdi-send" size="18" />
-          </button>
-        </form>
+          </Transition>
+        </div>
       </section>
     </Transition>
 
