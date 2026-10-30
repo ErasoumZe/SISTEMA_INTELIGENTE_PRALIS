@@ -13,11 +13,18 @@ const status = defineModel<string | null>("status", { default: null });
 const tipo = defineModel<string | null>("tipo", { default: null });
 const grupo = defineModel<string | null>("grupo", { default: null });
 const setor = defineModel<string | null>("setor", { default: null });
+const compra = defineModel<string | null>("compra", { default: null });
 const ordenar = defineModel<OrdenacaoProdutos>("ordenar", { default: "recentes" });
 
 const STATUS = [
   { value: "ativo", label: "Ativos" },
   { value: "inativo", label: "Inativos" }
+];
+// Doc 59: "Pendentes" = liberados para compra com o cadastro de compra incompleto.
+const COMPRA = [
+  { value: "liberados", label: "Liberados" },
+  { value: "nao_liberados", label: "Não liberados" },
+  { value: "pendentes", label: "Pendentes" }
 ];
 const TIPOS = [
   { value: "revenda", label: "Revenda" },
@@ -30,6 +37,9 @@ function alternarStatus(valor: string) {
 }
 function alternarTipo(valor: string) {
   tipo.value = tipo.value === valor ? null : valor;
+}
+function alternarCompra(valor: string) {
+  compra.value = compra.value === valor ? null : valor;
 }
 </script>
 
@@ -60,6 +70,21 @@ function alternarTipo(valor: string) {
         :color="tipo === opcao.value ? 'primary' : undefined"
         :aria-pressed="tipo === opcao.value"
         @click="alternarTipo(opcao.value)"
+      >
+        {{ opcao.label }}
+      </v-btn>
+    </div>
+
+    <div class="produto-filtros__grupo" data-filtro="compra">
+      <span class="produto-filtros__rotulo">Compra</span>
+      <v-btn
+        v-for="opcao in COMPRA"
+        :key="opcao.value"
+        size="small"
+        :variant="compra === opcao.value ? 'flat' : 'outlined'"
+        :color="compra === opcao.value ? 'primary' : undefined"
+        :aria-pressed="compra === opcao.value"
+        @click="alternarCompra(opcao.value)"
       >
         {{ opcao.label }}
       </v-btn>

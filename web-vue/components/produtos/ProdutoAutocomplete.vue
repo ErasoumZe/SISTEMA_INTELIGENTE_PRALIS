@@ -16,6 +16,8 @@ const props = defineProps<{
   desabilitado?: boolean;
   limpavel?: boolean;
   mensagemDeErro?: string | undefined;
+  /** Doc 59: no Compras so o produto liberado para compra pode ser escolhido. */
+  soLiberadosParaCompra?: boolean;
 }>();
 
 const modelo = defineModel<string>({ default: "" });
@@ -30,6 +32,7 @@ let debounce: ReturnType<typeof setTimeout> | null = null;
 function consulta(parametros: Record<string, string>) {
   const busca = new URLSearchParams();
   if (props.empresaId) busca.set("empresaId", props.empresaId);
+  if (props.soLiberadosParaCompra) busca.set("liberadoCompra", "true");
   for (const [chave, valor] of Object.entries(parametros)) if (valor) busca.set(chave, valor);
   const texto = busca.toString();
   return texto ? `?${texto}` : "";

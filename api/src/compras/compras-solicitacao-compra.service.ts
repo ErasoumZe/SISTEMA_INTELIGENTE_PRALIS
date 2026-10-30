@@ -121,13 +121,16 @@ export async function detalharSolicitacaoCompra(
   const ocorrencia = await ocorrenciaParaEnviar(id, empresaId, perfil);
   const [produtosDaAgenda, estoque, rankings] = await Promise.all([
     produtosDasAgendasRepository([ocorrencia.agendaId]),
-    listarEstoqueProdutosRepository({ empresaId }),
+    listarEstoqueProdutosRepository({ empresaId, liberadoCompra: true }),
     rankingsDaEmpresa(empresaId)
   ]);
-  // Doc 58 §2: os produtos do agendamento chegam sem quantidade; o responsavel decide quanto pedir.
-  const produtoIds = [...new Set(produtosDaAgenda.map((produto) => produto.produtoId))];
-  const fornecedores = await fornecedoresQuePodemReceber(empresaId, produtoIds);
   const estoquePorId = new Map(estoque.map((produto) => [produto.id, produto]));
+  // Doc 58 §2: os produtos do agendamento chegam sem quantidade; o responsavel decide quanto pedir. Doc 59: o
+  // que deixou de estar liberado para compra depois de agendado nao aparece para pedir.
+  const produtoIds = [...new Set(produtosDaAgenda.map((produto) => produto.produtoId))].filter((produtoId) =>
+    estoquePorId.has(produtoId)
+  );
+  const fornecedores = await fornecedoresQuePodemReceber(empresaId, produtoIds);
   return {
     ocorrenciaId: ocorrencia.id,
     grupoNome: ocorrencia.grupoNome,

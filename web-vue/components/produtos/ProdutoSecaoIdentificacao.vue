@@ -26,6 +26,8 @@ const props = defineProps<{
   /** F4: outro produto ja tem este EAN (aviso ao digitar; nao bloqueia o salvar). */
   eanRepetido: { nome: string; codigoInterno: string | null; rota: string } | null;
   dica: (campo: string) => string | undefined;
+  /** Doc 59: "liberado para compra" e da loja; a BASE e catalogo e nao mostra. */
+  naBase?: boolean;
 }>();
 const emit = defineEmits<{ "foto-escolher": [arquivo: File]; "foto-remover": [] }>();
 
@@ -65,6 +67,17 @@ const scannerAberto = ref(false);
           inset
           hide-details
           :disabled="travado"
+        />
+        <!-- Doc 59: como o status, e decisao da loja; nao liberado continua vendendo, so nao e pedido. -->
+        <v-switch
+          v-if="!naBase"
+          v-model="form.liberadoCompra"
+          label="Liberado para compra"
+          color="primary"
+          inset
+          hide-details
+          data-campo="liberadoCompra"
+          :disabled="somenteLeitura"
         />
       </v-col>
       <v-col cols="12" sm="7">

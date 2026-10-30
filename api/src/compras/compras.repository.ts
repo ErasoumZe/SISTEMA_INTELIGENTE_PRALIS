@@ -64,6 +64,7 @@ export async function listarEstoqueProdutosRepository(
   if (filtros.areaEstoque) condicoes.push(eq(produtos.areaEstoque, filtros.areaEstoque));
   if (filtros.localEstoque) condicoes.push(eq(produtos.setorEstoque, filtros.localEstoque));
   if (filtros.curvaAbc) condicoes.push(eq(produtos.curvaAbc, filtros.curvaAbc));
+  if (filtros.liberadoCompra !== undefined) condicoes.push(eq(produtos.liberadoCompra, filtros.liberadoCompra));
   if (filtros.localVenda) {
     condicoes.push(or(eq(produtos.localVenda1, filtros.localVenda), eq(produtos.localVenda2, filtros.localVenda))!);
   }

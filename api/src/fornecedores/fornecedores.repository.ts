@@ -17,7 +17,8 @@ export async function listarFornecedoresRepository() {
       nome: fornecedores.nome,
       documento: fornecedores.documento,
       whatsapp: fornecedores.whatsapp,
-      situacao: fornecedores.situacao
+      situacao: fornecedores.situacao,
+      categoria: fornecedores.categoria
     })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
@@ -31,13 +32,22 @@ export async function salvarFornecedorRepository(
     documento: string | null;
     whatsapp: string | null;
     situacao: "ativo" | "inativo";
+    // `undefined` = quem salvou nao mandou o campo: a categoria que ja existe fica.
+    categoria?: string | null | undefined;
   },
   db: ExecutorBanco = banco
 ) {
+  const categoria = input.categoria === undefined ? {} : { categoria: input.categoria };
   if (input.id) {
     await db
       .update(fornecedores)
-      .set({ nome: input.nome, documento: input.documento, whatsapp: input.whatsapp, situacao: input.situacao })
+      .set({
+        nome: input.nome,
+        documento: input.documento,
+        whatsapp: input.whatsapp,
+        situacao: input.situacao,
+        ...categoria
+      })
       .where(and(eq(fornecedores.id, input.id), eq(fornecedores.empresaId, input.empresaId)));
     return input;
   }
@@ -48,7 +58,8 @@ export async function salvarFornecedorRepository(
       nome: input.nome,
       documento: input.documento,
       whatsapp: input.whatsapp,
-      situacao: input.situacao
+      situacao: input.situacao,
+      ...categoria
     })
     .returning({ id: fornecedores.id });
   return criado;
@@ -72,6 +83,7 @@ export async function copiarFornecedoresRepository(
         nome: fornecedor.nome,
         documento: fornecedor.documento,
         whatsapp: fornecedor.whatsapp,
+        categoria: fornecedor.categoria,
         importadoDe: fornecedor.empresaId,
         idImportado: fornecedor.id
       });

@@ -638,6 +638,13 @@
       "when": 1793276821687,
       "tag": "0090_postos_do_caixa",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793383816931,
+      "tag": "0091_produtos_liberado_compra_fornecedor_categoria",
+      "breakpoints": true
     }
   ]
 }

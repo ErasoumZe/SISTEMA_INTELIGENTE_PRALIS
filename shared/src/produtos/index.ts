@@ -150,6 +150,9 @@ export const produtoPayloadSchema = z
     localVenda2: z.string().optional().nullable(),
     compraAproximada: z.boolean().optional().default(false),
     habilitarAjuda: z.boolean().optional().default(false),
+    // Doc 59: sem default de proposito. Quem regrava o produto sem mandar o campo (copia da BASE, fase B2)
+    // mantem o que ja estava; so o formulario liga ou desliga.
+    liberadoCompra: z.boolean().optional(),
     setorVenda1: z.string().optional().nullable(),
     setorVenda2: z.string().optional().nullable(),
     fotoUrl: z.string().optional().nullable(),
@@ -193,6 +196,13 @@ export function fraseDeInativacaoEmLote(quantidade: number): string {
   return `INATIVAR ${quantidade} PRODUTOS`;
 }
 
+/**
+ * Doc 59 (Rodrigo, 29/10/2026): filtro de compra da lista de produtos. `pendentes` = liberado para compra com
+ * o cadastro de compra incompleto (sem como se compra, sem estoque minimo ou maximo, ou sem fornecedor).
+ */
+export const compraProdutoFiltroSchema = z.enum(["liberados", "nao_liberados", "pendentes"]);
+export type CompraProdutoFiltro = z.infer<typeof compraProdutoFiltroSchema>;
+
 // As SEIS ordenacoes da listagem. Sao contrato: o banco ordena, nao o navegador.
 export const ordenacaoProdutosSchema = z
   .enum(["recentes", "antigos", "az", "za", "codigo_asc", "codigo_desc"])
@@ -212,6 +222,7 @@ export const produtosListaQuerySchema = empresaQuerySchema.extend({
     .enum(["true", "false"])
     .optional()
     .transform((valor) => valor === "true"),
+  compra: compraProdutoFiltroSchema.optional(),
   ordenar: ordenacaoProdutosSchema
 });
 
@@ -230,7 +241,12 @@ export const produtosOpcoesQuerySchema = empresaQuerySchema.extend({
     .max(2000)
     .optional()
     .transform((valor) => (valor ? valor.split(",").filter(Boolean) : []))
-    .pipe(z.array(uuidSchema).max(50))
+    .pipe(z.array(uuidSchema).max(50)),
+  // Doc 59: o seletor de produto do Compras so oferece o liberado para compra.
+  liberadoCompra: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((valor) => valor === "true")
 });
 
 export const produtosQuerySchema = empresaQuerySchema;
@@ -257,6 +273,7 @@ export interface ProdutoResumo {
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
+  liberadoCompra: boolean;
   tipo: string;
   status: string;
   grupoMercadoriaId: string | null;
@@ -332,6 +349,7 @@ export interface ProdutoDetalhe {
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
+  liberadoCompra: boolean;
   quantidadeIndividual: string;
   embalagem: string | null;
   cDe: string | null;

@@ -64,7 +64,12 @@ function completarAteOMaximo() {
 <template>
   <div class="item-linha" :class="{ 'item-linha--alerta': estouraMaximo }" :data-item="indice">
     <div class="item-linha__produto">
-      <ProdutoAutocomplete v-model="produtoId" :empresa-id="empresaId" densidade="comfortable" />
+      <ProdutoAutocomplete
+        v-model="produtoId"
+        :empresa-id="empresaId"
+        densidade="comfortable"
+        so-liberados-para-compra
+      />
       <div v-if="produto" class="item-linha__contexto">
         <v-chip size="x-small" variant="tonal" :color="abaixoDoMinimo ? 'warning' : undefined" label>
           Em estoque {{ formatarQuantidade(saldo) }} {{ unidade }}

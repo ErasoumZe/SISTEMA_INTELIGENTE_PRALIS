@@ -355,6 +355,32 @@ describe("agendamento de pedido integration", () => {
     expect(resposta.grupos.length).toBeGreaterThan(0);
   });
 
+  // Doc 59 (Rodrigo, 29/10/2026): so o produto liberado para compra pode ser agendado e aparece para escolher.
+  it("recusa e esconde o produto nao liberado para compra", async () => {
+    const naoLiberado = (await consultarUm<{ id: string }>(
+      `insert into produtos (empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao)
+       values ($1, $2, $3, 'AG-NAO-LIB', 'Agenda nao liberado') returning id`,
+      [idsTeste.empresaA, idsTeste.grupoMercadoriaInsumos, idsTeste.unidade]
+    ))!.id;
+    try {
+      const recusa = await pedir(
+        "POST",
+        "/api/compras/agendamentos",
+        corpo({ produtos: [{ produtoId: idsTeste.produto }, { produtoId: naoLiberado }] })
+      );
+      expect(recusa.statusCode, recusa.body).toBe(400);
+      expect(json<{ code?: string }>(recusa).code).toBe("PRODUCT_NOT_RELEASED_FOR_PURCHASE");
+
+      const ids = json<{ data: { produtos: Array<{ id: string }> } }>(
+        await pedir("GET", `/api/compras/agendamentos/produtos?empresaId=${idsTeste.empresaA}`)
+      ).data.produtos.map((produto) => produto.id);
+      expect(ids).toContain(idsTeste.produto);
+      expect(ids).not.toContain(naoLiberado);
+    } finally {
+      await executarSql("delete from produtos where id = $1", [naoLiberado]);
+    }
+  });
+
   it("isola por empresa e por permissao", async () => {
     const outra = await pedir("GET", `/api/compras/agendamentos?empresaId=${idsTeste.empresaB}`);
     expect(outra.statusCode).toBe(403);

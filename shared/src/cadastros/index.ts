@@ -24,6 +24,8 @@ export type CadastroForm = {
   documento: string;
   dataNascimento: string;
   whatsapp: string;
+  /** Doc 59: categoria do fornecedor (texto livre). */
+  categoria?: string;
   cep: string;
   rua: string;
   numero: string;
@@ -218,7 +220,8 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       documento: form.documento || null,
       whatsapp: form.whatsapp || null,
-      situacao: form.ativo ? "ativo" : "inativo"
+      situacao: form.ativo ? "ativo" : "inativo",
+      categoria: form.categoria?.trim() || null
     };
   if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")
