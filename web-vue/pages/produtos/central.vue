@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
+import CentralAplicarLoja from "~/components/produtos/CentralAplicarLoja.vue";
 import CentralCatalogoBase from "~/components/produtos/CentralCatalogoBase.vue";
 import CentralProdutosGrupos from "~/components/produtos/CentralProdutosGrupos.vue";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
@@ -314,6 +315,13 @@ onMounted(async () => {
         :carga-validada="cargas.find((item) => item.id === cargaId)?.estado !== 'recebida'"
         @gerar-previa="gerarPreviaCatalogoBase"
         @importar="importarCatalogoBase"
+      />
+      <CentralAplicarLoja
+        v-if="cargaId && cargaTemGrupos(cargas.find((item) => item.id === cargaId)?.estado)"
+        class="mt-5"
+        :carga-id="cargaId"
+        :empresas="empresas"
+        :empresa-inicial="sessao?.perfil?.empresaId ?? empresas[0]?.id ?? ''"
       />
 
       <CentralProdutosGrupos
