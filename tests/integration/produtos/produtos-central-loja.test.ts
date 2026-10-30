@@ -35,6 +35,7 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
   let antigoLigado = "";
   let parMaisVendido = "";
   let parMenosVendido = "";
+  let outroProduto = "";
   const prefixos = new Map<string, string>();
 
   const previa = () =>
@@ -83,11 +84,14 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
         "insert into produtos (empresa_id, descricao, codigo) values ($1, $2, $3) returning id",
         [idsTeste.empresaA, descricao, codigo]
       ))!.id;
-    parMenosVendido = await solto("B2 PDV SOLTO ZEROS", "00000000094005");
-    parMaisVendido = await solto("B2 PDV SOLTO", "94005");
+    parMenosVendido = await solto("B2 DUPLICATA UN", "00000000094005");
+    parMaisVendido = await solto("B2 DUPLICATA", "94005");
+    // Mesmo codigo do PDV, mas OUTRO produto (outro nome): nao entra na juncao, mesmo vendendo mais.
+    outroProduto = await solto("B2 DUPLICATA OUTRO SABOR", "094005");
     for (const [codigo, produtoId] of [
       ["00000000094005", parMenosVendido],
-      ["94005", parMaisVendido]
+      ["94005", parMaisVendido],
+      ["094005", outroProduto]
     ] as const) {
       await executarSql(
         `insert into integracoes_vinculos
@@ -112,6 +116,7 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
     };
     await venda(parMenosVendido, 1);
     await venda(parMaisVendido, 2);
+    await venda(outroProduto, 3);
     cargaId = (await consultarUm<{ id: string }>(
       "insert into produtos_central_cargas (estado, manifesto) values ('validada', '{}'::jsonb) returning id"
     ))!.id;
@@ -161,9 +166,7 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
     // De fora: a linha sem BASE e a sem medida base; o par antigo nao bloqueia mais.
     expect(plano.motivos["Sem o produto da BASE no ERP"]).toBe(1);
     expect(Object.keys(plano.motivos)).toHaveLength(2);
-    expect(plano.juntados).toEqual([
-      { codigoInterno: "94005", fica: "B2 PDV SOLTO", inativados: ["B2 PDV SOLTO ZEROS"] }
-    ]);
+    expect(plano.juntados).toEqual([{ codigoInterno: "94005", fica: "B2 DUPLICATA", inativados: ["B2 DUPLICATA UN"] }]);
 
     assertProblem(await aplicar({ confirmacao: "SIM", hashPlano: plano.hashPlano }), 400, "CONFIRMACAO_INVALIDA");
     assertProblem(await aplicar({ confirmacao: FRASE, hashPlano: "f".repeat(64) }), 409, "PREVIA_DESATUALIZADA");
@@ -235,6 +238,14 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
       [parMenosVendido]
     );
     expect(Number(vendasDoInativado?.total)).toBe(1);
+    // O de outro nome nao foi tocado: continua ativo, solto e com o vinculo dele.
+    const intocado = await consultarUm<{ status: string; base: string | null; vinculo: string }>(
+      `select p.status, p.produto_base_id as base, v.registro_sistema_id::text as vinculo
+         from produtos p join integracoes_vinculos v on v.identificador_externo = '094005' and v.empresa_id = p.empresa_id
+        where p.id = $1`,
+      [outroProduto]
+    );
+    expect(intocado).toEqual({ status: "ativo", base: null, vinculo: outroProduto });
 
     // Refazer e idempotente: nada novo e criado nem juntado.
     const denovo = json<{ data: { criar: number; atualizar: number; juntar: number } }>(await previa()).data;
