@@ -33,6 +33,8 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
   let cookie: string;
   let cargaId = "";
   let antigoLigado = "";
+  let parMaisVendido = "";
+  let parMenosVendido = "";
   const prefixos = new Map<string, string>();
 
   const previa = () =>
@@ -74,11 +76,42 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
       "insert into produtos (empresa_id, descricao, codigo, codigo_interno, produto_base_id) values ($1, 'B2 PDV LIGADO UN', '94002', '94002', $2) returning id",
       [idsTeste.empresaA, baseDois]
     ))!.id;
-    // Produto antigo solto com o mesmo codigo do PDV de uma linha: criar faria duplicata.
-    await executarSql(
-      "insert into produtos (empresa_id, descricao, codigo) values ($1, 'B2 PDV SOLTO', '00000000094005')",
-      [idsTeste.empresaA]
-    );
+    // Par de produtos antigos soltos com o MESMO codigo do PDV (com e sem zeros), cada um com o seu vinculo
+    // de venda: o que mais vendeu fica, recebe a BASE e os vinculos do outro; o outro e inativado.
+    const solto = async (descricao: string, codigo: string) =>
+      (await consultarUm<{ id: string }>(
+        "insert into produtos (empresa_id, descricao, codigo) values ($1, $2, $3) returning id",
+        [idsTeste.empresaA, descricao, codigo]
+      ))!.id;
+    parMenosVendido = await solto("B2 PDV SOLTO ZEROS", "00000000094005");
+    parMaisVendido = await solto("B2 PDV SOLTO", "94005");
+    for (const [codigo, produtoId] of [
+      ["00000000094005", parMenosVendido],
+      ["94005", parMaisVendido]
+    ] as const) {
+      await executarSql(
+        `insert into integracoes_vinculos
+           (empresa_id, tipo, tipo_registro, identificador_externo, descricao_externa, registro_sistema_id, pendente)
+         values ($1, 'vendas', 'produto', $2, 'B2 PDV SOLTO', $3, false)`,
+        [idsTeste.empresaA, codigo, produtoId]
+      );
+    }
+    const venda = async (produtoId: string, vezes: number) => {
+      for (let i = 0; i < vezes; i += 1) {
+        const vendaId = (await consultarUm<{ id: string }>(
+          `insert into vendas (empresa_id, data_referencia, descricao, valor_original, status)
+           values ($1, '2026-10-01', 'B2 venda do par', '5.00', 'aprovado') returning id`,
+          [idsTeste.empresaA]
+        ))!.id;
+        await executarSql(
+          `insert into vendas_produtos (venda_id, produto_id, descricao_produto, quantidade, valor_unitario, valor_total)
+           values ($1, $2, 'B2 PDV SOLTO', '1', '5.00', '5.00')`,
+          [vendaId, produtoId]
+        );
+      }
+    };
+    await venda(parMenosVendido, 1);
+    await venda(parMaisVendido, 2);
     cargaId = (await consultarUm<{ id: string }>(
       "insert into produtos_central_cargas (estado, manifesto) values ('validada', '{}'::jsonb) returning id"
     ))!.id;
@@ -116,18 +149,21 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
         total: number;
         criar: number;
         atualizar: number;
+        juntar: number;
+        inativar: number;
         bloqueados: number;
         motivos: Record<string, number>;
         hashPlano: string;
+        juntados: Array<{ codigoInterno: string | null; fica: string; inativados: string[] }>;
       };
     }>(resposta).data;
-    expect(plano).toMatchObject({ total: 6, criar: 2, atualizar: 1, bloqueados: 3 });
-    expect(Object.keys(plano.motivos)).toEqual(
-      expect.arrayContaining([
-        "Sem o produto da BASE no ERP",
-        "Já existe produto antigo da loja, solto, com este código do PDV (resolver à mão)"
-      ])
-    );
+    expect(plano).toMatchObject({ total: 6, criar: 2, atualizar: 1, juntar: 1, inativar: 1, bloqueados: 2 });
+    // De fora: a linha sem BASE e a sem medida base; o par antigo nao bloqueia mais.
+    expect(plano.motivos["Sem o produto da BASE no ERP"]).toBe(1);
+    expect(Object.keys(plano.motivos)).toHaveLength(2);
+    expect(plano.juntados).toEqual([
+      { codigoInterno: "94005", fica: "B2 PDV SOLTO", inativados: ["B2 PDV SOLTO ZEROS"] }
+    ]);
 
     assertProblem(await aplicar({ confirmacao: "SIM", hashPlano: plano.hashPlano }), 400, "CONFIRMACAO_INVALIDA");
     assertProblem(await aplicar({ confirmacao: FRASE, hashPlano: "f".repeat(64) }), 409, "PREVIA_DESATUALIZADA");
@@ -139,7 +175,8 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
       proximoCursor: null,
       criados: 2,
       atualizados: 1,
-      ignorados: 3,
+      juntados: 1,
+      ignorados: 2,
       falhas: []
     });
 
@@ -170,11 +207,37 @@ describe("produtos - aplicar a loja pelo backup do paralelo (fase B2)", () => {
     expect(antigo).toMatchObject({ id: antigoLigado, status: "inativo", codigo: "94002", nome: "B2 ANTIGO LIGADO" });
     expect(Number(antigo?.preco)).toBe(3.2);
 
-    for (const codigo of ["94003", "94004", "94005"]) expect(await produto(codigo)).toBeNull();
+    for (const codigo of ["94003", "94004"]) expect(await produto(codigo)).toBeNull();
     expect((await produto("94006"))?.nome).toBe("B2 NOVO");
 
-    // Refazer e idempotente: nada novo e criado.
-    const denovo = json<{ data: { criar: number; atualizar: number } }>(await previa()).data;
-    expect(denovo).toMatchObject({ criar: 0, atualizar: 3 });
+    // O par: fica o que mais vendeu (mesmo id, codigo do PDV preservado), agora com a BASE e os dados da loja;
+    // o outro fica inativo, com as vendas antigas; os dois codigos do PDV levam ao que ficou.
+    const ficou = await produto("94005");
+    expect(ficou).toMatchObject({ id: parMaisVendido, status: "ativo", codigo: "94005", nome: "B2 DUPLICATA" });
+    expect(Number(ficou?.preco)).toBe(12.5);
+    const inativado = await consultarUm<{ status: string; base: string | null }>(
+      "select status, produto_base_id as base from produtos where id = $1",
+      [parMenosVendido]
+    );
+    expect(inativado).toEqual({ status: "inativo", base: null });
+    const vinculos = await consultarTodos<{ codigo: string; produto: string }>(
+      `select identificador_externo as codigo, registro_sistema_id::text as produto from integracoes_vinculos
+        where empresa_id = $1 and tipo_registro = 'produto' and identificador_externo in ('94005', '00000000094005')
+        order by 1`,
+      [idsTeste.empresaA]
+    );
+    expect(vinculos).toEqual([
+      { codigo: "00000000094005", produto: parMaisVendido },
+      { codigo: "94005", produto: parMaisVendido }
+    ]);
+    const vendasDoInativado = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from vendas_produtos where produto_id = $1",
+      [parMenosVendido]
+    );
+    expect(Number(vendasDoInativado?.total)).toBe(1);
+
+    // Refazer e idempotente: nada novo e criado nem juntado.
+    const denovo = json<{ data: { criar: number; atualizar: number; juntar: number } }>(await previa()).data;
+    expect(denovo).toMatchObject({ criar: 0, atualizar: 4, juntar: 0 });
   });
 });

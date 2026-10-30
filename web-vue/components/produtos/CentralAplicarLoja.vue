@@ -2,7 +2,8 @@
 /**
  * Fase B2 da virada (R-222): a loja passa a ter os produtos dela como estão no backup do paralelo (o espelho da
  * planilha). Prévia sem gravar; aplicar exige a frase e o hash da prévia e grava em lotes, com progresso. Refazer
- * é seguro: o que já existe só é atualizado.
+ * é seguro: o que já existe só é atualizado. Produtos antigos do PDV com o mesmo código são juntados no que mais
+ * vendeu; os outros ficam inativos, com as vendas antigas.
  */
 import type { Opcao } from "~/types/padaria";
 
@@ -11,6 +12,9 @@ interface PreviaLoja {
   total: number;
   criar: number;
   atualizar: number;
+  juntar: number;
+  inativar: number;
+  juntados: Array<{ codigoInterno: string | null; fica: string | null; inativados: string[] }>;
   bloqueados: number;
   ativos: number;
   inativos: number;
@@ -32,6 +36,7 @@ interface LoteAplicado {
   proximoCursor: number | null;
   criados: number;
   atualizados: number;
+  juntados: number;
   ignorados: number;
   falhas: Array<{ nome: string; motivo: string }>;
 }
@@ -44,7 +49,8 @@ const confirmacao = ref("");
 const conferindo = ref(false);
 const aplicando = ref(false);
 const erro = ref("");
-const progresso = ref({ processados: 0, criados: 0, atualizados: 0, ignorados: 0 });
+const progresso = ref({ processados: 0, criados: 0, atualizados: 0, juntados: 0, ignorados: 0 });
+const aGravar = computed(() => (previa.value ? previa.value.criar + previa.value.atualizar + previa.value.juntar : 0));
 const falhas = ref<Array<{ nome: string; motivo: string }>>([]);
 const concluido = ref(false);
 watch([empresaId, () => props.cargaId], () => {
@@ -78,7 +84,7 @@ async function aplicar() {
   if (!previa.value || !fraseOk.value) return;
   aplicando.value = true;
   erro.value = "";
-  progresso.value = { processados: 0, criados: 0, atualizados: 0, ignorados: 0 };
+  progresso.value = { processados: 0, criados: 0, atualizados: 0, juntados: 0, ignorados: 0 };
   falhas.value = [];
   let cursor: number | null = 0;
   try {
@@ -96,6 +102,7 @@ async function aplicar() {
         processados: lote.processados,
         criados: progresso.value.criados + lote.criados,
         atualizados: progresso.value.atualizados + lote.atualizados,
+        juntados: progresso.value.juntados + lote.juntados,
         ignorados: progresso.value.ignorados + lote.ignorados
       };
       falhas.value.push(...lote.falhas);
@@ -120,6 +127,10 @@ async function aplicar() {
         inativos, com preço, custo, margem, estoque mínimo e máximo, grupo e fiscal. Quem já está ligado à BASE é
         atualizado (o histórico de vendas fica); o resto é criado. Foto fica de fora.
       </p>
+      <p>
+        Produtos antigos do PDV com o mesmo código (com e sem zeros) são <strong>juntados</strong>: fica o que mais
+        vendeu, que recebe as vendas novas dos dois códigos; os outros ficam inativos, com as vendas antigas.
+      </p>
       <div class="aplicar-loja__acoes">
         <v-select v-model="empresaId" :items="empresas" item-title="nome" item-value="id" label="Loja" hide-details />
         <v-btn
@@ -136,11 +147,19 @@ async function aplicar() {
       <template v-if="previa">
         <p>
           {{ previa.loja }}: <strong class="cx-num">{{ previa.criar }}</strong> a criar ·
-          <strong class="cx-num">{{ previa.atualizar }}</strong> a atualizar · {{ previa.bloqueados }} de fora ·
-          {{ previa.total }} no backup ({{ previa.ativos }} ativos, {{ previa.inativos }} inativos)
+          <strong class="cx-num">{{ previa.atualizar }}</strong> a atualizar ·
+          <strong class="cx-num">{{ previa.juntar }}</strong> a juntar ({{ previa.inativar }} antigos inativados) ·
+          {{ previa.bloqueados }} de fora · {{ previa.total }} no backup ({{ previa.ativos }} ativos,
+          {{ previa.inativos }} inativos)
         </p>
         <ul v-if="Object.keys(previa.motivos).length" class="aplicar-loja__lista">
           <li v-for="(n, motivo) in previa.motivos" :key="motivo">{{ n }} · {{ motivo }}</li>
+        </ul>
+        <ul v-if="previa.juntados.length" class="aplicar-loja__lista">
+          <li v-for="par in previa.juntados" :key="`${par.codigoInterno}-${par.fica}`">
+            juntar · {{ par.codigoInterno ?? "sem código" }} · fica {{ par.fica }}
+            <template v-if="par.inativados.length"> · inativa {{ par.inativados.join(", ") }}</template>
+          </li>
         </ul>
         <ul v-if="previa.amostra.length" class="aplicar-loja__lista">
           <li v-for="item in previa.amostra.slice(0, 8)" :key="`${item.acao}-${item.codigoInterno}-${item.nome}`">
@@ -158,11 +177,11 @@ async function aplicar() {
           <v-btn
             color="primary"
             prepend-icon="mdi-database-arrow-down"
-            :disabled="!fraseOk || previa.criar + previa.atualizar === 0"
+            :disabled="!fraseOk || aGravar === 0"
             :loading="aplicando"
             @click="aplicar"
           >
-            Aplicar {{ previa.criar + previa.atualizar }}
+            Aplicar {{ aGravar }}
           </v-btn>
         </div>
       </template>
@@ -170,7 +189,8 @@ async function aplicar() {
         <v-progress-linear :model-value="percentual" color="primary" height="8" rounded />
         <p>
           {{ progresso.processados }} de {{ previa?.total }} · {{ progresso.criados }} criados ·
-          {{ progresso.atualizados }} atualizados · {{ progresso.ignorados }} de fora · {{ falhas.length }} falhas
+          {{ progresso.atualizados }} atualizados · {{ progresso.juntados }} juntados · {{ progresso.ignorados }} de
+          fora · {{ falhas.length }} falhas
         </p>
         <v-alert v-if="concluido" type="success" variant="tonal">Loja aplicada pelo backup.</v-alert>
         <ul v-if="falhas.length" class="aplicar-loja__lista">
