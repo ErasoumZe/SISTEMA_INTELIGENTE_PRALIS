@@ -55,7 +55,7 @@ export async function listarAliasesHistoricoRepository(empresaId: string, db: Ex
 export async function listarProdutosParaHistoricoRepository(empresaId: string, db: ExecutorBanco = banco) {
   // Todos os status (doc 55, decisao 5): "INATIVO X" pareia com o produto inativo de nome exato.
   return db
-    .select({ id: produtos.id, descricao: produtos.descricao })
+    .select({ id: produtos.id, descricao: produtos.descricao, nomeCatalogo: produtos.nomeCatalogo })
     .from(produtos)
     .where(eq(produtos.empresaId, empresaId));
 }

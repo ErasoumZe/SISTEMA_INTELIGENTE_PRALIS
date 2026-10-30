@@ -182,6 +182,31 @@ describe("pareamento com o cadastro", () => {
   });
 });
 
+describe("pareamento pelo nome do catalogo (o nome da planilha)", () => {
+  // Produto vindo do paralelo: a descricao leva a unidade ("SPRITE LATA 220ML UN"); o nome da planilha e o
+  // nome do catalogo. Produto antigo do PDV: so a descricao.
+  const indices = construirIndicesHistorico(
+    [{ id: "f1", nome: "Spal" }],
+    [],
+    [
+      { id: "p1", descricao: "SPRITE LATA 220ML UN", nomeCatalogo: "SPRITE LATA 220ML" },
+      { id: "p2", descricao: "PAO FRANCES KG", nomeCatalogo: null },
+      { id: "p3", descricao: "FANTA UVA", nomeCatalogo: "FANTA UVA LATA 220ML" },
+      { id: "p4", descricao: "FANTA UVA UN", nomeCatalogo: "FANTA UVA" }
+    ]
+  );
+  const par = (produto: string) => parearLinhaHistorico("SPAL", normalizarNomeHistorico(produto), indices);
+
+  it("acha pelo nome do catalogo e, sem ele, pela descricao", () => {
+    expect(par("SPRITE LATA 220ML")).toMatchObject({ resultado: "correspondencia", produtoId: "p1" });
+    expect(par("PAO FRANCES KG")).toMatchObject({ resultado: "correspondencia", produtoId: "p2" });
+  });
+
+  it("o nome do catalogo vence a descricao de outro produto", () => {
+    expect(par("FANTA UVA")).toMatchObject({ resultado: "correspondencia", produtoId: "p4" });
+  });
+});
+
 describe("validade da linha", () => {
   const boa: HistoricoLinha = {
     numeroLinha: 2,
