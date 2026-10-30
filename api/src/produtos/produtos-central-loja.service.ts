@@ -3,6 +3,7 @@ import type { JsonValue } from "@padaria/shared/api";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { unidadesEGruposDaEmpresaRepository } from "./produtos-base.repository.js";
 import { montarPayloadBase } from "./produtos-catalogo-base.service.js";
+import { nomeParaJuntar } from "./produtos-nome-juntar.js";
 import {
   basesPorOrigemRepository,
   estadoDaCargaRepository,
@@ -106,7 +107,7 @@ async function planejar(cargaId: string, empresaId: string, loja: string) {
     const produtoBaseId = bases.get(texto(linha.dados["base_product_id"]));
     if (!produtoBaseId) return recusar("Sem o produto da BASE no ERP");
     const ligado = porBase.get(produtoBaseId);
-    const antigos = ligado
+    const comOMesmoCodigo = ligado
       ? []
       : [
           ...new Map(
@@ -116,6 +117,12 @@ async function planejar(cargaId: string, empresaId: string, loja: string) {
               .map((p) => [p.id, p])
           ).values()
         ];
+    const nomeDaLinha = nomeParaJuntar(linha.nome);
+    const antigos = comOMesmoCodigo.filter((p) => nomeParaJuntar(p.descricao) === nomeDaLinha);
+    // So ha antigo com o codigo, mas de outro produto: criar faria dois cadastros com o mesmo codigo do PDV.
+    if (comOMesmoCodigo.length && !antigos.length) {
+      return recusar("Produto antigo do PDV com este código, mas com outro nome (resolver à mão)");
+    }
     if (antigos.some((p) => jaEscolhidos.has(p.id))) {
       return recusar("Produto antigo do PDV disputado por mais de uma linha do backup (resolver à mão)");
     }
