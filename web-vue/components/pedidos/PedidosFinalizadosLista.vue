@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Pedidos finalizados (doc 58 §5): o que já foi comprado. "A caminho" espera a entrega (e o recebimento parcial
+ * Pedidos a receber (doc 58 §5): o que já foi comprado. "A caminho" espera a entrega (e o recebimento parcial
  * continua aqui até fechar); "Recebidos" já entraram no estoque. Cada linha abre o pedido.
  */
 import type { PedidoDto, PedidoStatus } from "@padaria/shared";

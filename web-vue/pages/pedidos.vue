@@ -12,7 +12,7 @@ import { itemPorTela } from "~/utils/domain";
 /**
  * Cotação por fornecedor (doc 58 §4, Rodrigo 23/10/2026): em cima o Pedido urgente; embaixo os produtos em
  * cotação e onde cada fornecedor está (Enviado, Cotado, Retornado, Com aumento, Comprado). O que foi comprado
- * segue para Pedidos finalizados, onde também se recebe. Catálogo, histórico e preço-base moram no "Cadastro de
+ * segue para Pedidos a receber, onde também se recebe. Catálogo, histórico e preço-base moram no "Cadastro de
  * compras".
  */
 const {

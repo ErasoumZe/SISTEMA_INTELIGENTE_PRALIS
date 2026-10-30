@@ -3,7 +3,7 @@ import { entrar, LARGURAS, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 import { abrirContextoCompras, irParaTela } from "./apoio-compras.js";
 
 // Doc 57 §1 e doc 58 §4/§5: catalogo, historico e preco-base moram no "Cadastro de compras". A Cotacao por
-// fornecedor tem o Pedido urgente e a matriz por produto; o comprado vai para Pedidos finalizados.
+// fornecedor tem o Pedido urgente e a matriz por produto; o comprado vai para Pedidos a receber.
 test("Cadastro de compras tem catalogo, historico e preco-base; a Cotacao tem so o Pedido urgente e a matriz", async ({
   page
 }) => {
@@ -29,7 +29,7 @@ test("Cadastro de compras tem catalogo, historico e preco-base; a Cotacao tem so
     await expect(page.getByText("Fila de pedidos", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Novo pedido manual" })).toHaveCount(0);
 
-    await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
+    await irParaTela(page, "/pedidos_finalizados", "Pedidos a receber");
     await expect(page.locator('[data-secao="pedidos-finalizados"]')).toBeVisible();
     await expect(page.getByRole("tab", { name: /A caminho/ })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Recebidos/ })).toBeVisible();
