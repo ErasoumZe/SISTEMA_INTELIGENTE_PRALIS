@@ -351,4 +351,28 @@ describe("historico de compras por fornecedor e produto integration", () => {
     });
     expect(aplicarSem.statusCode).toBe(403);
   });
+
+  it("pareia pelo nome do catalogo quando a descricao leva a unidade (produto vindo do paralelo)", async () => {
+    const produto = await consultarUm<{ id: string }>(
+      `insert into produtos (empresa_id, descricao, nome_catalogo, codigo)
+         values ($1, 'SPRITE LATA 220ML HIST UN', 'SPRITE LATA 220ML HIST', 'HIST-NOME-CATALOGO') returning id`,
+      [idsTeste.empresaA]
+    );
+    try {
+      const resposta = await analisar(
+        "nome-catalogo.csv",
+        csv([compra(FORNECEDOR_SEED, "SPRITE LATA 220ML HIST", 4, "12", "1,853")])
+      );
+      expect(resposta.statusCode, resposta.body).toBe(201);
+      const lido = await detalhe(json<{ data: { id: string } }>(resposta).data.id);
+      expect(lido.porResultado).toMatchObject({ correspondencia: 1 });
+      expect(lido.previa.criar).toBe(1);
+    } finally {
+      await executarSql("delete from compras_historico_importacoes where empresa_id = $1 and nome_arquivo = $2", [
+        idsTeste.empresaA,
+        "nome-catalogo.csv"
+      ]);
+      await executarSql("delete from produtos where id = $1", [produto!.id]);
+    }
+  });
 });

@@ -7,6 +7,7 @@ export type IndicesHistorico = {
   fornecedoresPorNome: Map<string, string[]>;
   apelidos: Map<string, string>;
   produtosPorNome: Map<string, string[]>;
+  produtosPorDescricao: Map<string, string[]>;
 };
 
 function indexar(mapa: Map<string, string[]>, chave: string, id: string) {
@@ -18,17 +19,25 @@ function indexar(mapa: Map<string, string[]>, chave: string, id: string) {
 export function construirIndicesHistorico(
   fornecedores: Array<{ id: string; nome: string }>,
   aliases: Array<{ aliasNormalizado: string; fornecedorId: string }>,
-  produtos: Array<{ id: string; descricao: string }>
+  produtos: Array<{ id: string; descricao: string; nomeCatalogo?: string | null }>
 ): IndicesHistorico {
   const fornecedoresPorNome = new Map<string, string[]>();
   for (const fornecedor of fornecedores)
     indexar(fornecedoresPorNome, normalizarNomeHistorico(fornecedor.nome), fornecedor.id);
+  // O nome da planilha e o nome do catalogo (o do paralelo); a descricao leva a unidade no fim
+  // ("SPRITE LATA 220ML UN"). A descricao so vale quando nenhum nome de catalogo casa.
   const produtosPorNome = new Map<string, string[]>();
-  for (const produto of produtos) indexar(produtosPorNome, normalizarNomeHistorico(produto.descricao), produto.id);
+  const produtosPorDescricao = new Map<string, string[]>();
+  for (const produto of produtos) {
+    const nome = produto.nomeCatalogo ? normalizarNomeHistorico(produto.nomeCatalogo) : "";
+    if (nome) indexar(produtosPorNome, nome, produto.id);
+    indexar(produtosPorDescricao, normalizarNomeHistorico(produto.descricao), produto.id);
+  }
   return {
     fornecedoresPorNome,
     apelidos: new Map(aliases.map((alias) => [alias.aliasNormalizado, alias.fornecedorId])),
-    produtosPorNome
+    produtosPorNome,
+    produtosPorDescricao
   };
 }
 
@@ -57,7 +66,8 @@ export function parearLinhaHistorico(
 ): Pareamento {
   const apelido = indices.apelidos.get(fornecedorNormalizado);
   const candidatosFornecedor = apelido ? [apelido] : (indices.fornecedoresPorNome.get(fornecedorNormalizado) ?? []);
-  const candidatosProduto = indices.produtosPorNome.get(produtoNormalizado) ?? [];
+  const candidatosProduto =
+    indices.produtosPorNome.get(produtoNormalizado) ?? indices.produtosPorDescricao.get(produtoNormalizado) ?? [];
   const fornecedorId = candidatosFornecedor.length === 1 ? candidatosFornecedor[0]! : null;
   const produtoId = candidatosProduto.length === 1 ? candidatosProduto[0]! : null;
 
