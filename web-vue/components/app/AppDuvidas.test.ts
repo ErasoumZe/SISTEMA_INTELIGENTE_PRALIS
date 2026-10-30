@@ -28,59 +28,69 @@ const duvidas: Duvida[] = [
 function montar() {
   return mount(AppDuvidas, {
     props: { duvidas },
-    global: {
-      stubs: {
-        AppLogoAnimada: true,
-        "v-navigation-drawer": { props: ["modelValue"], template: '<aside v-if="modelValue"><slot /></aside>' },
-        "v-btn": { template: '<button v-bind="$attrs"><slot /></button>' },
-        "v-chip": { template: '<button v-bind="$attrs"><slot /></button>' },
-        "v-expansion-panels": { template: "<div><slot /></div>" },
-        "v-expansion-panel": { template: "<div v-bind='$attrs'><slot /></div>" },
-        "v-expansion-panel-title": { template: "<div><slot /></div>" },
-        "v-expansion-panel-text": { template: "<div><slot /></div>" },
-        "v-text-field": {
-          inheritAttrs: false,
-          props: ["modelValue"],
-          emits: ["update:modelValue"],
-          template:
-            '<input :value="modelValue" :data-teste="$attrs[\'data-teste\']" @input="$emit(\'update:modelValue\', $event.target.value)" />'
-        }
-      }
-    }
+    global: { stubs: { AppLogoAnimada: true, "v-icon": true, Transition: false } }
   });
+}
+
+async function abrir(tela: ReturnType<typeof montar>) {
+  await tela.get("[data-teste='duvidas-abrir']").trigger("click");
+}
+
+async function perguntar(tela: ReturnType<typeof montar>, texto: string) {
+  await tela.get("[data-teste='duvidas-busca']").setValue(texto);
+  await tela.get("form").trigger("submit");
 }
 
 describe("AppDuvidas", () => {
   beforeEach(() => estados.clear());
 
-  it("abre no assunto da etapa em que o operador está", async () => {
+  it("a bolinha abre o chat já no assunto da etapa em que o operador está", async () => {
     useDuvidasContexto().marcar("maquininha");
     const tela = montar();
-    await tela.get("[data-teste='duvidas-abrir']").trigger("click");
+    expect(tela.find("[data-teste='duvidas-painel']").exists()).toBe(false);
+    await abrir(tela);
     expect(tela.find("[data-teste='duvida-m1']").exists()).toBe(true);
     expect(tela.find("[data-teste='duvida-v1']").exists()).toBe(false);
   });
 
-  it("fora do fechamento, na tela do caixa, abre em Durante o turno", async () => {
+  it("fora do fechamento, na tela do caixa, começa em Durante o turno", async () => {
     const tela = montar();
-    await tela.get("[data-teste='duvidas-abrir']").trigger("click");
+    await abrir(tela);
     expect(tela.find("[data-teste='duvida-t1']").exists()).toBe(true);
     expect(tela.find("[data-teste='duvida-m1']").exists()).toBe(false);
   });
 
-  it("a busca procura em todos os assuntos, pelo jeito que a pessoa fala", async () => {
+  it("tocar na pergunta mostra a pergunta como sua e a resposta como da Cicluz", async () => {
+    const tela = montar();
+    await abrir(tela);
+    await tela.get("[data-teste='duvida-t1']").trigger("click");
+    const minhas = tela.findAll("[data-de='voce']");
+    expect(minhas.at(-1)?.text()).toContain("Como faço sangria?");
+    expect(tela.findAll("[data-de='cicluz']").at(-1)?.text()).toContain("Pela aba Retorno / sangria.");
+  });
+
+  it("escrever procura em todos os assuntos, pelo jeito que a pessoa fala", async () => {
     useDuvidasContexto().marcar("maquininha");
     const tela = montar();
-    await tela.get("[data-teste='duvidas-abrir']").trigger("click");
-    await tela.get("[data-teste='duvidas-busca']").setValue("contei errado");
-    expect(tela.find("[data-teste='duvida-v1']").exists()).toBe(true);
-    expect(tela.find("[data-teste='duvida-m1']").exists()).toBe(false);
+    await abrir(tela);
+    await perguntar(tela, "contei errado");
+    const resposta = tela.findAll("[data-de='cicluz']").at(-1)?.text() ?? "";
+    expect(resposta).toContain("Errei a contagem");
+    expect(resposta).toContain("Use Corrigir contagem.");
   });
 
   it("sem resultado, manda chamar o gerente", async () => {
     const tela = montar();
-    await tela.get("[data-teste='duvidas-abrir']").trigger("click");
-    await tela.get("[data-teste='duvidas-busca']").setValue("xyz inexistente");
-    expect(tela.get("[data-teste='duvidas-vazio']").text()).toContain("chame o gerente");
+    await abrir(tela);
+    await perguntar(tela, "xyz inexistente");
+    expect(tela.findAll("[data-de='cicluz']").at(-1)?.text()).toContain("chame o gerente");
+  });
+
+  it("assuntos: escolher um assunto lista as perguntas dele", async () => {
+    const tela = montar();
+    await abrir(tela);
+    await tela.get("[aria-label='Ver os assuntos']").trigger("click");
+    await tela.get("[data-teste='duvidas-tema-vendas']").trigger("click");
+    expect(tela.find("[data-teste='duvida-v1']").exists()).toBe(true);
   });
 });

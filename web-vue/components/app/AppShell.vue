@@ -420,6 +420,6 @@ onMounted(() => {
       @abrir-saidas="emit('abrirSaidas')"
       @abrir-transferencias="emit('abrirTransferencias')"
     />
-    <AppDuvidas />
+    <AppDuvidas :com-navegacao-mobile="viewportMobile" />
   </v-layout>
 </template>
