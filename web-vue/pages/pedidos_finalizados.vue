@@ -8,7 +8,7 @@ import { usePedidosFinalizados } from "~/composables/usePedidosFinalizados";
 import { itemPorTela } from "~/utils/domain";
 
 /**
- * Pedidos finalizados (doc 58 §5, Rodrigo 23/10/2026): o que foi comprado na cotação — a caminho e recebido. O
+ * Pedidos a receber (doc 58 §5, Rodrigo 23/10/2026): o que foi comprado na cotação — a caminho e recebido. O
  * recebimento físico acontece aqui e é a única entrada de estoque (R-213).
  */
 const {
@@ -57,7 +57,7 @@ const {
     <ComprasTela>
       <AppCabecalhoTela
         :titulo="itemPorTela.pedidos_finalizados?.titulo ?? ''"
-        subtitulo="O que já foi comprado: a caminho e recebido. O recebimento é feito aqui."
+        subtitulo="O que já foi comprado e vai chegar, e o que já chegou. O recebimento é feito aqui."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <PedidosFinalizadosLista :pedidos="pedidos" :carregando="empresaCarregando" @abrir="verPedido" />

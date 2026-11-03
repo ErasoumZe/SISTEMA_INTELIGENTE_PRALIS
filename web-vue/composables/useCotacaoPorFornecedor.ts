@@ -5,7 +5,7 @@ import { mensagemErro } from "~/utils/domain";
 
 /**
  * Estado da tela Cotacao por fornecedor (doc 58 §4): a matriz de produtos em cotacao e o que o Pedido urgente
- * precisa (fornecedores e produtos). O que ja foi comprado mora em Pedidos finalizados.
+ * precisa (fornecedores e produtos). O que ja foi comprado mora em Pedidos a receber.
  */
 export function useCotacaoPorFornecedor() {
   const { apiGet } = useApi();

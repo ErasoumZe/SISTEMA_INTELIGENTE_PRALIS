@@ -40,7 +40,7 @@ async function ofertasEmCotacao(empresaId: string, produtoId?: string) {
     const item = itemPorId.get(convite.rodadaItemId);
     if (!item) continue;
     const vencedor = vencedores.get(item.rodadaItemId);
-    // Cotacao fechada: so interessa o que ainda espera decisao (o comprado ja foi para Pedidos finalizados).
+    // Cotacao fechada: so interessa o que ainda espera decisao (o comprado ja foi para Pedidos a receber).
     if (item.rodadaStatus !== "aberta" && vencedor) continue;
     const doConviteItem = respostas.filter((resposta) => resposta.conviteItemId === convite.conviteItemId);
     const doItem = doConviteItem.filter((resposta) => resposta.autorTipo === "fornecedor");

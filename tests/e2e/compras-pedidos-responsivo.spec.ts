@@ -10,7 +10,7 @@ import { abrirContextoCompras, codigoDeTeste, dialogoAberto, irParaTela, prepara
 test.describe("telas de compra em todas as larguras", () => {
   test.setTimeout(240_000);
 
-  test("Cotacao, Pedido urgente e Pedidos finalizados nao rolam na horizontal", async ({ page }) => {
+  test("Cotacao, Pedido urgente e Pedidos a receber nao rolam na horizontal", async ({ page }) => {
     const problemas = observarConsole(page);
     await entrar(page, USUARIOS.compras);
 
@@ -28,8 +28,8 @@ test.describe("telas de compra em todas as larguras", () => {
       await formulario.getByRole("button", { name: "Cancelar" }).click();
       await expect(formulario).toBeHidden();
 
-      await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
-      await expect(page.getByRole("heading", { name: "Pedidos finalizados", exact: true }), nome).toBeVisible();
+      await irParaTela(page, "/pedidos_finalizados", "Pedidos a receber");
+      await expect(page.getByRole("heading", { name: "Pedidos a receber", exact: true }), nome).toBeVisible();
       await semRolagemHorizontal(page);
     }
 

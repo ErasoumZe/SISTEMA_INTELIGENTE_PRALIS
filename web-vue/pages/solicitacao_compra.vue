@@ -114,7 +114,7 @@ onMounted(async () => {
     <ComprasTela>
       <AppCabecalhoTela
         titulo="Solicitação de compra"
-        subtitulo="Os pedidos agendados que você executa. Na data, confira as quantidades e envie aos fornecedores."
+        subtitulo="Os pedidos agendados que você executa. Na data, faça o pedido: ponha as quantidades e envie aos fornecedores."
       />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
 
@@ -150,7 +150,7 @@ onMounted(async () => {
               :disabled="!podeEnviar"
               append-icon="mdi-arrow-right"
               @click="abrir(item.ocorrenciaId)"
-              >Conferir e enviar</v-btn
+              >Fazer o pedido</v-btn
             >
           </li>
         </ul>

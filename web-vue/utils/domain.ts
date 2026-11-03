@@ -137,7 +137,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   // Doc 58 §5: o que ja foi comprado — a caminho e recebido. O recebimento acontece aqui.
   pedidos_finalizados: {
     id: "pedidos_finalizados",
-    titulo: "Pedidos finalizados",
+    titulo: "Pedidos a receber",
     permissao: "pedidos_visualizar",
     icone: "mdi-truck-check-outline"
   },

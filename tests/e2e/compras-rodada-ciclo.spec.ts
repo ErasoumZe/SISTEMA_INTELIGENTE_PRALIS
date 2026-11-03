@@ -20,7 +20,7 @@ import {
  * Pedido urgente -> o link sai (WhatsApp desconectado em dev: plano B "Copiar link") -> o fornecedor salva sem
  * enviar (COTADO) e depois envia (produto novo nao tem referencia: COM AUMENTO) -> o comprador abre a cotacao do
  * produto e contrapropoe -> o fornecedor aceita -> o comprador aceita e reajusta a referencia com a cotacao ainda
- * aberta (COMPRADO) -> o fornecedor ajusta a quantidade ao estoque dele, dentro da margem -> Pedidos finalizados:
+ * aberta (COMPRADO) -> o fornecedor ajusta a quantidade ao estoque dele, dentro da margem -> Pedidos a receber:
  * recebimento parcial e depois recebimento com devolucao, que fecha o item. Comprar nao move estoque (R-213).
  */
 const celula = (page: Page, produto: string, coluna: string) =>
@@ -154,8 +154,8 @@ test.describe("ciclo de compra pela cotacao", () => {
     await expect(separacao.locator('[data-estado="ajuste-salvo"]')).toBeVisible();
     await navegadorFornecedor.close();
 
-    // 8) Pedidos finalizados: o pedido esta A caminho com a quantidade ajustada.
-    await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
+    // 8) Pedidos a receber: o pedido esta A caminho com a quantidade ajustada.
+    await irParaTela(page, "/pedidos_finalizados", "Pedidos a receber");
     await page.locator(`[data-pedido="${fornecedorNome}"]`).click();
     const detalhe = page.locator(".pedido-detalhe");
     await expect(detalhe.locator('[data-campo="situacao-pedido"]')).toContainText("Comprado");
@@ -188,10 +188,10 @@ test.describe("ciclo de compra pela cotacao", () => {
     expect(problemas, problemas.join("\n")).toEqual([]);
   });
 
-  test("pedido do fluxo antigo continua acessivel em Pedidos finalizados e so pode ser cancelado", async ({ page }) => {
+  test("pedido do fluxo antigo continua acessivel em Pedidos a receber e so pode ser cancelado", async ({ page }) => {
     // O seed de desenvolvimento traz pedidos legados (A fazer / Enviado): leitura preservada.
     await entrar(page, USUARIOS.compras);
-    await irParaTela(page, "/pedidos_finalizados", "Pedidos finalizados");
+    await irParaTela(page, "/pedidos_finalizados", "Pedidos a receber");
     await page
       .locator('[data-secao="pedidos-finalizados"] .finalizados__linha', { hasText: "(legado)" })
       .first()

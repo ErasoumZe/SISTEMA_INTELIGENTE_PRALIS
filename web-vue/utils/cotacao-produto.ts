@@ -26,7 +26,7 @@ export const AJUDA_DO_GRUPO: Record<GrupoDaCotacao, string> = {
   decidir: "Não compraram sozinhas. Aceite, contraproponha ou espere as outras respostas.",
   aguardando: "Ainda não responderam ou salvaram sem enviar.",
   sem_oferta: "Não têm o produto ou o produto já foi comprado de outro.",
-  comprado: "Já é pedido: acompanhe em Pedidos finalizados."
+  comprado: "Já é pedido: acompanhe em Pedidos a receber."
 };
 
 const ORDEM_DOS_GRUPOS: GrupoDaCotacao[] = ["decidir", "aguardando", "sem_oferta", "comprado"];

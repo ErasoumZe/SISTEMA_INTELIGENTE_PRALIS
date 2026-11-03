@@ -5,7 +5,7 @@ import { mensagemErro } from "~/utils/domain";
 import { obterTentativaRecebimento, type TentativaRecebimento } from "~/utils/recebimento-idempotencia";
 
 /**
- * Estado e operacoes de Pedidos finalizados (doc 58 §5): o que ja foi comprado (a caminho) e o que ja chegou, o
+ * Estado e operacoes de Pedidos a receber (doc 58 §5): o que ja foi comprado (a caminho) e o que ja chegou, o
  * detalhe do pedido e o recebimento. O pedido nasce Comprado na cotacao; criar, editar e enviar na mao eram o
  * segundo caminho de compra e foram removidos.
  */
