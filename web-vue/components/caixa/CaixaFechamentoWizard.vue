@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useDuvidasContexto } from "~/composables/useDuvidasContexto";
 import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno, ResumoCaixa } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaFechamentoAjuda from "~/components/caixa/CaixaFechamentoAjuda.vue";
@@ -114,6 +115,13 @@ const etapas = [
   }
 ] as const;
 const etapaAtualDefinicao = computed(() => etapas.find((etapa) => etapa.id === etapaAtual.value) ?? etapas[0]);
+// O painel de duvidas abre no assunto da etapa em que o operador esta.
+const duvidas = useDuvidasContexto();
+const TEMA_DA_ETAPA = { 1: "vendas", 2: "maquininha", 3: "relatorio-final", 4: "fechamento" } as const;
+watch(etapaAtual, (etapa) => duvidas.marcar(TEMA_DA_ETAPA[etapa as keyof typeof TEMA_DA_ETAPA] ?? null), {
+  immediate: true
+});
+onBeforeUnmount(() => duvidas.marcar(null));
 // R-232 · a etapa "Resumo" saiu: ao entrar no fechamento, um popup rapido confirma o gerente responsavel.
 // A confirmacao vale para este caixa nesta aba (recarregar a tela nao pergunta de novo).
 const chaveGerente = `cicluz:fechamento:gerente:${props.caixa.id}`;
