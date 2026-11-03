@@ -1056,3 +1056,56 @@ Depois: teste em produção com as flags desligadas, e a virada pelo roteiro aci
    - Copiar os 4.365 inativos ainda depende de decisão; a recomendação é não copiar.
 5. Resolver à mão os 90 em dobro e os 50 fora da BASE.
 6. Desligar "criar automaticamente".
+
+### Fase B em produção (29 e 30/10/2026)
+
+**Decisões do José (29/10/2026), que substituem o plano acima onde conflitam:**
+
+- **Todos** os produtos da TNP entram, ativos e inativos, cada um com a situação que tem no paralelo.
+- Preço, custo, margem, situação, estoque mínimo e máximo, grupo e fiscal vêm da linha da loja no backup do paralelo, que é o espelho da planilha. A foto fica de fora.
+- Grupos e fornecedores vêm da planilha.
+
+**Fases:**
+
+| Fase   | O que fez (PR)                                            | Resultado na Padaria Principal                                                                |
+| ------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| B1     | Grupos oficiais da planilha e unidades da BASE (#241)     | 79 grupos e 6 unidades criados                                                                |
+| B2     | Aplicar a loja pelo backup do paralelo (#244)             | 6.072 produtos criados e 1.077 atualizados, 0 falhas                                          |
+| B3     | Histórico de compras casando pelo nome do catálogo (#245) | Fornecedores de 54 para 159; 11.580 compras no histórico; 2.000 vínculos fornecedor × produto |
+| Junção | Produtos antigos do PDV com o mesmo código (#246 e #247)  | 48 juntados e 43 inativados, com os vínculos de venda levados para quem ficou                 |
+
+**B1:** o card "Grupos e unidades" fica em Produtos → Manutenção, com prévia, a frase `CRIAR GRUPOS E UNIDADES` e o hash. O grupo é casado pelo nome limpo, sem os U+2060 invisíveis.
+
+**B2:** o card "Aplicar a loja pelo backup" fica na Central, com a frase `APLICAR A LOJA PELO BACKUP`, o hash e lotes de 150.
+
+- O produto ligado à BASE é atualizado: mantém o id, o histórico de vendas e o código do PDV.
+- O produto sem ligação é criado com "cadastrar mesmo assim", porque o paralelo tem 246 nomes repetidos.
+- A gravação é idempotente: rodar de novo só atualiza.
+- O primeiro deploy falhou no build, por falta de fôlego do servidor, e o redeploy passou.
+
+**B3:** fornecedores e histórico vêm da aba "TNP - DISCRIMINAÇÃO MERCADORIAS", importada em Compras → Cadastro de compras → Histórico de compras.
+
+- **Por que CSV:** o XLSX inteiro foi recusado, porque essa aba tem 84,6 MB descompactada e o limite é 64 MB por aba. Entrou um CSV só com as 6 colunas: REFERÊNCIA, PRODUTOS, QUANT, VALOR CUSTO UN, DATA REF e CONFRONTAR.
+- **Pareamento:** passou a casar pelo **nome do catálogo**, porque a descrição do produto vindo do paralelo termina com a unidade ("… UN").
+- **Fornecedores:** 25 nomes da planilha foram associados a fornecedores que já existiam e 105 foram cadastrados (outras grafias foram associadas a esses novos). O José decidiu cada grupo de grafias diferentes; a proposta está em `docs/relatorios`, fora do repositório.
+- **De fora:** 718 linhas ambíguas, quase todas "INATIVO …" que existem em dobro no paralelo com o mesmo nome, e 120 sem produto.
+- **O que não muda:** custo, preço de venda e preço-base.
+
+**Junção:** os "90 em dobro" e os 48 que a B2 deixou de fora eram o mesmo item criado duas vezes pela integração, com o código do PDV com e sem zeros (ex.: `10469` e `00000000010469`).
+
+- **Regra aprovada pelo José (30/10):** fica o que mais vendeu (no empate, a venda mais recente).
+- **O que fica:** é ligado à BASE, atualizado e recebe os vínculos de venda do outro.
+- **O outro:** é inativado, com as vendas antigas. Nada é apagado.
+- **Trava (#247):** só junta o produto antigo de **mesmo nome**, sem acento e sem sufixo de unidade.
+  - Ela evitou juntar "ICE TEA LEAO PESSEGO" com "LIMÃO" e "COCA COLA 1L" com "COCA COLA PET 1L CX C/06".
+  - O deploy da #247 também falhou no build, e o redeploy passou.
+
+**A conferir no PDV:**
+
+- O código `7891098040909`, que é o EAN do ICE TEA LIMÃO no paralelo, tem um vínculo de venda num produto antigo "ICE TEA LEAO PESSEGO 1500ML", que segue ativo e intocado.
+- A "COCA COLA PET 1L CX C/06" antiga segue à parte.
+
+**Ainda falta da virada:**
+
+- Desligar "criar automaticamente" em Integrações → Dicionário → Regras automáticas → linha "produto". A chave da integração **não se mexe**.
+- O deploy falhou duas vezes no build (código 255, no `generate` do front em paralelo com o build da API). A falta de fôlego do servidor está documentada; resolver de vez é decisão de infraestrutura.
