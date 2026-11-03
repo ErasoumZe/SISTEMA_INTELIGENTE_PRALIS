@@ -43,6 +43,12 @@ function resolverItens(
   const entradas: ItemEntrada[] = itens.map((item) => {
     const produto = produtosPorId.get(item.produtoId);
     if (!produto) throw erroValidacao("Produto nao pertence a empresa informada", "INVALID_PRODUCT");
+    // Doc 59: so o produto liberado para compra entra no pedido (agendado, urgente ou manual).
+    if (!produto.liberadoCompra)
+      throw erroValidacao(
+        `Produto não liberado para compra: ${produto.descricao}`,
+        "PRODUCT_NOT_RELEASED_FOR_PURCHASE"
+      );
     return {
       produtoId: item.produtoId,
       descricaoProduto: produto.descricao,

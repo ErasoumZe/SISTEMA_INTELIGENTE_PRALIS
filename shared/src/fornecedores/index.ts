@@ -20,7 +20,9 @@ export const fornecedorPayloadSchema = z.object({
   // R-219/R-221: fornecedor inativo nao aparece no seletor da rodada. WhatsApp segue opcional no
   // cadastro; a obrigatoriedade e no ato de convidar (ver `podeConvidar`).
   situacao: z.enum(situacoesFornecedor).default("ativo"),
-  whatsapp: z.string().trim().min(8).max(30).optional().nullable()
+  whatsapp: z.string().trim().min(8).max(30).optional().nullable(),
+  // Doc 59 (Rodrigo, 29/10/2026): texto livre ate a lista de categorias ser definida.
+  categoria: z.string().trim().max(80).optional().nullable()
 });
 
 /**

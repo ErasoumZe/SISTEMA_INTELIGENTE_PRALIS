@@ -26,6 +26,7 @@ export type ProdutoEstoqueLinha = {
   quantidadeEstoque: number;
   estoqueMin: number | null;
   estoqueMax: number | null;
+  liberadoCompra: boolean;
 };
 
 function numeroOuNulo(valor: string | null): number | null {
@@ -74,7 +75,8 @@ export async function buscarProdutosEstoqueRepository(
       descricao: produtos.descricao,
       quantidadeEstoque: produtos.quantidadeEstoque,
       estoqueMin: produtos.estoqueMin,
-      estoqueMax: produtos.estoqueMax
+      estoqueMax: produtos.estoqueMax,
+      liberadoCompra: produtos.liberadoCompra
     })
     .from(produtos)
     .where(eq(produtos.empresaId, empresaId));
@@ -83,7 +85,8 @@ export async function buscarProdutosEstoqueRepository(
     descricao: linha.descricao ?? "Produto",
     quantidadeEstoque: Number(linha.quantidadeEstoque),
     estoqueMin: numeroOuNulo(linha.estoqueMin),
-    estoqueMax: numeroOuNulo(linha.estoqueMax)
+    estoqueMax: numeroOuNulo(linha.estoqueMax),
+    liberadoCompra: linha.liberadoCompra
   }));
 }
 

@@ -33,7 +33,7 @@ describe("fluxo de compras dos docs 57 e 58 integration", () => {
       [FORN_A, idsTeste.empresaA, FORN_B]
     );
     await executarSql(
-      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao) values ($1,$2,$3,$4,'PROD-FLX-2','Abacaxi do fluxo') on conflict (id) do nothing",
+      "insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, liberado_compra) values ($1,$2,$3,$4,'PROD-FLX-2','Abacaxi do fluxo', true) on conflict (id) do nothing",
       [PRODUTO_2, idsTeste.empresaA, idsTeste.grupoMercadoriaInsumos, idsTeste.unidade]
     );
     await executarSql(

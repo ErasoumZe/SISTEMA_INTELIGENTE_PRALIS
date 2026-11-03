@@ -74,6 +74,7 @@ export async function carregarProdutoParaEscritaRepository(
   grupoIdExterno: string | null;
   areaVenda: string | null;
   grupoMercadoriaId: string | null;
+  liberadoCompra: boolean;
 } | null> {
   const [linha] = await tx
     .select({
@@ -88,7 +89,8 @@ export async function carregarProdutoParaEscritaRepository(
       validadeBalanca: produtos.validadeBalanca,
       grupoIdExterno: produtos.grupoIdExterno,
       areaVenda: produtos.areaVenda,
-      grupoMercadoriaId: produtos.grupoMercadoriaId
+      grupoMercadoriaId: produtos.grupoMercadoriaId,
+      liberadoCompra: produtos.liberadoCompra
     })
     .from(produtos)
     .where(eq(produtos.id, id))
@@ -237,6 +239,7 @@ export interface ProdutoParaGravar {
   marca: string | null;
   compraAproximada: boolean;
   habilitarAjuda: boolean;
+  liberadoCompra: boolean;
   unidadeIndividualId: string;
   quantidadeIndividual: number;
   grupoMercadoriaId: string | null;
@@ -343,6 +346,7 @@ export async function salvarProdutoRepository(
     marca: input.marca,
     compraAproximada: input.compraAproximada,
     habilitarAjuda: input.habilitarAjuda,
+    liberadoCompra: input.liberadoCompra,
     unidadeMedidaId: input.unidadeIndividualId,
     unidadeIndividualId: input.unidadeIndividualId,
     quantidadeIndividual: String(input.quantidadeIndividual),

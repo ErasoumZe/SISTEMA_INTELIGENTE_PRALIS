@@ -39,7 +39,8 @@ export async function salvarFornecedor(id: string | null, body: DadosExternos) {
     nome: dados.nome.trim(),
     documento: apenasDigitos(dados.documento),
     whatsapp: dados.whatsapp ? apenasDigitos(dados.whatsapp) : null,
-    situacao: dados.situacao
+    situacao: dados.situacao,
+    categoria: dados.categoria === undefined ? undefined : dados.categoria?.trim() || null
   });
 }
 

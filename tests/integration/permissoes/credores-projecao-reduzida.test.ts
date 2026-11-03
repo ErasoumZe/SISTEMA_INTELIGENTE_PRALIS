@@ -42,7 +42,8 @@ const CONTRATO_COMPLETO_COLABORADOR = [
   "funcaoNome"
 ];
 // `situacao` entrou no E1 da Fase 2 do Compras (R-221 decisao 11): o seletor de convite precisa dela.
-const CONTRATO_COMPLETO_FORNECEDOR = ["id", "empresaId", "nome", "documento", "whatsapp", "situacao"];
+// `categoria` entrou com o doc 59 (Rodrigo, 29/10/2026): so no contrato completo, de quem cadastra.
+const CONTRATO_COMPLETO_FORNECEDOR = ["id", "empresaId", "nome", "documento", "whatsapp", "situacao", "categoria"];
 
 // Dados que NAO podem sair na resposta operacional. Sao gravados por SQL direto de proposito: o
 // payload de cadastro valida CPF/CNPJ e o que importa aqui e o vazamento, nao a validacao.

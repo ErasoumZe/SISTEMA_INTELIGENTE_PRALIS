@@ -20,8 +20,8 @@ describe("compras solicitacoes integration", () => {
 
     // Produto de empresaA com teto configurado (estoque 0, maximo 10): pedir 20 estoura o teto.
     await executarSql(
-      `insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, quantidade_estoque, estoque_max)
-       values ($1, $2, $3, $4, $5, $6, '0', '10') on conflict (id) do nothing`,
+      `insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, quantidade_estoque, estoque_max, liberado_compra)
+       values ($1, $2, $3, $4, $5, $6, '0', '10', true) on conflict (id) do nothing`,
       [
         PRODUTO_TETO,
         idsTeste.empresaA,
@@ -42,8 +42,8 @@ describe("compras solicitacoes integration", () => {
       [UNIDADE_EMPRESA_B, idsTeste.empresaB, "Unidade B", "unb"]
     );
     await executarSql(
-      `insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao)
-       values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing`,
+      `insert into produtos (id, empresa_id, grupo_mercadoria_id, unidade_medida_id, codigo, descricao, liberado_compra)
+       values ($1, $2, $3, $4, $5, $6, true) on conflict (id) do nothing`,
       [
         PRODUTO_EMPRESA_B,
         idsTeste.empresaB,

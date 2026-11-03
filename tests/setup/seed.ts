@@ -535,7 +535,9 @@ export async function aplicarSeedIntegracao() {
     grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
     unidadeMedidaId: idsTeste.unidade,
     codigo: "PROD-INT",
-    descricao: "Produto Integracao"
+    descricao: "Produto Integracao",
+    // Doc 59: o produto dos testes de Compras e pedido, entao nasce liberado para compra.
+    liberadoCompra: true
   });
 
   const adminId = usuarioIds.get("admin");

@@ -112,6 +112,8 @@ export type Opcao = {
   ativo?: boolean;
   /** Situacao do fornecedor (R-219): fornecedor inativo nao aparece no seletor da rodada. */
   situacao?: "ativo" | "inativo";
+  /** Doc 59: categoria do fornecedor (texto livre). */
+  categoria?: string | null;
   horaInicio?: string | null;
   horaFim?: string | null;
   /** ADM-003 V1B — turno. Nulos significam TURNO INCOMPLETO: valido no cadastro, mas nao admissivel. */

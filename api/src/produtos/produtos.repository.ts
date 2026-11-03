@@ -45,6 +45,7 @@ export async function detalheProdutoRepository(id: string, escopoEmpresas: strin
       marca: produtos.marca,
       compraAproximada: produtos.compraAproximada,
       habilitarAjuda: produtos.habilitarAjuda,
+      liberadoCompra: produtos.liberadoCompra,
       quantidadeIndividual: produtos.quantidadeIndividual,
       embalagem: produtos.embalagem,
       cDe: produtos.cDe,

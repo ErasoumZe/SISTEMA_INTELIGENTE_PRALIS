@@ -195,6 +195,7 @@ export async function listarOpcoesDeProduto(entrada: {
   escopoEmpresas: string[];
   busca: string | undefined;
   ids: string[];
+  soLiberadosParaCompra?: boolean | undefined;
 }) {
   if (!entrada.escopoEmpresas.length) return [];
   return opcoesDeProdutoRepository({ ...entrada, limite: LIMITE_DE_OPCOES });
@@ -367,7 +368,9 @@ export async function salvarProduto(
           areaVenda: dados.areaVenda === undefined ? (alvo?.areaVenda ?? null) : dados.areaVenda,
           produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
           codigoInterno: opcoes.codigoInterno ?? null,
-          criadoPor: ator.usuarioId ?? null
+          criadoPor: ator.usuarioId ?? null,
+          // Doc 59: quem nao manda o campo (copia da BASE, fase B2) mantem o que ja estava.
+          liberadoCompra: dados.liberadoCompra ?? alvo?.liberadoCompra ?? false
         }
       )
     );
@@ -560,6 +563,7 @@ function montarProdutoParaGravar(
     produtoBaseId: string | null;
     codigoInterno: string | null;
     criadoPor: string | null;
+    liberadoCompra: boolean;
   }
 ): ProdutoParaGravar {
   return {
@@ -580,6 +584,7 @@ function montarProdutoParaGravar(
     marca: dados.marca?.trim() || null,
     compraAproximada: dados.compraAproximada,
     habilitarAjuda: dados.habilitarAjuda,
+    liberadoCompra: extra.liberadoCompra,
     unidadeIndividualId: dados.unidadeIndividualId,
     quantidadeIndividual: dados.quantidadeIndividual,
     grupoMercadoriaId: dados.grupoMercadoriaId ?? null,

@@ -321,7 +321,10 @@ export async function versoesDoConviteRepository(
 
 // --- doc 57 §5.1: o fornecedor diz o que mais ele vende -------------------------------------------
 
-/** Os produtos ativos da padaria (so nome e grupo) e se ESTE fornecedor ja esta vinculado a cada um. */
+/**
+ * Os produtos ativos e liberados para compra da padaria (so nome e grupo) e se ESTE fornecedor ja esta vinculado a
+ * cada um. Doc 59: o fornecedor so ve o que a padaria compra pelo pedido.
+ */
 export async function produtosParaFornecedorRepository(
   empresaId: string,
   fornecedorId: string,
@@ -340,7 +343,7 @@ export async function produtosParaFornecedorRepository(
       fornecedoresProdutos,
       and(eq(fornecedoresProdutos.produtoId, produtos.id), eq(fornecedoresProdutos.fornecedorId, fornecedorId))
     )
-    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.status, "ativo")))
+    .where(and(eq(produtos.empresaId, empresaId), eq(produtos.status, "ativo"), eq(produtos.liberadoCompra, true)))
     .orderBy(asc(produtos.descricao));
 }
 

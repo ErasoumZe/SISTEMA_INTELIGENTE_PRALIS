@@ -506,6 +506,8 @@ export const fornecedores = pgTable(
     // R-219/R-221: fornecedor inativo nao aparece no seletor da rodada. Mesmo padrao de
     // `produtos.status`. WhatsApp continua opcional no cadastro; a obrigatoriedade e no convite.
     situacao: text("situacao").$type<"ativo" | "inativo">().notNull().default("ativo"),
+    // Doc 59: categoria do fornecedor (texto livre ate a lista ser definida).
+    categoria: text("categoria"),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
@@ -1013,6 +1015,9 @@ export const produtos = pgTable(
     marca: text("marca"),
     compraAproximada: boolean("compra_aproximada").notNull().default(false),
     habilitarAjuda: boolean("habilitar_ajuda").notNull().default(false),
+    // Doc 59 (Rodrigo, 29/10/2026): so o produto liberado entra no pedido de Compras. Comeca desligado; nao
+    // liberado continua ativo e vendendo, so nao e pedido.
+    liberadoCompra: boolean("liberado_compra").notNull().default(false),
     quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
     // Como se compra (porte do Pralis; enums fieis mantidos como texto)
     embalagem: text("embalagem"), // sigla de unidades_medida (cadastro de Unidades)

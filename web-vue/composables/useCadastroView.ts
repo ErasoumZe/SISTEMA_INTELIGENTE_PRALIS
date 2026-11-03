@@ -67,6 +67,7 @@ export function useCadastroView(params: {
         nome: item.nome,
         documento: item.documento,
         whatsapp: item.whatsapp ? mascararWhatsapp(item.whatsapp) : undefined,
+        categoria: item.categoria ?? undefined,
         // Projetado para a edicao preservar a situacao: sem isto, editar o nome reabriria o form com
         // o default e o salvar seguinte reativaria um fornecedor inativo (R-219).
         ativo: item.situacao === "inativo" ? "Não" : "Sim"
@@ -286,7 +287,7 @@ export function useCadastroView(params: {
       usuarios: ["Nome", "Email", "Perfil", "Posto do caixa", "Setor", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
-      fornecedores: ["Nome", "Documento", "WhatsApp"],
+      fornecedores: ["Nome", "Documento", "WhatsApp", "Categoria"],
       socios_gestores: ["Nome", "Ativo"],
       maquininhas: ["Apelido", "Número de série", "Ativo"],
       clientes: ["Nome", "Documento"],

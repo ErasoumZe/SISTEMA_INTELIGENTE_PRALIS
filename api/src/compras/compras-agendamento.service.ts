@@ -97,8 +97,15 @@ async function validarPayload(payload: AgendamentoPayload, perfil: PerfilUsuario
   if (!(await validarGrupoAgendaRepository(payload.empresaId, payload.grupoMercadoriaId)))
     throw erroValidacao("Grupo nao pertence a empresa", "INVALID_GROUP");
   const ids = payload.produtos.map((produto) => produto.produtoId);
-  if ((await produtosDaEmpresaRepository(payload.empresaId, ids)).length !== ids.length)
-    throw erroValidacao("Produto nao pertence a empresa", "INVALID_PRODUCT");
+  const daEmpresa = await produtosDaEmpresaRepository(payload.empresaId, ids);
+  if (daEmpresa.length !== ids.length) throw erroValidacao("Produto nao pertence a empresa", "INVALID_PRODUCT");
+  // Doc 59: so o produto liberado para compra pode ser agendado.
+  const naoLiberados = daEmpresa.filter((produto) => !produto.liberadoCompra);
+  if (naoLiberados.length)
+    throw erroValidacao(
+      `Produto não liberado para compra: ${naoLiberados.map((produto) => produto.descricao).join(", ")}`,
+      "PRODUCT_NOT_RELEASED_FOR_PURCHASE"
+    );
   const responsavelId = payload.responsavelId ?? perfil.usuarioId;
   // Doc 58 §1: o responsavel executa o pedido (confere e envia a cotacao): precisa de `pedidos_editar`.
   const podeExecutar = await usuariosComPermissao(payload.empresaId, "pedidos_editar");
@@ -344,7 +351,7 @@ export async function listarProdutosDoAgendamento(
 ): Promise<ProdutosAgendamentoDto> {
   validarEmpresa(perfil, empresaId);
   const [estoque, grupos, { maisVende, maisCompra, maisLucro }] = await Promise.all([
-    listarEstoqueProdutosRepository({ empresaId }),
+    listarEstoqueProdutosRepository({ empresaId, liberadoCompra: true }),
     gruposDaEmpresaRepository(empresaId),
     rankingsDaEmpresa(empresaId, agora)
   ]);
