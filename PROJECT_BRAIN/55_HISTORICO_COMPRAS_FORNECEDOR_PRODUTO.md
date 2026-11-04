@@ -178,6 +178,11 @@ Só cria tabelas novas; nenhum `UPDATE` em dado existente. Os nomes finais de FK
 | Preço-base (`produtos_precos_base`)                  | **Não mexe sozinho.** Mostra o "menor custo dos últimos N meses" como _sugestão_; trocar a base passa pela análise e aplicação existentes, com confirmação. | **Dinheiro**: a base decide a compra automática.      |
 | Preço-base inicial                                   | A carga inicial é ato único (doc 53). Esta importação não a repete.                                                                                         | —                                                     |
 
+**Atualização de 04/11/2026 (R-233):** a aplicação desta planilha continua sem mexer no preço-base.
+Ao abrir uma rodada futura para um produto ainda sem base, o sistema inicializa a referência com o
+último custo pago presente no histórico importado. A origem aponta para o fato histórico; não se usa
+`fornecedores_produtos.preco_ofertado` como substituto da base.
+
 ## 5. Decisões registradas (José, 21/10/2026: "aceito as recomendações do doc 55, 1 a 8")
 
 1. **Entrada:** CSV ou XLSX de **uma aba só** (pequeno). Não se mexe nos tetos de upload (10 MB) nem de descompressão.

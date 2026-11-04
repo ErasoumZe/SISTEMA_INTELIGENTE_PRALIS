@@ -17,6 +17,9 @@ const PRODUTO_2 = "11111111-1111-4111-8111-11111111f703";
 const IMPORTACAO = "11111111-1111-4111-8111-11111111f704";
 const IMPORTACAO_ITEM = "11111111-1111-4111-8111-11111111f705";
 const PRECO_BASE = "11111111-1111-4111-8111-11111111f706";
+const HISTORICO_REFERENCIA = "11111111-1111-4111-8111-11111111f707";
+const HISTORICO_ITEM_ANTIGO = "11111111-1111-4111-8111-11111111f708";
+const HISTORICO_ITEM_RECENTE = "11111111-1111-4111-8111-11111111f709";
 
 type Convite = { id: string; fornecedorId: string; token: string };
 type RodadaAberta = { id: string; itens: Array<{ id: string; produtoId: string }>; convites: Convite[] };
@@ -77,6 +80,10 @@ describe("fluxo de compras dos docs 57 e 58 integration", () => {
       idsTeste.empresaA,
       [idsTeste.produto, PRODUTO_2]
     ]);
+    await executarSql("delete from compras_historico_precos where importacao_item_id = any($1)", [
+      [HISTORICO_ITEM_ANTIGO, HISTORICO_ITEM_RECENTE]
+    ]);
+    await executarSql("delete from compras_historico_importacoes where id = $1", [HISTORICO_REFERENCIA]);
     await executarSql("delete from compras_rodadas where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from compras_solicitacoes where empresa_id = $1", [idsTeste.empresaA]);
     await executarSql("delete from compras_importacoes_preco_base_itens where id = $1", [IMPORTACAO_ITEM]);
@@ -397,5 +404,49 @@ describe("fluxo de compras dos docs 57 e 58 integration", () => {
     expect(
       (await pedir("GET", `/api/compras/painel?empresaId=${idsTeste.empresaA}`, undefined, cookieSem)).statusCode
     ).toBe(403);
+  });
+
+  it("usa o ultimo custo pago da planilha como primeira referencia do fornecedor e da compra automatica", async () => {
+    await executarSql(
+      "insert into compras_historico_importacoes (id, empresa_id, nome_arquivo, hash_arquivo, status, total_linhas, criado_por) values ($1,$2,'historico.csv',$3,'aplicada',2,(select usuario_id from perfis_usuarios limit 1))",
+      [HISTORICO_REFERENCIA, idsTeste.empresaA, "7".repeat(64)]
+    );
+    await executarSql(
+      "insert into compras_historico_importacao_itens (id, importacao_id, numero_linha, fornecedor_informado, fornecedor_normalizado, produto_informado, produto_normalizado, data_compra, quantidade, custo_unitario, fornecedor_id, produto_id, resultado) values ($1,$3,1,'Fluxo Bahamas','FLUXO BAHAMAS','Abacaxi do fluxo','ABACAXI DO FLUXO',current_date - 2,'1','8.0000',$4,$5,'correspondencia'),($2,$3,2,'Fluxo Bahamas','FLUXO BAHAMAS','Abacaxi do fluxo','ABACAXI DO FLUXO',current_date - 1,'1','10.0000',$4,$5,'correspondencia')",
+      [HISTORICO_ITEM_ANTIGO, HISTORICO_ITEM_RECENTE, HISTORICO_REFERENCIA, FORN_A, PRODUTO_2]
+    );
+    await executarSql(
+      "insert into compras_historico_precos (empresa_id, fornecedor_id, produto_id, data_compra, quantidade, custo_unitario, origem, importacao_item_id) values ($1,$2,$3,current_date - 2,'1','8.0000','planilha',$4),($1,$2,$3,current_date - 1,'1','10.0000','planilha',$5)",
+      [idsTeste.empresaA, FORN_A, PRODUTO_2, HISTORICO_ITEM_ANTIGO, HISTORICO_ITEM_RECENTE]
+    );
+
+    const rodada = await abrir([{ fornecedorId: FORN_B, produtos: [PRODUTO_2] }]);
+    const token = rodada.convites[0]!.token;
+    const publica = json<{ data: { itens: Array<{ referencia: string | null }> } }>(
+      await publico("GET", "/api/rodada", token)
+    ).data;
+    expect(Number(publica.itens[0]?.referencia)).toBe(10);
+    const base = await consultarUm<{ origem: string; valor: string; historico_preco_id: string }>(
+      "select origem, valor, historico_preco_id from produtos_precos_base where empresa_id = $1 and produto_id = $2 and valido_ate is null",
+      [idsTeste.empresaA, PRODUTO_2]
+    );
+    expect(base?.origem).toBe("historico");
+    expect(Number(base?.valor)).toBe(10);
+    expect(base?.historico_preco_id).toBeTruthy();
+
+    await responder(token, { "Abacaxi do fluxo": 10 });
+    const comprado = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_adjudicacoes a join compras_rodadas_itens i on i.id = a.rodada_item_id where i.rodada_id = $1",
+      [rodada.id]
+    );
+    expect(Number(comprado?.total)).toBe(1);
+
+    const rodadaMaior = await abrir([{ fornecedorId: FORN_A, produtos: [PRODUTO_2] }]);
+    await responder(rodadaMaior.convites[0]!.token, { "Abacaxi do fluxo": 12 });
+    const semCompra = await consultarUm<{ total: string }>(
+      "select count(*)::text as total from compras_adjudicacoes a join compras_rodadas_itens i on i.id = a.rodada_item_id where i.rodada_id = $1",
+      [rodadaMaior.id]
+    );
+    expect(Number(semCompra?.total)).toBe(0);
   });
 });

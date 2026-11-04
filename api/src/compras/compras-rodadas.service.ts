@@ -19,7 +19,7 @@ import { ultimoEnvioDosConvitesRepository } from "./compras-whatsapp.repository.
 import {
   buscarEmpresaComprasRepository,
   buscarFornecedoresParaConviteRepository,
-  buscarPrecosBaseVigentesRepository,
+  inicializarPrecosBaseDoHistoricoRepository,
   buscarSolicitacaoParaRodadaRepository,
   criarRodadaRepository,
   detalharRodadaRepository,
@@ -105,9 +105,15 @@ export async function abrirRodadaNaTransacao(
     if (motivo) throw naoProcessavel(`${fornecedor.nome}: ${motivo}`, "FORNECEDOR_NAO_CONVIDAVEL");
   }
 
-  // Snapshot do preco-base vigente por produto (envelope congelado).
+  // Se nao havia base, o ultimo custo pago do historico vira a primeira referencia auditavel.
+  // O envelope congela esse valor; respostas posteriores nao mudam a cotacao ja enviada.
   const produtoIds = solicitacao.itens.map((item) => item.produtoId);
-  const precoBasePorProduto = await buscarPrecosBaseVigentesRepository(payload.empresaId, produtoIds, tx);
+  const precoBasePorProduto = await inicializarPrecosBaseDoHistoricoRepository(
+    payload.empresaId,
+    produtoIds,
+    usuarioId,
+    tx
+  );
   const itensEnvelope: ItemEnvelope[] = solicitacao.itens.map((item) => {
     const base = precoBasePorProduto.get(item.produtoId);
     return {

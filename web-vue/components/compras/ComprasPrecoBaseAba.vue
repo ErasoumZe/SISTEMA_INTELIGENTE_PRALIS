@@ -20,7 +20,7 @@ type PrecoBaseLinha = {
   produtoDescricao: string;
   produtoCodigo: string | null;
   valor: string;
-  origem: "importacao" | "rodada";
+  origem: "importacao" | "rodada" | "historico";
   validoDesde: string;
 };
 
@@ -50,7 +50,8 @@ const ROTULO_STATUS: Record<ImportacaoLinha["status"], string> = {
 };
 const ROTULO_ORIGEM: Record<PrecoBaseLinha["origem"], string> = {
   importacao: "Importação inicial",
-  rodada: "Rodada de cotação"
+  rodada: "Rodada de cotação",
+  historico: "Último custo pago (histórico)"
 };
 // Formatadores reaproveitados: criar um `Intl` por celula custava milhares de objetos por carga.
 const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });

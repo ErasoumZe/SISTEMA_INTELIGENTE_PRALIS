@@ -1453,7 +1453,7 @@ export const produtosPrecosBase = pgTable(
     empresaId,
     produtoId: uuid("produto_id").notNull(),
     valor: numeric("valor", { precision: 14, scale: 4 }).notNull(),
-    origem: text("origem").$type<"importacao" | "rodada">().notNull(),
+    origem: text("origem").$type<"importacao" | "rodada" | "historico">().notNull(),
     importacaoItemId: uuid("importacao_item_id").references(() => comprasImportacoesPrecoBaseItens.id, {
       onDelete: "restrict"
     }),
@@ -1461,6 +1461,9 @@ export const produtosPrecosBase = pgTable(
     // era placeholder de texto sem FK. FK simples (produtos_precos_base tem empresa_id, mesma empresa
     // garantida no codigo). `referencia_externa` sai na migration seguinte (drop isolado).
     rodadaId: uuid("rodada_id").references((): AnyPgColumn => comprasRodadas.id, { onDelete: "restrict" }),
+    historicoPrecoId: uuid("historico_preco_id").references((): AnyPgColumn => comprasHistoricoPrecos.id, {
+      onDelete: "restrict"
+    }),
     validoDesde: timestamp("valido_desde", { withTimezone: true }).notNull().defaultNow(),
     validoAte: timestamp("valido_ate", { withTimezone: true }),
     criadoPor: text("criado_por")
@@ -1475,10 +1478,10 @@ export const produtosPrecosBase = pgTable(
       foreignColumns: [produtos.id, produtos.empresaId]
     }).onDelete("restrict"),
     check("produtos_precos_base_valor_check", sql`${table.valor} >= 0`),
-    check("produtos_precos_base_origem_check", sql`${table.origem} in ('importacao', 'rodada')`),
+    check("produtos_precos_base_origem_check", sql`${table.origem} in ('importacao', 'rodada', 'historico')`),
     check(
       "produtos_precos_base_origem_referencia_check",
-      sql`(${table.origem} = 'importacao' and ${table.importacaoItemId} is not null) or (${table.origem} = 'rodada' and ${table.rodadaId} is not null)`
+      sql`(${table.origem} = 'importacao' and ${table.importacaoItemId} is not null and ${table.rodadaId} is null and ${table.historicoPrecoId} is null) or (${table.origem} = 'rodada' and ${table.rodadaId} is not null and ${table.importacaoItemId} is null and ${table.historicoPrecoId} is null) or (${table.origem} = 'historico' and ${table.historicoPrecoId} is not null and ${table.importacaoItemId} is null and ${table.rodadaId} is null)`
     ),
     check(
       "produtos_precos_base_validade_check",
