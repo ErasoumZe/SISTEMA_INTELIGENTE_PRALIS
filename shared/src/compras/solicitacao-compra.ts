@@ -55,6 +55,8 @@ export type SolicitacaoCompraItemDto = {
   /** Sugestao: a quantidade padrao do agendamento ou maximo - saldo. Vazio = sem sugestao. */
   /** Fornecedores do catalogo (aprovados, com WhatsApp) que recebem este produto. Vazio = escolher. */
   fornecedores: SolicitacaoCompraFornecedorDto[];
+  /** Vinculos aprovados que nao podem receber a cotacao; exibidos para explicar a ausencia no envio. */
+  fornecedoresIndisponiveis: Array<SolicitacaoCompraFornecedorDto & { motivo: string }>;
   maisVende: boolean;
   maisCompra: boolean;
   maisLucro: boolean;

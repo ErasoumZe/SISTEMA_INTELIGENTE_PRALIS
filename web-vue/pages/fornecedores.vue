@@ -1,32 +1,59 @@
 <script setup lang="ts">
 import { permissoes } from "~/utils/domain";
-import { fornecedorPendente, soPendentes } from "~/utils/fornecedores-pendentes";
+import { filtrarFornecedores, fornecedorPendente } from "~/utils/fornecedores-pendentes";
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
 
 // Doc 59: sem WhatsApp o pedido não vai sozinho; a lista de pendentes é o ponto de partida de quem compra.
-const pendentes = ref(false);
+const busca = ref("");
+const filtroWhatsapp = ref<"todos" | "com" | "sem">("todos");
+const filtroSituacao = ref<"todos" | "ativos" | "inativos">("todos");
 </script>
 
 <template>
   <AppWorkspace tela-inicial="fornecedores" tipo-pagina="cadastro" v-slot="ctx">
     <div class="fornecedores__filtro">
-      <v-chip
-        :color="pendentes ? 'warning' : undefined"
-        :variant="pendentes ? 'flat' : 'outlined'"
-        prepend-icon="mdi-whatsapp"
-        data-filtro="pendentes"
-        @click="pendentes = !pendentes"
-      >
-        Sem WhatsApp: {{ ctx.linhasCadastro.filter(fornecedorPendente).length }}
-      </v-chip>
+      <v-text-field
+        v-model="busca"
+        label="Buscar fornecedor"
+        placeholder="Nome, documento, WhatsApp ou categoria"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        density="compact"
+        hide-details
+        class="fornecedores__busca"
+      />
+      <v-select
+        v-model="filtroWhatsapp"
+        label="WhatsApp"
+        :items="[
+          { title: 'Todos', value: 'todos' },
+          { title: 'Com WhatsApp', value: 'com' },
+          { title: `Sem WhatsApp (${ctx.linhasCadastro.filter(fornecedorPendente).length})`, value: 'sem' }
+        ]"
+        density="compact"
+        hide-details
+        class="fornecedores__seletor"
+      />
+      <v-select
+        v-model="filtroSituacao"
+        label="Situação"
+        :items="[
+          { title: 'Todos', value: 'todos' },
+          { title: 'Ativos', value: 'ativos' },
+          { title: 'Inativos', value: 'inativos' }
+        ]"
+        density="compact"
+        hide-details
+        class="fornecedores__seletor"
+      />
     </div>
     <CadastroTablePage
       tela="fornecedores"
       :tela-atual="ctx.telaAtual"
       :descricao="ctx.descricao"
       :colunas="ctx.colunasCadastro"
-      :linhas="soPendentes(ctx.linhasCadastro, pendentes)"
+      :linhas="filtrarFornecedores(ctx.linhasCadastro, { busca, whatsapp: filtroWhatsapp, situacao: filtroSituacao })"
       :permissoes-filtro="[...permissoes]"
       :pode-excluir="false"
       @acionar="ctx.abrirCadastroNovo"
@@ -41,7 +68,20 @@ const pendentes = ref(false);
 <style scoped>
 .fornecedores__filtro {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-2);
   padding: var(--cx-sp-2) var(--cx-sp-3) 0;
+}
+.fornecedores__busca {
+  flex: 1 1 280px;
+}
+.fornecedores__seletor {
+  flex: 1 1 170px;
+  max-width: 240px;
+}
+@media (max-width: 600px) {
+  .fornecedores__seletor {
+    max-width: none;
+  }
 }
 </style>

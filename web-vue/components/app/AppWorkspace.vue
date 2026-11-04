@@ -1074,7 +1074,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     ]);
     dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "fornecedores") {
-    dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+    dados.fornecedores = await carregarOpcoesCompletas("/api/fornecedores", idEmpresa);
   } else if (tela === "socios_gestores") {
     dados.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
   } else if (tela === "maquininhas") {
@@ -1361,7 +1361,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.contas = await apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`);
     },
     fornecedores: async () => {
-      alvo.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+      alvo.fornecedores = await carregarOpcoesCompletas("/api/fornecedores", idEmpresa);
     },
     colaboradores: async () => {
       alvo.colaboradores = await carregarOpcoesCompletas("/api/colaboradores", idEmpresa);

@@ -155,13 +155,25 @@ const telaPequena = useDisplay().xs;
               v-else
               v-model="escolhido[item.produtoId]"
               :items="opcoesFornecedor"
-              placeholder="Sem fornecedor: escolha"
+              :placeholder="
+                item.fornecedoresIndisponiveis.length
+                  ? 'Vínculo indisponível: escolha outro'
+                  : 'Sem fornecedor: escolha'
+              "
               density="compact"
               hide-details
               :error="Number(quantidades[item.produtoId]) > 0 && !escolhido[item.produtoId]"
               :aria-label="`Fornecedor de ${item.descricao}`"
               data-campo="fornecedor-escolhido"
             />
+            <span v-if="item.fornecedoresIndisponiveis.length" class="linha__motivo">
+              {{
+                item.fornecedoresIndisponiveis
+                  .map((fornecedor) => `${fornecedor.nome}: ${fornecedor.motivo}`)
+                  .join("; ")
+              }}.
+              <NuxtLink to="/fornecedores">Corrigir no cadastro de fornecedores</NuxtLink>
+            </span>
           </div>
         </div>
         <p v-if="!itens.length" class="solicitacao__vazio">Nenhum produto com este nome.</p>
@@ -295,6 +307,12 @@ const telaPequena = useDisplay().xs;
 
 .linha__destino {
   color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
+.linha__motivo {
+  display: block;
+  color: var(--cx-attention);
   font-size: var(--cx-fs-caption);
 }
 
