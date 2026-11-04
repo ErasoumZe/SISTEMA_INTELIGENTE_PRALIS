@@ -1570,3 +1570,19 @@ ERP, sem `empresa_id` de loja e sem ser convertido em TNP. Catálogos TNP/LI/HOR
 às respectivas empresas do ERP; a operação de copiar da BASE para uma empresa deve preservar a
 proveniência e respeitar conflitos de código interno. A persistência, permissões e cópia serão
 implementadas sem misturar a BASE com os produtos operacionais de uma empresa.
+
+### R-233 — Primeiro preço de referência de Compras vem do último custo pago (José, 04/11/2026)
+
+Quando um produto ainda não tem preço-base vigente, a primeira cotação usa como referência o custo
+unitário da compra mais recente desse produto na empresa, importada e pareada do histórico de compras.
+A origem é a linha histórica real, com fornecedor e data; o preço do vínculo fornecedor–produto é só
+um resumo e não é a fonte da referência. A escolha é por produto, entre todos os fornecedores, não
+apenas o destinatário do convite. Em empate de data, vale o registro histórico criado mais recentemente
+e, depois, o identificador para desempate determinístico. Produto sem histórico válido segue sem base
+e exige decisão do comprador.
+
+Ao abrir a rodada, a base é inicializada somente se ausente e o valor é congelado no item enviado ao
+fornecedor. Uma base existente nunca é substituída por esta inicialização. Oferta com custo final menor
+ou igual à referência segue a compra automática já aprovada; acima dela exige decisão do comprador.
+As rodadas já abertas e as compras históricas não são reescritas. A importação do histórico continua
+gravando fatos e vínculos; a inicialização da base ocorre na primeira rodada posterior.

@@ -8,9 +8,11 @@ import {
   comprasSolicitacoesItens,
   empresas,
   fornecedores,
+  comprasHistoricoPrecos,
+  produtos,
   produtosPrecosBase
 } from "@padaria/db/schema";
-import { sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
+import { sqlTravarPrecoBaseDaEmpresa, sqlTravarRodadaDeCompras } from "@padaria/db/sessao";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 export async function travarRodadaDaSolicitacao(solicitacaoId: string, tx: TransacaoBanco): Promise<void> {
@@ -78,6 +80,63 @@ export async function buscarPrecosBaseVigentesRepository(
       )
     );
   return new Map(linhas.map((linha) => [linha.produtoId, { id: linha.id, valor: linha.valor }]));
+}
+
+/**
+ * A primeira cotacao usa o ultimo custo PAGO importado da planilha, se o produto ainda nao tem base.
+ * A trava da empresa serializa esta inicializacao com a carga inicial e com o fechamento de rodadas.
+ * O registro aponta para a linha historica real; nunca reescreve uma referencia ja vigente.
+ */
+export async function inicializarPrecosBaseDoHistoricoRepository(
+  empresaId: string,
+  produtoIds: string[],
+  usuarioId: string,
+  tx: TransacaoBanco
+): Promise<Map<string, { id: string; valor: string }>> {
+  if (!produtoIds.length) return new Map();
+  await tx.execute(sqlTravarPrecoBaseDaEmpresa(empresaId));
+  const vigentes = await buscarPrecosBaseVigentesRepository(empresaId, produtoIds, tx);
+  const semBase = [...new Set(produtoIds)].filter((produtoId) => !vigentes.has(produtoId));
+  if (!semBase.length) return vigentes;
+
+  const ultimos = await tx
+    .selectDistinctOn([comprasHistoricoPrecos.produtoId], {
+      id: comprasHistoricoPrecos.id,
+      produtoId: comprasHistoricoPrecos.produtoId,
+      valor: comprasHistoricoPrecos.custoUnitario
+    })
+    .from(comprasHistoricoPrecos)
+    .innerJoin(produtos, eq(produtos.id, comprasHistoricoPrecos.produtoId))
+    .where(
+      and(
+        eq(comprasHistoricoPrecos.empresaId, empresaId),
+        eq(produtos.empresaId, empresaId),
+        eq(produtos.status, "ativo"),
+        inArray(comprasHistoricoPrecos.produtoId, semBase)
+      )
+    )
+    .orderBy(
+      asc(comprasHistoricoPrecos.produtoId),
+      desc(comprasHistoricoPrecos.dataCompra),
+      desc(comprasHistoricoPrecos.criadoEm),
+      desc(comprasHistoricoPrecos.id)
+    );
+  if (!ultimos.length) return vigentes;
+  const criados = await tx
+    .insert(produtosPrecosBase)
+    .values(
+      ultimos.map((ultimo) => ({
+        empresaId,
+        produtoId: ultimo.produtoId,
+        valor: ultimo.valor,
+        origem: "historico" as const,
+        historicoPrecoId: ultimo.id,
+        criadoPor: usuarioId
+      }))
+    )
+    .returning({ id: produtosPrecosBase.id, produtoId: produtosPrecosBase.produtoId, valor: produtosPrecosBase.valor });
+  for (const criado of criados) vigentes.set(criado.produtoId, { id: criado.id, valor: criado.valor });
+  return vigentes;
 }
 
 export type FornecedorConvite = { id: string; nome: string; situacao: string; whatsapp: string | null };

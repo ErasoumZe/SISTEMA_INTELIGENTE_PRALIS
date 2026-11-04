@@ -645,6 +645,13 @@
       "when": 1793383816931,
       "tag": "0091_produtos_liberado_compra_fornecedor_categoria",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793815386424,
+      "tag": "0092_massive_lightspeed",
+      "breakpoints": true
     }
   ]
 }
