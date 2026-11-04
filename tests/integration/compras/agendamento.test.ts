@@ -122,6 +122,7 @@ describe("agendamento de pedido integration", () => {
     itens: Array<{
       produtoId: string;
       fornecedores: Array<{ fornecedorId: string }>;
+      fornecedoresIndisponiveis: Array<{ fornecedorId: string; nome: string; motivo: string }>;
     }>;
   };
   const ocorrenciaDa = async (agendaId: string) =>
@@ -197,6 +198,31 @@ describe("agendamento de pedido integration", () => {
     expect(item?.fornecedores.map((fornecedor) => fornecedor.fornecedorId).sort()).toEqual(
       [FORNECEDOR, SEGUNDO].sort()
     );
+  });
+
+  it("explica o vinculo aprovado que nao pode receber WhatsApp sem envia-lo", async () => {
+    await executarSql("delete from pedidos_agendas where empresa_id = $1", [idsTeste.empresaA]);
+    const id = await criar();
+    await materializar(depoisDoInicio());
+    const ocorrencia = await ocorrenciaDa(id);
+    await executarSql("update fornecedores set whatsapp = null where id = any($1)", [[FORNECEDOR, SEGUNDO]]);
+    try {
+      const item = (await detalhar(ocorrencia.id)).itens.find((linha) => linha.produtoId === idsTeste.produto);
+      expect(item?.fornecedores).toEqual([]);
+      expect(item?.fornecedoresIndisponiveis).toHaveLength(2);
+      expect(item?.fornecedoresIndisponiveis).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ fornecedorId: FORNECEDOR, motivo: expect.stringContaining("WhatsApp") }),
+          expect.objectContaining({ fornecedorId: SEGUNDO, motivo: expect.stringContaining("WhatsApp") })
+        ])
+      );
+      const envio = await enviarSolicitacao(ocorrencia.id, [{ produtoId: idsTeste.produto, quantidade: 1 }]);
+      expect(envio.statusCode).toBe(422);
+      expect((await enviosDaSolicitacao(ocorrencia.solicitacao_id)).map((linha) => linha.fornecedor_id)).toEqual([]);
+    } finally {
+      await executarSql("update fornecedores set whatsapp = '11999995501' where id = $1", [FORNECEDOR]);
+      await executarSql("update fornecedores set whatsapp = '11999995502' where id = $1", [SEGUNDO]);
+    }
   });
 
   it("o responsavel confere e envia: cada fornecedor do catalogo entra na fila com o prazo, a margem e o horario", async () => {

@@ -37,6 +37,38 @@ const fornecedorId = ref("");
 const produtoId = ref("");
 const precoOfertado = ref("");
 const statusFiltro = ref<"" | "pendente" | "aprovado" | "rejeitado">("");
+const busca = ref("");
+const fornecedorFiltro = ref<string | null>(null);
+const origemFiltro = ref<"" | "compras" | "fornecedor">("");
+const pagina = ref(1);
+const porPagina = 50;
+const linhasFiltradas = computed(() => {
+  const termo = (busca.value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  return catalogo.value.filter((linha) => {
+    if (fornecedorFiltro.value && linha.fornecedorId !== fornecedorFiltro.value) return false;
+    if (origemFiltro.value && linha.origem !== origemFiltro.value) return false;
+    if (!termo) return true;
+    return [linha.fornecedorNome, linha.produtoDescricao].some((valor) =>
+      valor
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pt-BR")
+        .includes(termo)
+    );
+  });
+});
+const totalPaginas = computed(() => Math.max(1, Math.ceil(linhasFiltradas.value.length / porPagina)));
+const linhasPagina = computed(() =>
+  linhasFiltradas.value.slice((pagina.value - 1) * porPagina, pagina.value * porPagina)
+);
+watch([busca, fornecedorFiltro, origemFiltro, statusFiltro, () => props.empresaId], () => (pagina.value = 1));
+watch(totalPaginas, (total) => {
+  if (pagina.value > total) pagina.value = total;
+});
 
 const ROTULO_ORIGEM: Record<CatalogoLinha["origem"], string> = { compras: "Compras", fornecedor: "Fornecedor" };
 const ROTULO_STATUS: Record<CatalogoLinha["status"], string> = {
@@ -158,6 +190,42 @@ watch([() => props.empresaId, statusFiltro], carregar, { immediate: true });
       />
       <v-btn prepend-icon="mdi-link-plus" color="primary" @click="abrirDialogo">Vincular produto</v-btn>
     </div>
+    <div class="catalogo__filtros mb-3">
+      <v-text-field
+        v-model="busca"
+        label="Buscar vínculo"
+        placeholder="Fornecedor ou produto"
+        prepend-inner-icon="mdi-magnify"
+        density="compact"
+        clearable
+        hide-details
+      />
+      <v-autocomplete
+        v-model="fornecedorFiltro"
+        :items="fornecedores"
+        item-title="nome"
+        item-value="id"
+        label="Fornecedor"
+        density="compact"
+        clearable
+        hide-details
+        no-data-text="Nenhum fornecedor"
+      />
+      <v-select
+        v-model="origemFiltro"
+        :items="[
+          { title: 'Todas as origens', value: '' },
+          { title: 'Compras', value: 'compras' },
+          { title: 'Fornecedor', value: 'fornecedor' }
+        ]"
+        label="Origem"
+        density="compact"
+        hide-details
+      />
+    </div>
+    <p v-if="!carregando && !erro" class="text-body-2 text-medium-emphasis mb-2">
+      {{ linhasFiltradas.length }} vínculo(s) encontrado(s)
+    </p>
     <div class="responsive-table-shell">
       <v-table density="comfortable">
         <thead>
@@ -171,7 +239,7 @@ watch([() => props.empresaId, statusFiltro], carregar, { immediate: true });
           </tr>
         </thead>
         <tbody>
-          <tr v-for="linha in catalogo" :key="linha.id">
+          <tr v-for="linha in linhasPagina" :key="linha.id">
             <td>{{ linha.fornecedorNome }}</td>
             <td>{{ linha.produtoDescricao }}</td>
             <td>{{ ROTULO_ORIGEM[linha.origem] }}</td>
@@ -208,11 +276,18 @@ watch([() => props.empresaId, statusFiltro], carregar, { immediate: true });
           </tr>
           <!-- `!erro` junto: com a lista limpa antes do await, um 403 deixava a tela afirmando
              "nenhum vínculo cadastrado" ao lado do alerta vermelho. -->
-          <tr v-if="!carregando && !erro && !catalogo.length">
-            <td colspan="6" class="text-center text-medium-emphasis py-6">Nenhum vínculo cadastrado.</td>
+          <tr v-if="!carregando && !erro && !linhasFiltradas.length">
+            <td colspan="6" class="text-center text-medium-emphasis py-6">
+              Nenhum vínculo encontrado com estes filtros.
+            </td>
           </tr>
         </tbody>
       </v-table>
+    </div>
+    <div v-if="totalPaginas > 1" class="d-flex align-center justify-end ga-2 mt-3">
+      <v-btn variant="outlined" size="small" :disabled="pagina === 1" @click="pagina -= 1">Anterior</v-btn>
+      <span>{{ pagina }} / {{ totalPaginas }}</span>
+      <v-btn variant="outlined" size="small" :disabled="pagina === totalPaginas" @click="pagina += 1">Próxima</v-btn>
     </div>
 
     <v-dialog v-model="dialogVinculo" max-width="620">
@@ -262,5 +337,15 @@ watch([() => props.empresaId, statusFiltro], carregar, { immediate: true });
 <style scoped>
 .filtro-situacao {
   max-width: 220px;
+}
+.catalogo__filtros {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) minmax(150px, 1fr);
+  gap: var(--cx-sp-2);
+}
+@media (max-width: 767px) {
+  .catalogo__filtros {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -102,14 +102,22 @@ async function ocorrenciaParaEnviar(id: string, empresaId: string, perfil: Perfi
 async function fornecedoresQuePodemReceber(empresaId: string, produtoIds: string[]) {
   const catalogo = await fornecedoresDoCatalogoRepository(empresaId, produtoIds);
   const porProduto = new Map<string, Array<{ fornecedorId: string; nome: string }>>();
+  const indisponiveis = new Map<string, Array<{ fornecedorId: string; nome: string; motivo: string }>>();
   for (const vinculo of catalogo) {
-    if (podeConvidar({ situacao: vinculo.situacao, whatsapp: vinculo.whatsapp })) continue;
+    const motivo = podeConvidar({ situacao: vinculo.situacao, whatsapp: vinculo.whatsapp });
+    if (motivo) {
+      const lista = indisponiveis.get(vinculo.produtoId) ?? [];
+      if (!lista.some((item) => item.fornecedorId === vinculo.fornecedorId))
+        lista.push({ fornecedorId: vinculo.fornecedorId, nome: vinculo.nome, motivo });
+      indisponiveis.set(vinculo.produtoId, lista);
+      continue;
+    }
     const lista = porProduto.get(vinculo.produtoId) ?? [];
     if (!lista.some((item) => item.fornecedorId === vinculo.fornecedorId))
       lista.push({ fornecedorId: vinculo.fornecedorId, nome: vinculo.nome });
     porProduto.set(vinculo.produtoId, lista);
   }
-  return porProduto;
+  return { porProduto, indisponiveis };
 }
 
 export async function detalharSolicitacaoCompra(
@@ -148,7 +156,8 @@ export async function detalharSolicitacaoCompra(
           unidade: produto?.unidade ?? null,
           estoqueAtual: produto?.quantidadeEstoque ?? null,
           estoqueMax: produto?.estoqueMax ?? null,
-          fornecedores: fornecedores.get(produtoId) ?? [],
+          fornecedores: fornecedores.porProduto.get(produtoId) ?? [],
+          fornecedoresIndisponiveis: fornecedores.indisponiveis.get(produtoId) ?? [],
           maisVende: rankings.maisVende.has(produtoId),
           maisCompra: rankings.maisCompra.has(produtoId),
           maisLucro: rankings.maisLucro.has(produtoId)
@@ -215,7 +224,7 @@ export async function enviarSolicitacaoCompra(
     for (const item of payload.itens) {
       const destinos = item.fornecedorId
         ? [item.fornecedorId]
-        : (catalogo.get(item.produtoId) ?? []).map((fornecedor) => fornecedor.fornecedorId);
+        : (catalogo.porProduto.get(item.produtoId) ?? []).map((fornecedor) => fornecedor.fornecedorId);
       if (!destinos.length) semFornecedor.push(item.produtoId);
       for (const fornecedorId of destinos) {
         const lista = porFornecedor.get(fornecedorId) ?? new Set<string>();
