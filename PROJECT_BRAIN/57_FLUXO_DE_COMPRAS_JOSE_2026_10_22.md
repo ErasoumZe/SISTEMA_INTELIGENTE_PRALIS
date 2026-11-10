@@ -95,14 +95,13 @@ desmarcar continua sendo no catálogo, pelo comprador. _Substitui, para este cas
 
 ## 7. Conectividade (José executa ou faz junto)
 
-WhatsApp: integração por API — **Meta WhatsApp Cloud API** (oficial, exige modelos de mensagem aprovados) **ou** um
-gateway por webhook (Z-API, Evolution, n8n). Passo a passo e variáveis no relatório de entrega.
+> **Atualização de 10/11/2026 (R-235):** a Meta WhatsApp Cloud API saiu. O envio é pela **Evolution API**; roteiro,
+> variáveis e riscos no **documento 60**.
 
-A API escolhe pelo `WHATSAPP_PROVEDOR` (`desligado` | `meta` | `webhook`; `teste` só nos testes):
+A API escolhe pelo `WHATSAPP_PROVEDOR` (`desligado` | `evolution` | `webhook`; `teste` só nos testes):
 
-- `meta`: `WHATSAPP_META_TOKEN`, `WHATSAPP_META_TELEFONE_ID`, e os modelos `WHATSAPP_META_MODELO_COTACAO` (padrão
-  `cotacao_compra`, 4 variáveis: fornecedor, empresa, prazo, link) e `WHATSAPP_META_MODELO_CONFIRMACAO` (padrão
-  `pedido_confirmado`, 3 variáveis: fornecedor, empresa, itens), idioma `WHATSAPP_META_IDIOMA` (padrão `pt_BR`).
+- `evolution`: `WHATSAPP_EVOLUTION_URL`, `WHATSAPP_EVOLUTION_API_KEY`, `WHATSAPP_EVOLUTION_INSTANCIA` e, para o
+  callback de status, `WHATSAPP_EVOLUTION_WEBHOOK_SEGREDO`. O texto da mensagem sai como está, sem modelo aprovado.
 - `webhook`: `WHATSAPP_WEBHOOK_URL` e `WHATSAPP_WEBHOOK_TOKEN` (Bearer); o corpo é `{ telefone, mensagem, tipo }`.
 
 A fila tenta 5 vezes por mensagem (tick de 60 s); depois fica "Falhou" e o comprador reenvia.

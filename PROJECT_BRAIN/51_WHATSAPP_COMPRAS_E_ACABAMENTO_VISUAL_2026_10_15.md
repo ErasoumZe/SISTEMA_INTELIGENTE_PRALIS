@@ -1,5 +1,8 @@
 # 51 - WhatsApp em Compras e acabamento visual - 15/10/2026
 
+> **Superado em 10/11/2026 (R-235):** a recomendação deste documento (Meta WhatsApp Cloud API) não vale
+> mais. O envio é pela **Evolution API**; ver o documento 60.
+
 > Escopo desta rodada: melhorar somente a apresentação de Pedidos, corrigir a exibição de
 > quantidades e documentar a integração oficial do WhatsApp. Nenhuma migration, credencial,
 > mensagem externa, push, PR, merge ou deploy foi executado.

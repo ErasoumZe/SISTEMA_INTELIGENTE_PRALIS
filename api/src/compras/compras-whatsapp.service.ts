@@ -55,7 +55,6 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
     return {
       telefone: envio.telefone,
       tipo: "convite",
-      parametros: [dados.fornecedorNome, dados.empresaNome, prazo, link],
       texto: [
         `Olá, ${dados.fornecedorNome}!`,
         `A ${dados.empresaNome} tem uma cotação de ${dados.totalItens} item(ns) para você.`,
@@ -70,7 +69,6 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
     return {
       telefone: envio.telefone,
       tipo: "pedido_confirmado",
-      parametros: [dados.fornecedorNome, dados.empresaNome, resumo],
       texto: [
         `Olá, ${dados.fornecedorNome}!`,
         `A ${dados.empresaNome} comprou estes produtos de você. Pode separar e entregar.`,

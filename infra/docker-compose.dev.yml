@@ -28,14 +28,13 @@ services:
       GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID:-}
       GOOGLE_ADMISSAO_SYNC_ENABLED: ${GOOGLE_ADMISSAO_SYNC_ENABLED:-false}
       # WhatsApp de Compras (doc 57 §7): o sistema manda a cotacao e o "pode entregar". Sem provedor, a fila
-      # espera e a tela avisa. O TOKEN e segredo: so no painel do Coolify ou no .env.local ignorado, nunca no Git.
+      # espera e a tela avisa. Provedor `evolution` (R-235). A API_KEY e o WEBHOOK_SEGREDO sao segredos: so no
+      # painel do Coolify ou no .env.local ignorado, nunca no Git.
       WHATSAPP_PROVEDOR: ${WHATSAPP_PROVEDOR:-desligado}
-      WHATSAPP_META_TOKEN: ${WHATSAPP_META_TOKEN:-}
-      WHATSAPP_META_TELEFONE_ID: ${WHATSAPP_META_TELEFONE_ID:-}
-      WHATSAPP_META_VERSAO_API: ${WHATSAPP_META_VERSAO_API:-v21.0}
-      WHATSAPP_META_MODELO_COTACAO: ${WHATSAPP_META_MODELO_COTACAO:-cotacao_compra}
-      WHATSAPP_META_MODELO_CONFIRMACAO: ${WHATSAPP_META_MODELO_CONFIRMACAO:-pedido_confirmado}
-      WHATSAPP_META_IDIOMA: ${WHATSAPP_META_IDIOMA:-pt_BR}
+      WHATSAPP_EVOLUTION_URL: ${WHATSAPP_EVOLUTION_URL:-}
+      WHATSAPP_EVOLUTION_API_KEY: ${WHATSAPP_EVOLUTION_API_KEY:-}
+      WHATSAPP_EVOLUTION_INSTANCIA: ${WHATSAPP_EVOLUTION_INSTANCIA:-}
+      WHATSAPP_EVOLUTION_WEBHOOK_SEGREDO: ${WHATSAPP_EVOLUTION_WEBHOOK_SEGREDO:-}
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
       WHATSAPP_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_TOKEN:-}
     ports:
