@@ -24,6 +24,8 @@ const envOpcionalUrl = z.preprocess(
   (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
   z.string().trim().url().optional()
 );
+/** Valor de `WHATSAPP_PROVEDOR` da Meta Cloud API, removida pela R-235. */
+const PROVEDOR_REMOVIDO_META = "meta";
 
 const envSchema = z.object({
   // Enum fechado: um typo (ex.: "prod") derruba o boot em vez de desativar
@@ -146,19 +148,23 @@ const envSchema = z.object({
     .default("08351168000153")
     .transform((valor) => valor.replace(/\D/g, ""))
     .refine((valor) => valor.length === 14, "NOTAS_FISCAIS_COMPANY deve ter 14 digitos (CNPJ da contabilidade)"),
-  // Envio automatico das cotacoes pelo WhatsApp (doc 57 §3). `desligado`: as mensagens ficam na fila e a
-  // tela avisa. `meta`: WhatsApp Cloud API oficial (modelos aprovados). `webhook`: um gateway (Z-API,
-  // Evolution, n8n) recebe {telefone, mensagem}. `teste`: so para os testes automatizados.
-  WHATSAPP_PROVEDOR: z.enum(["desligado", "meta", "webhook", "teste"]).default("desligado"),
-  WHATSAPP_META_TOKEN: envOpcionalNaoVazio,
-  // Callback da Meta: o token confirma o GET inicial; o app secret autentica cada POST.
-  WHATSAPP_META_WEBHOOK_VERIFY_TOKEN: envOpcionalNaoVazio,
-  WHATSAPP_META_APP_SECRET: envOpcionalNaoVazio,
-  WHATSAPP_META_TELEFONE_ID: envOpcionalNaoVazio,
-  WHATSAPP_META_VERSAO_API: z.string().trim().min(1).default("v21.0"),
-  WHATSAPP_META_MODELO_COTACAO: z.string().trim().min(1).default("cotacao_compra"),
-  WHATSAPP_META_MODELO_CONFIRMACAO: z.string().trim().min(1).default("pedido_confirmado"),
-  WHATSAPP_META_IDIOMA: z.string().trim().min(1).default("pt_BR"),
+  // Envio automatico das cotacoes pelo WhatsApp (doc 57 §3, R-235). `desligado`: as mensagens ficam na fila
+  // e a tela avisa. `evolution`: Evolution API (v2) da propria empresa, texto livre. `webhook`: um gateway
+  // generico (n8n, Z-API) recebe {telefone, mensagem}. `teste`: so para os testes automatizados.
+  // A Meta Cloud API saiu (R-235). Ambiente que ainda tenha `meta` sobe com o envio desligado (a fila
+  // espera e o boot avisa) em vez de derrubar a API inteira por causa do WhatsApp.
+  WHATSAPP_PROVEDOR: z.preprocess(
+    (valor) => (typeof valor === "string" && valor.trim() === PROVEDOR_REMOVIDO_META ? "desligado" : valor),
+    z.enum(["desligado", "evolution", "webhook", "teste"]).default("desligado")
+  ),
+  // Endereco da Evolution sem a rota (ex.: https://evolution.exemplo.com.br). A chave e a da instancia
+  // (cabecalho `apikey`); a instancia e o nome dado na Evolution ao numero conectado pelo QR code.
+  WHATSAPP_EVOLUTION_URL: envOpcionalUrl,
+  WHATSAPP_EVOLUTION_API_KEY: envOpcionalNaoVazio,
+  WHATSAPP_EVOLUTION_INSTANCIA: envOpcionalNaoVazio,
+  // Callback de status: a Evolution manda `Authorization: Bearer <segredo>` (configurado no webhook da
+  // instancia). Sem segredo, a rota responde 503.
+  WHATSAPP_EVOLUTION_WEBHOOK_SEGREDO: envOpcionalNaoVazio,
   // O compose sempre manda a variavel (vazia quando nao ha gateway): vazio e ausente, nao URL invalida.
   WHATSAPP_WEBHOOK_URL: z.preprocess(
     (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
@@ -197,6 +203,12 @@ if (env.NODE_ENV === "production") {
   if (!env.GROQ_API_KEY) {
     console.warn("[env] GROQ_API_KEY ausente: transcricao de observacao do fechamento desativada.");
   }
+}
+
+if (process.env["WHATSAPP_PROVEDOR"]?.trim() === PROVEDOR_REMOVIDO_META) {
+  console.warn(
+    "[env] WHATSAPP_PROVEDOR=meta nao existe mais (R-235): o envio do WhatsApp fica desligado. Use `evolution`."
+  );
 }
 
 if (env.NODE_ENV !== "development" && env.GEMINI_MAQUININHA_SIMULADA) {

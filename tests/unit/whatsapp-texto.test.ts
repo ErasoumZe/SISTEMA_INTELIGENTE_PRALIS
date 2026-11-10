@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parametroDeModelo, resumoDosItens } from "../../api/src/whatsapp/texto-whatsapp.js";
+import { resumoDosItens } from "../../api/src/whatsapp/texto-whatsapp.js";
 
-// Regras da Meta para variavel de modelo do WhatsApp (doc 57 §7): uma linha, espacos simples, corpo <= 1.024.
 describe("texto do WhatsApp", () => {
-  it("variavel do modelo vira uma linha so, sem tabulacao nem espaco repetido", () => {
-    expect(parametroDeModelo("  Mercearia\ndo   Lu\t ")).toBe("Mercearia do Lu");
-  });
-
   it("resumo cabe inteiro quando e curto", () => {
     expect(resumoDosItens(["5 Coca 2 L", "3 Coca 1,5 L"])).toBe("5 Coca 2 L; 3 Coca 1,5 L");
   });

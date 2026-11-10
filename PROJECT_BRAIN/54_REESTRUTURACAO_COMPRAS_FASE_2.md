@@ -277,7 +277,7 @@ Regra-mãe: nada é pronto enquanto o caminho antigo existir.
 - Fornecedor que, depois da compra automática, diz que não entrega: hoje `pedidos` não tem
   cancelamento por item; buraco herdado.
 - Disparo de N convites de WhatsApp sem o navegador bloquear N pop-ups: decisão de UX que afeta E3;
-  caminho definitivo é a Meta Cloud API do documento 51.
+  caminho definitivo é o envio pelo servidor, hoje pela Evolution API (R-235, documento 60).
 
 ### Perguntas levantadas na revisão do E6 (21/10/2026) — o código decidiu em silêncio, José confirma
 

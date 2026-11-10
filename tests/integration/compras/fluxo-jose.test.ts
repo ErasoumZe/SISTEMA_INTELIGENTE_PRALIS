@@ -244,7 +244,7 @@ describe("fluxo de compras dos docs 57 e 58 integration", () => {
         (envio) => envio.tipo === "convite" && envio.telefone === "5511999997701" && envio.texto.includes("/rodada#t=")
       );
       expect(mensagem).toBeTruthy();
-      const link = mensagem!.parametros[3]!;
+      const link = /https?:\/\/\S+\/rodada#t=\S+/u.exec(mensagem!.texto)![0];
       const tokenNovo = decodeURIComponent(link.split("#t=")[1]!);
       expect(tokenNovo).not.toBe(tokenDaAbertura);
       expect((await publico("GET", "/api/rodada", tokenDaAbertura)).statusCode).toBe(404);

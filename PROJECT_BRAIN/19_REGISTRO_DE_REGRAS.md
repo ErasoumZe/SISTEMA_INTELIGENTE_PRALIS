@@ -1261,7 +1261,7 @@ final válido da rodada mais recentemente encerrada e pode subir ou cair; o hist
 > automática exige custo ≤ base e a exceção do Comprador não vira base, a base vinda de rodada **só
 > desce**; só a carga inicial/reimportação a sobe. Pergunta aberta no documento 54 (item 3).
 
-Fornecedor sem WhatsApp fica bloqueado para cotação. O envio oficial usará Meta Cloud API e só muda
+Fornecedor sem WhatsApp fica bloqueado para cotação. ~~O envio oficial usará Meta Cloud API~~ (superado pela R-235: Evolution API) e só muda
 para enviado após confirmação da API. Credenciais ficam exclusivamente em variáveis de ambiente.
 
 Implementação é aditiva e protegida por feature flag; legado permanece legível. Cada fase exige SQL
@@ -1586,3 +1586,15 @@ fornecedor. Uma base existente nunca é substituída por esta inicialização. O
 ou igual à referência segue a compra automática já aprovada; acima dela exige decisão do comprador.
 As rodadas já abertas e as compras históricas não são reescritas. A importação do histórico continua
 gravando fatos e vínculos; a inicialização da base ocorre na primeira rodada posterior.
+
+### R-235 — WhatsApp do Compras sai pela Evolution API; a Meta foi removida (José, 10/11/2026)
+
+O envio automático do WhatsApp de Compras (convite com o link da cotação e "pode entregar") passa a usar
+a **Evolution API** da própria empresa (`WHATSAPP_PROVEDOR=evolution`), com o texto pronto da mensagem.
+A **Meta WhatsApp Cloud API foi removida**: provedor, modelos, variáveis `WHATSAPP_META_*` e o callback
+`/api/whatsapp/meta/webhook`. Não ficam dois caminhos. O callback de status passa a ser
+`/api/whatsapp/evolution/webhook`, autenticado por `Authorization: Bearer <segredo>`, e só registra no log
+o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que ainda tenha
+`WHATSAPP_PROVEDOR=meta` sobe com o envio desligado e um aviso, sem derrubar a API. Vale só para o S1.
+Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
+(acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
