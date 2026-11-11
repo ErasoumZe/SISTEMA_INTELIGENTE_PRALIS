@@ -3,7 +3,9 @@ import { computed, inject, ref, watch } from "vue";
 import { CONFIRMAR_ACAO_KEY, type ConfirmarAcao } from "~/utils/confirmacao-acao";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
+import CaixaRelatorioFinalFolhaCreare from "~/components/caixa/CaixaRelatorioFinalFolhaCreare.vue";
 import {
+  conferenciaFolhaDoDossie,
   conferenciaMaquininhaDoRelatorio,
   etapaDoRelatorioMaquininha,
   dataHoraOuTraco,
@@ -63,6 +65,8 @@ const erroQuebra = ref("");
 
 const maquininha = computed(() => conferenciaMaquininhaDoRelatorio(dossie.value?.relatorioMaquininha));
 const etapaMaquininha = computed(() => etapaDoRelatorioMaquininha(dossie.value?.relatorioMaquininha));
+// Fechamento cego (11/11/2026): a conferencia linha a linha so aparece aqui, para a Tesouraria.
+const conferenciaFolha = computed(() => (dossie.value ? conferenciaFolhaDoDossie(dossie.value) : null));
 const ultimaConferencia = computed(() => dossie.value?.conferenciasTesouraria.at(-1) ?? null);
 const lacreFechamentoInformado = computed(() => {
   const lacre = dossie.value?.resumo?.lacreFechamento;
@@ -232,6 +236,16 @@ function anexoUrl(anexo: { id: string }) {
             :lacre-fechamento-informado="lacreFechamentoInformado"
             @estado="estadoTransferencias = $event"
             @alterado="aoAlterarTransferencias"
+          />
+          <CaixaRelatorioFinalFolhaCreare
+            v-if="conferenciaFolha"
+            class="mb-3"
+            :creare="conferenciaFolha.creare"
+            :versao="conferenciaFolha.versao"
+            :maquininha="conferenciaFolha.maquininha"
+            :periodo="conferenciaFolha.periodo"
+            :pdv-nome="caixa?.pdvNome ?? null"
+            :correcao-maquininha="conferenciaFolha.correcaoMaquininha"
           />
           <RelatorioFechamentoFolhaDigital
             :caixa="dossie.caixa"
