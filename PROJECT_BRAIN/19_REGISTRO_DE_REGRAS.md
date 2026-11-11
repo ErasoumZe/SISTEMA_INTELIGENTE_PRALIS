@@ -1449,6 +1449,14 @@ feita pelo caixa da tarde). O sistema decide sozinho se o caixa é manhã ou tar
   (o acumulado da maquininha também zera). Um terceiro caixa no mesmo PDV e dia é recusado.
 - O banco só permite um caixa aberto por PDV, então a tarde só abre depois que a manhã fechou.
 
+**Conferência da leitura da maquininha (Marco, 11/11/2026).** A IA lê, o servidor confere a conta do próprio
+comprovante antes de devolver a leitura (`conferirSomasDaLeitura`): (1) o TOTAL de cada forma tem de ser a soma
+das bandeiras impressas; se não for, o valor some e o campo fica para o operador digitar olhando a foto; (2) crédito
++ débito + Pix + voucher tem de dar o TOTAL EFETIVADO; se não der, o campo sem bandeiras para conferir (ou o próprio
+TOTAL EFETIVADO) fica destravado para revisão, sem apagar o que foi lido. Nada é trocado por um valor calculado. O
+texto da IA avisa que o zero cortado (Ø) da bobina é 0, nunca 8. Caso real: PagBank do PDV 1 Manhã da Lisboa 2,
+10/11, CREDITO A VISTA 707,21 lido como 787,21 e travado na tela.
+
 ### R-229 — Postos do caixa: PDV + turno do caixa, separados dos turnos do DP (Marco, 29/10/2026)
 
 **Supera** o uso do turno do DP (`turno_padrao_id`) no Caixa e o rascunho R-228 (etiqueta do turno). A tela Turnos
