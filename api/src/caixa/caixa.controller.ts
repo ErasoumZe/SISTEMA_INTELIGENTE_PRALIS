@@ -509,7 +509,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const query = vendasDoCaixaQuerySchema.parse(request.query);
       try {
         const consulta = await listarVendasDoCaixaAberto(caixaId, query, request.perfilUsuario!);
-        const pagina = paginadoDeResultado(consulta.resultado);
+        const pagina = paginadoDeResultado<unknown>(consulta.resultado);
         return {
           ...pagina,
           meta: {

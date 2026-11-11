@@ -1093,7 +1093,7 @@ function confirmarFechamento() {
         />
         <CaixaFechamentoConfirmacaoDialog
           :aberto="revisaoFechamentoAberta"
-          :saldo-esperado="contagemFisica?.esperado ?? 0"
+          :falta="Math.max(0, -(contagemFisica?.diferenca ?? 0))"
           :observacao="fechamento.observacao"
           :lacre-fechamento="fechamento.lacreFechamento.trim()"
           :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
