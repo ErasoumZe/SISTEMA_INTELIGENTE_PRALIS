@@ -17,6 +17,7 @@ import {
   formatarCampoDinheiro,
   limparDigitacaoDinheiro,
   numeroDoCampo,
+  numeroDosCentavos,
   posicaoAposDigitos
 } from "~/utils/campo-dinheiro";
 
@@ -32,8 +33,10 @@ const props = withDefaults(
     // tela mesmo quando a tela de fora sabia que o valor nao bate. Agora o erro aparece (borda + mensagem).
     error?: boolean;
     errorMessages?: string | string[];
+    // Moedas: os dois ultimos digitos sao os centavos e a virgula entra sozinha (4230 vira 42,30).
+    centavos?: boolean;
   }>(),
-  { casas: 2, placeholder: "0,00", disabled: false, error: false, errorMessages: "" }
+  { casas: 2, placeholder: "0,00", disabled: false, error: false, errorMessages: "", centavos: false }
 );
 
 const emit = defineEmits<{ "update:modelValue": [string] }>();
@@ -63,6 +66,18 @@ function aoDigitar(evento: Event) {
   const bruto = alvo.value;
   const posicao = alvo.selectionStart ?? bruto.length;
   const digitosAEsquerda = contarDigitos(bruto.slice(0, posicao));
+
+  if (props.centavos) {
+    // Cada digito empurra os anteriores para a esquerda; o cursor fica sempre no fim, como na maquininha.
+    // Apagando ate sobrar so zero, o campo volta a ficar VAZIO (vazio nao e o mesmo que zero).
+    const apagando = (evento as InputEvent).inputType?.startsWith("delete") ?? false;
+    const lido = numeroDosCentavos(bruto);
+    const emCentavos = apagando && lido === 0 ? null : lido;
+    emit("update:modelValue", emCentavos === null ? "" : String(emCentavos));
+    alvo.value = emCentavos === null ? "" : formatarCampoDinheiro(emCentavos);
+    alvo.setSelectionRange(alvo.value.length, alvo.value.length);
+    return;
+  }
 
   const numero = numeroDoCampo(limparDigitacaoDinheiro(bruto));
   emit("update:modelValue", numero === null ? "" : String(numero));

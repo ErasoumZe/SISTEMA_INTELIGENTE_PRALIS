@@ -742,6 +742,7 @@ function confirmarFechamento() {
                         v-model="aberturaExtra.valorMoedas"
                         label="Moedas contadas (obrigatório)"
                         icone="mdi-circle-multiple-outline"
+                        centavos
                       />
                     </v-col>
                     <v-col v-if="aberturaDivergente" cols="12">
