@@ -298,6 +298,21 @@ const LEITURA_CREARE_ZERADA = {
 };
 
 /**
+ * Fechamento cego (Marco, 11/11/2026): o caixa nao recebe o fisico esperado; quem confere o fechamento sim. A
+ * fixture le o esperado com a sessao do administrador (que tem `fechamentos_caixa_conferir`).
+ */
+async function esperadoPelaConferencia(app: FastifyInstance, caixaId: string) {
+  const resposta = await app.inject({
+    method: "GET",
+    url: `/api/caixa/${caixaId}/relatorio-vendas`,
+    headers: { cookie: await cookieSessao(app, "admin") }
+  });
+  expect(resposta.statusCode, resposta.body).toBe(200);
+  return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica
+    .esperado;
+}
+
+/**
  * R-232 · registra (ou corrige) a contagem fisica cega, como a operadora faz em Vendas: gera de novo o relatorio de
  * vendas com a contagem. Corrigir uma contagem ja gravada exige justificativa (a fixture manda uma). Devolve o
  * fisico esperado pelo sistema naquele instante.
@@ -334,8 +349,7 @@ export async function registrarContagemFisica(
     }
   });
   expect(resposta.statusCode, resposta.body).toBe(200);
-  return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica
-    .esperado;
+  return esperadoPelaConferencia(app, entrada.caixaId);
 }
 
 /**
@@ -384,8 +398,7 @@ export async function prepararFechamentoValido(
     }
   });
   expect(relatorioVendas.statusCode, relatorioVendas.body).toBe(200);
-  const esperado = json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(relatorioVendas).data.dados
-    .contagemFisica.esperado;
+  const esperado = await esperadoPelaConferencia(app, entrada.caixaId);
 
   const leitura = {
     documentoLegivel: true,
