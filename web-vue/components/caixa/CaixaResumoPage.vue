@@ -176,12 +176,11 @@ watch(
 // R-232 · `null` para o operador de caixa: ele nao ve o fisico esperado durante o turno (contagem cega).
 const saldoVisivel = computed(() => resumoAtual.value?.saldo ?? null);
 const saldoAtual = computed(() => Number(saldoVisivel.value ?? 0));
-// D7: observacao e obrigatoria quando ha quebra ou sobra — a mesma regra do servidor, espelhada na tela.
+// Observacao obrigatoria so quando FALTA dinheiro (fechamento cego, Marco 11/11/2026) — a mesma regra do servidor.
 // A diferenca e a da contagem registrada em Vendas (contado - esperado naquele instante).
 const diferencaFechamento = computed(() => contagemFisica.value?.diferenca ?? 0);
-const fechamentoDivergente = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value !== 0);
 const fechamentoComQuebra = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value < 0);
-const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
+const observacaoObrigatoriaPendente = computed(() => fechamentoComQuebra.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
 const lacreFechamentoReservado = computed(() => props.status?.lacreFechamentoReservado ?? null);
 const responsaveisFechamentoPendentes = computed(
@@ -234,14 +233,17 @@ const exibirMaquininhaNaAbertura = true;
 // Cockpit por categoria: a cor entra como ACENTO (barra/chip/total) via os tokens --cat-* da main,
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
 // (saldo fisico) e o card-ancora. Sem card de deficit (fundo simples, PROJECT_BRAIN/12).
-type CardCategoria = { chave: string; titulo: string; icone: string; valor: number; detalhe?: string; tom: string };
-type CardFormaPagamento = {
+type CardCategoria = {
   chave: string;
   titulo: string;
   icone: string;
   valor: number;
-  quantidade: number;
+  detalhe?: string;
+  tom: string;
+  quantidade?: number;
 };
+// Fechamento cego (11/11/2026): o caixa ve so a quantidade de vendas por forma, nunca o valor.
+type CardFormaPagamento = { chave: string; titulo: string; icone: string; quantidade: number };
 
 const categorias = computed<CardCategoria[]>(() => {
   const r = resumoAtual.value;
@@ -253,7 +255,9 @@ const categorias = computed<CardCategoria[]>(() => {
       chave: "entradas",
       titulo: "Entradas",
       icone: "mdi-arrow-down-bold-circle-outline",
-      valor: r.totalEntradas,
+      // O valor das vendas nao chega ao caixa (fechamento cego): o cartao mostra quantas vendas houve.
+      valor: 0,
+      quantidade: (r.porFormaPagamento ?? []).reduce((soma, item) => soma + item.quantidade, 0),
       tom: "var(--cat-entradas-faixa)"
     },
     {
@@ -301,7 +305,6 @@ const formasPagamento = computed<CardFormaPagamento[]>(() =>
     chave: item.formaPagamentoId ?? item.formaPagamento,
     titulo: item.formaPagamento,
     icone: iconeFormaPagamento(item.formaPagamento),
-    valor: item.total,
     quantidade: item.quantidade
   }))
 );
@@ -923,10 +926,8 @@ function confirmarFechamento() {
         <CaixaFechamentoWizard
           v-if="etapaFechamento && caixaAberto"
           :caixa="caixaAberto"
-          :resumo="resumoAtual"
           :fechamento="fechamento"
           :contagem-fisica="contagemFisica"
-          :fechamento-divergente="fechamentoDivergente"
           :fechamento-com-quebra="fechamentoComQuebra"
           :observacao-obrigatoria-pendente="observacaoObrigatoriaPendente"
           :lacre-fechamento-pendente="lacreFechamentoPendente"

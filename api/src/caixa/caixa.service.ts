@@ -1463,8 +1463,10 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
     const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
     const observacao = dados.observacao?.trim() || null;
-    if (diferencaFisicaCentavos !== 0 && !observacao) {
-      throw new Error("Observacao obrigatoria quando a contagem fisica do fechamento divergir");
+    // Fechamento cego (Marco, 11/11/2026): o caixa so ve a FALTA, entao so a falta exige observacao. A sobra o
+    // caixa nao enxerga (a tela diz "Tudo certo"); ela continua registrada e vai para a Tesouraria.
+    if (diferencaFisicaCentavos < 0 && !observacao) {
+      throw new Error("Observacao obrigatoria quando faltar dinheiro na contagem do fechamento");
     }
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final

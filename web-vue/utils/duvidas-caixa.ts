@@ -347,7 +347,7 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "vendas",
     pergunta: "Por que o sistema não mostra quanto deveria ter na gaveta?",
     resposta:
-      "Para a contagem ser do que está na mão, sem influência. A comparação com o sistema aparece só depois, na etapa final.",
+      "Para a contagem ser do que está na mão, sem influência. A comparação com o sistema é da Tesouraria; no fim do fechamento aparece só se faltou dinheiro.",
     palavras: ["esperado", "contagem cega"]
   },
   {
@@ -403,7 +403,7 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "vendas",
     pergunta: "Folha do CREARE e folha do malote são a mesma coisa?",
     resposta:
-      "Não. A folha do CREARE (cupom de vendas) vai na etapa 1. A folha do malote (o papel que vai junto com o dinheiro) vai na etapa 4.",
+      "Não. A folha do CREARE (cupom de vendas) vai na etapa 1. A folha do malote (o papel que vai junto com o dinheiro) vai na etapa 3.",
     palavras: ["folha do malote", "duas folhas"]
   },
   {
@@ -499,36 +499,26 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "maquininha",
     pergunta: "A maquininha mostra mais cartão do que eu vendi no CREARE.",
     resposta:
-      "Não lance venda para igualar. Sobra no cartão não é quebra sua. Deixe a diferença como está e explique na observação do fechamento; a Tesouraria verifica.",
+      "Não lance venda para igualar. Sobra no cartão não é quebra sua. Deixe como está: a conferência do cartão é da Tesouraria.",
     palavras: ["cartao a mais", "nao bate cartao", "igualar", "lancar venda"]
-  },
-
-  // ── Fechamento · Relatório final ──────────────────────────────────────────────────────────────────────
-  {
-    id: "relatorio-o-que-confiro",
-    tema: "relatorio-final",
-    pergunta: "Na etapa 3, o que eu confiro?",
-    resposta:
-      "A comparação CREARE × sistema, os pagamentos por tipo, a maquininha, as vendas canceladas, as sangrias com lacre e as entradas e saídas.",
-    palavras: ["relatorio final", "conferir"]
-  },
-  {
-    id: "relatorio-divergiu",
-    tema: "relatorio-final",
-    pergunta: "Algo não bateu no relatório final. E agora?",
-    resposta:
-      "Volte à etapa do problema, corrija e gere ou salve de novo. Se a diferença for real, explique na observação do fechamento.",
-    palavras: ["nao bateu", "diferenca", "voltar etapa"]
   },
 
   // ── Fechamento · Encerrar ─────────────────────────────────────────────────────────────────────────────
   {
     id: "fechamento-o-que-preencho",
     tema: "fechamento",
-    pergunta: "Na etapa 4, o que eu preencho?",
+    pergunta: "Na etapa 3, o que eu preencho?",
     resposta:
-      "Anexe a foto da folha do malote, informe o lacre de fechamento e escreva a observação (por texto ou voz). O dinheiro não é contado de novo: vale o que você digitou em Vendas.",
+      "Anexe a foto da folha do malote e informe o lacre de fechamento. Se faltou dinheiro, explique na observação (por texto ou voz). O dinheiro não é contado de novo: vale o que você digitou em Vendas.",
     palavras: ["folha do malote", "lacre de fechamento", "observacao"]
+  },
+  {
+    id: "fechamento-nao-volta",
+    tema: "fechamento",
+    pergunta: "Por que não consigo voltar para Vendas?",
+    resposta:
+      "Depois de entrar no Fechamento, dá para voltar só até a Maquininha (para refazer a foto). Se a contagem estiver errada, use “Corrigir contagem” e explique o motivo: a correção vai para a Tesouraria.",
+    palavras: ["voltar", "vendas", "voltar etapa", "nao volta"]
   },
   {
     id: "fechamento-lacre",
@@ -598,7 +588,8 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     id: "quebra-sobrou",
     tema: "quebra",
     pergunta: "Sobrou dinheiro. Isso vira crédito para mim?",
-    resposta: "Não. A sobra não vira crédito. A observação é obrigatória e a Tesouraria é avisada.",
+    resposta:
+      "Não. Para você aparece “Tudo certo”: a sobra fica registrada e a Tesouraria é avisada. A sobra não vira crédito.",
     palavras: ["sobra", "a mais"]
   },
   {
