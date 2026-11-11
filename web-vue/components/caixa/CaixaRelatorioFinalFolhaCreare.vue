@@ -6,7 +6,7 @@ import { GRUPOS_FOLHA_CREARE, type CampoValorFolhaCreare, type FolhaCreareGerada
 
 // R-225 · Relatorio final: a conferencia do turno em cartoes (um por linha da folha, cada um abre e fecha). Cada linha da folha do CREARE (espelho do
 // fechamento manual do PDV) contra o relatorio de vendas do Pralis e, nas formas de cartao/Pix, contra o
-// liquido da maquininha. Saldo Inicial, CLIENTES e Saldo Final Dinheiro so aparecem no rodape (sem comparar).
+// liquido da maquininha. Saldo Inicial, CLIENTES, Sangria e Saldo Final Dinheiro so aparecem no rodape (sem comparar).
 type FormaMaquininha = "credito" | "debito" | "pix" | "voucher";
 const props = defineProps<{
   creare: FolhaCreareGerada;

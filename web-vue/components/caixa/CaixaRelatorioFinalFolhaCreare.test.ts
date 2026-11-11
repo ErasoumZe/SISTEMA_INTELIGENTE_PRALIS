@@ -45,10 +45,12 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
     );
     expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Sem valor na folha");
     expect(texto(wrapper.get('[data-teste="final-linha-pix"]'))).toContain("Maquininha sem leitura");
-    expect(texto(wrapper.get('[data-teste="final-linha-sangria"]'))).toContain("-R$");
-    // So na folha (sem comparar) vai para o rodape, nao vira linha.
+    // So na folha (sem comparar) vai para o rodape, nao vira linha. A sangria tambem: a folha do CREARE
+    // nao registra sangria nem suprimento, e comparar acusava diferenca em todo caixa com sangria.
     expect(wrapper.find('[data-teste="final-linha-clientes"]').exists()).toBe(false);
+    expect(wrapper.find('[data-teste="final-linha-sangria"]').exists()).toBe(false);
     expect(texto(wrapper)).toContain("CLIENTES (VND/TRANS): R$ 148,81");
+    expect(texto(wrapper)).toContain("Sangria: R$ 600,00");
   });
 
   it("cada linha e um cartao que abre e fecha sozinho, com o selo da situacao", async () => {

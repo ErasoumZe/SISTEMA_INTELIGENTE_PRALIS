@@ -1400,8 +1400,13 @@ exatos do cupom, e a tela mostra os campos na ordem impressa.
 | CREDITO, DEBITO, DINHEIRO, PIX, VOUCHER       | vendas do caixa por categoria da forma de pagamento                                                                |
 | Total                                         | total aprovado do relatório de vendas                                                                              |
 | Despesas                                      | despesas + mercadorias + retiradas (como antes)                                                                    |
-| Sangria                                       | sangrias e retornos que saíram do PDV no turno                                                                     |
+| Sangria                                       | **só exibida** desde 11/11/2026 (ver ajuste abaixo)                                                                |
 | Saldo Inicial, CLIENTES, Saldo Final Dinheiro | **só exibidos** (CLIENTES sem equivalente definido; o Saldo Final do CREARE soma voucher e o físico do Pralis não) |
+
+**Ajuste do Marco (11/11/2026): a Sangria deixa de ser comparada.** A folha do CREARE não registra sangria nem
+suprimento (transferência no meio do turno): a linha "Sangria" sai R$ 0,00 mesmo com sangria feita, e a comparação
+acusava diferença em todo caixa com sangria (caso real: PDV 1 Manhã da Lisboa 2, 10/11, sangria de R$ 900,00 no
+lacre 4284). A linha vai para o rodapé "só na folha"; a sangria continua conferida pela Tesouraria no retorno.
 
 "Bate" = igual em centavos. Turno da tarde é outra folha começando do zero (diferente da maquininha, R-210).
 

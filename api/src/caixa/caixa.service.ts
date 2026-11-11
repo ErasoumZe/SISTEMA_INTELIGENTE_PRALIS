@@ -2368,6 +2368,8 @@ export async function gerarRelatorioVendasFechamento(
       );
     // R-225 · folha "Relatorio de Venda Geral": cada linha com equivalente no Pralis e comparada em
     // centavos. CLIENTES, Saldo Inicial e Saldo Final Dinheiro (que soma voucher) so sao exibidos.
+    // Sangria tambem so e exibida (Marco, 11/11/2026): a folha do CREARE nao registra sangria nem
+    // suprimento do meio do turno, entao comparar acusava diferenca em todo caixa com sangria.
     const pralis = {
       trocoInicial: deCentavos(totaisOperacionais.trocoInicialEntrada ?? 0),
       credito: porCategoria("credito"),
@@ -2387,8 +2389,7 @@ export async function gerarRelatorioVendasFechamento(
       pix: comparar(leitura.pix, pralis.pix),
       voucher: comparar(leitura.voucher, pralis.voucher),
       total: comparar(leitura.total, pralis.total),
-      despesas: comparar(leitura.despesas, pralis.despesas),
-      sangria: comparar(leitura.sangria, pralis.sangria)
+      despesas: comparar(leitura.despesas, pralis.despesas)
     };
     const formasDaFolha = [
       leitura.clientes,
