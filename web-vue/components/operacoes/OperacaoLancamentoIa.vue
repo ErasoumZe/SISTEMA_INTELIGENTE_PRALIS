@@ -184,7 +184,9 @@ function moeda(valor: string | null) {
 
         <p class="ia-nota-itens">{{ resultado.itens.length }} item(ns) lido(s).</p>
         <div v-if="resultado.itens.some((item) => item.alertaCusto)" class="ia-custo-alertas" role="status">
-          <div class="ia-custo-alertas-titulo"><v-icon size="17">mdi-chart-line-variant</v-icon> Revisão de custo por item</div>
+          <div class="ia-custo-alertas-titulo">
+            <v-icon size="17">mdi-chart-line-variant</v-icon> Revisão de custo por item
+          </div>
           <div
             v-for="item in resultado.itens.filter((linha) => linha.alertaCusto)"
             :key="`${item.ean ?? item.codigo ?? item.descricao}-custo`"
@@ -194,7 +196,8 @@ function moeda(valor: string | null) {
             <strong>{{ item.descricao }}</strong>
             <span>
               {{ item.alertaCusto?.mensagem }}
-              Último: {{ moeda(item.alertaCusto?.custoAnterior ?? null) }} · Nota: {{ moeda(item.alertaCusto?.custoNota ?? null) }}
+              Último: {{ moeda(item.alertaCusto?.custoAnterior ?? null) }} · Nota:
+              {{ moeda(item.alertaCusto?.custoNota ?? null) }}
             </span>
           </div>
           <small>Este alerta é informativo. A IA não altera o preço nem bloqueia o salvamento.</small>
@@ -475,12 +478,40 @@ function moeda(valor: string | null) {
   color: var(--cx-ink-soft);
   font-size: 12px;
 }
-.ia-custo-alertas { display: grid; gap: 7px; margin: 12px 0; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--cx-warning) 8%, var(--cx-surface)); }
-.ia-custo-alertas-titulo { display: flex; align-items: center; gap: 6px; color: var(--cx-warning); font-weight: 800; }
-.ia-custo-alerta { display: grid; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--cx-warning); border-radius: 6px; background: color-mix(in srgb, var(--cx-warning) 10%, transparent); font-size: .82rem; }
-.ia-custo-alerta.nivel-critico { border-left-color: var(--cx-danger); background: color-mix(in srgb, var(--cx-danger) 10%, transparent); }
-.ia-custo-alerta span { color: var(--cx-muted); }
-.ia-custo-alertas small { color: var(--cx-muted); }
+.ia-custo-alertas {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cx-warning) 8%, var(--cx-surface));
+}
+.ia-custo-alertas-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cx-warning);
+  font-weight: 800;
+}
+.ia-custo-alerta {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--cx-warning);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cx-warning) 10%, transparent);
+  font-size: 0.82rem;
+}
+.ia-custo-alerta.nivel-critico {
+  border-left-color: var(--cx-danger);
+  background: color-mix(in srgb, var(--cx-danger) 10%, transparent);
+}
+.ia-custo-alerta span {
+  color: var(--cx-muted);
+}
+.ia-custo-alertas small {
+  color: var(--cx-muted);
+}
 .ia-nota-aplicar {
   width: 100%;
   border: 1px solid transparent;

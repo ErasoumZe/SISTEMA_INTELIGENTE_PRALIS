@@ -261,8 +261,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     somenteCaixaAberto: ["transferencias", "fechamento", "relatorio_produtos"]
   }),
   // R-238: o PDV 4 e o caixa do gerente. Abre, puxa vendas e fecha como qualquer PDV, e alem disso ve
-  // Entradas (vendas em tempo real, buscar venda), lanca Saidas, faz transferencia comum e a sem lacre
-  // (buscar troco no cofre ou numa conta no meio do turno). R-121/R-122: lanca e corrige as proprias
+  // Entradas (vendas em tempo real, buscar venda), lanca Saidas, faz a transferencia sem lacre
+  // (buscar troco no fluxo e descer para um PDV aberto). Nao gera malote. R-121/R-122: lanca e corrige as proprias
   // saidas com o caixa aberto, sem `_excluir` (R-015) e sem `_pagar`/`_efetuar`/`_conferir` (R-076/R-077).
   "Caixa Gerente": permissoesDoCargoSeed({
     ativas: [
@@ -286,7 +286,7 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     ],
     extras: [
       "entradas_criar",
-      "transferencias_criar",
+      // Sem `transferencias_criar`: o gerente nao gera malote; so faz a sem lacre (R-238).
       "transferencias_sem_lacre",
       "despesas_criar",
       "despesas_editar",
@@ -305,6 +305,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
     extras: [
       "transferencias_criar",
+      // R-238: a Tesouraria faz transferencia com lacre (malote) e sem lacre.
+      "transferencias_sem_lacre",
       // Paridade com db/src/referencia-permissoes.ts (R-191).
       "despesas_discriminar",
       "mercadorias_discriminar",

@@ -77,6 +77,33 @@ describe("transferencias - sem lacre (R-231)", () => {
     ))!;
   }
 
+  it("R-238: destinos sem lacre sao so os PDVs com caixa aberto, com posto e turno, sem valor", async () => {
+    const destinos = await contexto.app.inject({
+      method: "GET",
+      url: `/api/transferencias/sem-lacre/destinos?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(destinos.statusCode, destinos.body).toBe(200);
+    const lista = json<{ data: Array<Record<string, unknown>> }>(destinos).data;
+    const doCaixa = lista.find((item) => item.contaId === caixa.contaId);
+    expect(doCaixa).toBeTruthy();
+    expect(Object.keys(doCaixa!).sort()).toEqual(["contaId", "pdvNome", "responsavelNome", "turno"]);
+    const fechados = await consultarUm<{ total: string }>(
+      `select count(*)::text as total from pdvs p
+        where p.empresa_id = $1 and p.conta_id = any($2::uuid[])
+          and not exists (select 1 from fechamentos_caixa f where f.pdv_id = p.id and f.status = 'aberto')`,
+      [idsTeste.empresaA, lista.map((item) => item.contaId)]
+    );
+    expect(fechados?.total).toBe("0");
+
+    const semPermissao = await contexto.app.inject({
+      method: "GET",
+      url: `/api/transferencias/sem-lacre/destinos?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieCaixa }
+    });
+    expect(semPermissao.statusCode, semPermissao.body).toBe(403);
+  });
+
   it("quem nao tem a permissao propria nao manda dinheiro sem lacre", async () => {
     const resposta = await enviar(cookieCaixa, caixa.contaId, 10, 0);
     expect(resposta.statusCode, resposta.body).toBe(403);

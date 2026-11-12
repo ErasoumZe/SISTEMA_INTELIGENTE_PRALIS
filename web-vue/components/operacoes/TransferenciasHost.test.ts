@@ -51,7 +51,7 @@ function criarStatusCaixaAberto(): CaixaStatus {
   };
 }
 
-function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
+function montar(criar: boolean, operar: boolean, caixaAberto: boolean, semLacre = false) {
   const modalOperacaoAberto = ref(true);
   const caixaStatus = ref<CaixaStatus | null>(caixaAberto ? criarStatusCaixaAberto() : null);
   const empresaId = ref("emp-1");
@@ -68,6 +68,7 @@ function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
           podeEditarTransferencia: computed(() => criar),
           podeOperarCaixa: computed(() => operar),
           podeOperarTransferenciaSemCaixa: computed(() => !operar),
+          podeTransferirSemLacre: computed(() => semLacre),
           caixaSalvando: ref(false),
           salvandoOperacao: ref(false),
           carregarStatusCaixa: vi.fn(async () => undefined),
@@ -92,6 +93,17 @@ describe("host único +Novo / Transferências", () => {
     expect(wrapper.get("h2").text()).toBe("Nova transferência");
     expect(wrapper.get('[data-tab="nova"] span').text()).toBe("Nova transferência");
     expect(wrapper.get('[data-tab="retorno"] span').text()).toBe("Retorno / sangria");
+    wrapper.unmount();
+  });
+
+  it("gerente (PDV 4) vê Sem lacre e Retorno / sangria, sem gerar malote (R-238)", async () => {
+    const { wrapper } = montar(false, true, true, true);
+    await flushPromises();
+    expect(wrapper.get('[data-tab="nova"]').text()).toContain("Sem lacre");
+    expect(wrapper.get('[data-tab="nova"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.get('[data-tab="retorno"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(true);
+    expect(wrapper.get(".lc-titulo").text()).toBe("Transferência sem lacre");
     wrapper.unmount();
   });
 

@@ -18,6 +18,9 @@ const {
   campoFisico,
   semLacre,
   podeUsarSemLacre,
+  somenteSemLacre,
+  opcoesDestinoSemLacre,
+  carregandoDestinosSemLacre,
   fisicoDigitado,
   moedasDigitadas,
   campoMoedas,
@@ -92,8 +95,17 @@ const {
           <span class="tr-campo-lbl">Destino / Entrada</span>
           <select v-if="!multiploDestino" v-model="form.contaDestinoId" class="tr-input" aria-label="Destino / Entrada">
             <option value="">—</option>
-            <option v-for="c in contasCandidatas" :key="c.id" :value="c.id">{{ c.nome }}</option>
+            <option v-for="c in semLacre ? opcoesDestinoSemLacre : contasCandidatas" :key="c.id" :value="c.id">
+              {{ c.nome }}
+            </option>
           </select>
+          <span
+            v-if="semLacre && !carregandoDestinosSemLacre && !opcoesDestinoSemLacre.length"
+            class="tr-legenda"
+            role="status"
+          >
+            Nenhum PDV com caixa aberto agora.
+          </span>
           <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
             <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
               <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
@@ -207,9 +219,10 @@ const {
         </template>
       </template>
 
-      <!-- R-231 · junto das outras opcoes: marcada, a transferencia vai sem malote e sem lacre. -->
+      <!-- R-231 · junto das outras opcoes: marcada, a transferencia vai sem malote e sem lacre. Quem SO faz sem lacre
+           (gerente, R-238) nao ve a chave: o formulario ja abre nesse modo. -->
       <button
-        v-if="podeUsarSemLacre"
+        v-if="podeUsarSemLacre && !somenteSemLacre"
         type="button"
         role="switch"
         class="tr-sem-lacre"

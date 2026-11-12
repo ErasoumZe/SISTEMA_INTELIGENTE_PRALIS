@@ -17,6 +17,7 @@ const {
   podeEditarTransferencia,
   podeOperarCaixa,
   podeOperarTransferenciaSemCaixa,
+  podeTransferirSemLacre,
   caixaSalvando,
   salvandoOperacao,
   carregarStatusCaixa,
@@ -35,10 +36,12 @@ const caixaEmFechamento = computed(() => caixaStatus.value?.caixaAberto?.status 
 // A Tesouraria registra a transferencia contabil sem depender do caixa do PDV.
 // Retorno/sangria e outro ato: continua exclusivo do operador com caixa aberto.
 const eRetaguarda = computed(() => podeOperarTransferenciaSemCaixa.value);
+// R-238 · o gerente (PDV 4) nao gera malote, mas faz a transferencia SEM lacre pela mesma aba.
+const somenteSemLacre = computed(() => !podeCriarTransferencia.value && podeTransferirSemLacre.value);
 const podeUsarComum = computed(
   () =>
     (eRetaguarda.value || !caixaEmFechamento.value) &&
-    (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value)
+    (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value || somenteSemLacre.value)
 );
 const {
   entrega,
@@ -68,7 +71,8 @@ const ocupado = computed(() => processando.value || caixaSalvando.value || salva
 const podeUsarRetorno = computed(() => !caixaEmFechamento.value && podeRetornar.value);
 const titulo = computed(() => {
   if (editando.value) return "Editar transferência";
-  return podeUsarComum.value ? "Nova transferência" : "Retorno / sangria";
+  if (!podeUsarComum.value || aba.value === "retorno") return "Retorno / sangria";
+  return somenteSemLacre.value ? "Transferência sem lacre" : "Nova transferência";
 });
 const transferenciaVars = {
   "--cat": "var(--cat-transferencias-base)",
@@ -129,7 +133,7 @@ function fechar() {
             @click="aba = 'nova'"
           >
             <v-icon size="16">mdi-swap-horizontal</v-icon>
-            <span>Nova transferência</span>
+            <span>{{ somenteSemLacre ? "Sem lacre" : "Nova transferência" }}</span>
           </button>
           <button
             type="button"
