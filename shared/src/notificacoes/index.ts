@@ -15,6 +15,8 @@ export const tipoNotificacaoSchema = z.enum([
   "compras_decisao_pendente",
   // Agendamento de pedido (doc 58 §2): chegou a data; o responsavel envia pela Solicitacao de compra.
   "compras_agendamento_conferir",
+  // R-236: 3a sangria recusada por passar do dinheiro do caixa no mesmo turno. Referencia o caixa.
+  "sangria_recusada",
   // Conferencia de estoque agendada (doc 57 §1): chegou a data de contar.
   "conferencia_estoque_fazer"
 ]);

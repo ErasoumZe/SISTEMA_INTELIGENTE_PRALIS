@@ -127,7 +127,8 @@ import {
   type IntencaoEntregaCofre,
   type VendaCanceladaCaixaLinha,
   explicarQuebraContagemRepository,
-  listarQuebrasCaixaRepository as listarQuebrasDoFechamentoRepository
+  listarQuebrasCaixaRepository as listarQuebrasDoFechamentoRepository,
+  registrarSangriaRecusadaRepository
 } from "./caixa.repository.js";
 import {
   listarRetornosPendentesRepository,
@@ -1867,7 +1868,68 @@ async function registrarEntregaAoCofre(
 // M2 (R3/R4): sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade â€” uma
 // transferencia caixa -> cofre. O servidor resolve a conta do cofre, o ordinal (R6) e consome o
 // lacre novo (D5 opcional). O retorno da sobra em especie zera o saldo fisico e libera o fechamento.
+// R-236 · recusa da sangria pelo teto (D1) -> motivo gravado. A recusa desfaz a transacao da sangria, entao o registro
+// e feito depois, em outra transacao. A partir da 3a recusa no mesmo caixa a Tesouraria e avisada (uma vez por caixa).
+const MOTIVO_DA_RECUSA = {
+  SANGRIA_ACIMA_DO_DISPONIVEL: "acima_do_disponivel",
+  SANGRIA_SEM_SALDO: "sem_saldo",
+  SANGRIA_RESERVADA_PARA_RETORNOS: "reservado_para_retornos"
+} as const;
+const RECUSAS_PARA_AVISAR = 3;
+
 export async function criarTransferenciaCofreCaixa(
+  caixaId: string,
+  dados: TransferenciaCofrePayload,
+  perfil: PerfilUsuario
+): Promise<CaixaStatus> {
+  try {
+    return await executarTransferenciaCofreCaixa(caixaId, dados, perfil);
+  } catch (erro) {
+    const motivo =
+      erro instanceof ErroDominio ? MOTIVO_DA_RECUSA[erro.code as keyof typeof MOTIVO_DA_RECUSA] : undefined;
+    if (motivo) await registrarSangriaRecusada(caixaId, paraCentavos(dados.valor), motivo, perfil);
+    throw erro;
+  }
+}
+
+async function registrarSangriaRecusada(
+  caixaId: string,
+  valorCentavos: number,
+  motivo: (typeof MOTIVO_DA_RECUSA)[keyof typeof MOTIVO_DA_RECUSA],
+  perfil: PerfilUsuario
+) {
+  if (valorCentavos <= 0) return;
+  await executarEmTransacao(async (tx) => {
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa) return;
+    const recusas = await registrarSangriaRecusadaRepository(
+      {
+        empresaId: caixa.empresaId,
+        fechamentoCaixaId: caixa.id,
+        usuarioId: perfil.usuarioId,
+        valorCentavos,
+        motivo
+      },
+      tx
+    );
+    if (recusas < RECUSAS_PARA_AVISAR) return;
+    const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+      .map((item) => item.usuarioId)
+      .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+    await criarNotificacoesRepository(
+      {
+        empresaId: caixa.empresaId,
+        tipo: "sangria_recusada",
+        destinatariosUsuarioIds: destinatarios,
+        referenciaId: caixa.id,
+        titulo: `${recusas} sangrias recusadas por passar do caixa - ${caixa.pdvNome ?? "PDV"}`
+      },
+      tx
+    );
+  });
+}
+
+async function executarTransferenciaCofreCaixa(
   caixaId: string,
   dados: TransferenciaCofrePayload,
   perfil: PerfilUsuario
@@ -1929,7 +1991,7 @@ export async function criarTransferenciaCofreCaixa(
     // operador. Recalculado aqui dentro, sob a trava â€” o saldo que a tela viu nao serve de prova.
     const saldoDisponivelCentavos = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (saldoDisponivelCentavos <= 0) {
-      throw new Error("Caixa sem saldo em especie para enviar ao cofre");
+      throw new ErroDominio("Caixa sem saldo em especie para enviar ao cofre", 400, "SANGRIA_SEM_SALDO");
     }
     const totalPlanejadoCentavos = (await listarPlanejamentosRetornoRepository(caixa.id, tx)).reduce(
       (total, planejamento) => total + paraCentavos(planejamento.valorOriginal),
@@ -1937,14 +1999,20 @@ export async function criarTransferenciaCofreCaixa(
     );
     const saldoLivreCentavos = Math.max(0, saldoDisponivelCentavos - totalPlanejadoCentavos);
     if (saldoLivreCentavos <= 0) {
-      throw new Error("Saldo disponivel reservado para transferencias de retorno planejadas");
+      throw new ErroDominio(
+        "Saldo disponivel reservado para transferencias de retorno planejadas",
+        400,
+        "SANGRIA_RESERVADA_PARA_RETORNOS"
+      );
     }
     if (valorCentavos > saldoLivreCentavos) {
       // R-232 · o operador de caixa nao ve o fisico esperado: a mensagem nao pode revelar o disponivel.
-      throw new Error(
+      throw new ErroDominio(
         temPermissao(perfil.permissoes, "caixas_gerenciar")
           ? `Valor acima do saldo livre do caixa: disponivel R$ ${deCentavos(saldoLivreCentavos).toFixed(2)} apos reservar os retornos planejados`
-          : "Valor acima do dinheiro disponível no caixa. Confira o valor da sangria."
+          : "Valor acima do dinheiro disponível no caixa. Confira o valor da sangria.",
+        400,
+        "SANGRIA_ACIMA_DO_DISPONIVEL"
       );
     }
 
