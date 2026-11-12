@@ -1652,3 +1652,12 @@ esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou f
 - **Limite conhecido:** a folha "Relatório de Venda Geral" do CREARE, impressa pelo caixa, mostra o dinheiro do
   turno. Para o fechamento ser cego de verdade, a folha precisa ser impressa ou guardada por outra pessoa, ou só
   depois da contagem. É regra de operação a decidir com o Rodrigo.
+
+- **Atualização (Marco, 12/11/2026):**
+  - **A falta só aparece DEPOIS de fechar.** Antes de fechar o caixa não vê valor nenhum, nem a falta (contar 0 e ver
+    a falta revelava o esperado). A observação do fechamento ficou opcional. Fechou: aparece "Tudo certo" (bateu ou
+    sobrou) ou "Falta de R$ X"; na falta, o caixa escreve a explicação ali mesmo (uma vez) e ela vai para a quebra.
+    Enquanto ele não explica, a quebra fica "Aguardando explicação do caixa".
+  - **Campanhas no fechamento:** o PDV 1-3 vê só "Meta atingida / Meta ainda não atingida", sem valor vendido nem %.
+  - **Saldo da conta do PDV** ("minhas contas") não vai para quem não vê vendas.
+  - PDV 4 (Caixa Gerente) e Gerência veem vendas em tempo real (R-238): para eles o fechamento não é cego.
