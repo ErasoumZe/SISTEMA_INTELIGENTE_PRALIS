@@ -1,0 +1,2 @@
+ALTER TABLE "lacres" DROP CONSTRAINT "lacres_numero_unico";--> statement-breakpoint
+CREATE UNIQUE INDEX "lacres_numero_ativo_unico" ON "lacres" USING btree ("empresa_id","numero") WHERE "lacres"."rompido" = false;
