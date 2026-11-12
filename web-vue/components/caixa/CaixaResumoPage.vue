@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted } from "vue";
 import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
+import { categoriasDoCaixaPermitidas } from "~/utils/caixa-categorias";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import CaixaRecebimentosSemLacre from "~/components/caixa/CaixaRecebimentosSemLacre.vue";
@@ -17,7 +18,7 @@ import CaixaFechamentoWizard from "~/components/caixa/CaixaFechamentoWizard.vue"
 import CaixaAberturaConfirmacaoDialog from "~/components/caixa/CaixaAberturaConfirmacaoDialog.vue";
 import CaixaIndisponibilidadeDialog from "~/components/caixa/CaixaIndisponibilidadeDialog.vue";
 import CaixaInicioFechamentoDialog from "~/components/caixa/CaixaInicioFechamentoDialog.vue";
-import { deCentavos, paraCentavos, type ContagemFisicaRelatorio } from "@padaria/shared";
+import { deCentavos, paraCentavos, type ContagemFisicaRelatorio, type Permissao } from "@padaria/shared";
 const { apiGet, apiPost } = useApi();
 const route = useRoute();
 const router = useRouter();
@@ -32,6 +33,8 @@ const props = defineProps<{
   usuarioId: string;
   usuarioNome: string;
   salvando?: boolean;
+  /** A mesma checagem do menu. Sem ela, PDV 1-3 veriam atalhos para telas que nao abrem (R-238). */
+  temPermissao?: (permissao: Permissao) => boolean;
 }>();
 
 const emit = defineEmits<{
@@ -243,7 +246,7 @@ type CardFormaPagamento = {
   quantidade: number;
 };
 
-const categorias = computed<CardCategoria[]>(() => {
+const todasCategorias = computed<CardCategoria[]>(() => {
   const r = resumoAtual.value;
   if (!r) return [];
   const entrada = r.totalTransferenciasEntrada ?? 0;
@@ -295,6 +298,10 @@ const categorias = computed<CardCategoria[]>(() => {
     }
   ];
 });
+// R-238: PDV 1-3 nao veem as linhas de Entradas e Saidas (nao tem essas telas).
+const categorias = computed<CardCategoria[]>(() =>
+  categoriasDoCaixaPermitidas(todasCategorias.value, props.temPermissao)
+);
 
 const formasPagamento = computed<CardFormaPagamento[]>(() =>
   (resumoAtual.value?.porFormaPagamento ?? []).map((item) => ({
