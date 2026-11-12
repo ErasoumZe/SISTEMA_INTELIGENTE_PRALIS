@@ -316,6 +316,10 @@ async function esperadoPelaConferencia(app: FastifyInstance, caixaId: string) {
   const resposta = await app.inject({
     method: "GET",
     url: `/api/caixa/${caixaId}/relatorio-vendas`,
+    // Leitura da FIXTURE, nao do teste: sai de outro IP para nao gastar a cota global de 300/min por IP
+    // (@fastify/rate-limit) dos testes que rodam em sequencia no mesmo arquivo. Sem isto, a caixa-portas-s3-s8
+    // passava do limite e recebia 429 no envio da venda integrada.
+    remoteAddress: "127.0.0.250",
     headers: { cookie: await cookieConferencia(app) }
   });
   expect(resposta.statusCode, resposta.body).toBe(200);
