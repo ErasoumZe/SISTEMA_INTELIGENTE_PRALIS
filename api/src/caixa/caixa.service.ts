@@ -2013,8 +2013,11 @@ export async function executarPlanejamentoRetorno(
     if (planejamento.status !== "agendada") return statusParaOPerfil(await statusDoCaixaAberto(caixa, tx), perfil);
     const saldoDisponivel = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (planejamento.valorCentavos > saldoDisponivel) {
+      // R-232 / R-236 · S5: o disponivel e o fisico esperado; so quem gerencia caixas o ve na mensagem.
       throw new Error(
-        `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
+        temPermissao(perfil.permissoes, "caixas_gerenciar")
+          ? `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
+          : "Valor programado acima do dinheiro disponível no caixa. Avise a Tesouraria."
       );
     }
     await exigirConfirmadorDaConta(
@@ -2258,8 +2261,16 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
     listarVendasCanceladasCaixaRepository(caixaId)
   ]);
 
+  // Fechamento cego (R-236) · S1: com o caixa ainda aberto, quem opera o PDV sem conferir o fechamento nem gerenciar
+  // caixas nao recebe as VENDAS com valor por aqui. Somadas, elas davam o esperado da gaveta.
+  const cegoNoDetalhe =
+    !veValoresDoFechamento(perfil) &&
+    !temPermissao(perfil.permissoes, "caixas_gerenciar") &&
+    caixa.status !== "fechado" &&
+    caixa.status !== "ajustado";
+  const categorias = montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId);
   return {
-    lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
+    lancamentos: cegoNoDetalhe ? categorias.filter((categoria) => categoria.categoria !== "entradas") : categorias,
     vendasCanceladas: serializarVendasCanceladas(vendasCanceladas),
     alteracoesPosFechamento: alteracoesPosFechamento.map((alteracao) => ({
       id: alteracao.id,

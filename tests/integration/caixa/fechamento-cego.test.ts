@@ -91,6 +91,21 @@ describe("caixa - fechamento cego", () => {
     expect(daConferencia.vendas).toHaveProperty("totalGeral");
     expect(daConferencia.creare).toHaveProperty("comparacao");
 
+    // S1: com o caixa aberto, o detalhe nao manda as vendas (com valor) para o operador; a conferencia recebe.
+    const categoriasDoDetalhe = async (cookie: string) => {
+      const detalhe = await contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/${caixa.caixaId}/detalhe`,
+        headers: { cookie }
+      });
+      expect(detalhe.statusCode, detalhe.body).toBe(200);
+      return json<{ data: { lancamentos: Array<{ categoria: string }> } }>(detalhe).data.lancamentos.map(
+        (categoria) => categoria.categoria
+      );
+    };
+    expect(await categoriasDoDetalhe(cookieCaixa)).not.toContain("entradas");
+    expect(await categoriasDoDetalhe(cookieAdmin)).toContain("entradas");
+
     const fechou = await fechar(caixa);
     expect(fechou.statusCode, fechou.body).toBe(204);
   });
