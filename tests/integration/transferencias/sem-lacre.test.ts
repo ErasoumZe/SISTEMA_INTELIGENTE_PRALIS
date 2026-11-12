@@ -84,7 +84,7 @@ describe("transferencias - sem lacre (R-231)", () => {
       headers: { cookie: cookieAdmin }
     });
     expect(destinos.statusCode, destinos.body).toBe(200);
-    const lista = json<{ data: Array<Record<string, unknown>> }>(destinos).data;
+    const lista = json<{ data: Array<{ contaId: string } & Record<string, unknown>> }>(destinos).data;
     const doCaixa = lista.find((item) => item.contaId === caixa.contaId);
     expect(doCaixa).toBeTruthy();
     expect(Object.keys(doCaixa!).sort()).toEqual(["contaId", "pdvNome", "responsavelNome", "turno"]);
