@@ -95,12 +95,13 @@ describe("host único +Novo / Transferências", () => {
     wrapper.unmount();
   });
 
-  it("operador com Caixa aberto entra no retorno, sem montar formulário contábil", async () => {
+  it("PDV 1-3 (sem transferência comum) vê só Retorno / sangria, sem abas (R-238)", async () => {
     const { wrapper } = montar(false, true, true);
     await flushPromises();
     expect(wrapper.findAllComponents({ name: "VDialog" })).toHaveLength(1);
-    expect(wrapper.get('[data-tab="nova"]').attributes("disabled")).toBeDefined();
-    expect(wrapper.get('[data-tab="retorno"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.find('[data-tab="nova"]').exists()).toBe(false);
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+    expect(wrapper.get(".lc-titulo").text()).toBe("Retorno / sangria");
     expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(false);
     expect(wrapper.getComponent({ name: "CaixaRetornoSangriaForm" }).props("responsavelNome")).toBe("Operadora");
     wrapper.unmount();

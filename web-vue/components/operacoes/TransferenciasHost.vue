@@ -66,6 +66,10 @@ const {
 });
 const ocupado = computed(() => processando.value || caixaSalvando.value || salvandoOperacao.value);
 const podeUsarRetorno = computed(() => !caixaEmFechamento.value && podeRetornar.value);
+const titulo = computed(() => {
+  if (editando.value) return "Editar transferência";
+  return podeUsarComum.value ? "Nova transferência" : "Retorno / sangria";
+});
 const transferenciaVars = {
   "--cat": "var(--cat-transferencias-base)",
   "--cat-soft": "var(--cat-transferencias-soft)",
@@ -103,11 +107,13 @@ function fechar() {
       <div class="transferencias-host__faixa">
         <div class="lc-head">
           <span class="lc-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
-          <h2 class="lc-titulo">{{ editando ? "Editar transferência" : "Nova transferência" }}</h2>
+          <h2 class="lc-titulo">{{ titulo }}</h2>
           <v-icon class="lc-x" size="19" :disabled="ocupado" aria-label="Fechar" @click="fechar">mdi-close</v-icon>
         </div>
+        <!-- R-238: sem a transferencia comum (PDV 1, 2 e 3) so existe Retorno / sangria, entao nao ha
+             abas: uma aba sozinha seria um botao que nao escolhe nada. -->
         <div
-          v-if="!editando"
+          v-if="!editando && podeUsarComum"
           class="lc-cats transferencias-host__abas"
           role="tablist"
           aria-label="Tipo de transferência"

@@ -254,6 +254,17 @@ function acoesLancamentoPorDominio(...acoes: string[]): Permissao[] {
 
 const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargoSeed({
+    // R-238: PDV 1, 2 e 3 abrem, fazem Retorno / sangria (`caixa_operar`) e fecham. NAO veem Entradas
+    // (vendas em tempo real), NAO lancam Saidas e NAO fazem transferencia comum: isso e do PDV 4, do
+    // gerente, no cargo "Caixa Gerente" abaixo.
+    ativas: ["caixa", "transferencias", "fechamento", "relatorio_produtos"],
+    somenteCaixaAberto: ["transferencias", "fechamento", "relatorio_produtos"]
+  }),
+  // R-238: o PDV 4 e o caixa do gerente. Abre, puxa vendas e fecha como qualquer PDV, e alem disso ve
+  // Entradas (vendas em tempo real, buscar venda), lanca Saidas, faz transferencia comum e a sem lacre
+  // (buscar troco no cofre ou numa conta no meio do turno). R-121/R-122: lanca e corrige as proprias
+  // saidas com o caixa aberto, sem `_excluir` (R-015) e sem `_pagar`/`_efetuar`/`_conferir` (R-076/R-077).
+  "Caixa Gerente": permissoesDoCargoSeed({
     ativas: [
       "caixa",
       "entradas",
@@ -273,12 +284,10 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "fechamento",
       "relatorio_produtos"
     ],
-    // R-121/R-122: o operador lanca TODAS as saidas e CORRIGE as proprias enquanto o caixa esta
-    // aberto. Sem `_excluir`: a R-015 depende do rastro — apagar lancamento apaga a explicacao da
-    // quebra. Sem `_pagar`/`_efetuar`/`_conferir`: ciclo de vida e da retaguarda (R-076/R-077).
     extras: [
       "entradas_criar",
       "transferencias_criar",
+      "transferencias_sem_lacre",
       "despesas_criar",
       "despesas_editar",
       "mercadorias_criar",
