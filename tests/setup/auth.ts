@@ -3,11 +3,16 @@ import { expect } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { usuariosTeste, type PerfilTeste } from "./contexto.js";
 
-export async function cookieSessao(app: FastifyInstance, perfil: PerfilTeste) {
+/**
+ * `remoteAddress`: login de FIXTURE (nao do teste) sai de outro IP para nao gastar a cota de login
+ * (20/min por IP) dos testes que rodam em sequencia no mesmo arquivo.
+ */
+export async function cookieSessao(app: FastifyInstance, perfil: PerfilTeste, opcoes: { remoteAddress?: string } = {}) {
   const usuario = usuariosTeste[perfil];
   const resposta = await app.inject({
     method: "POST",
     url: "/api/auth/sign-in/email",
+    ...(opcoes.remoteAddress ? { remoteAddress: opcoes.remoteAddress } : {}),
     payload: {
       email: usuario.email,
       password: usuario.senha

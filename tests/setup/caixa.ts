@@ -301,12 +301,14 @@ const LEITURA_CREARE_ZERADA = {
  * Fechamento cego (Marco, 11/11/2026): o caixa nao recebe o fisico esperado; quem confere o fechamento sim. A
  * fixture le o esperado com a sessao do administrador (que tem `fechamentos_caixa_conferir`).
  */
-// Uma sessao de administrador por aplicacao: logar a cada chamada estoura o limite de login (429).
+// Uma sessao de administrador por aplicacao, e de outro IP: login e leitura da fixture nao podem gastar a
+// cota por IP (login 20/min, global 300/min) dos testes. Sem isto, a caixa-portas-s3-s8 levava 429 no login.
+const IP_DA_FIXTURE = "127.0.0.250";
 const sessoesConferencia = new WeakMap<FastifyInstance, Promise<string>>();
 function cookieConferencia(app: FastifyInstance) {
   let sessao = sessoesConferencia.get(app);
   if (!sessao) {
-    sessao = cookieSessao(app, "admin");
+    sessao = cookieSessao(app, "admin", { remoteAddress: IP_DA_FIXTURE });
     sessoesConferencia.set(app, sessao);
   }
   return sessao;
@@ -319,7 +321,7 @@ async function esperadoPelaConferencia(app: FastifyInstance, caixaId: string) {
     // Leitura da FIXTURE, nao do teste: sai de outro IP para nao gastar a cota global de 300/min por IP
     // (@fastify/rate-limit) dos testes que rodam em sequencia no mesmo arquivo. Sem isto, a caixa-portas-s3-s8
     // passava do limite e recebia 429 no envio da venda integrada.
-    remoteAddress: "127.0.0.250",
+    remoteAddress: IP_DA_FIXTURE,
     headers: { cookie: await cookieConferencia(app) }
   });
   expect(resposta.statusCode, resposta.body).toBe(200);
