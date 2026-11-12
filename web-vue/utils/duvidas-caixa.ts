@@ -459,7 +459,8 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     id: "maquininha-leitura-falhou",
     tema: "maquininha",
     pergunta: "A leitura da maquininha não funcionou.",
-    resposta: "A foto fica anexada. Digite os valores do comprovante (crédito, débito, Pix e voucher) e salve.",
+    resposta:
+      "A foto fica anexada. Digite os valores do comprovante (crédito, débito, Pix e voucher): quando os quatro estiverem preenchidos, salva sozinho.",
     palavras: ["leitura automatica nao funcionou"]
   },
   {
@@ -467,7 +468,7 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "maquininha",
     pergunta: "Diz que não encontrou o caixa da manhã.",
     resposta:
-      "Na tarde, quando a manhã desse PDV não fechou no dia, explique o que aconteceu (pelo menos 5 letras) antes de salvar.",
+      "Na tarde, quando a manhã desse PDV não fechou no dia, explique o que aconteceu (pelo menos 5 letras); depois disso a leitura salva sozinha.",
     palavras: ["nao encontramos o caixa da manha", "sem manha"]
   },
   {
@@ -491,7 +492,7 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "maquininha",
     pergunta: "Posso pular a maquininha?",
     resposta:
-      "A tela deixa avançar, mas o caixa não fecha sem a maquininha salva. Se mandar outra foto depois, salve de novo.",
+      "A tela deixa avançar, mas o caixa não fecha sem a leitura da maquininha. Ela salva sozinha quando completa; se mandar outra foto, a nova substitui a anterior.",
     palavras: ["salve a conferencia da maquininha", "pular"]
   },
   {
