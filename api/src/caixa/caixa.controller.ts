@@ -53,6 +53,7 @@ import {
   registrarIndisponibilidadeCaixa,
   registrarRetornoIndisponibilidadeCaixa
 } from "./caixa.service.js";
+import type { VendaDoTurnoVisivel } from "./caixa.service.js";
 import { resolverRecebimentoSemLacre } from "./recebimento-sem-lacre.service.js";
 
 // R-231 · recebimento sem lacre: o operador do caixa confirma ou marca "Nao recebi".
@@ -509,7 +510,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const query = vendasDoCaixaQuerySchema.parse(request.query);
       try {
         const consulta = await listarVendasDoCaixaAberto(caixaId, query, request.perfilUsuario!);
-        const pagina = paginadoDeResultado<unknown>(consulta.resultado);
+        const pagina = paginadoDeResultado<VendaDoTurnoVisivel>(consulta.resultado);
         return {
           ...pagina,
           meta: {

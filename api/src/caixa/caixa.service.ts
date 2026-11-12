@@ -2560,6 +2560,9 @@ async function consultarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCa
   };
 }
 
+/** Uma venda da consulta do turno: completa para quem confere o fechamento, sem valores para o caixa. */
+export type VendaDoTurnoVisivel = Awaited<ReturnType<typeof listarVendasDoCaixaAberto>>["resultado"]["itens"][number];
+
 /** A consulta das vendas do turno como o perfil pode ver (a rota da tela do caixa usa esta). */
 export async function listarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCaixaQuery, perfil: PerfilUsuario) {
   const consulta = await consultarVendasDoCaixaAberto(caixaId, filtros, perfil);
