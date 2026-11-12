@@ -167,8 +167,19 @@ async function enviar(evento: Event) {
         { anexoId: json.data.id }
       );
       definirLeitura(novaLeitura(leituraIa.sugestao));
+      // Salva sozinho quando a IA leu as 4 formas e a conta do comprovante fechou no servidor (Marco, 11/11):
+      // o operador esquecia de salvar. Com campo duvidoso ou faltando, continua no salvar manual.
+      if (campos.every(({ chave }) => travado(chave)) && podeSalvar.value) {
+        await salvar();
+        if (salvo.value) {
+          aviso.value = "A IA leu o comprovante, a conta fechou e a leitura foi salva.";
+          return;
+        }
+      }
+      const conferencia = leituraIa.sugestao.observacoes.filter((texto) => /bate/u.test(texto)).join(" ");
       aviso.value =
-        "A IA leu o comprovante. Os valores lidos ficam travados; preencha só os que ela não conseguiu ler e salve.";
+        (conferencia ? conferencia + " " : "") +
+        "Os valores lidos ficam travados; preencha só os que ela não conseguiu ler e salve.";
     } catch {
       // IA fora do ar (ou sem resposta): a foto continua anexada como prova e todos os campos ficam livres.
       definirLeitura(novaLeitura(null));

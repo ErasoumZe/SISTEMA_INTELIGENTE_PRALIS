@@ -54,6 +54,7 @@ function cancelarCorrecao() {
           v-model="contagem.valorMoedas"
           label="Moedas"
           icone="mdi-circle-multiple-outline"
+          centavos
           data-teste="contagem-moedas"
         />
         <div class="contagem__total" aria-live="polite">

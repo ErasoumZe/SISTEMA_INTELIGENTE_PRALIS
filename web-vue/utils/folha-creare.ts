@@ -59,7 +59,8 @@ export const GRUPOS_FOLHA_CREARE: ReadonlyArray<{
     titulo: "Saídas e saldo",
     campos: [
       { chave: "despesas", rotulo: "Despesas", compara: true },
-      { chave: "sangria", rotulo: "Sangria", compara: true, negativo: true },
+      // A folha do CREARE nao registra sangria nem suprimento: so exibe, nunca compara (Marco, 11/11/2026).
+      { chave: "sangria", rotulo: "Sangria", compara: false, negativo: true },
       { chave: "saldoFinalDinheiro", rotulo: "Saldo Final Dinheiro", compara: false }
     ]
   }

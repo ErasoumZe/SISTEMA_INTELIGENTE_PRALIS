@@ -1400,8 +1400,13 @@ exatos do cupom, e a tela mostra os campos na ordem impressa.
 | CREDITO, DEBITO, DINHEIRO, PIX, VOUCHER       | vendas do caixa por categoria da forma de pagamento                                                                |
 | Total                                         | total aprovado do relatório de vendas                                                                              |
 | Despesas                                      | despesas + mercadorias + retiradas (como antes)                                                                    |
-| Sangria                                       | sangrias e retornos que saíram do PDV no turno                                                                     |
+| Sangria                                       | **só exibida** desde 11/11/2026 (ver ajuste abaixo)                                                                |
 | Saldo Inicial, CLIENTES, Saldo Final Dinheiro | **só exibidos** (CLIENTES sem equivalente definido; o Saldo Final do CREARE soma voucher e o físico do Pralis não) |
+
+**Ajuste do Marco (11/11/2026): a Sangria deixa de ser comparada.** A folha do CREARE não registra sangria nem
+suprimento (transferência no meio do turno): a linha "Sangria" sai R$ 0,00 mesmo com sangria feita, e a comparação
+acusava diferença em todo caixa com sangria (caso real: PDV 1 Manhã da Lisboa 2, 10/11, sangria de R$ 900,00 no
+lacre 4284). A linha vai para o rodapé "só na folha"; a sangria continua conferida pela Tesouraria no retorno.
 
 "Bate" = igual em centavos. Turno da tarde é outra folha começando do zero (diferente da maquininha, R-210).
 
@@ -1443,6 +1448,14 @@ feita pelo caixa da tarde). O sistema decide sozinho se o caixa é manhã ou tar
 - **Dia seguinte**: não existe manhã fechada naquele dia, então o primeiro caixa volta a ser manhã, sem desconto
   (o acumulado da maquininha também zera). Um terceiro caixa no mesmo PDV e dia é recusado.
 - O banco só permite um caixa aberto por PDV, então a tarde só abre depois que a manhã fechou.
+
+**Conferência da leitura da maquininha (Marco, 11/11/2026).** A IA lê, o servidor confere a conta do próprio
+comprovante antes de devolver a leitura (`conferirSomasDaLeitura`): (1) o TOTAL de cada forma tem de ser a soma
+das bandeiras impressas; se não for, o valor some e o campo fica para o operador digitar olhando a foto; (2) crédito
++ débito + Pix + voucher tem de dar o TOTAL EFETIVADO; se não der, o campo sem bandeiras para conferir (ou o próprio
+TOTAL EFETIVADO) fica destravado para revisão, sem apagar o que foi lido. Nada é trocado por um valor calculado. O
+texto da IA avisa que o zero cortado (Ø) da bobina é 0, nunca 8. Caso real: PagBank do PDV 1 Manhã da Lisboa 2,
+10/11, CREDITO A VISTA 707,21 lido como 787,21 e travado na tela.
 
 ### R-229 — Postos do caixa: PDV + turno do caixa, separados dos turnos do DP (Marco, 29/10/2026)
 

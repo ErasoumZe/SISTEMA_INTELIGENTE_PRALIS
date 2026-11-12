@@ -17,6 +17,16 @@ export function numeroDoCampo(bruto: string | number | null | undefined): number
 }
 
 /**
+ * Modo "centavos" (Moedas, pedido do Marco em 11/11/2026): so os digitos contam e os dois ultimos sao
+ * os centavos, como na maquininha: 4 vira 0,04; 42 vira 0,42; 4230 vira 42,30. Ninguem digita a virgula.
+ */
+export function numeroDosCentavos(bruto: string): number | null {
+  const digitos = bruto.replace(/\D/gu, "").replace(/^0+(?=\d)/u, "");
+  if (!digitos) return null;
+  return Number(digitos) / 100;
+}
+
+/**
  * Formata em pt-BR com no MINIMO duas casas — e isso que faz `50` virar `50,00`.
  * `casas` e o teto de decimais preservados, nao um fixo: colunas de `scale 4` (valor unitario,
  * desconto, juros) passam 4 aqui para a tela nao arredondar o que a pessoa digitou.

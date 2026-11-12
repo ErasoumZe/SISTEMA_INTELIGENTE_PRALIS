@@ -74,6 +74,57 @@ describe("CaixaFechamentoMaquininha · IA fora do ar", () => {
   });
 });
 
+// Marco, 11/11: o operador esquecia de clicar em salvar. A leitura completa e conferida salva sozinha.
+describe("CaixaFechamentoMaquininha · salvar automatico", () => {
+  async function enviarFoto(sugestao: Record<string, unknown>) {
+    apiGet.mockResolvedValue({ etapaDia: "manha", leituraReferencia: null, relatorio: null });
+    apiPost.mockResolvedValue({ sugestao });
+    const apiPut = vi.fn().mockResolvedValue({});
+    vi.stubGlobal("useApi", () => ({ apiUrl: "", apiGet, apiPost, apiPut }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ data: { id: "anexo-1" } }), { status: 201 }))
+    );
+    const wrapper = montar();
+    await flushPromises();
+    const input = wrapper.findAll('input[type="file"]')[1]!;
+    Object.defineProperty(input.element, "files", { value: [new File(["x"], "cupom.png", { type: "image/png" })] });
+    await input.trigger("change");
+    await flushPromises();
+    return { wrapper, apiPut };
+  }
+
+  it("a IA leu as 4 formas e a conta fechou: salva sem clicar", async () => {
+    const { wrapper, apiPut } = await enviarFoto({
+      documentoLegivel: true,
+      credito: 707.21,
+      debito: 1059.6,
+      pix: 791.8,
+      voucher: 449.83,
+      camposDuvidosos: [],
+      observacoes: []
+    });
+    expect(apiPut).toHaveBeenCalledTimes(1);
+    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({ anexoId: "anexo-1", leituraAcumulada: { credito: 707.21 } });
+    expect(wrapper.text()).toContain("a leitura foi salva");
+  });
+
+  it("a conta nao fechou (credito duvidoso): nao salva e mostra o motivo", async () => {
+    const { wrapper, apiPut } = await enviarFoto({
+      documentoLegivel: true,
+      credito: null,
+      debito: 1059.6,
+      pix: 791.8,
+      voucher: 449.83,
+      camposDuvidosos: ["credito"],
+      observacoes: ["Crédito: o total lido (R$ 787,21) não bate com a soma das linhas (R$ 707,21)."]
+    });
+    expect(apiPut).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("não bate com a soma das linhas");
+    expect(wrapper.get('[data-teste="maquininha-campo-credito"]').attributes("readonly")).toBeUndefined();
+  });
+});
+
 describe("CaixaFechamentoMaquininha · leitura salva", () => {
   it("mostra os valores com virgula e trava o que a IA leu; o duvidoso continua editavel", async () => {
     apiGet.mockResolvedValue({

@@ -99,7 +99,7 @@ describe("Caixa - comparacao da folha do CREARE (R-225)", () => {
     expect(new Set(Object.values(vazio.creare.comparacao))).toEqual(new Set(["pendente"]));
     expect(vazio.creare.pralis["total"]).toBe(12.5);
     expect(Object.keys(vazio.creare.comparacao).sort()).toEqual(
-      ["credito", "debito", "despesas", "dinheiro", "pix", "sangria", "total", "trocoInicial", "voucher"].sort()
+      ["credito", "debito", "despesas", "dinheiro", "pix", "total", "trocoInicial", "voucher"].sort()
     );
 
     // Folha igual ao Pralis: tudo confere. CLIENTES e Saldo Final so sao exibidos (fora da comparacao).

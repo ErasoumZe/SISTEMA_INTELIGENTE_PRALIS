@@ -74,6 +74,7 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
             :model-value="valorMoedas"
             label="Moedas"
             icone="mdi-circle-multiple-outline"
+            centavos
             @update:model-value="emit('update:valorMoedas', $event)"
           />
         </v-col>

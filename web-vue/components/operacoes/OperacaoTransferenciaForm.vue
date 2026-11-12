@@ -127,7 +127,13 @@ const {
         </p>
         <div class="tr-dois">
           <CampoDinheiro v-model="campoFisico" label="Dinheiro físico" icone="mdi-cash" data-teste="malote-dinheiro" />
-          <CampoDinheiro v-model="campoMoedas" label="Moedas" icone="mdi-circle-multiple" data-teste="malote-moedas" />
+          <CampoDinheiro
+            v-model="campoMoedas"
+            centavos
+            label="Moedas"
+            icone="mdi-circle-multiple"
+            data-teste="malote-moedas"
+          />
         </div>
         <span v-if="erroComposicao" class="tr-erro" role="alert">{{ erroComposicao }}</span>
         <div class="tr-total-malote" data-teste="malote-total">

@@ -90,12 +90,70 @@ Mapeamento obrigatorio:
 - pix: o "TOTAL" da secao "QR CODE DEBITO" (linha "PIX") ou da secao "PIX".
 - voucher: o "TOTAL" da secao "VOUCHER".
 Em cada linha, o numero de 4 digitos (ex.: 0057) e a quantidade de transacoes, nunca valor.
+A impressora termica imprime o ZERO cortado por um risco (parece "Ø"). Esse caractere e SEMPRE 0, nunca 8: "R$ 7Ø7,21" e 707.21.
 Para cada forma, devolva as linhas discriminadas visiveis em detalhes (ex.: VISA, ELO, MASTER, TICKET FLEX), com nome e valor. Se nao houver linha discriminada, devolva lista vazia.
 Nao some, nao estime, nao complete numeros cortados e nao compare fotos diferentes. Valores em reais como numero JSON com PONTO decimal e os centavos: R$ 947,05 vira 947.05; R$ 2.552,61 vira 2552.61. Nunca descarte os centavos nem devolva 94705. Use null quando nao estiver visivel.
 O numero da maquininha e a hora do turno sao conferidos pelo sistema, nunca inventados pela IA. Se o documento nao for legivel, use documentoLegivel=false, valores null, listas vazias e explique em observacoes.
 Liste em camposDuvidosos todo campo ambiguo. Responda somente o JSON solicitado.`;
 
 type RespostaGemini = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+
+const FORMAS = [
+  ["credito", "Crédito"],
+  ["debito", "Débito"],
+  ["pix", "Pix"],
+  ["voucher", "Voucher"]
+] as const;
+const emCentavos = (valor: number) => Math.round(valor * 100);
+const reais = (centavos: number) => (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/**
+ * A IA le, o servidor confere a conta do proprio comprovante (11/11/2026). Caso real: PagBank com
+ * CREDITO A VISTA 707,21 lido como 787,21 (zero cortado lido como 8) e o valor travado na tela.
+ * 1) Em cada forma, o TOTAL tem de ser a soma das linhas discriminadas (ELO + MASTER + VISA). Se nao for,
+ *    o total some (null) e vira duvidoso: o operador digita olhando a foto, em vez de herdar o erro.
+ * 2) Credito + debito + Pix + voucher tem de dar o TOTAL EFETIVADO. Se nao der, quem nao tem linhas para
+ *    conferir vira duvidoso (com o valor lido mantido); se todas foram conferidas, o duvidoso e o TOTAL EFETIVADO.
+ * Nada e corrigido em silencio: o servidor nunca troca um numero lido por outro calculado.
+ */
+export function conferirSomasDaLeitura(leitura: RelatorioMaquininhaIa): RelatorioMaquininhaIa {
+  if (!leitura.documentoLegivel) return leitura;
+  const conferida = { ...leitura };
+  const duvidosos = new Set(leitura.camposDuvidosos);
+  const observacoes = [...leitura.observacoes];
+  const semLinhas: string[] = [];
+
+  for (const [forma, rotulo] of FORMAS) {
+    const total = leitura[forma];
+    const linhas = leitura.detalhes[forma];
+    if (total === null) continue;
+    if (!linhas.length) {
+      semLinhas.push(forma);
+      continue;
+    }
+    const soma = linhas.reduce((acumulado, linha) => acumulado + emCentavos(linha.valor), 0);
+    if (soma === emCentavos(total)) continue;
+    conferida[forma] = null;
+    duvidosos.add(forma);
+    observacoes.push(
+      `${rotulo}: o total lido (${reais(emCentavos(total))}) não bate com a soma das linhas (${reais(soma)}). Confira na foto e digite o valor.`
+    );
+  }
+
+  const formas = FORMAS.map(([forma]) => conferida[forma]);
+  if (leitura.acumulador !== null && formas.every((valor) => valor !== null)) {
+    const soma = formas.reduce((acumulado, valor) => acumulado + emCentavos(valor), 0);
+    if (soma !== emCentavos(leitura.acumulador)) {
+      // Aqui nao ha prova de QUAL numero errou: o valor fica, so destrava para o operador revisar.
+      for (const campo of semLinhas.length ? semLinhas : ["acumulador"]) duvidosos.add(campo);
+      observacoes.push(
+        `A soma das formas (${reais(soma)}) não bate com o TOTAL EFETIVADO (${reais(emCentavos(leitura.acumulador))}). Confira na foto.`
+      );
+    }
+  }
+
+  return { ...conferida, camposDuvidosos: [...duvidosos].slice(0, 30), observacoes: observacoes.slice(0, 20) };
+}
 
 function falha(mensagem: string, status = 502, codigo = "IA_INDISPONIVEL"): never {
   throw new ErroDominio(mensagem, status, codigo);
@@ -158,7 +216,7 @@ export async function extrairRelatorioMaquininhaComGemini(
     const validado = relatorioMaquininhaIaSchema.safeParse(json);
     if (!validado.success)
       return falha("A IA devolveu campos invalidos. Revise manualmente.", 422, "IA_RESPOSTA_INCOMPLETA");
-    return validado.data;
+    return conferirSomasDaLeitura(validado.data);
   } catch (erro) {
     if (erro instanceof ErroDominio) throw erro;
     if (erro instanceof Error && erro.name === "AbortError")
