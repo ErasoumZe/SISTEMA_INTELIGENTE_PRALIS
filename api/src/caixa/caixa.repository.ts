@@ -44,6 +44,7 @@ import {
   fechamentosCaixaRelatoriosVendas,
   fechamentosCaixa,
   quebrasCaixa,
+  sangriasRecusadas,
   transferenciasConferenciasFisicas
 } from "@padaria/db/schema/caixa";
 import { despesas } from "@padaria/db/schema/despesa";
@@ -450,6 +451,31 @@ export async function explicarQuebraContagemRepository(
     )
     .returning({ id: quebrasCaixa.id });
   return linha ?? null;
+}
+
+// R-236 · registra a sangria recusada por passar do dinheiro do caixa e devolve quantas o caixa ja teve.
+export async function registrarSangriaRecusadaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    usuarioId: string;
+    valorCentavos: number;
+    motivo: "acima_do_disponivel" | "sem_saldo" | "reservado_para_retornos";
+  },
+  db: ExecutorBanco = banco
+): Promise<number> {
+  await db.insert(sangriasRecusadas).values({
+    empresaId: input.empresaId,
+    fechamentoCaixaId: input.fechamentoCaixaId,
+    usuarioId: input.usuarioId,
+    valor: centavosParaDecimalBanco(input.valorCentavos),
+    motivo: input.motivo
+  });
+  const [linha] = await db
+    .select({ total: count() })
+    .from(sangriasRecusadas)
+    .where(eq(sangriasRecusadas.fechamentoCaixaId, input.fechamentoCaixaId));
+  return Number(linha?.total ?? 0);
 }
 
 export async function listarUsuariosTesourariaRepository(empresaId: string, db: ExecutorBanco = banco) {

@@ -3697,6 +3697,34 @@ export const alteracoesPosFechamentoCaixa = pgTable(
 // e pertence ao usuario que operou o caixa. O saldo pendente e derivado juntando estas linhas com
 // suas notificacoes ainda nao verificadas; nao existe coluna de saldo e esta entidade jamais
 // movimenta `contas`. A FK composta impede empresa_id divergente do fechamento no proprio banco.
+// R-236 · cada sangria recusada por passar do dinheiro do caixa. A recusa em si revelava o esperado da gaveta
+// (tentando valores, o caixa cercava o saldo sem deixar rastro); agora fica registrada e, a partir da 3a no mesmo
+// caixa, a Tesouraria e avisada. Nao muda a regra da sangria (D1): so registra.
+export const sangriasRecusadas = pgTable(
+  "sangrias_recusadas",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id")
+      .notNull()
+      .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
+    usuarioId: text("usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    valor: valorMonetario("valor").notNull(),
+    motivo: text("motivo").$type<"acima_do_disponivel" | "sem_saldo" | "reservado_para_retornos">().notNull(),
+    criadoEm
+  },
+  (table) => [
+    check(
+      "sangrias_recusadas_motivo_check",
+      sql`${table.motivo} in ('acima_do_disponivel', 'sem_saldo', 'reservado_para_retornos')`
+    ),
+    check("sangrias_recusadas_valor_positivo_check", sql`${table.valor} > 0`),
+    index("sangrias_recusadas_caixa_idx").on(table.fechamentoCaixaId)
+  ]
+);
+
 export const quebrasCaixa = pgTable(
   "quebras_caixa",
   {
@@ -3779,6 +3807,7 @@ export const notificacoes = pgTable(
         | "compras_decisao_pendente"
         | "compras_agendamento_conferir"
         | "conferencia_estoque_fazer"
+        | "sangria_recusada"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -3806,7 +3835,8 @@ export const notificacoes = pgTable(
     check(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
-        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer')`
+        'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer',
+        'sangria_recusada')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(

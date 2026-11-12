@@ -182,6 +182,39 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     );
   }
 
+  // R-236: a recusa da sangria por passar do caixa revelava o esperado (tentando valores). Agora cada recusa fica
+  // registrada e, a partir da 3a no mesmo caixa, a Tesouraria e avisada uma vez. A regra do teto (D1) nao muda.
+  it("sangria acima do caixa: cada recusa fica registrada e a 3a avisa a Tesouraria", async () => {
+    const { caixaId } = await abrirCaixaComSaldo("sangria-recusada", "2026-06-02T08:00", 300);
+    for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+      const recusada = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+        valor: 5000 + tentativa,
+        lacre: "RECUSA-1",
+        idempotenciaChave: randomUUID()
+      });
+      expect(recusada.statusCode, recusada.body).toBe(400);
+      expect(recusada.body).toContain("SANGRIA_ACIMA_DO_DISPONIVEL");
+    }
+    const recusas = await consultarTodos<{ motivo: string; valor: string }>(
+      "select motivo, valor from sangrias_recusadas where fechamento_caixa_id = $1 order by criado_em",
+      [caixaId]
+    );
+    expect(recusas.map((recusa) => recusa.motivo)).toEqual([
+      "acima_do_disponivel",
+      "acima_do_disponivel",
+      "acima_do_disponivel"
+    ]);
+    expect(recusas.map((recusa) => recusa.valor)).toEqual(["5001.00", "5002.00", "5003.00"]);
+    const avisos = await consultarTodos<{ titulo: string }>(
+      "select titulo from notificacoes where tipo = 'sangria_recusada' and referencia_id = $1",
+      [caixaId]
+    );
+    expect(avisos.length).toBeGreaterThan(0);
+    expect(avisos[0]?.titulo).toMatch(/3 sangrias recusadas/u);
+    // A recusa nao mexe no caixa: nenhuma entrega foi criada.
+    expect(await movimentosDoCaixa(caixaId)).toHaveLength(0);
+  });
+
   it("mesma chave + mesma intencao devolve o movimento vencedor sem duplicar", async () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-repeticao", "2026-06-01T08:00", 300);
     const chave = randomUUID();

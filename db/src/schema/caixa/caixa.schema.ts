@@ -12,5 +12,6 @@ export {
   fechamentosCaixaRelatoriosVendas,
   notificacoes,
   quebrasCaixa,
+  sangriasRecusadas,
   transferenciasConferenciasFisicas
 } from "../app.schema.js";
