@@ -1598,3 +1598,16 @@ o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que a
 `WHATSAPP_PROVEDOR=meta` sobe com o envio desligado e um aviso, sem derrubar a API. Vale só para o S1.
 Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
 (acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
+
+### R-238 — PDV 4 é o caixa do gerente; PDV 1, 2 e 3 só abrem, fazem sangria e fecham (Marco, 12/11/2026)
+
+- **PDV 1, 2 e 3 (cargo "Caixa"):** abrem o caixa, fazem **Retorno / sangria** e fecham. Não veem **Entradas**
+  (vendas em tempo real, buscar venda; no Caixa o cartão "Entradas" mostra só a quantidade e não abre a lista),
+  não lançam **Saídas** e não fazem **transferência comum** nem **sem lacre**. Ao tocar em Transferências, a
+  janela abre direto em Retorno / sangria, sem abas.
+- **PDV 4 (cargo "Caixa Gerente"):** é um PDV comum (abre, puxa vendas e fecha pelo mesmo fluxo) e além disso vê
+  Entradas, lança Saídas e faz transferência comum e **sem lacre** (buscar troco no cofre ou numa conta no meio do
+  turno). Por ver as vendas em tempo real, o fechamento do PDV 4 não é cego.
+- **Produção:** o seed de referência só roda com `SEED_REFERENCIA=1`. Para valer lá, o cargo "Caixa" perde
+  Entradas, Saídas e a transferência comum, o cargo "Caixa Gerente" é criado e as contas "PDV 4 · Manhã/Tarde"
+  passam para ele (grade de permissões ou rodada do seed autorizada).
