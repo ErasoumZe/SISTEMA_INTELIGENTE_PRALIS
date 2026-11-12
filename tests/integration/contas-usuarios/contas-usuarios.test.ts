@@ -202,7 +202,7 @@ describe("contas-usuarios integration", () => {
         idsTeste.empresaA,
         idsTeste.contaCaixa,
         usuarioCaixaId,
-        idsTeste.contaLivre
+        idsTeste.contaCofre
       ]);
       await executarSql(
         "update permissoes_usuarios set regras = regras - 'entradas_visualizar' where usuario_id = $1",
@@ -221,7 +221,7 @@ describe("contas-usuarios integration", () => {
         expect(doPdv).toMatchObject({ ehContaPdv: true });
         expect(doPdv).not.toHaveProperty("saldoAtual");
         expect(doPdv).not.toHaveProperty("saldoPendente");
-        expect(contas.find((conta) => conta.id === idsTeste.contaLivre)).toHaveProperty("saldoAtual");
+        expect(contas.find((conta) => conta.id === idsTeste.contaCofre)).toHaveProperty("saldoAtual");
       } finally {
         await executarSql(
           `update permissoes_usuarios set regras = regras || '{"entradas_visualizar": true}'::jsonb where usuario_id = $1`,
