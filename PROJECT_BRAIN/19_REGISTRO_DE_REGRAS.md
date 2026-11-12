@@ -1630,6 +1630,31 @@ Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficia
   Caixa e Tesouraria, criar o cargo "Caixa Gerente" (restaurar padrão) e passar as contas "PDV 4 · Manhã/Tarde" para
   ele.
 
+### R-239 — O número do lacre volta a valer depois da baixa (Marco, 12/11/2026)
+
+**Supera em parte a R-021** ("o lacre não se repete"). Os lacres vêm em lotes comprados com numeração impressa, e
+um lote futuro pode repetir números.
+
+- **Regra:** o mesmo número não pode estar **ativo** duas vezes na empresa. Depois da baixa (lacre aberto e
+  conferido, `rompido = true`), o número pode ser usado de novo por um lacre novo.
+- **Banco:** a trava `lacres_numero_unico` (empresa + número, para sempre) virou o índice
+  `lacres_numero_ativo_unico` (empresa + número, só onde `rompido = false`). Migration `0093`, sem mudança de dados.
+- **Abertura do caixa:** a busca do malote pelo número pega o lacre ativo; sem ativo, o último baixado (para
+  responder "já utilizado").
+- **Histórico:** buscar um número pode trazer mais de uma transferência, cada uma com sua data.
+
+### R-237 — Vídeos de ajuda no painel, separados do chat de Dúvidas (Marco, 12/11/2026)
+
+- **Onde:** no painel inicial, faixa "Vídeos de ajuda", com busca. O chat de Dúvidas (bolinha) continua igual: lá
+  se pergunta, aqui se assiste.
+- **Quem vê:** cada grupo de vídeos pertence a uma tela do menu. O grupo do Caixa aparece para quem tem a tela
+  Caixa (a conta do PDV). Não há filtro de cargo próprio: vale a mesma lista do menu. Outros grupos (outros tipos de
+  conta) entram depois, cada um ligado à sua tela.
+- **Formato:** um vídeo curto por dúvida, em tela cheia no celular, com a legenda grande gravada no vídeo e
+  barrinhas no topo, uma por passo. As setas dos lados vão para o passo anterior ou o próximo (não pulam segundos);
+  quando o vídeo termina, o próximo do grupo começa sozinho. Ordem do grupo do Caixa: a ordem da abertura.
+- **Sem vídeo de login:** quem assiste já está dentro do sistema.
+
 ### R-236 — Fechamento cego: o caixa não vê se bateu; só a Tesouraria vê as diferenças (Marco, 11/11/2026)
 
 **Supera em parte a R-232** (que mostrava ao caixa, no fim, "contado × esperado" e a sobra). Motivo: vendo o valor

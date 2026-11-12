@@ -517,6 +517,9 @@ export async function buscarTransferenciaPorLacreAberturaRepository(
       )
     )
     .where(and(eq(lacres.empresaId, empresaId), ilike(lacres.numero, numeroLacre), eq(lacres.origem, "saida")))
+    // R-239: o mesmo numero pode existir ja baixado (lote antigo) e ativo (lote novo). O ativo vem primeiro;
+    // sem ativo, vem o mais recente baixado, para o servico responder "ja utilizado".
+    .orderBy(asc(lacres.rompido), desc(lacres.criadoEm))
     .limit(1);
   return linha ?? null;
 }
