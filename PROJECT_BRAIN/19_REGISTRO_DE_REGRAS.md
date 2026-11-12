@@ -1634,3 +1634,15 @@ esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou f
 - **Limite conhecido:** a folha "Relatório de Venda Geral" do CREARE, impressa pelo caixa, mostra o dinheiro do
   turno. Para o fechamento ser cego de verdade, a folha precisa ser impressa ou guardada por outra pessoa, ou só
   depois da contagem. É regra de operação a decidir com o Rodrigo.
+
+### R-237 — Vídeos de ajuda no painel, separados do chat de Dúvidas (Marco, 12/11/2026)
+
+- **Onde:** no painel inicial, faixa "Vídeos de ajuda", com busca. O chat de Dúvidas (bolinha) continua igual: lá
+  se pergunta, aqui se assiste.
+- **Quem vê:** cada grupo de vídeos pertence a uma tela do menu. O grupo do Caixa aparece para quem tem a tela
+  Caixa (a conta do PDV). Não há filtro de cargo próprio: vale a mesma lista do menu. Outros grupos (outros tipos de
+  conta) entram depois, cada um ligado à sua tela.
+- **Formato:** um vídeo curto por dúvida, em tela cheia no celular, com a legenda grande gravada no vídeo e
+  barrinhas no topo, uma por passo. As setas dos lados vão para o passo anterior ou o próximo (não pulam segundos);
+  quando o vídeo termina, o próximo do grupo começa sozinho. Ordem do grupo do Caixa: a ordem da abertura.
+- **Sem vídeo de login:** quem assiste já está dentro do sistema.
