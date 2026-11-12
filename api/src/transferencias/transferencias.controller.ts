@@ -20,6 +20,7 @@ import {
   confirmarTransferencia,
   criarTransferencia,
   criarTransferenciaSemLacre,
+  listarDestinosSemLacre,
   liberarTravaTransferencia,
   listarTransferencias,
   listarAnexosDaConferencia,
@@ -29,7 +30,6 @@ import {
   recusarConferencia
 } from "./transferencias.service.js";
 import { statusErroValidacao } from "../utils.js";
-import { listarDestinosSemLacreRepository } from "./transferencias.repository.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
 export async function registrarRotasTransferencias(app: FastifyInstance): Promise<void> {
@@ -86,7 +86,7 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       if (!podeAcessarEmpresa(perfil, empresaId)) {
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
-      return ok(await listarDestinosSemLacreRepository(empresaId));
+      return ok(await listarDestinosSemLacre(empresaId));
     }
   );
 
