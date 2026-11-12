@@ -115,7 +115,13 @@ const idPassos = computed(() => `passos-${atual.value.id}`);
   <v-dialog v-model="aberto" fullscreen transition="dialog-bottom-transition" :aria-label="grupo.titulo">
     <div class="tela-cheia">
       <header class="tela-cheia__topo">
-        <v-btn icon="mdi-arrow-left" variant="tonal" color="white" aria-label="Voltar para os vídeos" @click="aberto = false" />
+        <v-btn
+          icon="mdi-arrow-left"
+          variant="tonal"
+          color="white"
+          aria-label="Voltar para os vídeos"
+          @click="aberto = false"
+        />
         <span class="tela-cheia__contador">
           {{ grupo.titulo }} · <span class="cx-num">vídeo {{ indice + 1 }} de {{ grupo.videos.length }}</span>
         </span>

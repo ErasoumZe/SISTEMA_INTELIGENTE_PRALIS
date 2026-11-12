@@ -45,7 +45,10 @@ describe("videos de ajuda", () => {
     for (const video of GRUPOS_VIDEOS.flatMap((g) => g.videos)) {
       expect(video.inicios, video.id).toHaveLength(video.passos.length);
       expect(video.inicios[0], video.id).toBe(0);
-      expect([...video.inicios].sort((a, b) => a - b), video.id).toEqual(video.inicios);
+      expect(
+        [...video.inicios].sort((a, b) => a - b),
+        video.id
+      ).toEqual(video.inicios);
       expect(video.inicios.at(-1)!, video.id).toBeLessThan(video.duracao);
     }
   });

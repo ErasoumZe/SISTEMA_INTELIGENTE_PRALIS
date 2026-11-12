@@ -70,12 +70,7 @@ const numero = (grupoId: string, videoId: string) =>
       </ul>
     </div>
 
-    <AppVideoTelaCheia
-      v-if="aberto"
-      :grupo="aberto.grupo"
-      :inicio="aberto.inicio"
-      @fechar="aberto = null"
-    />
+    <AppVideoTelaCheia v-if="aberto" :grupo="aberto.grupo" :inicio="aberto.inicio" @fechar="aberto = null" />
   </section>
 </template>
 
