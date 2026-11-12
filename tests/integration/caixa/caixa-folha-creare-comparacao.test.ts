@@ -90,7 +90,20 @@ describe("Caixa - comparacao da folha do CREARE (R-225)", () => {
         }
       });
       expect(resposta.statusCode, resposta.body).toBe(200);
-      return json<{ data: RelatorioGerado }>(resposta).data.dados;
+      // Fechamento cego (Marco, 11/11/2026): o caixa recebe so a leitura da folha, sem a comparacao com o sistema.
+      const doCaixa = json<{ data: RelatorioGerado }>(resposta).data.dados as unknown as {
+        creare: Record<string, unknown>;
+      };
+      expect(doCaixa.creare).not.toHaveProperty("comparacao");
+      expect(doCaixa.creare).not.toHaveProperty("pralis");
+      // Quem confere o fechamento (aqui o administrador) le o relatorio completo.
+      const completo = await contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/${caixa.caixaId}/relatorio-vendas`,
+        headers: { cookie: cookieAdmin }
+      });
+      expect(completo.statusCode, completo.body).toBe(200);
+      return json<{ data: RelatorioGerado }>(completo).data.dados;
     }
 
     // Folha sem valores: tudo pendente; o Pralis vai junto para a tela mostrar ao lado.

@@ -828,7 +828,7 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     await revincularVendasAoCaixa(travado, tx);
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa aberto nao encontrado");
-    return ocultarFisicoEsperado({ ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador }, perfil);
+    return statusParaOPerfil({ ...(await statusDoCaixaAberto(atualizado, tx)), vinculoOperador }, perfil);
   });
 }
 
@@ -838,6 +838,49 @@ function ocultarFisicoEsperado(status: CaixaStatus, perfil: PerfilUsuario): Caix
   if (!status.resumo || temPermissao(perfil.permissoes, "caixas_gerenciar")) return status;
   const { saldoProprio: _saldoProprio, propostaRetorno: _propostaRetorno, ...resumo } = status.resumo;
   return { ...status, resumo: { ...resumo, saldo: null } };
+}
+
+// Fechamento cego (Marco, 11/11/2026): so quem confere o fechamento (Tesouraria, `fechamentos_caixa_conferir`) recebe
+// o VALOR das vendas, o esperado da gaveta e as comparacoes. Caixa e gerente recebem quantas vendas houve e, no fim,
+// so a falta. A Tela esconder nao basta: o que nao pode ser visto nao sai do servidor.
+function veValoresDoFechamento(perfil: PerfilUsuario) {
+  return temPermissao(perfil.permissoes, "fechamentos_caixa_conferir");
+}
+
+/** O status do caixa aberto como o perfil pode ver: R-232 (saldo) + fechamento cego (valor das vendas). */
+function statusParaOPerfil(status: CaixaStatus, perfil: PerfilUsuario): CaixaStatus {
+  const cego = ocultarFisicoEsperado(status, perfil);
+  if (!cego.resumo || veValoresDoFechamento(perfil)) return cego;
+  return {
+    ...cego,
+    resumo: {
+      ...cego.resumo,
+      totalEntradas: null,
+      porFormaPagamento: cego.resumo.porFormaPagamento?.map((forma) => ({ ...forma, total: null }))
+    }
+  };
+}
+
+/** O relatorio de vendas do fechamento como o perfil pode ver (fechamento cego). */
+function relatorioVendasParaOPerfil(
+  relatorio: ReturnType<typeof serializarRelatorioVendasFechamento>,
+  perfil: PerfilUsuario
+) {
+  if (veValoresDoFechamento(perfil)) return relatorio;
+  const dados = (relatorio.dados ?? {}) as Record<string, DadosExternos>;
+  const vendas = (dados["vendas"] ?? {}) as Record<string, DadosExternos>;
+  const creare = dados["creare"] as Record<string, DadosExternos> | null | undefined;
+  const contagem = lerContagemFisica(relatorio.dados);
+  return {
+    ...relatorio,
+    dados: {
+      ...dados,
+      vendas: { quantidade: typeof vendas["quantidade"] === "number" ? vendas["quantidade"] : 0 },
+      // A leitura da folha e o que o proprio caixa leu do cupom; a comparacao com o sistema e da Tesouraria.
+      creare: creare ? { anexoId: creare["anexoId"] ?? null, leitura: creare["leitura"] ?? null } : (creare ?? null),
+      contagemFisica: contagem ? { ...contagem, esperado: null, diferenca: Math.min(contagem.diferenca, 0) } : null
+    } as DadosExternos
+  };
 }
 
 export async function registrarIndisponibilidadeCaixa(
@@ -1368,7 +1411,7 @@ async function abrirCaixaEmTransacao(
       console.error("[caixa] falha ao notificar campanhas na abertura", erroCampanhas);
     }
 
-    return statusDoCaixaAberto(aberto, tx);
+    return statusParaOPerfil(await statusDoCaixaAberto(aberto, tx), perfil);
   });
 }
 
@@ -1463,8 +1506,10 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
     const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
     const observacao = dados.observacao?.trim() || null;
-    if (diferencaFisicaCentavos !== 0 && !observacao) {
-      throw new Error("Observacao obrigatoria quando a contagem fisica do fechamento divergir");
+    // Fechamento cego (Marco, 11/11/2026): o caixa so ve a FALTA, entao so a falta exige observacao. A sobra o
+    // caixa nao enxerga (a tela diz "Tudo certo"); ela continua registrada e vai para a Tesouraria.
+    if (diferencaFisicaCentavos < 0 && !observacao) {
+      throw new Error("Observacao obrigatoria quando faltar dinheiro na contagem do fechamento");
     }
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final
@@ -1867,7 +1912,7 @@ export async function criarTransferenciaCofreCaixa(
         observacao: dados.observacao?.trim() || null,
         responsavelNome: dados.responsavelNome?.trim() || null
       });
-      return statusDoCaixaAberto(caixa, tx);
+      return statusParaOPerfil(await statusDoCaixaAberto(caixa, tx), perfil);
     }
     if (lacreSelecionado.transferenciaId || lacreSelecionado.rompido) {
       throw new Error("Lacre de retorno / sangria ja utilizado");
@@ -1926,7 +1971,7 @@ export async function criarTransferenciaCofreCaixa(
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
+    return statusParaOPerfil(await statusDoCaixaAberto(atualizado, tx), perfil);
   });
 }
 
@@ -1965,7 +2010,7 @@ export async function executarPlanejamentoRetorno(
     if (planejamento.status === "cancelada") {
       throw new ErroDominio("Planejamento cancelado nao pode ser executado", 409, "PLANEJAMENTO_CANCELADO");
     }
-    if (planejamento.status !== "agendada") return statusDoCaixaAberto(caixa, tx);
+    if (planejamento.status !== "agendada") return statusParaOPerfil(await statusDoCaixaAberto(caixa, tx), perfil);
     const saldoDisponivel = saldoFisicoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (planejamento.valorCentavos > saldoDisponivel) {
       throw new Error(
@@ -1996,7 +2041,7 @@ export async function executarPlanejamentoRetorno(
       throw new ErroDominio("Planejamento alterado por outro usuario neste instante", 409, "PLANEJAMENTO_CONFLITO");
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
+    return statusParaOPerfil(await statusDoCaixaAberto(atualizado, tx), perfil);
   });
 }
 
@@ -2287,7 +2332,7 @@ export async function obterRelatorioVendasFechamento(caixaId: string, perfil: Pe
   const relatorio = await buscarRelatorioVendasFechamentoRepository(caixa.id, caixa.empresaId, undefined, {
     incluirInvalidado: true
   });
-  return relatorio ? serializarRelatorioVendasFechamento(relatorio) : null;
+  return relatorio ? relatorioVendasParaOPerfil(serializarRelatorioVendasFechamento(relatorio), perfil) : null;
 }
 
 export async function gerarRelatorioVendasFechamento(
@@ -2311,7 +2356,7 @@ export async function gerarRelatorioVendasFechamento(
   // O fechamento guarda o consolidado, e não replica potencialmente milhares de cupons no JSON.
   // A consulta usa o corte gravado do Caixa; a linha desta página existe porque a função compartilhada
   // também devolve uma página, enquanto `totais` cobre integralmente o período.
-  const primeiraPagina = await listarVendasDoCaixaAberto(caixa.id, { page: 1, pageSize: 1 }, perfil);
+  const primeiraPagina = await consultarVendasDoCaixaAberto(caixa.id, { page: 1, pageSize: 1 }, perfil);
   const canceladas = await listarVendasCanceladasCaixa(caixa.id, perfil);
   const relatorio = await executarEmTransacao(async (tx) => {
     if (!(await travarCaixaRepository(caixa.id, tx))) throw new Error("Caixa nao encontrado");
@@ -2442,7 +2487,7 @@ export async function gerarRelatorioVendasFechamento(
       tx
     );
   });
-  return serializarRelatorioVendasFechamento(relatorio);
+  return relatorioVendasParaOPerfil(serializarRelatorioVendasFechamento(relatorio), perfil);
 }
 
 /**
@@ -2453,7 +2498,8 @@ export async function gerarRelatorioVendasFechamento(
  * periodo congelado: a ultima venda e limitada pelo corte gravado no servidor, nunca por agora
  * nem por data informada pelo navegador.
  */
-export async function listarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCaixaQuery, perfil: PerfilUsuario) {
+// Consulta COMPLETA das vendas do turno: uso interno (o relatorio de vendas precisa dos valores para gravar).
+async function consultarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCaixaQuery, perfil: PerfilUsuario) {
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
@@ -2511,6 +2557,42 @@ export async function listarVendasDoCaixaAberto(caixaId: string, filtros: Vendas
     abertura: dataHoraAbertura.toISOString(),
     limiteSuperior: limiteOperacional.toISOString(),
     manuaisSemHorarioForaDoFiltro: temFiltroHorario
+  };
+}
+
+/** Uma venda da consulta do turno: completa para quem confere o fechamento, sem valores para o caixa. */
+export type VendaDoTurnoVisivel = Awaited<ReturnType<typeof listarVendasDoCaixaAberto>>["resultado"]["itens"][number];
+
+/** A consulta das vendas do turno como o perfil pode ver (a rota da tela do caixa usa esta). */
+export async function listarVendasDoCaixaAberto(caixaId: string, filtros: VendasDoCaixaQuery, perfil: PerfilUsuario) {
+  const consulta = await consultarVendasDoCaixaAberto(caixaId, filtros, perfil);
+  if (veValoresDoFechamento(perfil)) return consulta;
+  const { resultado, totais } = consulta;
+  // Fechamento cego (Marco, 11/11/2026): o caixa consulta hora, forma e produtos de cada venda, nunca o valor.
+  // Somando os valores ele calcularia o dinheiro esperado na gaveta.
+  return {
+    ...consulta,
+    resultado: {
+      ...resultado,
+      itens: resultado.itens.map((venda) => ({
+        id: venda.id,
+        descricao: venda.descricao,
+        dataVenda: venda.dataVenda,
+        pagamentos: (venda.pagamentos ?? []).map((pagamento) => ({
+          formaPagamentoNome: pagamento.formaPagamentoNome,
+          tipoPagamentoAutomacao: pagamento.tipoPagamentoAutomacao
+        })),
+        itensVenda: (venda.itensVenda ?? []).map((item) => ({
+          quantidade: item.quantidade,
+          descricaoProduto: item.descricaoProduto
+        }))
+      }))
+    },
+    totais: {
+      quantidade: totais.quantidade,
+      totalGeral: null,
+      porFormaPagamento: totais.porFormaPagamento.map((forma) => ({ ...forma, total: null }))
+    }
   };
 }
 

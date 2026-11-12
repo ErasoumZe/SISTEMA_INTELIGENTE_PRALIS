@@ -51,7 +51,12 @@ describe("caixa - contagem física cega (R-232)", () => {
     expect(resumo["saldo"]).toBeNull();
     expect(resumo).not.toHaveProperty("saldoProprio");
     expect(resumo).not.toHaveProperty("propostaRetorno");
-    expect(resumo["totalEntradas"]).toEqual(expect.any(Number));
+    // Fechamento cego (Marco, 11/11/2026): nem o valor das vendas chega ao caixa; so a quantidade por forma.
+    expect(resumo["totalEntradas"]).toBeNull();
+    for (const forma of (resumo["porFormaPagamento"] ?? []) as Array<{ total: unknown; quantidade: number }>) {
+      expect(forma.total).toBeNull();
+      expect(forma.quantidade).toEqual(expect.any(Number));
+    }
   });
 
   it("a contagem fica no relatório, trava e só muda com justificativa (com histórico); o fechamento usa ela", async () => {
@@ -97,7 +102,8 @@ describe("caixa - contagem física cega (R-232)", () => {
         };
       };
     }>(corrigida).data.dados.contagemFisica;
-    expect(contagem).toMatchObject({ total: 100, esperado: 100, diferenca: 0 });
+    // Fechamento cego: o caixa ve o total que contou, mas nao o esperado; sem falta, a diferenca chega como 0.
+    expect(contagem).toMatchObject({ total: 100, esperado: null, diferenca: 0 });
     expect(contagem.correcoes).toEqual([
       expect.objectContaining({
         de: expect.objectContaining({ valorEspecie: 90 }),

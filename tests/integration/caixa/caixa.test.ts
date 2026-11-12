@@ -1156,10 +1156,12 @@ describe("caixa integration", () => {
     assertOk(propria);
     const corpo = json<{
       data: Array<{ id: string; descricao: string }>;
-      meta: { totais: { totalGeral: number; quantidade: number }; manuaisSemHorarioForaDoFiltro: boolean };
+      meta: { totais: { totalGeral: number | null; quantidade: number }; manuaisSemHorarioForaDoFiltro: boolean };
     }>(propria);
     expect(corpo.data).toEqual([expect.objectContaining({ id: vendaDoCaixa, descricao: "Venda do turno consultado" })]);
-    expect(corpo.meta.totais).toMatchObject({ totalGeral: 37, quantidade: 1 });
+    // Fechamento cego (Marco, 11/11/2026): o operador ve a venda e a quantidade, nunca o valor.
+    expect(corpo.meta.totais).toMatchObject({ totalGeral: null, quantidade: 1 });
+    expect(corpo.data[0]).not.toHaveProperty("valorOriginal");
     expect(corpo.meta.manuaisSemHorarioForaDoFiltro).toBe(true);
 
     // Ter caixa_operar nao torna o operador leitor do caixa de outra pessoa/PDV.

@@ -9,15 +9,19 @@ type Categoria = {
   icone: string;
   valor: number;
   detalhe?: string;
+  // So em Entradas: quantas vendas o PDV fez no turno.
+  quantidade?: number;
 };
 
+// Fechamento cego (Marco, 11/11/2026): o caixa ve so QUANTAS vendas houve, nunca o valor das vendas. Com o total ou
+// os valores por forma ele calcularia o dinheiro esperado na gaveta. Os valores sao da Tesouraria.
 type FormaPagamento = {
   chave: string;
   titulo: string;
   icone: string;
-  valor: number;
   quantidade: number;
 };
+const textoVendas = (quantidade: number) => `${quantidade} ${quantidade === 1 ? "venda" : "vendas"}`;
 
 const props = defineProps<{
   categorias: Categoria[];
@@ -47,19 +51,13 @@ const route = useRoute();
 // Prévia estritamente local para a composição visual. Não substitui nem cria uma
 // venda, e permanece desligada fora de `?preview=tipos-venda` em desenvolvimento.
 const formasPagamentoPreview: FormaPagamento[] = [
-  { chave: "preview-pix", titulo: "PIX", icone: "mdi-qrcode", valor: 0, quantidade: 0 },
-  { chave: "preview-credito", titulo: "Cartão de crédito", icone: "mdi-credit-card-outline", valor: 0, quantidade: 0 },
-  { chave: "preview-debito", titulo: "Cartão de débito", icone: "mdi-credit-card-outline", valor: 0, quantidade: 0 },
-  { chave: "preview-dinheiro", titulo: "Dinheiro", icone: "mdi-cash", valor: 0, quantidade: 0 },
-  { chave: "preview-voucher", titulo: "Voucher", icone: "mdi-ticket-percent-outline", valor: 0, quantidade: 0 },
-  { chave: "preview-crediario", titulo: "Crediário", icone: "mdi-notebook-outline", valor: 0, quantidade: 0 },
-  {
-    chave: "preview-outros",
-    titulo: "Outras formas",
-    icone: "mdi-dots-horizontal-circle-outline",
-    valor: 0,
-    quantidade: 0
-  }
+  { chave: "preview-pix", titulo: "PIX", icone: "mdi-qrcode", quantidade: 0 },
+  { chave: "preview-credito", titulo: "Cartão de crédito", icone: "mdi-credit-card-outline", quantidade: 0 },
+  { chave: "preview-debito", titulo: "Cartão de débito", icone: "mdi-credit-card-outline", quantidade: 0 },
+  { chave: "preview-dinheiro", titulo: "Dinheiro", icone: "mdi-cash", quantidade: 0 },
+  { chave: "preview-voucher", titulo: "Voucher", icone: "mdi-ticket-percent-outline", quantidade: 0 },
+  { chave: "preview-crediario", titulo: "Crediário", icone: "mdi-notebook-outline", quantidade: 0 },
+  { chave: "preview-outros", titulo: "Outras formas", icone: "mdi-dots-horizontal-circle-outline", quantidade: 0 }
 ];
 
 const mostrandoPreviewTiposVenda = computed(() => import.meta.dev && route.query.preview === "tipos-venda");
@@ -134,13 +132,13 @@ const outrasCategorias = computed(() => props.categorias.filter((categoria) => c
         v-if="entrada"
         type="button"
         class="destaque-entrada"
-        :aria-label="`Consultar vendas nas Entradas: ${dinheiro(entrada.valor)}`"
+        :aria-label="`Consultar as vendas do turno: ${textoVendas(entrada.quantidade ?? 0)}`"
         @click="emit('selecionarCategoria', entrada.chave, entrada.valor)"
       >
         <span class="destaque-entrada__icone"><v-icon :icon="entrada.icone" size="22" /></span>
         <span class="destaque-entrada__conteudo">
           <span class="destaque-entrada__rotulo">Entradas</span>
-          <strong>{{ dinheiro(entrada.valor) }}</strong>
+          <strong>{{ textoVendas(entrada.quantidade ?? 0) }}</strong>
           <span>{{ entrada.detalhe || "Vendas do PDV neste turno" }}</span>
         </span>
       </button>
@@ -254,9 +252,8 @@ const outrasCategorias = computed(() => props.categorias.filter((categoria) => c
             <span class="forma-pagamento__icone"><v-icon :icon="forma.icone" size="18" /></span>
             <span class="forma-pagamento__nome">
               <strong>{{ forma.titulo }}</strong>
-              <small>{{ forma.quantidade }} {{ forma.quantidade === 1 ? "venda" : "vendas" }}</small>
             </span>
-            <strong class="forma-pagamento__valor">{{ dinheiro(forma.valor) }}</strong>
+            <strong class="forma-pagamento__valor">{{ textoVendas(forma.quantidade) }}</strong>
           </li>
         </ul>
       </section>

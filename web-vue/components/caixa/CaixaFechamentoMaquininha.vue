@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount } from "vue";
 import type { CaixaOperacional } from "~/types/padaria";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
@@ -167,31 +168,40 @@ async function enviar(evento: Event) {
         { anexoId: json.data.id }
       );
       definirLeitura(novaLeitura(leituraIa.sugestao));
-      // Salva sozinho quando a IA leu as 4 formas e a conta do comprovante fechou no servidor (Marco, 11/11):
-      // o operador esquecia de salvar. Com campo duvidoso ou faltando, continua no salvar manual.
-      if (campos.every(({ chave }) => travado(chave)) && podeSalvar.value) {
-        await salvar();
-        if (salvo.value) {
-          aviso.value = "A IA leu o comprovante, a conta fechou e a leitura foi salva.";
-          return;
-        }
-      }
-      const conferencia = leituraIa.sugestao.observacoes.filter((texto) => /bate/u.test(texto)).join(" ");
-      aviso.value =
-        (conferencia ? conferencia + " " : "") +
-        "Os valores lidos ficam travados; preencha só os que ela não conseguiu ler e salve.";
+      const conferencia = (leituraIa.sugestao.observacoes ?? []).filter((texto) => /bate/u.test(texto)).join(" ");
+      aviso.value = podeSalvar.value
+        ? "A IA leu o comprovante e a leitura foi salva."
+        : (conferencia ? conferencia + " " : "") +
+          "Os valores lidos ficam travados; preencha só os que ela não conseguiu ler. Salva sozinho quando completar.";
     } catch {
       // IA fora do ar (ou sem resposta): a foto continua anexada como prova e todos os campos ficam livres.
       definirLeitura(novaLeitura(null));
       aviso.value =
-        "A leitura automática não funcionou. A foto ficou anexada: preencha os valores do comprovante manualmente e salve.";
+        "A leitura automática não funcionou. A foto ficou anexada: preencha os valores do comprovante. Salva sozinho quando completar.";
     }
+    // Foto nova SUBSTITUI a leitura salva, pela mesma regra: completa, grava sozinha.
+    agendarSalvamento(0);
   } catch (falha) {
     erro.value = mensagemErro(falha);
   } finally {
     enviando.value = false;
   }
 }
+// Salvar sozinho (Marco, 11/11/2026): nao existe mais botao "Salvar leitura". Sempre que a leitura fica completa — a
+// IA leu tudo, o operador completou o que faltou, explicou a tarde sem manha ou trocou a foto — ela e gravada. O
+// operador nao precisa salvar para seguir para o Fechamento.
+let temporizadorSalvar: ReturnType<typeof setTimeout> | null = null;
+function agendarSalvamento(atrasoMs = 800) {
+  salvo.value = false;
+  if (temporizadorSalvar) clearTimeout(temporizadorSalvar);
+  temporizadorSalvar = setTimeout(() => {
+    temporizadorSalvar = null;
+    if (podeSalvar.value && !salvando.value) void salvar();
+  }, atrasoMs);
+}
+onBeforeUnmount(() => {
+  if (temporizadorSalvar) clearTimeout(temporizadorSalvar);
+});
 async function salvar() {
   if (!podeSalvar.value || !props.caixa.id) return;
   salvando.value = true;
@@ -225,7 +235,9 @@ watch(
         <h3 id="maquininha-titulo">Relatórios da maquininha</h3>
         <p>Abra o turno atual para registrar a foto. Os dois turnos ficam no mesmo lugar para conferência.</p>
       </div>
-      <v-chip :color="salvo ? 'success' : 'warning'" size="small">{{ salvo ? "Revisado" : "Pendente" }}</v-chip>
+      <v-chip :color="salvo ? 'success' : 'warning'" size="small" data-teste="maquininha-situacao">{{
+        salvando ? "Salvando…" : salvo ? "Salvo" : "Pendente"
+      }}</v-chip>
     </header>
     <v-alert type="info" density="compact" variant="tonal" class="mb-4" data-teste="maquininha-aviso-turno">
       <template v-if="etapa === 'tarde'">
@@ -252,6 +264,7 @@ watch(
       <v-textarea
         v-model="justificativaSemManha"
         class="mt-3"
+        @update:model-value="agendarSalvamento()"
         label="Por que não há manhã hoje?"
         rows="2"
         auto-grow
@@ -320,6 +333,7 @@ watch(
                 :hint="travado(campo.chave) ? 'Lido pela IA' : ''"
                 :persistent-hint="travado(campo.chave)"
                 :data-teste="`maquininha-campo-${campo.chave}`"
+                @update:model-value="agendarSalvamento()"
               />
             </div>
             <section class="maquininha__liquidos">
@@ -332,16 +346,15 @@ watch(
                 </article>
               </div>
             </section>
-            <v-alert v-if="aviso" type="info" density="compact" class="mt-4">{{ aviso }}</v-alert
-            ><v-alert v-if="erro" type="error" density="compact" class="mt-4">{{ erro }}</v-alert
-            ><v-btn
-              color="success"
-              class="maquininha__salvar mt-4"
-              :loading="salvando"
-              :disabled="!podeSalvar"
-              @click="salvar"
-              >Salvar leitura da maquininha</v-btn
-            >
+            <v-alert v-if="aviso" type="info" density="compact" class="mt-4">{{ aviso }}</v-alert>
+            <v-alert v-if="erro" type="error" density="compact" class="mt-4" data-teste="maquininha-erro-salvar">
+              {{ erro }}
+              <template #append>
+                <v-btn v-if="podeSalvar" size="small" variant="text" :loading="salvando" @click="salvar"
+                  >Tentar de novo</v-btn
+                >
+              </template>
+            </v-alert>
           </template>
         </v-expansion-panel-text>
       </v-expansion-panel>

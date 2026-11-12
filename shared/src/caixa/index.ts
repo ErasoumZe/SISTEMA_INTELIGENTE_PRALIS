@@ -154,7 +154,9 @@ export const contagemFisicaRelatorioSchema = z.object({
   valorEspecie: z.number(),
   valorMoedas: z.number(),
   total: z.number(),
-  esperado: z.number(),
+  // Fechamento cego (Marco, 11/11/2026): `null` para quem nao confere o fechamento (caixa e gerente), e a `diferenca`
+  // chega a eles so quando e FALTA (sobra vira 0). A Tesouraria recebe os dois numeros reais.
+  esperado: z.number().nullable(),
   diferenca: z.number(),
   registradaEm: z.string(),
   registradaPor: z.string(),
@@ -462,7 +464,8 @@ export const detalheCaixaResponseSchema = z.object({
 });
 
 export const resumoCaixaSchema = z.object({
-  totalEntradas: z.number(),
+  // Fechamento cego (Marco, 11/11/2026): `null` para quem nao confere o fechamento; o caixa ve quantas vendas houve.
+  totalEntradas: z.number().nullable(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number().optional(),
   totalTransferenciasSaida: z.number().optional(),
@@ -486,7 +489,8 @@ export const resumoCaixaSchema = z.object({
       z.object({
         formaPagamentoId: z.string().nullable(),
         formaPagamento: z.string(),
-        total: z.number(),
+        // Fechamento cego: `null` para quem nao confere o fechamento (fica so a quantidade).
+        total: z.number().nullable(),
         quantidade: z.number().int().nonnegative()
       })
     )

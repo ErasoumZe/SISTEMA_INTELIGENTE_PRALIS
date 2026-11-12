@@ -1611,3 +1611,26 @@ o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que a
 `WHATSAPP_PROVEDOR=meta` sobe com o envio desligado e um aviso, sem derrubar a API. Vale só para o S1.
 Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
 (acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
+
+### R-236 — Fechamento cego: o caixa não vê se bateu; só a Tesouraria vê as diferenças (Marco, 11/11/2026)
+
+**Supera em parte a R-232** (que mostrava ao caixa, no fim, "contado × esperado" e a sobra). Motivo: vendo o valor
+esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou ficar com o dinheiro que sobrou.
+
+- **Quem vê tudo:** só quem confere o fechamento (`fechamentos_caixa_conferir`: Tesouraria e administrador). O
+  **Gerente vê como o caixa.** A conferência linha a linha (Folha CREARE × PDV × Maquininha) saiu do caixa e vive
+  no dossiê da Tesouraria (`RelatorioFechamentoDossie`).
+- **Caixa e gerente veem:** no turno e na etapa Vendas, **só a quantidade** de vendas (no total e por forma); na
+  lista "Vendas do caixa", hora, forma e produtos, **sem valor**. O servidor não manda esses valores (status do
+  caixa, relatório de vendas, lista de vendas e as respostas de abertura, sangria e retorno programado): esconder
+  só na tela não basta.
+- **Fechamento em 3 etapas:** Vendas → Maquininha → Fechamento (a etapa "Relatório final" do caixa foi removida).
+  Depois de entrar no Fechamento, o caixa **volta só até a Maquininha** (para refazer a foto), nunca a Vendas;
+  recarregar a tela reabre no Fechamento. Mudar a contagem continua só por "Corrigir contagem", com motivo que vai
+  para a Tesouraria.
+- **Resultado no fim:** se faltou dinheiro, aparece "Falta de R$ X", gera quebra e a **observação é obrigatória**
+  (também no servidor). Se sobrou ou bateu, aparece **sempre "Tudo certo"**, sem valor e **sem exigir observação**;
+  a sobra fica registrada e a Tesouraria é avisada.
+- **Limite conhecido:** a folha "Relatório de Venda Geral" do CREARE, impressa pelo caixa, mostra o dinheiro do
+  turno. Para o fechamento ser cego de verdade, a folha precisa ser impressa ou guardada por outra pessoa, ou só
+  depois da contagem. É regra de operação a decidir com o Rodrigo.
