@@ -51,7 +51,7 @@ function criarStatusCaixaAberto(): CaixaStatus {
   };
 }
 
-function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
+function montar(criar: boolean, operar: boolean, caixaAberto: boolean, semLacre = false) {
   const modalOperacaoAberto = ref(true);
   const caixaStatus = ref<CaixaStatus | null>(caixaAberto ? criarStatusCaixaAberto() : null);
   const empresaId = ref("emp-1");
@@ -68,6 +68,7 @@ function montar(criar: boolean, operar: boolean, caixaAberto: boolean) {
           podeEditarTransferencia: computed(() => criar),
           podeOperarCaixa: computed(() => operar),
           podeOperarTransferenciaSemCaixa: computed(() => !operar),
+          podeTransferirSemLacre: computed(() => semLacre),
           caixaSalvando: ref(false),
           salvandoOperacao: ref(false),
           carregarStatusCaixa: vi.fn(async () => undefined),
@@ -95,12 +96,24 @@ describe("host único +Novo / Transferências", () => {
     wrapper.unmount();
   });
 
-  it("operador com Caixa aberto entra no retorno, sem montar formulário contábil", async () => {
+  it("gerente (PDV 4) vê Sem lacre e Retorno / sangria, sem gerar malote (R-238)", async () => {
+    const { wrapper } = montar(false, true, true, true);
+    await flushPromises();
+    expect(wrapper.get('[data-tab="nova"]').text()).toContain("Sem lacre");
+    expect(wrapper.get('[data-tab="nova"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.get('[data-tab="retorno"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(true);
+    expect(wrapper.get(".lc-titulo").text()).toBe("Transferência sem lacre");
+    wrapper.unmount();
+  });
+
+  it("PDV 1-3 (sem transferência comum) vê só Retorno / sangria, sem abas (R-238)", async () => {
     const { wrapper } = montar(false, true, true);
     await flushPromises();
     expect(wrapper.findAllComponents({ name: "VDialog" })).toHaveLength(1);
-    expect(wrapper.get('[data-tab="nova"]').attributes("disabled")).toBeDefined();
-    expect(wrapper.get('[data-tab="retorno"]').attributes("disabled")).toBeUndefined();
+    expect(wrapper.find('[data-tab="nova"]').exists()).toBe(false);
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+    expect(wrapper.get(".lc-titulo").text()).toBe("Retorno / sangria");
     expect(wrapper.findComponent({ name: "OperacaoTransferenciaForm" }).exists()).toBe(false);
     expect(wrapper.getComponent({ name: "CaixaRetornoSangriaForm" }).props("responsavelNome")).toBe("Operadora");
     wrapper.unmount();

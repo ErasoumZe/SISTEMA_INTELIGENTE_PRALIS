@@ -74,7 +74,8 @@ import {
   listarTravamentosTransferenciaDoUsuarioRepository,
   transferenciaAdmitePrazoRepository,
   listarTransferenciasVencidasRepository,
-  registrarRecusaConferenciaRepository
+  registrarRecusaConferenciaRepository,
+  listarDestinosSemLacreRepository
 } from "./transferencias.repository.js";
 import {
   listarTransferenciasRepository,
@@ -1066,4 +1067,9 @@ export async function atualizarTransferencia(
     await atualizarTransferenciaRepository(transferenciaId, await comTextoDaTransferencia(dados, tx), computar, tx);
     return { id: transferenciaId, computar };
   });
+}
+
+// R-238 · PDVs com caixa aberto que podem receber transferencia sem lacre agora (posto, turno, quem abriu; sem valor).
+export function listarDestinosSemLacre(empresaId: string) {
+  return listarDestinosSemLacreRepository(empresaId);
 }

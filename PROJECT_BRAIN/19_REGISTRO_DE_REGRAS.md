@@ -1612,6 +1612,24 @@ o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que a
 Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
 (acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
 
+### R-238 — Quem faz cada transferência; PDV 4 é o caixa do gerente (Marco, 12/11/2026)
+
+- **Tesouraria:** transferência **com lacre** (lança os malotes), **sem lacre** e entre contas que ela movimenta.
+- **PDV 4 (cargo "Caixa Gerente"):** PDV comum (abre, puxa vendas e fecha pelo mesmo fluxo). Faz **Retorno /
+  sangria** do próprio caixa e a transferência **sem lacre** (pega dinheiro num fluxo, ex. "fluxo troco", e desce
+  para um PDV no meio do turno). **Não gera malote** (sem transferência com lacre). Vê **Entradas** (vendas em tempo
+  real, buscar venda, vendas canceladas) e lança **Saídas**. Por ver as vendas em tempo real, o fechamento do PDV 4
+  não é cego.
+- **PDV 1, 2 e 3 (cargo "Caixa"):** abrem, fazem **Retorno / sangria** (malote de sangria com lacre já definido) e
+  fecham. Não veem Entradas (no Caixa o cartão some), não lançam Saídas e não fazem nenhuma outra transferência. Ao
+  tocar em Transferências, a janela abre direto em Retorno / sangria, sem abas.
+- **Destino da sem lacre:** só PDV com **caixa aberto agora** ("usuário logado"), mostrado com posto, turno e quem
+  abriu ("PDV 1 · Manhã · Maria"). Tudo separado por manhã e tarde.
+- **O que não se vê, some** da tela (aba, cartão, linha) em vez de aparecer desabilitado.
+- **Produção:** o seed de referência só roda com `SEED_REFERENCIA=1`. Para valer lá: "Restaurar padrão" nos cargos
+  Caixa e Tesouraria, criar o cargo "Caixa Gerente" (restaurar padrão) e passar as contas "PDV 4 · Manhã/Tarde" para
+  ele.
+
 ### R-239 — O número do lacre volta a valer depois da baixa (Marco, 12/11/2026)
 
 **Supera em parte a R-021** ("o lacre não se repete"). Os lacres vêm em lotes comprados com numeração impressa, e

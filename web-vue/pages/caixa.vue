@@ -19,6 +19,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuário'"
       :salvando="ctx.caixaSalvando"
+      :tem-permissao="ctx.temPermissao"
       @abrir-caixa="ctx.abrirCaixaOperacional"
       @executar-planejamento="ctx.executarPlanejamentoRetorno"
       @fechar-caixa="ctx.fecharCaixaOperacional"

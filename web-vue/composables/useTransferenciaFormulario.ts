@@ -4,6 +4,8 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import { useApi } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
+import { rotuloDestinoSemLacre } from "~/utils/destino-sem-lacre";
+import type { DestinoSemLacre } from "@padaria/shared/transferencias";
 
 // Formulário contábil existente; não executa retorno/sangria manual.
 export function useTransferenciaFormulario() {
@@ -18,6 +20,7 @@ export function useTransferenciaFormulario() {
     salvarOperacao,
     abrirOperacao,
     podeTransferirSemLacre,
+    podeCriarTransferencia,
     aposTransferenciaSemLacre
   } = useWorkspaceContext();
   const { apiGet, apiPost } = useApi();
@@ -26,6 +29,11 @@ export function useTransferenciaFormulario() {
   // transferencia vai como comum (sem lacres, sem agendamento/multiplo/prazo) pela rota propria do servidor.
   const semLacre = ref(false);
   const podeUsarSemLacre = computed(() => podeTransferirSemLacre.value && !operacaoEditandoId.value);
+  // R-238 · o gerente (PDV 4) so faz transferencia SEM lacre: nao gera malote. O formulario abre ja nesse modo.
+  const somenteSemLacre = computed(() => podeUsarSemLacre.value && !podeCriarTransferencia.value);
+  // R-238 · destino sem lacre: so PDV com caixa aberto agora, com posto e turno (evita mandar para o PDV errado).
+  const destinosSemLacre = ref<DestinoSemLacre[]>([]);
+  const carregandoDestinosSemLacre = ref(false);
 
   const aberto = computed({
     get: () => modalOperacaoAberto.value && entidadeNova.value === "transferencia",
@@ -190,6 +198,36 @@ export function useTransferenciaFormulario() {
     multiploDestino.value = false;
     tempoConfirmacaoAberto.value = false;
   });
+  watch(
+    [aberto, semLacre],
+    async ([estaAberto, ativo]) => {
+      if (!estaAberto || !ativo || !empresaId.value) return;
+      carregandoDestinosSemLacre.value = true;
+      try {
+        destinosSemLacre.value = await apiGet<DestinoSemLacre[]>(
+          `/api/transferencias/sem-lacre/destinos?empresaId=${encodeURIComponent(empresaId.value)}`
+        );
+      } catch (falha) {
+        destinosSemLacre.value = [];
+        erroComposicao.value = mensagemErro(falha);
+      } finally {
+        carregandoDestinosSemLacre.value = false;
+      }
+    },
+    { immediate: true }
+  );
+  // Sem lacre: PDVs abertos com rotulo "PDV 1 · Manhã · Maria"; PDV fechado nao aparece. A Tesouraria ainda pode
+  // mandar sem lacre para uma conta que nao e PDV (Banco, Cofre...); o gerente, so para PDV.
+  const opcoesDestinoSemLacre = computed(() => {
+    const abertos = destinosSemLacre.value
+      .filter((destino) => destino.contaId !== form.value.contaOrigemId)
+      .map((destino) => ({ id: destino.contaId, nome: rotuloDestinoSemLacre(destino) }));
+    if (somenteSemLacre.value) return abertos;
+    const outrasContas = opcoesEmpresa.value.contas.filter(
+      (conta) => !conta.ehContaPdv && conta.id !== form.value.contaOrigemId
+    );
+    return [...outrasContas, ...abertos];
+  });
   watch(lacresRetornoAtivos, (ativo) => {
     if (!ativo) {
       form.value.lacresRetorno = [];
@@ -197,7 +235,7 @@ export function useTransferenciaFormulario() {
     }
   });
   watch(aberto, (estaAberto) => {
-    semLacre.value = false;
+    semLacre.value = estaAberto && somenteSemLacre.value;
     if (!estaAberto) lacresRetornoAtivos.value = false;
   });
   // Ao reabrir uma transferência que já possui bolsas, revela a mesma área para edição.
@@ -344,6 +382,9 @@ export function useTransferenciaFormulario() {
     totalDigitado,
     semLacre,
     podeUsarSemLacre,
+    somenteSemLacre,
+    opcoesDestinoSemLacre,
+    carregandoDestinosSemLacre,
     fisicoDigitado,
     moedasDigitadas,
     contaDestinoSelecionada,

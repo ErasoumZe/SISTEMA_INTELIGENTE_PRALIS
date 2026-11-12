@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs";
 import { z } from "zod";
 import {
   confirmarTransferenciaPayloadSchema,
+  destinosSemLacreQuerySchema,
   recusarConferenciaPayloadSchema,
   transferenciaPayloadSchema,
   transferenciaSemLacrePayloadSchema,
@@ -19,6 +20,7 @@ import {
   confirmarTransferencia,
   criarTransferencia,
   criarTransferenciaSemLacre,
+  listarDestinosSemLacre,
   liberarTravaTransferencia,
   listarTransferencias,
   listarAnexosDaConferencia,
@@ -69,6 +71,22 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
         page: query.page,
         pageSize: query.pageSize
       });
+    }
+  );
+
+  // R-238 · para onde a transferencia sem lacre pode ir agora: PDVs com caixa aberto. O POST continua recusando
+  // PDV fechado (R-231); esta lista so evita oferecer o que vai ser recusado.
+  app.get(
+    "/api/transferencias/sem-lacre/destinos",
+    { preHandler: exigirPermissao("transferencias_sem_lacre") },
+    async (request, reply) => {
+      const perfil = request.perfilUsuario;
+      if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
+      const { empresaId } = destinosSemLacreQuerySchema.parse(request.query);
+      if (!podeAcessarEmpresa(perfil, empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      return ok(await listarDestinosSemLacre(empresaId));
     }
   );
 

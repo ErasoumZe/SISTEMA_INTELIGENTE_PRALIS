@@ -17,6 +17,7 @@ const {
   podeEditarTransferencia,
   podeOperarCaixa,
   podeOperarTransferenciaSemCaixa,
+  podeTransferirSemLacre,
   caixaSalvando,
   salvandoOperacao,
   carregarStatusCaixa,
@@ -35,10 +36,12 @@ const caixaEmFechamento = computed(() => caixaStatus.value?.caixaAberto?.status 
 // A Tesouraria registra a transferencia contabil sem depender do caixa do PDV.
 // Retorno/sangria e outro ato: continua exclusivo do operador com caixa aberto.
 const eRetaguarda = computed(() => podeOperarTransferenciaSemCaixa.value);
+// R-238 · o gerente (PDV 4) nao gera malote, mas faz a transferencia SEM lacre pela mesma aba.
+const somenteSemLacre = computed(() => !podeCriarTransferencia.value && podeTransferirSemLacre.value);
 const podeUsarComum = computed(
   () =>
     (eRetaguarda.value || !caixaEmFechamento.value) &&
-    (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value)
+    (editando.value ? podeEditarTransferencia.value : podeCriarTransferencia.value || somenteSemLacre.value)
 );
 const {
   entrega,
@@ -66,6 +69,11 @@ const {
 });
 const ocupado = computed(() => processando.value || caixaSalvando.value || salvandoOperacao.value);
 const podeUsarRetorno = computed(() => !caixaEmFechamento.value && podeRetornar.value);
+const titulo = computed(() => {
+  if (editando.value) return "Editar transferência";
+  if (!podeUsarComum.value || aba.value === "retorno") return "Retorno / sangria";
+  return somenteSemLacre.value ? "Transferência sem lacre" : "Nova transferência";
+});
 const transferenciaVars = {
   "--cat": "var(--cat-transferencias-base)",
   "--cat-soft": "var(--cat-transferencias-soft)",
@@ -103,11 +111,13 @@ function fechar() {
       <div class="transferencias-host__faixa">
         <div class="lc-head">
           <span class="lc-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
-          <h2 class="lc-titulo">{{ editando ? "Editar transferência" : "Nova transferência" }}</h2>
+          <h2 class="lc-titulo">{{ titulo }}</h2>
           <v-icon class="lc-x" size="19" :disabled="ocupado" aria-label="Fechar" @click="fechar">mdi-close</v-icon>
         </div>
+        <!-- R-238: sem a transferencia comum (PDV 1, 2 e 3) so existe Retorno / sangria, entao nao ha
+             abas: uma aba sozinha seria um botao que nao escolhe nada. -->
         <div
-          v-if="!editando"
+          v-if="!editando && podeUsarComum"
           class="lc-cats transferencias-host__abas"
           role="tablist"
           aria-label="Tipo de transferência"
@@ -123,7 +133,7 @@ function fechar() {
             @click="aba = 'nova'"
           >
             <v-icon size="16">mdi-swap-horizontal</v-icon>
-            <span>Nova transferência</span>
+            <span>{{ somenteSemLacre ? "Sem lacre" : "Nova transferência" }}</span>
           </button>
           <button
             type="button"
