@@ -301,11 +301,22 @@ const LEITURA_CREARE_ZERADA = {
  * Fechamento cego (Marco, 11/11/2026): o caixa nao recebe o fisico esperado; quem confere o fechamento sim. A
  * fixture le o esperado com a sessao do administrador (que tem `fechamentos_caixa_conferir`).
  */
+// Uma sessao de administrador por aplicacao: logar a cada chamada estoura o limite de login (429).
+const sessoesConferencia = new WeakMap<FastifyInstance, Promise<string>>();
+function cookieConferencia(app: FastifyInstance) {
+  let sessao = sessoesConferencia.get(app);
+  if (!sessao) {
+    sessao = cookieSessao(app, "admin");
+    sessoesConferencia.set(app, sessao);
+  }
+  return sessao;
+}
+
 async function esperadoPelaConferencia(app: FastifyInstance, caixaId: string) {
   const resposta = await app.inject({
     method: "GET",
     url: `/api/caixa/${caixaId}/relatorio-vendas`,
-    headers: { cookie: await cookieSessao(app, "admin") }
+    headers: { cookie: await cookieConferencia(app) }
   });
   expect(resposta.statusCode, resposta.body).toBe(200);
   return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica

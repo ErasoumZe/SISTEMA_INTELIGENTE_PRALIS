@@ -115,7 +115,7 @@ describe("caixa - fechamento cego", () => {
 
     const semObservacao = await fechar(caixa);
     expect(semObservacao.statusCode).toBeGreaterThanOrEqual(400);
-    expect(semObservacao.body).toMatch(/Observacao obrigatoria quando faltar dinheiro/);
+    expect(semObservacao.body).toMatch(/Observa.{1,3}o obrigat.{1,3}ria quando faltar dinheiro/u);
 
     const comObservacao = await fechar(caixa, "Troco errado para um cliente");
     expect(comObservacao.statusCode, comObservacao.body).toBe(204);
