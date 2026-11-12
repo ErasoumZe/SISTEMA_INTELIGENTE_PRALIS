@@ -18,8 +18,8 @@ export type ResultadoGravacao = {
  */
 // Dois envios ao mesmo tempo leriam a mesma "ultima linha" e um sobrescreveria o outro. Fila por planilha+aba (a API
 // roda em uma replica). O envio seguinte espera o anterior terminar (inclusive a releitura).
-const filas = new Map<string, Promise<unknown>>();
-function emFila<T>(chave: string, tarefa: () => Promise<T>): Promise<T> {
+const filas = new Map<string, Promise<ResultadoGravacao>>();
+function emFila(chave: string, tarefa: () => Promise<ResultadoGravacao>): Promise<ResultadoGravacao> {
   const anterior = filas.get(chave) ?? Promise.resolve();
   const atual = anterior.catch(() => undefined).then(tarefa);
   filas.set(chave, atual);
