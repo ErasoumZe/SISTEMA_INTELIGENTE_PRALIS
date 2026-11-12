@@ -20,6 +20,7 @@ const categorias = [
   { title: "Vencimentos", value: "lancamento_vencimento" },
   { title: "Transferências", value: "transferencia" },
   { title: "Quebras de caixa", value: "quebra_caixa" },
+  { title: "Sangrias recusadas", value: "sangria_recusada" },
   { title: "Mensagens", value: "mensagem_admin" },
   { title: "Campanhas", value: "campanha" },
   { title: "Compras", value: "compras" }
@@ -64,7 +65,8 @@ function rotuloTipo(tipo: Notificacao["tipo"]) {
     campanha: "Campanha",
     compras_decisao_pendente: "Compras",
     compras_agendamento_conferir: "Compras",
-    conferencia_estoque_fazer: "Estoque"
+    conferencia_estoque_fazer: "Estoque",
+    sangria_recusada: "Caixa"
   }[tipo];
 }
 </script>

@@ -1686,3 +1686,6 @@ esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou f
   - **Campanhas no fechamento:** o PDV 1-3 vê só "Meta atingida / Meta ainda não atingida", sem valor vendido nem %.
   - **Saldo da conta do PDV** ("minhas contas") não vai para quem não vê vendas.
   - PDV 4 (Caixa Gerente) e Gerência veem vendas em tempo real (R-238): para eles o fechamento não é cego.
+  - **Sangria recusada por passar do caixa** (Marco, 12/11/2026): a recusa revelava o esperado (tentando valores). A
+    regra do teto (D1) não muda, mas cada recusa fica registrada (`sangrias_recusadas`: caixa, quem, valor, motivo) e,
+    a partir da 3ª no mesmo caixa, a Tesouraria recebe o aviso "sangrias recusadas" (uma vez por caixa).

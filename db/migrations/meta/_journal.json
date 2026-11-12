@@ -659,6 +659,13 @@
       "when": 1794495827719,
       "tag": "0093_lacre_numero_ativo_unico",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1794509918605,
+      "tag": "0094_sangrias_recusadas",
+      "breakpoints": true
     }
   ]
 }
