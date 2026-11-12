@@ -123,10 +123,7 @@ async function previaCartao(caixa: Caixa, pdv: string): Promise<PreviaPlanilha["
         totalEfetivado: leitura.totalEfetivado.valor,
         conferencia: {
           status: "CONFERÊNCIA NECESSÁRIA",
-          avisos: [
-            ...avisos,
-            "RELATÓRIO DA MANHÃ DESTE PDV NÃO ENCONTRADO: SEM ELE NÃO DÁ PARA TIRAR A MANHÃ DO ACUMULADO."
-          ]
+          avisos: [...avisos, "SEM O RELATÓRIO DO TURNO DA MANHÃ, NÃO DÁ PARA TIRAR DO ACUMULADO O VALOR DA MANHÃ."]
         }
       };
     }
@@ -192,11 +189,10 @@ export async function montarPreviaPlanilha(caixaId: string, perfil: PerfilUsuari
   return { caixaId, pdv, turno, cartao, relatorioPdv, avisos };
 }
 
-function semAcesso(aba: string, erro: unknown): ResultadoGravacao {
-  const mensagem =
-    erro instanceof GoogleConfiguracaoAusenteError
-      ? "INTEGRAÇÃO COM O GOOGLE NÃO CONFIGURADA. OS DADOS FORAM PREPARADOS, MAS NÃO FORAM GRAVADOS."
-      : "SEM ACESSO À PLANILHA (COMPARTILHE COM A CONTA GOOGLE DO SISTEMA COMO EDITOR). NADA FOI GRAVADO.";
+function semAcesso(aba: string, faltaConfiguracao: boolean): ResultadoGravacao {
+  const mensagem = faltaConfiguracao
+    ? "INTEGRAÇÃO COM O GOOGLE NÃO CONFIGURADA. OS DADOS FORAM PREPARADOS, MAS NÃO FORAM GRAVADOS."
+    : "SEM ACESSO À PLANILHA (COMPARTILHE COM A CONTA GOOGLE DO SISTEMA COMO EDITOR). NADA FOI GRAVADO.";
   return { aba, gravado: false, linhaInicial: null, linhas: 0, mensagem };
 }
 
@@ -237,7 +233,7 @@ export async function enviarParaPlanilha(
         chave
       });
     } catch (erro) {
-      return semAcesso(aba, erro);
+      return semAcesso(aba, erro instanceof GoogleConfiguracaoAusenteError);
     }
   };
   const cartao = linhasCartao.length

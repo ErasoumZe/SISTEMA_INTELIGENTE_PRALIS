@@ -260,7 +260,7 @@ export function subtrairManha(
   }
   for (const chave of daManha.keys()) {
     if (!bandeirasLidas(acumulado).some((b) => `${b.modalidade}|${b.bandeira}` === chave)) {
-      avisos.push(`${chave.replace("|", " ")}: ESTÁ NA MANHÃ E NÃO NO ACUMULADO.`);
+      avisos.push(`${chave.replace("|", " ")}: ESTÁ NO RELATÓRIO DA MANHÃ, MAS FALTA NO ACUMULADO.`);
     }
   }
   return { bandeiras, avisos };
