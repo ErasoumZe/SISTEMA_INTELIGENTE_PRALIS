@@ -1,4 +1,5 @@
 import type { LinhaHistoricoCaixa } from "@padaria/shared";
+import type { FolhaCreareGerada } from "~/utils/folha-creare";
 import { formatarDataHora } from "~/utils/formatacao";
 
 // Tipos e funcoes puras do Relatorio de fechamento (Tesouraria). Ficam fora dos componentes para serem testadas
@@ -135,6 +136,32 @@ export function conferenciaMaquininhaDoRelatorio(relatorioMaquininha: unknown): 
       liquido: gravado ?? (acumulado === null ? null : acumulado - (inicial ?? 0))
     };
   });
+}
+
+// Conferencia do turno (Folha CREARE x PDV x Maquininha) para a Tesouraria. Desde 11/11/2026 o caixa nao ve mais
+// esta conferencia (fechamento cego): ela saiu da etapa "Relatorio final" do caixa e vive no dossie. Sem folha
+// gerada devolve null.
+export function conferenciaFolhaDoDossie(dossie: Pick<Dossie, "relatorioVendas" | "relatorioMaquininha">) {
+  const vendas = registro(dossie.relatorioVendas);
+  const dados = registro(vendas.dados);
+  const creare = dados.creare;
+  if (!creare || typeof creare !== "object") return null;
+  const revisado = registro(registro(dossie.relatorioMaquininha).dadosRevisados);
+  const liquidos = registro(revisado.liquidos);
+  const correcao = registro(revisado.leituraAcumulada).correcaoManual;
+  const maquininha = Object.fromEntries(
+    (["credito", "debito", "pix", "voucher"] as const).map((forma) => [forma, valorOpcional(liquidos[forma])])
+  ) as Record<"credito" | "debito" | "pix" | "voucher", number | null>;
+  const inicio = vendas.periodoInicio;
+  const fim = vendas.periodoFim;
+  return {
+    creare: creare as FolhaCreareGerada,
+    versao: typeof dados.versao === "number" ? dados.versao : 0,
+    maquininha,
+    periodo: typeof inicio === "string" && typeof fim === "string" ? { inicio, fim } : null,
+    correcaoMaquininha:
+      correcao && typeof correcao === "object" ? (correcao as { justificativa: string; campos: string[] }) : null
+  };
 }
 
 // Em qual turno do dia este relatorio foi feito (o servidor decide pela existencia de uma manha ja fechada).

@@ -179,8 +179,7 @@
   .maquininha__liquidos > div:first-of-type {
     grid-template-columns: 1fr;
   }
-  .maquininha__foto :deep(.v-btn),
-  .maquininha__salvar {
+  .maquininha__foto :deep(.v-btn) {
     width: 100%;
     min-height: 48px;
   }

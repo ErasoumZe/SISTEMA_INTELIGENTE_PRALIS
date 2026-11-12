@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import type { CampanhaComProgresso } from "@padaria/shared/campanhas";
+import type { CampanhaComProgresso, CampanhaDoFechamento } from "@padaria/shared/campanhas";
 import CampanhaProgresso from "~/components/campanhas/CampanhaProgresso.vue";
 
 /**
@@ -13,7 +13,13 @@ import CampanhaProgresso from "~/components/campanhas/CampanhaProgresso.vue";
 const props = defineProps<{ empresaId: string; pdvId: string; dia: string }>();
 
 const { apiGet } = useApi();
-const campanhas = ref<CampanhaComProgresso[]>([]);
+const campanhas = ref<CampanhaDoFechamento[]>([]);
+// R-236 · N1: o PDV 1-3 recebe so "meta atingida"; quem ve vendas recebe o progresso completo (barra em R$ e %).
+function comProgresso(campanha: CampanhaDoFechamento): CampanhaComProgresso | null {
+  return campanha.totalVendido !== undefined && campanha.pdvs && campanha.percentualDaMeta !== undefined
+    ? (campanha as CampanhaComProgresso)
+    : null;
+}
 
 async function carregar() {
   if (!props.empresaId || !props.pdvId || !props.dia) {
@@ -22,7 +28,7 @@ async function carregar() {
   }
   const params = new URLSearchParams({ empresaId: props.empresaId, pdvId: props.pdvId, dia: props.dia });
   try {
-    campanhas.value = await apiGet<CampanhaComProgresso[]>(`/api/campanhas/fechamento?${params.toString()}`);
+    campanhas.value = await apiGet<CampanhaDoFechamento[]>(`/api/campanhas/fechamento?${params.toString()}`);
   } catch {
     // Campanha e informacao adicional: falhar aqui nao pode atrapalhar o fechamento do caixa, que e
     // a operacao que a padaria realmente precisa concluir.
@@ -47,7 +53,16 @@ watch(() => [props.empresaId, props.pdvId, props.dia], carregar, { immediate: tr
       </div>
       <p class="caixa-campanhas__mensagem">{{ campanha.mensagem }}</p>
 
-      <CampanhaProgresso :campanha="campanha" compacto />
+      <CampanhaProgresso v-if="comProgresso(campanha)" :campanha="comProgresso(campanha)!" compacto />
+      <p
+        v-else
+        class="caixa-campanhas__meta"
+        :class="{ 'caixa-campanhas__meta--atingida': campanha.metaAtingida }"
+        data-teste="campanha-meta"
+      >
+        <v-icon size="16">{{ campanha.metaAtingida ? "mdi-check-circle" : "mdi-progress-clock" }}</v-icon>
+        {{ campanha.metaAtingida ? "Meta atingida" : "Meta ainda não atingida" }}
+      </p>
 
       <p class="caixa-campanhas__bonificacao">
         Bonificação:
@@ -127,5 +142,16 @@ watch(() => [props.empresaId, props.pdvId, props.dia], carregar, { immediate: tr
   font-size: 0.78rem;
   line-height: 1.45;
   color: var(--cx-ink-soft);
+}
+.caixa-campanhas__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-weight: 700;
+  color: var(--cx-ink-soft);
+}
+.caixa-campanhas__meta--atingida {
+  color: rgb(var(--v-theme-success));
 }
 </style>

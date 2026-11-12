@@ -1,4 +1,5 @@
 import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
+import { temPermissao, type Permissao } from "@padaria/shared/autenticacao";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { listarContas } from "../contas/contas.service.js";
@@ -17,7 +18,7 @@ import { exigirContaDaEmpresa, exigirUsuarioDaEmpresa } from "./contas-usuarios.
 
 // Perfil minimo para as decisoes de escopo (usuarioId + role). O role "usuario_admin" e o unico
 // com short-circuit (ve todas as contas), espelhando exatamente a regra de permissoes.
-type PerfilEscopo = { usuarioId: string; role: string };
+type PerfilEscopo = { usuarioId: string; role: string; permissoes?: Permissao[] | null };
 
 // Contas OPERAVEIS pelo usuario logado — feed dos seletores de Origem/Destino (transferencia) e
 // Conta (despesa/mercadoria/retirada). Regra (Jose, 27/07):
@@ -45,13 +46,25 @@ export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas
   const contasPdvIds = new Set(
     pdvs.filter((pdv) => empresasDasContas.includes(pdv.empresaId)).map((pdv) => pdv.contaId)
   );
-  return contas.map((conta) => ({
-    ...conta,
-    saldoAtual: saldos.get(conta.id)?.disponivel ?? 0,
-    saldoPendente: saldos.get(conta.id)?.pendente ?? 0,
-    ehCofre: contasCofreIds.has(conta.id),
-    ehContaPdv: contasPdvIds.has(conta.id)
-  }));
+  // Fechamento cego (R-236) · N2: o saldo da conta do PDV inclui as vendas em dinheiro, ou seja, e o esperado da gaveta
+  // ao vivo. So o ve quem confere o fechamento, gerencia caixas, ve Entradas (PDV 4, R-238) ou cadastra contas.
+  const veSaldoDoPdv =
+    perfil.role === "usuario_admin" ||
+    ["fechamentos_caixa_conferir", "caixas_gerenciar", "entradas_visualizar", "cadastro_contas_visualizar"].some(
+      (permissao) => temPermissao(perfil.permissoes ?? [], permissao as Permissao)
+    );
+  return contas.map((conta) => {
+    const ehContaPdv = contasPdvIds.has(conta.id);
+    const ocultarSaldo = ehContaPdv && !veSaldoDoPdv;
+    return {
+      ...conta,
+      ...(ocultarSaldo
+        ? {}
+        : { saldoAtual: saldos.get(conta.id)?.disponivel ?? 0, saldoPendente: saldos.get(conta.id)?.pendente ?? 0 }),
+      ehCofre: contasCofreIds.has(conta.id),
+      ehContaPdv
+    };
+  });
 }
 
 // Gancho para a ETAPA 2 (confirmacao de recebimento da transferencia): quem pode CONFIRMAR uma

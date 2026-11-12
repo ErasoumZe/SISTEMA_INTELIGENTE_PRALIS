@@ -67,30 +67,45 @@ describe("CaixaFechamentoMaquininha · IA fora do ar", () => {
     Object.defineProperty(input.element, "files", { value: [new File(["x"], "cupom.png", { type: "image/png" })] });
     await input.trigger("change");
     await flushPromises();
-    expect(wrapper.text()).toContain("preencha os valores do comprovante manualmente");
+    expect(wrapper.text()).toContain("preencha os valores do comprovante");
     for (const forma of ["credito", "debito", "pix", "voucher"]) {
       expect(wrapper.get(`[data-teste="maquininha-campo-${forma}"]`).attributes("readonly")).toBeUndefined();
     }
   });
 });
 
-// Marco, 11/11: o operador esquecia de clicar em salvar. A leitura completa e conferida salva sozinha.
+// Marco, 11/11: nao existe botao "Salvar leitura". Leitura completa (IA, campo completado, justificativa ou foto nova)
+// grava sozinha; foto nova substitui a leitura salva pela mesma regra.
+const esperarSalvamento = async () => {
+  await flushPromises();
+  await new Promise((resolver) => setTimeout(resolver, 900));
+  await flushPromises();
+};
+
 describe("CaixaFechamentoMaquininha · salvar automatico", () => {
+  let proximoAnexo = 1;
+  async function anexarFoto(wrapper: ReturnType<typeof montar>) {
+    const input = wrapper.findAll('input[type="file"]')[1]!;
+    Object.defineProperty(input.element, "files", {
+      value: [new File(["x"], "cupom.png", { type: "image/png" })],
+      configurable: true
+    });
+    await input.trigger("change");
+    await esperarSalvamento();
+  }
   async function enviarFoto(sugestao: Record<string, unknown>) {
+    proximoAnexo = 1;
     apiGet.mockResolvedValue({ etapaDia: "manha", leituraReferencia: null, relatorio: null });
     apiPost.mockResolvedValue({ sugestao });
     const apiPut = vi.fn().mockResolvedValue({});
     vi.stubGlobal("useApi", () => ({ apiUrl: "", apiGet, apiPost, apiPut }));
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ data: { id: "anexo-1" } }), { status: 201 }))
+      vi.fn(async () => new Response(JSON.stringify({ data: { id: `anexo-${proximoAnexo++}` } }), { status: 201 }))
     );
     const wrapper = montar();
     await flushPromises();
-    const input = wrapper.findAll('input[type="file"]')[1]!;
-    Object.defineProperty(input.element, "files", { value: [new File(["x"], "cupom.png", { type: "image/png" })] });
-    await input.trigger("change");
-    await flushPromises();
+    await anexarFoto(wrapper);
     return { wrapper, apiPut };
   }
 
@@ -122,6 +137,26 @@ describe("CaixaFechamentoMaquininha · salvar automatico", () => {
     expect(apiPut).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain("não bate com a soma das linhas");
     expect(wrapper.get('[data-teste="maquininha-campo-credito"]').attributes("readonly")).toBeUndefined();
+
+    // O operador completa o credito olhando a foto: salva sozinho, sem botao.
+    await wrapper.get('[data-teste="maquininha-campo-credito"]').setValue("707,21");
+    await esperarSalvamento();
+    expect(apiPut).toHaveBeenCalledTimes(1);
+    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({ leituraAcumulada: { credito: 707.21 } });
+  });
+
+  it("nao existe mais botao de salvar", async () => {
+    const { wrapper } = await enviarFoto({ documentoLegivel: true, credito: 1, debito: 1, pix: 1, voucher: 1 });
+    expect(wrapper.findAll("button").some((botao) => botao.text().includes("Salvar leitura"))).toBe(false);
+  });
+
+  it("foto nova substitui a leitura salva, pela mesma regra", async () => {
+    const leitura = { documentoLegivel: true, credito: 707.21, debito: 1059.6, pix: 791.8, voucher: 449.83 };
+    const { wrapper, apiPut } = await enviarFoto(leitura);
+    expect(apiPut.mock.calls[0]?.[1]).toMatchObject({ anexoId: "anexo-1" });
+    await anexarFoto(wrapper);
+    expect(apiPut).toHaveBeenCalledTimes(2);
+    expect(apiPut.mock.calls[1]?.[1]).toMatchObject({ anexoId: "anexo-2", leituraAcumulada: { credito: 707.21 } });
   });
 });
 
@@ -207,7 +242,7 @@ describe("CaixaFechamentoMaquininha · manha e tarde (R-227)", () => {
 });
 
 describe("CaixaFechamentoMaquininha · tarde sem manha (R-229)", () => {
-  it("avisa e so libera salvar com a justificativa, que vai no envio", async () => {
+  it("avisa e so salva sozinho depois da justificativa, que vai no envio", async () => {
     apiGet.mockResolvedValue({
       etapaDia: "tarde",
       semManha: true,
@@ -224,12 +259,12 @@ describe("CaixaFechamentoMaquininha · tarde sem manha (R-229)", () => {
     const wrapper = montar();
     await flushPromises();
     expect(wrapper.get('[data-teste="maquininha-sem-manha"]').text()).toContain("caixa da manhã do PDV 1");
-    const salvar = wrapper.findAll("button").find((botao) => botao.text().includes("Salvar leitura"))!;
-    expect(salvar.attributes("disabled")).toBeDefined();
+    await wrapper.get('[data-teste="justificativa-sem-manha"]').setValue("A");
+    await esperarSalvamento();
+    expect(apiPut).not.toHaveBeenCalled();
     await wrapper.get('[data-teste="justificativa-sem-manha"]').setValue("A manhã não abriu caixa hoje");
-    expect(salvar.attributes("disabled")).toBeUndefined();
-    await salvar.trigger("click");
-    await flushPromises();
+    await esperarSalvamento();
+    expect(apiPut).toHaveBeenCalledTimes(1);
     expect(apiPut.mock.calls[0]?.[1]).toMatchObject({ justificativaSemManha: "A manhã não abriu caixa hoje" });
   });
 });

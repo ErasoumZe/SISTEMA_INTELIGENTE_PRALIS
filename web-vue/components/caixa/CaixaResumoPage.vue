@@ -18,6 +18,7 @@ import CaixaFechamentoWizard from "~/components/caixa/CaixaFechamentoWizard.vue"
 import CaixaAberturaConfirmacaoDialog from "~/components/caixa/CaixaAberturaConfirmacaoDialog.vue";
 import CaixaIndisponibilidadeDialog from "~/components/caixa/CaixaIndisponibilidadeDialog.vue";
 import CaixaInicioFechamentoDialog from "~/components/caixa/CaixaInicioFechamentoDialog.vue";
+import CaixaResultadoFechamentoDialog from "~/components/caixa/CaixaResultadoFechamentoDialog.vue";
 import { deCentavos, paraCentavos, type ContagemFisicaRelatorio, type Permissao } from "@padaria/shared";
 const { apiGet, apiPost } = useApi();
 const route = useRoute();
@@ -130,6 +131,16 @@ type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
+// R-236 · o resultado do fechamento (tudo certo / falta) so aparece DEPOIS de encerrar: guarda o caixa que pediu para
+// fechar e, quando ele deixa de ser o caixa aberto (o fechamento deu certo), abre o resultado.
+const caixaEncerrandoId = ref<string | null>(null);
+const caixaResultadoId = ref<string | null>(null);
+watch(caixaAberto, (atual) => {
+  if (caixaEncerrandoId.value && atual?.id !== caixaEncerrandoId.value) {
+    caixaResultadoId.value = caixaEncerrandoId.value;
+    caixaEncerrandoId.value = null;
+  }
+});
 const vinculoOperador = computed(() => props.status?.vinculoOperador ?? null);
 const pdvDesligado = computed(() => Boolean(props.status?.indisponibilidadeAberta));
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
@@ -179,12 +190,11 @@ watch(
 // R-232 · `null` para o operador de caixa: ele nao ve o fisico esperado durante o turno (contagem cega).
 const saldoVisivel = computed(() => resumoAtual.value?.saldo ?? null);
 const saldoAtual = computed(() => Number(saldoVisivel.value ?? 0));
-// D7: observacao e obrigatoria quando ha quebra ou sobra — a mesma regra do servidor, espelhada na tela.
+// Observacao obrigatoria so quando FALTA dinheiro (fechamento cego, Marco 11/11/2026) — a mesma regra do servidor.
 // A diferenca e a da contagem registrada em Vendas (contado - esperado naquele instante).
 const diferencaFechamento = computed(() => contagemFisica.value?.diferenca ?? 0);
-const fechamentoDivergente = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value !== 0);
 const fechamentoComQuebra = computed(() => Boolean(contagemFisica.value) && diferencaFechamento.value < 0);
-const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
+const observacaoObrigatoriaPendente = computed(() => fechamentoComQuebra.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
 const lacreFechamentoReservado = computed(() => props.status?.lacreFechamentoReservado ?? null);
 const responsaveisFechamentoPendentes = computed(
@@ -237,14 +247,17 @@ const exibirMaquininhaNaAbertura = true;
 // Cockpit por categoria: a cor entra como ACENTO (barra/chip/total) via os tokens --cat-* da main,
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
 // (saldo fisico) e o card-ancora. Sem card de deficit (fundo simples, PROJECT_BRAIN/12).
-type CardCategoria = { chave: string; titulo: string; icone: string; valor: number; detalhe?: string; tom: string };
-type CardFormaPagamento = {
+type CardCategoria = {
   chave: string;
   titulo: string;
   icone: string;
   valor: number;
-  quantidade: number;
+  detalhe?: string;
+  tom: string;
+  quantidade?: number;
 };
+// Fechamento cego (11/11/2026): o caixa ve so a quantidade de vendas por forma, nunca o valor.
+type CardFormaPagamento = { chave: string; titulo: string; icone: string; quantidade: number };
 
 const todasCategorias = computed<CardCategoria[]>(() => {
   const r = resumoAtual.value;
@@ -256,7 +269,9 @@ const todasCategorias = computed<CardCategoria[]>(() => {
       chave: "entradas",
       titulo: "Entradas",
       icone: "mdi-arrow-down-bold-circle-outline",
-      valor: r.totalEntradas,
+      // O valor das vendas nao chega ao caixa (fechamento cego): o cartao mostra quantas vendas houve.
+      valor: 0,
+      quantidade: (r.porFormaPagamento ?? []).reduce((soma, item) => soma + item.quantidade, 0),
       tom: "var(--cat-entradas-faixa)"
     },
     {
@@ -308,7 +323,6 @@ const formasPagamento = computed<CardFormaPagamento[]>(() =>
     chave: item.formaPagamentoId ?? item.formaPagamento,
     titulo: item.formaPagamento,
     icone: iconeFormaPagamento(item.formaPagamento),
-    valor: item.total,
     quantidade: item.quantidade
   }))
 );
@@ -572,6 +586,7 @@ function confirmarFechamento() {
   const caixa = caixaAberto.value;
   if (!caixa || props.salvando) return;
   revisaoFechamentoAberta.value = false;
+  caixaEncerrandoId.value = caixa.id;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
@@ -930,10 +945,8 @@ function confirmarFechamento() {
         <CaixaFechamentoWizard
           v-if="etapaFechamento && caixaAberto"
           :caixa="caixaAberto"
-          :resumo="resumoAtual"
           :fechamento="fechamento"
           :contagem-fisica="contagemFisica"
-          :fechamento-divergente="fechamentoDivergente"
           :fechamento-com-quebra="fechamentoComQuebra"
           :observacao-obrigatoria-pendente="observacaoObrigatoriaPendente"
           :lacre-fechamento-pendente="lacreFechamentoPendente"
@@ -1099,7 +1112,7 @@ function confirmarFechamento() {
         />
         <CaixaFechamentoConfirmacaoDialog
           :aberto="revisaoFechamentoAberta"
-          :saldo-esperado="contagemFisica?.esperado ?? 0"
+          :falta="contagemFisica && contagemFisica.diferenca !== null ? Math.max(0, -contagemFisica.diferenca) : null"
           :observacao="fechamento.observacao"
           :lacre-fechamento="fechamento.lacreFechamento.trim()"
           :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
@@ -1111,6 +1124,7 @@ function confirmarFechamento() {
           @editar="revisaoFechamentoAberta = false"
           @confirmar="confirmarFechamento"
         />
+        <CaixaResultadoFechamentoDialog :caixa-id="caixaResultadoId" @fechar="caixaResultadoId = null" />
         <CaixaInicioFechamentoDialog
           :aberto="confirmacaoInicioFechamentoAberta"
           :pdv-nome="caixaAberto?.pdvNome ?? ''"

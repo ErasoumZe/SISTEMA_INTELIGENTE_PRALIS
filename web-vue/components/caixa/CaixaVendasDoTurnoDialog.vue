@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OperacaoResumo, Opcao } from "~/types/padaria";
-import { dinheiro, mensagemErro } from "~/utils/domain";
+import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 
 type Totais = {
@@ -194,12 +194,11 @@ watch(
         </v-alert>
         <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
 
+        <!-- Fechamento cego (Marco, 11/11/2026): o caixa consulta as vendas (hora, forma e produtos), mas sem valor
+             em R$; somando os valores ele calcularia o dinheiro esperado na gaveta. -->
         <section class="consulta-turno__resumo" aria-label="Resumo das vendas filtradas">
           <div>
             <span>Vendas encontradas</span><strong>{{ total }}</strong>
-          </div>
-          <div>
-            <span>Total recebido</span><strong>{{ totais ? dinheiro(totais.totalGeral) : "—" }}</strong>
           </div>
           <div>
             <span>Formas usadas</span><strong>{{ formasUsadas.length }}</strong>
@@ -219,13 +218,12 @@ watch(
                   <strong>{{ venda.descricao }}</strong>
                   <span>{{ horaDaVenda(venda) }} · {{ nomePagamento(venda) }}</span>
                 </div>
-                <strong>{{ dinheiro(Number(venda.valorLiquido ?? venda.valorOriginal)) }}</strong>
               </div>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
               <div v-if="venda.itensVenda?.length" class="consulta-turno__produtos">
                 <span v-for="item in venda.itensVenda" :key="`${venda.id}-${item.descricaoProduto}`">
-                  {{ item.quantidade }}× {{ item.descricaoProduto }} · {{ dinheiro(item.valorTotal) }}
+                  {{ item.quantidade }}× {{ item.descricaoProduto }}
                 </span>
               </div>
               <p v-else class="text-body-2 text-medium-emphasis mb-0">Sem produtos detalhados nesta venda.</p>
@@ -309,7 +307,7 @@ watch(
 }
 .consulta-turno__resumo {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 .consulta-turno__resumo > div {

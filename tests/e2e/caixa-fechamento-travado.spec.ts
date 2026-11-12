@@ -27,8 +27,6 @@ async function avancarAteConferencia(page: Page) {
   await expect(page.getByText("Relatório gerado.", { exact: true })).toBeVisible();
   await page.locator(porTeste("avancar-vendas-fechamento")).click();
   await page.locator(porTeste("avancar-maquininha-fechamento")).click();
-  await expect(page.locator(porTeste("fechamento-movimentacoes"))).toContainText("Transferências (líquido)");
-  await page.locator(porTeste("avancar-movimentacoes-fechamento")).click();
 }
 
 type Sessao = { usuarioId: string; empresaId: string };

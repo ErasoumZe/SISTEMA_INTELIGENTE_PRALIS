@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  conferenciaFolhaDoDossie,
   conferenciaMaquininhaDoRelatorio,
   duracaoDaParada,
   etapaDoRelatorioMaquininha,
@@ -99,5 +100,29 @@ describe("liquido da maquininha manha e tarde", () => {
     expect(etapaDoRelatorioMaquininha({ dadosRevisados: { etapaDia: "manha" } })).toBe("manha");
     expect(etapaDoRelatorioMaquininha({})).toBeNull();
     expect(etapaDoRelatorioMaquininha(null)).toBeNull();
+  });
+});
+
+// Fechamento cego (11/11/2026): a conferencia Folha CREARE x PDV x Maquininha saiu do caixa e vive no dossie.
+describe("conferencia da folha no dossie da Tesouraria", () => {
+  it("monta folha, periodo e liquidos da maquininha a partir do dossie", () => {
+    const conferencia = conferenciaFolhaDoDossie({
+      relatorioVendas: {
+        periodoInicio: "2026-11-10T08:50:48.000Z",
+        periodoFim: "2026-11-10T17:02:00.000Z",
+        dados: { versao: 5, creare: { leitura: { credito: 707.21 }, pralis: { credito: 707.21 } } }
+      },
+      relatorioMaquininha: {
+        dadosRevisados: { liquidos: { credito: 707.21, debito: 1059.6, pix: 791.8, voucher: 449.83 } }
+      }
+    });
+    expect(conferencia?.versao).toBe(5);
+    expect(conferencia?.maquininha.debito).toBe(1059.6);
+    expect(conferencia?.periodo?.inicio).toBe("2026-11-10T08:50:48.000Z");
+    expect(conferencia?.correcaoMaquininha).toBeNull();
+  });
+
+  it("sem folha do CREARE gerada nao ha conferencia", () => {
+    expect(conferenciaFolhaDoDossie({ relatorioVendas: null, relatorioMaquininha: null })).toBeNull();
   });
 });

@@ -13,7 +13,8 @@ export async function listarProdutosMaisVendidos(empresaId: string, caixaId?: st
   const produto = sql<string>`coalesce(${produtos.descricao}, ${vendasProdutos.descricaoProduto})`;
   const quantidade = sql<number>`sum(${vendasProdutos.quantidade})::float`;
   const valorTotal = sql<number>`sum(${vendasProdutos.valorTotal})::float`;
-  const filtros = [eq(vendas.empresaId, empresaId)];
+  // So venda aprovada conta: cancelada nao saiu da padaria.
+  const filtros = [eq(vendas.empresaId, empresaId), eq(vendas.status, "aprovado")];
   if (caixaId) filtros.push(eq(vendas.caixaId, caixaId));
 
   return banco

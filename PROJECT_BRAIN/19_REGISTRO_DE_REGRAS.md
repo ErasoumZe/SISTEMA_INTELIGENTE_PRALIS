@@ -1654,3 +1654,35 @@ um lote futuro pode repetir números.
   barrinhas no topo, uma por passo. As setas dos lados vão para o passo anterior ou o próximo (não pulam segundos);
   quando o vídeo termina, o próximo do grupo começa sozinho. Ordem do grupo do Caixa: a ordem da abertura.
 - **Sem vídeo de login:** quem assiste já está dentro do sistema.
+
+### R-236 — Fechamento cego: o caixa não vê se bateu; só a Tesouraria vê as diferenças (Marco, 11/11/2026)
+
+**Supera em parte a R-232** (que mostrava ao caixa, no fim, "contado × esperado" e a sobra). Motivo: vendo o valor
+esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou ficar com o dinheiro que sobrou.
+
+- **Quem vê tudo:** só quem confere o fechamento (`fechamentos_caixa_conferir`: Tesouraria e administrador). O
+  **Gerente vê como o caixa.** A conferência linha a linha (Folha CREARE × PDV × Maquininha) saiu do caixa e vive
+  no dossiê da Tesouraria (`RelatorioFechamentoDossie`).
+- **Caixa e gerente veem:** no turno e na etapa Vendas, **só a quantidade** de vendas (no total e por forma); na
+  lista "Vendas do caixa", hora, forma e produtos, **sem valor**. O servidor não manda esses valores (status do
+  caixa, relatório de vendas, lista de vendas e as respostas de abertura, sangria e retorno programado): esconder
+  só na tela não basta.
+- **Fechamento em 3 etapas:** Vendas → Maquininha → Fechamento (a etapa "Relatório final" do caixa foi removida).
+  Depois de entrar no Fechamento, o caixa **volta só até a Maquininha** (para refazer a foto), nunca a Vendas;
+  recarregar a tela reabre no Fechamento. Mudar a contagem continua só por "Corrigir contagem", com motivo que vai
+  para a Tesouraria.
+- **Resultado no fim:** se faltou dinheiro, aparece "Falta de R$ X", gera quebra e a **observação é obrigatória**
+  (também no servidor). Se sobrou ou bateu, aparece **sempre "Tudo certo"**, sem valor e **sem exigir observação**;
+  a sobra fica registrada e a Tesouraria é avisada.
+- **Limite conhecido:** a folha "Relatório de Venda Geral" do CREARE, impressa pelo caixa, mostra o dinheiro do
+  turno. Para o fechamento ser cego de verdade, a folha precisa ser impressa ou guardada por outra pessoa, ou só
+  depois da contagem. É regra de operação a decidir com o Rodrigo.
+
+- **Atualização (Marco, 12/11/2026):**
+  - **A falta só aparece DEPOIS de fechar.** Antes de fechar o caixa não vê valor nenhum, nem a falta (contar 0 e ver
+    a falta revelava o esperado). A observação do fechamento ficou opcional. Fechou: aparece "Tudo certo" (bateu ou
+    sobrou) ou "Falta de R$ X"; na falta, o caixa escreve a explicação ali mesmo (uma vez) e ela vai para a quebra.
+    Enquanto ele não explica, a quebra fica "Aguardando explicação do caixa".
+  - **Campanhas no fechamento:** o PDV 1-3 vê só "Meta atingida / Meta ainda não atingida", sem valor vendido nem %.
+  - **Saldo da conta do PDV** ("minhas contas") não vai para quem não vê vendas.
+  - PDV 4 (Caixa Gerente) e Gerência veem vendas em tempo real (R-238): para eles o fechamento não é cego.

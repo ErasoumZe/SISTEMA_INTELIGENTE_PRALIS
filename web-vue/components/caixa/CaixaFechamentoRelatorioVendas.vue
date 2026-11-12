@@ -21,7 +21,7 @@ type DadosRelatorioVendas = {
   contagemFisica?: ContagemFisicaRelatorio;
   vendas: TotaisRelatorioVendas;
   canceladas: VendaCanceladaCaixa[];
-  // A comparacao da folha com o Pralis e mostrada no Relatorio final; aqui so volta a leitura revisada.
+  // A comparacao da folha com o Pralis e da Tesouraria (dossie, fechamento cego); aqui so volta a leitura revisada.
   creare?: { anexoId?: string; leitura?: SugestaoFolhaCreare } | null;
 };
 type RelatorioGerado = {

@@ -6,7 +6,6 @@ export type TemaDuvida =
   | "turno"
   | "vendas"
   | "maquininha"
-  | "relatorio-final"
   | "fechamento"
   | "quebra"
   | "depois"
@@ -26,7 +25,6 @@ export const TEMAS_DUVIDA: ReadonlyArray<{ id: TemaDuvida; titulo: string }> = [
   { id: "turno", titulo: "Durante o turno" },
   { id: "vendas", titulo: "Fechamento · Vendas" },
   { id: "maquininha", titulo: "Fechamento · Maquininha" },
-  { id: "relatorio-final", titulo: "Fechamento · Relatório final" },
   { id: "fechamento", titulo: "Fechamento · Encerrar" },
   { id: "quebra", titulo: "Falta e sobra" },
   { id: "depois", titulo: "Depois de fechar" },
