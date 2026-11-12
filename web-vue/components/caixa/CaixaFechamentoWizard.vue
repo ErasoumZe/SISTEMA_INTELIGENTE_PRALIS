@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDuvidasContexto } from "~/composables/useDuvidasContexto";
-import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno, ResumoCaixa } from "~/types/padaria";
+import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaFechamentoAjuda from "~/components/caixa/CaixaFechamentoAjuda.vue";
 import CaixaFechamentoEtapas from "~/components/caixa/CaixaFechamentoEtapas.vue";
 import CaixaFechamentoMaquininha from "~/components/caixa/CaixaFechamentoMaquininha.vue";
-import CaixaFechamentoMovimentacoes from "~/components/caixa/CaixaFechamentoMovimentacoes.vue";
 import CaixaFechamentoRelatorioVendas from "~/components/caixa/CaixaFechamentoRelatorioVendas.vue";
 import CaixaGerenteFechamentoDialog from "~/components/caixa/CaixaGerenteFechamentoDialog.vue";
 import type { ContagemFisicaRelatorio } from "@padaria/shared";
@@ -27,10 +26,8 @@ type AnexoFechamento = {
 
 const props = defineProps<{
   caixa: CaixaOperacional;
-  resumo: ResumoCaixa | null;
   fechamento: Fechamento;
   contagemFisica: ContagemFisicaRelatorio | null;
-  fechamentoDivergente: boolean;
   fechamentoComQuebra: boolean;
   observacaoObrigatoriaPendente: boolean;
   lacreFechamentoPendente: boolean;
@@ -55,7 +52,30 @@ const emit = defineEmits<{
   (event: "contagem", contagem: ContagemFisicaRelatorio | null): void;
 }>();
 
-const etapaAtual = ref(1);
+// Fechamento cego (Marco, 11/11/2026): o caixa nao ve mais o "Relatorio final" (Folha x PDV x Maquininha); a
+// conferencia completa e da Tesouraria, no dossie. Sao 3 etapas. Depois de entrar no Fechamento, o caixa so volta
+// ate a Maquininha (refazer a foto), nunca a Vendas. A marca vale para este caixa nesta aba: recarregar a tela
+// reabre direto no Fechamento.
+const chaveFechamento = `cicluz:fechamento:chegou:${props.caixa.id}`;
+function lerChegouAoFechamento() {
+  try {
+    return sessionStorage.getItem(chaveFechamento) === "1";
+  } catch {
+    return false;
+  }
+}
+const chegouAoFechamento = ref(lerChegouAoFechamento());
+const etapaAtual = ref(chegouAoFechamento.value ? 3 : 1);
+function irParaFechamento() {
+  chegouAoFechamento.value = true;
+  try {
+    sessionStorage.setItem(chaveFechamento, "1");
+  } catch {
+    // Sem armazenamento (aba privada): a trava vale ate recarregar a tela.
+  }
+  etapaAtual.value = 3;
+}
+const podeVoltar = computed(() => etapaAtual.value === 3 || (etapaAtual.value === 2 && !chegouAoFechamento.value));
 const etapasNavegacaoVisiveis = ref(false);
 const etapas = [
   {
@@ -89,25 +109,13 @@ const etapas = [
   },
   {
     id: 3,
-    titulo: "Relatório final",
-    resumo: "Revise recebimentos, saídas, lacres e diferenças.",
-    passos: [
-      "Confira a comparação CREARE × Pralis e os recebimentos por forma de pagamento.",
-      "Revise os valores da maquininha e as vendas canceladas.",
-      "Abra os blocos de sangrias, retornos, lacres, entradas e saídas para conferir cada item.",
-      "Se houver pendência ou divergência, volte à etapa correspondente, corrija e gere ou salve novamente."
-    ],
-    quandoAvancar: "os dados consolidados estiverem revisados e sem pendência operacional.",
-    cor: "var(--cat-retiradas-base)"
-  },
-  {
-    id: 4,
     titulo: "Fechamento",
     resumo: "Anexe a folha do malote, informe o lacre e envie à Tesouraria.",
     passos: [
       "A contagem do dinheiro já foi feita em Vendas; aqui não se conta de novo.",
       "Anexe a folha de fechamento do malote e informe o lacre físico reservado para este fechamento.",
-      "Se a contagem divergiu, explique o motivo na observação; o campo aceita preenchimento por voz.",
+      "Se faltar dinheiro na contagem, explique o motivo na observação; o campo aceita preenchimento por voz.",
+      "Depois de entrar no Fechamento, só dá para voltar até a Maquininha.",
       "Execute retornos programados, se existirem, e só então envie o malote à Tesouraria."
     ],
     quandoAvancar: "o físico, a folha, o lacre e as justificativas obrigatórias estiverem preenchidos.",
@@ -117,7 +125,7 @@ const etapas = [
 const etapaAtualDefinicao = computed(() => etapas.find((etapa) => etapa.id === etapaAtual.value) ?? etapas[0]);
 // O painel de duvidas abre no assunto da etapa em que o operador esta.
 const duvidas = useDuvidasContexto();
-const TEMA_DA_ETAPA = { 1: "vendas", 2: "maquininha", 3: "relatorio-final", 4: "fechamento" } as const;
+const TEMA_DA_ETAPA = { 1: "vendas", 2: "maquininha", 3: "fechamento" } as const;
 watch(etapaAtual, (etapa) => duvidas.marcar(TEMA_DA_ETAPA[etapa as keyof typeof TEMA_DA_ETAPA] ?? null), {
   immediate: true
 });
@@ -141,8 +149,7 @@ function confirmarGerente() {
     // Sem armazenamento (aba privada): o popup volta a aparecer, sem prejuizo.
   }
 }
-const TOTAL_ETAPAS = 4;
-const resumo = computed(() => props.resumo);
+const TOTAL_ETAPAS = 3;
 
 function formatarHora(dataHora: string | null | undefined) {
   if (!dataHora) return "—";
@@ -241,20 +248,12 @@ function formatarHora(dataHora: string | null | undefined) {
 
     <CaixaFechamentoMaquininha v-else-if="etapaAtual === 2" id="fechamento-painel-2" :caixa="caixa" />
 
-    <CaixaFechamentoMovimentacoes
-      v-else-if="etapaAtual === 3"
-      :resumo="resumo"
-      :caixa-id="caixa.id"
-      :pdv-nome="caixa.pdvNome"
-    />
-
     <CaixaFechamentoEtapas
       v-else
-      id="fechamento-painel-4"
+      id="fechamento-painel-3"
       :caixa="caixa"
       :fechamento="fechamento"
       :contagem-fisica="contagemFisica"
-      :fechamento-divergente="fechamentoDivergente"
       :fechamento-com-quebra="fechamentoComQuebra"
       :observacao-obrigatoria-pendente="observacaoObrigatoriaPendente"
       :lacre-fechamento-pendente="lacreFechamentoPendente"
@@ -278,7 +277,13 @@ function formatarHora(dataHora: string | null | undefined) {
       class="fechamento-wizard__rodape"
       :class="{ 'fechamento-wizard__rodape--inicio': etapaAtual === 1 }"
     >
-      <v-btn v-if="etapaAtual > 1" color="error" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual -= 1"
+      <v-btn
+        v-if="etapaAtual > 1 && podeVoltar"
+        color="error"
+        variant="tonal"
+        prepend-icon="mdi-arrow-left"
+        data-teste="voltar-etapa-fechamento"
+        @click="etapaAtual -= 1"
         >Voltar etapa</v-btn
       >
       <v-spacer />
@@ -297,23 +302,19 @@ function formatarHora(dataHora: string | null | undefined) {
         color="success"
         append-icon="mdi-arrow-right"
         data-teste="avancar-maquininha-fechamento"
-        @click="etapaAtual = 3"
-      >
-        Ver relatório final
-      </v-btn>
-      <v-btn
-        v-else
-        color="success"
-        append-icon="mdi-arrow-right"
-        data-teste="avancar-movimentacoes-fechamento"
-        @click="etapaAtual = 4"
+        @click="irParaFechamento"
       >
         Ir para fechamento
       </v-btn>
     </footer>
     <footer v-else class="fechamento-wizard__rodape fechamento-wizard__rodape--ultimo">
-      <v-btn color="secondary" variant="tonal" prepend-icon="mdi-arrow-left" @click="etapaAtual = 3"
-        >Voltar ao relatório final</v-btn
+      <v-btn
+        color="secondary"
+        variant="tonal"
+        prepend-icon="mdi-arrow-left"
+        data-teste="voltar-maquininha-fechamento"
+        @click="etapaAtual = 2"
+        >Voltar à maquininha</v-btn
       >
     </footer>
   </section>

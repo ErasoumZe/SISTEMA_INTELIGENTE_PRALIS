@@ -20,7 +20,6 @@ const props = defineProps<{
   fechamento: Fechamento;
   // R-232 · a contagem foi feita (cega) em Vendas; aqui ela so aparece, nao se conta de novo.
   contagemFisica: ContagemFisicaRelatorio | null;
-  fechamentoDivergente: boolean;
   fechamentoComQuebra: boolean;
   observacaoObrigatoriaPendente: boolean;
   lacreFechamentoPendente: boolean;
@@ -60,7 +59,7 @@ const podeSolicitarFechamento = computed(
     props.folhaFechamentoEnviada
 );
 
-const diferenca = computed(() => props.contagemFisica?.diferenca ?? 0);
+const diferenca = computed(() => props.contagemFisica?.diferenca ?? null);
 // Diz POR QUE ainda nao da para encerrar (antes era so "Preencha os campos obrigatorios").
 const motivoPendente = computed(() => {
   if (!props.contagemFisica) return "Registre a contagem do dinheiro em Vendas e gere o relatório.";
@@ -97,26 +96,35 @@ function solicitarFechamento() {
       </div>
     </header>
 
-    <section v-if="contagemFisica" class="fechamento-etapas__situacao" aria-label="Contagem registrada em Vendas">
+    <!-- Fechamento cego (R-236, Marco 12/11/2026): o caixa nao ve o resultado antes de fechar (nem a falta). Depois
+         de encerrar, aparece "Tudo certo" ou a falta, para explicar. Quem confere o fechamento ve aqui. -->
+    <section
+      v-if="contagemFisica && diferenca === null"
+      class="fechamento-etapas__situacao"
+      aria-label="Resultado da contagem"
+    >
+      <v-alert type="info" variant="tonal" data-teste="aviso-resultado-depois">
+        Depois de encerrar, o sistema mostra se a contagem bateu.
+      </v-alert>
+    </section>
+    <section
+      v-else-if="contagemFisica && diferenca !== null"
+      class="fechamento-etapas__situacao"
+      aria-label="Resultado da contagem"
+    >
       <v-alert
-        :type="fechamentoDivergente ? (diferenca < 0 ? 'error' : 'warning') : 'success'"
+        :type="diferenca < 0 ? 'error' : 'success'"
         variant="tonal"
         class="fechamento-etapas__alerta-divergencia"
         data-teste="alerta-quebra"
       >
-        <div class="text-subtitle-2 mb-1">
-          Contagem em Vendas: {{ dinheiro(contagemFisica.total) }} contado para
-          {{ dinheiro(contagemFisica.esperado) }} esperado
-        </div>
         <template v-if="diferenca < 0">
-          A falta de <strong>{{ dinheiro(Math.abs(diferenca)) }}</strong> gera quebra de caixa e notifica a Tesouraria.
-          A observação é obrigatória.
+          <div class="text-subtitle-2 mb-1">Falta de {{ dinheiro(Math.abs(diferenca)) }} no caixa</div>
+          A falta gera quebra de caixa e avisa a Tesouraria. Explique o motivo na observação.
         </template>
-        <template v-else-if="diferenca > 0">
-          Há sobra de <strong>{{ dinheiro(diferenca) }}</strong
-          >; não há quebra positiva, mas a Tesouraria será notificada. A observação é obrigatória.
+        <template v-else>
+          <div class="text-subtitle-2">Tudo certo com a contagem.</div>
         </template>
-        <template v-else>Confere com o sistema.</template>
       </v-alert>
     </section>
 
@@ -187,7 +195,7 @@ function solicitarFechamento() {
         <v-col cols="12" md="7">
           <CampoObservacaoVoz
             v-model="fechamento.observacao"
-            :label="fechamentoDivergente ? 'Observação da divergência (obrigatória)' : 'Observação do fechamento'"
+            :label="fechamentoComQuebra ? 'Observação da falta (obrigatória)' : 'Observação do fechamento'"
             :error="observacaoObrigatoriaPendente"
             :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
             data-teste="observacao-fechamento"
@@ -225,7 +233,7 @@ function solicitarFechamento() {
           data-teste="botao-fechar"
           @click="solicitarFechamento"
         >
-          {{ fechamentoComQuebra ? "Encerrar com divergência" : "Encerrar e enviar à Tesouraria" }}
+          {{ fechamentoComQuebra ? "Encerrar com falta" : "Encerrar e enviar à Tesouraria" }}
         </v-btn>
         <p
           v-if="fechamentoTravado"

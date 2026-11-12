@@ -298,6 +298,38 @@ const LEITURA_CREARE_ZERADA = {
 };
 
 /**
+ * Fechamento cego (Marco, 11/11/2026): o caixa nao recebe o fisico esperado; quem confere o fechamento sim. A
+ * fixture le o esperado com a sessao do administrador (que tem `fechamentos_caixa_conferir`).
+ */
+// Uma sessao de administrador por aplicacao, e de outro IP: login e leitura da fixture nao podem gastar a
+// cota por IP (login 20/min, global 300/min) dos testes. Sem isto, a caixa-portas-s3-s8 levava 429 no login.
+const IP_DA_FIXTURE = "127.0.0.250";
+const sessoesConferencia = new WeakMap<FastifyInstance, Promise<string>>();
+function cookieConferencia(app: FastifyInstance) {
+  let sessao = sessoesConferencia.get(app);
+  if (!sessao) {
+    sessao = cookieSessao(app, "admin", { remoteAddress: IP_DA_FIXTURE });
+    sessoesConferencia.set(app, sessao);
+  }
+  return sessao;
+}
+
+async function esperadoPelaConferencia(app: FastifyInstance, caixaId: string) {
+  const resposta = await app.inject({
+    method: "GET",
+    url: `/api/caixa/${caixaId}/relatorio-vendas`,
+    // Leitura da FIXTURE, nao do teste: sai de outro IP para nao gastar a cota global de 300/min por IP
+    // (@fastify/rate-limit) dos testes que rodam em sequencia no mesmo arquivo. Sem isto, a caixa-portas-s3-s8
+    // passava do limite e recebia 429 no envio da venda integrada.
+    remoteAddress: IP_DA_FIXTURE,
+    headers: { cookie: await cookieConferencia(app) }
+  });
+  expect(resposta.statusCode, resposta.body).toBe(200);
+  return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica
+    .esperado;
+}
+
+/**
  * R-232 · registra (ou corrige) a contagem fisica cega, como a operadora faz em Vendas: gera de novo o relatorio de
  * vendas com a contagem. Corrigir uma contagem ja gravada exige justificativa (a fixture manda uma). Devolve o
  * fisico esperado pelo sistema naquele instante.
@@ -334,8 +366,7 @@ export async function registrarContagemFisica(
     }
   });
   expect(resposta.statusCode, resposta.body).toBe(200);
-  return json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(resposta).data.dados.contagemFisica
-    .esperado;
+  return esperadoPelaConferencia(app, entrada.caixaId);
 }
 
 /**
@@ -384,8 +415,7 @@ export async function prepararFechamentoValido(
     }
   });
   expect(relatorioVendas.statusCode, relatorioVendas.body).toBe(200);
-  const esperado = json<{ data: { dados: { contagemFisica: { esperado: number } } } }>(relatorioVendas).data.dados
-    .contagemFisica.esperado;
+  const esperado = await esperadoPelaConferencia(app, entrada.caixaId);
 
   const leitura = {
     documentoLegivel: true,

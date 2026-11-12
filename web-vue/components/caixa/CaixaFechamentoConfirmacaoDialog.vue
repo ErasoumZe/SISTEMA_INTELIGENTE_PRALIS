@@ -10,7 +10,8 @@ type AnexoFechamento = {
 
 const props = defineProps<{
   aberto: boolean;
-  saldoEsperado: number;
+  // Fechamento cego (R-236): `null` para o caixa — o resultado so aparece depois de fechar. Quem confere ve a falta.
+  falta: number | null;
   observacao: string;
   lacreFechamento: string;
   caixaResponsavelNome: string;
@@ -27,7 +28,6 @@ const emit = defineEmits<{
 }>();
 
 const totalContado = computed(() => props.valorTotal);
-const diferenca = computed(() => totalContado.value - props.saldoEsperado);
 const folhas = computed(() => props.anexos.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoes = computed(() => props.anexos.filter((anexo) => anexo.tipo === "comprovante_cartao"));
 const relatoriosCreare = computed(() => props.anexos.filter((anexo) => anexo.tipo === "relatorio_vendas_creare"));
@@ -57,9 +57,15 @@ function dinheiroRelatorio(campo: string) {
           <div class="text-overline">Conferência física</div>
           <v-row dense>
             <v-col cols="12" sm="6"><strong>Total contado:</strong> {{ dinheiro(totalContado) }}</v-col>
-            <v-col cols="12" sm="6" :class="diferenca ? 'text-error' : 'text-success'">
-              <strong>{{ diferenca ? "Diferença:" : "Conferência:" }}</strong>
-              {{ diferenca ? dinheiro(Math.abs(diferenca)) : "bateu" }}
+            <v-col
+              v-if="falta !== null"
+              cols="12"
+              sm="6"
+              :class="falta > 0 ? 'text-error' : 'text-success'"
+              data-teste="confirmacao-resultado"
+            >
+              <strong>{{ falta > 0 ? "Falta:" : "Conferência:" }}</strong>
+              {{ falta > 0 ? dinheiro(falta) : "tudo certo" }}
             </v-col>
             <v-col cols="12" sm="6"><strong>Dinheiro físico:</strong> {{ dinheiro(valorEspecie) }}</v-col>
             <v-col cols="12" sm="6"><strong>Moedas:</strong> {{ dinheiro(valorMoedas) }}</v-col>

@@ -11,10 +11,10 @@ function montar() {
       saldo: 500,
       vendasCanceladasQuantidade: 2,
       categorias: [
-        { chave: "entradas", titulo: "Entradas", icone: "mdi-cash", valor: 100 },
+        { chave: "entradas", titulo: "Entradas", icone: "mdi-cash", valor: 0, quantidade: 3 },
         { chave: "transferencias", titulo: "Transferencias", icone: "mdi-bank-transfer", valor: 50 }
       ],
-      formasPagamento: [{ chave: "pix", titulo: "PIX", icone: "mdi-qrcode", valor: 100, quantidade: 3 }]
+      formasPagamento: [{ chave: "pix", titulo: "PIX", icone: "mdi-qrcode", quantidade: 3 }]
     },
     global: {
       stubs: {
@@ -31,7 +31,7 @@ describe("CaixaResumoOperacao", () => {
     const wrapper = montar();
 
     expect(wrapper.get('[data-teste="resumo-saldo-caixa"]').text()).toContain("500");
-    expect(wrapper.get('[aria-label^="Consultar vendas nas Entradas"]').text()).toContain("Entradas");
+    expect(wrapper.get('[aria-label^="Consultar as vendas do turno"]').text()).toContain("Entradas");
     expect(wrapper.get('[aria-controls="movimentacoes-lista"]').text()).toContain("Ocultar");
     expect(wrapper.text()).toContain("Vendas por forma de pagamento");
     expect(wrapper.text()).toContain("Vendas canceladas");
@@ -46,16 +46,28 @@ describe("CaixaResumoOperacao", () => {
     expect(wrapper.get('[aria-controls="formas-pagamento-lista"]').attributes("aria-expanded")).toBe("false");
     expect(wrapper.get('[aria-controls="movimentacoes-lista"]').attributes("aria-expanded")).toBe("false");
     expect(wrapper.get('[data-teste="resumo-saldo-caixa"]').text()).toContain("500");
-    expect(wrapper.get('[aria-label^="Consultar vendas nas Entradas"]').text()).toContain("Entradas");
+    expect(wrapper.get('[aria-label^="Consultar as vendas do turno"]').text()).toContain("Entradas");
   });
 
   it("abre a consulta de vendas somente pelas entradas e preserva canceladas", async () => {
     const wrapper = montar();
 
-    await wrapper.get('[aria-label^="Consultar vendas nas Entradas"]').trigger("click");
+    await wrapper.get('[aria-label^="Consultar as vendas do turno"]').trigger("click");
     await wrapper.get('[aria-label^="Ver 2 vendas canceladas"]').trigger("click");
 
-    expect(wrapper.emitted("selecionarCategoria")).toEqual([["entradas", 100]]);
+    expect(wrapper.emitted("selecionarCategoria")).toEqual([["entradas", 0]]);
     expect(wrapper.emitted("verVendasCanceladas")).toHaveLength(1);
+  });
+});
+
+// Fechamento cego (Marco, 11/11/2026): o caixa ve quantas vendas houve, nunca o valor delas.
+describe("CaixaResumoOperacao · fechamento cego", () => {
+  it("entradas e formas de pagamento mostram so a quantidade de vendas", () => {
+    const wrapper = montar();
+    expect(wrapper.get('[aria-label^="Consultar as vendas do turno"]').text()).toContain("3 vendas");
+    const formas = wrapper.get("#formas-pagamento-lista").text();
+    expect(formas).toContain("PIX");
+    expect(formas).toContain("3 vendas");
+    expect(formas).not.toContain("R$");
   });
 });

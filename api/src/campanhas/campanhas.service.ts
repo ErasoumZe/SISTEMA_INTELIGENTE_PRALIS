@@ -1,8 +1,9 @@
-import type { PerfilUsuario } from "@padaria/shared";
+import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared";
 import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import {
   percentualDaMetaCentavos,
   type CampanhaComProgresso,
+  type CampanhaDoFechamento,
   type CampanhaPayload,
   type StatusCampanha
 } from "@padaria/shared/campanhas";
@@ -244,7 +245,7 @@ export async function campanhasDoFechamento(input: {
   pdvId: string | null;
   dia: string;
   perfil: PerfilUsuario;
-}): Promise<CampanhaComProgresso[]> {
+}): Promise<CampanhaDoFechamento[]> {
   exigirEmpresa(input.perfil, input.empresaId);
   if (!input.pdvId) return [];
 
@@ -257,5 +258,25 @@ export async function campanhasDoFechamento(input: {
 
   const ids = new Set(doPdv.map((linha) => linha.id));
   const todas = await listarCampanhas(input.empresaId, input.perfil);
-  return todas.filter((campanha) => ids.has(campanha.id));
+  // Fechamento cego (R-236) · N1: quem nao ve vendas recebe so "meta atingida", sem vendido nem percentual.
+  const veValores = [
+    "fechamentos_caixa_conferir",
+    "caixas_gerenciar",
+    "entradas_visualizar",
+    "campanhas_visualizar"
+  ].some((permissao) => temPermissao(input.perfil.permissoes, permissao as Permissao));
+  return todas
+    .filter((campanha) => ids.has(campanha.id))
+    .map((campanha) => {
+      const metaAtingida = paraCentavos(campanha.totalVendido) >= paraCentavos(campanha.metaValor);
+      if (veValores) return { ...campanha, metaAtingida };
+      const {
+        pdvs: _pdvs,
+        totalVendido: _total,
+        percentualDaMeta: _percentual,
+        naoAtribuido: _sem,
+        ...base
+      } = campanha;
+      return { ...base, metaAtingida };
+    });
 }

@@ -17,7 +17,8 @@ import {
   historicoCaixaQuerySchema,
   salvarRelatorioMaquininhaFechamentoSchema,
   transferenciaCofrePayloadSchema,
-  vendasDoCaixaQuerySchema
+  vendasDoCaixaQuerySchema,
+  explicarFaltaPayloadSchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
@@ -51,8 +52,11 @@ import {
   salvarRelatorioMaquininhaFechamento,
   transcreverObservacaoFechamento,
   registrarIndisponibilidadeCaixa,
-  registrarRetornoIndisponibilidadeCaixa
+  registrarRetornoIndisponibilidadeCaixa,
+  obterResultadoFechamento,
+  explicarFaltaFechamento
 } from "./caixa.service.js";
+import type { VendaDoTurnoVisivel } from "./caixa.service.js";
 import { resolverRecebimentoSemLacre } from "./recebimento-sem-lacre.service.js";
 
 // R-231 · recebimento sem lacre: o operador do caixa confirma ou marca "Nao recebi".
@@ -436,6 +440,37 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // R-236 · resultado do fechamento para o proprio caixa, so depois de fechar (a falta nao aparece antes).
+  app.get(
+    "/api/caixa/:caixaId/resultado-fechamento",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const params = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await obterResultadoFechamento(params.caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  // R-236 · na falta, o caixa explica depois de fechar; a explicacao vai para a quebra (Tesouraria).
+  app.post(
+    "/api/caixa/:caixaId/explicar-falta",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const params = caixaParamsSchema.parse(request.params);
+      const { observacao } = explicarFaltaPayloadSchema.parse(request.body);
+      try {
+        return ok(await explicarFaltaFechamento(params.caixaId, observacao, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
   // Detalhe de auditoria de um caixa: alteracoes de horario e acerto de saldo.
   app.get(
     "/api/caixa/:caixaId/detalhe",
@@ -509,7 +544,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const query = vendasDoCaixaQuerySchema.parse(request.query);
       try {
         const consulta = await listarVendasDoCaixaAberto(caixaId, query, request.perfilUsuario!);
-        const pagina = paginadoDeResultado(consulta.resultado);
+        const pagina = paginadoDeResultado<VendaDoTurnoVisivel>(consulta.resultado);
         return {
           ...pagina,
           meta: {

@@ -94,6 +94,11 @@ export type CampanhaPayload = z.infer<typeof campanhaPayloadSchema>;
 export type PdvDaCampanha = z.infer<typeof pdvDaCampanhaSchema>;
 export type Campanha = z.infer<typeof campanhaSchema>;
 export type CampanhaComProgresso = z.infer<typeof campanhaComProgressoSchema>;
+// No fechamento do caixa (R-199 + R-236, Marco 12/11/2026): o PDV 1-3 ve so se a meta foi atingida. O valor vendido e
+// o percentual (somados ao vivo) davam as vendas do turno, entao so saem para quem ja ve vendas.
+export type CampanhaDoFechamento = Campanha & { metaAtingida: boolean } & Partial<
+    Pick<CampanhaComProgresso, "pdvs" | "totalVendido" | "percentualDaMeta" | "naoAtribuido">
+  >;
 
 /**
  * Percentual da meta, em centavos inteiros como todo dinheiro deste projeto.

@@ -56,7 +56,7 @@ describe("base de dúvidas do caixa", () => {
   });
 
   it("toda etapa do fechamento tem pergunta", () => {
-    for (const tema of ["vendas", "maquininha", "relatorio-final", "fechamento"]) {
+    for (const tema of ["vendas", "maquininha", "fechamento"]) {
       expect(DUVIDAS_CAIXA.some((d) => d.tema === tema)).toBe(true);
     }
   });
