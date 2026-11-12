@@ -16,7 +16,7 @@ export async function registrarRotasProdutosMaisVendidos(app: FastifyInstance): 
       }
 
       return paginadoDeArray(
-        await obterProdutosMaisVendidos(query.empresaId, query.caixaId),
+        await obterProdutosMaisVendidos(query.empresaId, query.caixaId, request.perfilUsuario!),
         query.page,
         query.pageSize
       );

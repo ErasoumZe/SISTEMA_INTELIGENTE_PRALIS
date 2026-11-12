@@ -2810,6 +2810,10 @@ export async function obterResultadoFechamento(caixaId: string, perfil: PerfilUs
 
 export async function explicarFaltaFechamento(caixaId: string, observacao: string, perfil: PerfilUsuario) {
   const caixa = await caixaEncerradoDoOperador(caixaId, perfil);
+  // So quem operou o caixa explica a propria falta: quem gerencia caixas nao escreve em nome dele.
+  if (caixa.usuarioCaixaId !== perfil.usuarioId) {
+    throw new ErroDominio("Só o operador deste caixa explica a falta.", 403, "FALTA_SO_DO_OPERADOR");
+  }
   const atualizada = await explicarQuebraContagemRepository({
     fechamentoCaixaId: caixa.id,
     empresaId: caixa.empresaId,

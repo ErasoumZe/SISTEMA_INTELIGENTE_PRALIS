@@ -157,6 +157,21 @@ describe("caixa - fechamento cego", () => {
         headers: { cookie: cookieCaixa },
         payload: { observacao }
       });
+    // So o operador explica a propria falta: quem gerencia caixas (aqui o admin) nao escreve em nome dele.
+    const peloAdmin = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixa.caixaId}/explicar-falta`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Explicacao em nome do caixa" }
+    });
+    expect(peloAdmin.statusCode).toBe(403);
+    const caixaQueNaoExiste = await contexto.app.inject({
+      method: "GET",
+      url: "/api/caixa/11111111-1111-4111-8111-999999999999/resultado-fechamento",
+      headers: { cookie: cookieCaixa }
+    });
+    expect(caixaQueNaoExiste.statusCode).toBeGreaterThanOrEqual(400);
+
     const explicada = await explicar("Troco errado para um cliente");
     expect(explicada.statusCode, explicada.body).toBe(200);
     expect(await resultado()).toEqual({ resultado: "falta", falta: 5, explicacaoPendente: false });
