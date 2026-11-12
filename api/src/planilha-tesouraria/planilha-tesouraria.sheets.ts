@@ -29,7 +29,10 @@ export async function gravarNaProximaLinha(input: {
 
   const [existentes = []] = await gateway.batchGetValues(planilhaId, [a1(aba, `F2:${ultimaColuna}`)]);
   // A API devolve a faixa ate a ultima linha com conteudo: linhas vazias no meio continuam contando.
-  const ultimaPreenchida = existentes.reduce((ultima, celulas, indice) => (celulas.some((c) => c.trim()) ? indice : ultima), -1);
+  const ultimaPreenchida = existentes.reduce(
+    (ultima, celulas, indice) => (celulas.some((c) => c.trim()) ? indice : ultima),
+    -1
+  );
   const linhaInicial = ultimaPreenchida + 3; // +2 da linha 2 inicial, +1 para a proxima
   const chavesExistentes = new Set(
     existentes.filter((celulas) => celulas.some((c) => c.trim())).map((celulas) => chave(comDataNormalizada(celulas)))

@@ -87,7 +87,9 @@ export const previaPlanilhaSchema = z.object({
   cartao: z
     .object({ linhas: z.array(linhaCartaoSchema), conferencia: conferenciaSchema, totalEfetivado: dinheiroOuNulo })
     .nullable(),
-  relatorioPdv: z.object({ linha: linhaPdvSchema, conferencia: conferenciaSchema, totalImpresso: dinheiroOuNulo }).nullable(),
+  relatorioPdv: z
+    .object({ linha: linhaPdvSchema, conferencia: conferenciaSchema, totalImpresso: dinheiroOuNulo })
+    .nullable(),
   avisos: z.array(z.string())
 });
 export type PreviaPlanilha = z.infer<typeof previaPlanilhaSchema>;
@@ -154,6 +156,8 @@ export function conferirCartao(leitura: LeituraCartaoPlanilha): Conferencia {
   if (!leitura.numeroSerie) avisos.push("NÚMERO DE SÉRIE NÃO LIDO.");
   if (!leitura.data || !leitura.numeroSerie) ilegivel = true;
   let divergente = false;
+  // Com bandeira ilegivel a soma fica incompleta: comparar com o total viraria "divergente" por falta de leitura.
+  let modalidadeIncompleta = false;
   let somaValor = 0;
   let somaTransacoes = 0;
   for (const modalidade of leitura.modalidades) {
@@ -161,6 +165,7 @@ export function conferirCartao(leitura: LeituraCartaoPlanilha): Conferencia {
     const transacoes = modalidade.bandeiras.map((b) => b.transacoes);
     if (valores.some((v) => v === null) || transacoes.some((t) => t === null)) {
       ilegivel = true;
+      modalidadeIncompleta = true;
       avisos.push(`${modalidade.modalidade}: BANDEIRA COM VALOR OU QUANTIDADE ILEGÍVEL.`);
       continue;
     }
@@ -181,7 +186,7 @@ export function conferirCartao(leitura: LeituraCartaoPlanilha): Conferencia {
   if (total.valor === null || total.transacoes === null) {
     ilegivel = true;
     avisos.push("TOTAL EFETIVADO NÃO LIDO.");
-  } else {
+  } else if (!modalidadeIncompleta) {
     if (somaValor !== centavos(total.valor)) {
       divergente = true;
       avisos.push("SOMA DAS MODALIDADES DIFERENTE DO TOTAL EFETIVADO.");
@@ -308,9 +313,15 @@ export function celulasPdv(linha: LinhaPdv): Array<string | number> {
 
 /** Chave de duplicidade: o mesmo registro nao entra duas vezes (cartao: data+serie+pdv+modalidade+bandeira). */
 export function chaveCartao(celulas: ReadonlyArray<string | number>): string {
-  return celulas.slice(0, 5).map((c) => maiusculas(String(c))).join("|");
+  return celulas
+    .slice(0, 5)
+    .map((c) => maiusculas(String(c)))
+    .join("|");
 }
 /** PDV: um registro por data + PDV (o turno ja esta no PDV, ex.: 2T). */
 export function chavePdv(celulas: ReadonlyArray<string | number>): string {
-  return celulas.slice(0, 2).map((c) => maiusculas(String(c))).join("|");
+  return celulas
+    .slice(0, 2)
+    .map((c) => maiusculas(String(c)))
+    .join("|");
 }

@@ -60,7 +60,10 @@ async function fotos(caixa: Pick<Caixa, "id" | "empresaId">, tipo: "comprovante_
     (anexo) => anexo.tipo === tipo
   );
   return Promise.all(
-    anexos.map(async (anexo) => ({ dados: await readFile(caminhoAbsolutoDocumento(anexo.caminho)), mimeType: anexo.mimeType }))
+    anexos.map(async (anexo) => ({
+      dados: await readFile(caminhoAbsolutoDocumento(anexo.caminho)),
+      mimeType: anexo.mimeType
+    }))
   );
 }
 
@@ -75,7 +78,8 @@ function configIa() {
 async function lerCartao(caixa: Caixa): Promise<LeituraCartaoPlanilha | null> {
   const arquivos = await fotos(caixa, "comprovante_cartao");
   if (!arquivos.length) return null;
-  if (simulada()) return leituraCartaoSimulada(caixa.maquininhaNumeroSerie ?? null, dataIsoParaPlanilha(caixa.dataMovimento));
+  if (simulada())
+    return leituraCartaoSimulada(caixa.maquininhaNumeroSerie ?? null, dataIsoParaPlanilha(caixa.dataMovimento));
   return lerCartaoParaPlanilha(arquivos, configIa());
 }
 
@@ -119,7 +123,10 @@ async function previaCartao(caixa: Caixa, pdv: string): Promise<PreviaPlanilha["
         totalEfetivado: leitura.totalEfetivado.valor,
         conferencia: {
           status: "CONFERÊNCIA NECESSÁRIA",
-          avisos: [...avisos, "RELATÓRIO DA MANHÃ DESTE PDV NÃO ENCONTRADO: SEM ELE NÃO DÁ PARA TIRAR A MANHÃ DO ACUMULADO."]
+          avisos: [
+            ...avisos,
+            "RELATÓRIO DA MANHÃ DESTE PDV NÃO ENCONTRADO: SEM ELE NÃO DÁ PARA TIRAR A MANHÃ DO ACUMULADO."
+          ]
         }
       };
     }
@@ -214,14 +221,28 @@ export async function enviarParaPlanilha(
     throw erroValidacao("Informe o nome do operador.", "PLANILHA_SEM_OPERADOR");
   }
 
-  const gravar = async (aba: string, ultimaColuna: "L" | "N", linhas: Array<Array<string | number>>, chave: typeof chaveCartao) => {
+  const gravar = async (
+    aba: string,
+    ultimaColuna: "L" | "N",
+    linhas: Array<Array<string | number>>,
+    chave: typeof chaveCartao
+  ) => {
     try {
-      return await gravarNaProximaLinha({ gateway, planilhaId: env.PLANILHA_TESOURARIA_ID, aba, ultimaColuna, linhas, chave });
+      return await gravarNaProximaLinha({
+        gateway,
+        planilhaId: env.PLANILHA_TESOURARIA_ID,
+        aba,
+        ultimaColuna,
+        linhas,
+        chave
+      });
     } catch (erro) {
       return semAcesso(aba, erro);
     }
   };
-  const cartao = linhasCartao.length ? await gravar(ABA_CARTOES, "L", linhasCartao.map(celulasCartao), chaveCartao) : null;
+  const cartao = linhasCartao.length
+    ? await gravar(ABA_CARTOES, "L", linhasCartao.map(celulasCartao), chaveCartao)
+    : null;
   const relatorioPdv = payload.relatorioPdv
     ? await gravar(ABA_PDV, "N", [celulasPdv(payload.relatorioPdv)], chavePdv)
     : null;

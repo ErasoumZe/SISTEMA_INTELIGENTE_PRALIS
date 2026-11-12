@@ -26,7 +26,9 @@ const erro = ref("");
 const resultado = ref<ResultadoEnvioPlanilha | null>(null);
 const confirmado = ref(false);
 
-const somaCartao = computed(() => linhasCartao.value.reduce((soma, linha) => soma + Math.round(linha.valor * 100), 0) / 100);
+const somaCartao = computed(
+  () => linhasCartao.value.reduce((soma, linha) => soma + Math.round(linha.valor * 100), 0) / 100
+);
 const somaPdv = computed(() => {
   const l = linhaPdv.value;
   if (!l) return 0;
@@ -48,7 +50,10 @@ async function preparar() {
   resultado.value = null;
   confirmado.value = false;
   try {
-    previa.value = await apiPost<PreviaPlanilha>(`/api/caixa/${encodeURIComponent(props.caixaId)}/planilha-tesouraria/previa`, {});
+    previa.value = await apiPost<PreviaPlanilha>(
+      `/api/caixa/${encodeURIComponent(props.caixaId)}/planilha-tesouraria/previa`,
+      {}
+    );
     linhasCartao.value = structuredClone(previa.value.cartao?.linhas ?? []);
     linhaPdv.value = previa.value.relatorioPdv ? structuredClone(previa.value.relatorioPdv.linha) : null;
   } catch (falha) {
@@ -92,17 +97,26 @@ const numero = (valor: string) => {
       </v-btn>
     </header>
     <p class="text-body-2 text-medium-emphasis mb-3">
-      Lê as fotos do cartão e do PDV deste fechamento, confere as somas e mostra a prévia. Corrija o que a leitura
-      errar e envie. O fechamento não muda.
+      Lê as fotos do cartão e do PDV deste fechamento, confere as somas e mostra a prévia. Corrija o que a leitura errar
+      e envie. O fechamento não muda.
     </p>
 
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-3" role="alert">{{ erro }}</v-alert>
 
     <template v-if="previa">
-      <v-alert v-for="aviso in previa.avisos" :key="aviso" type="warning" variant="tonal" density="compact" class="mb-2">
+      <v-alert
+        v-for="aviso in previa.avisos"
+        :key="aviso"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mb-2"
+      >
         {{ aviso }}
       </v-alert>
-      <p v-if="previa.pdv" class="mb-3"><strong>PDV:</strong> {{ previa.pdv }} · <strong>Turno:</strong> {{ previa.turno }}</p>
+      <p v-if="previa.pdv" class="mb-3">
+        <strong>PDV:</strong> {{ previa.pdv }} · <strong>Turno:</strong> {{ previa.turno }}
+      </p>
 
       <div v-if="previa.cartao" class="mb-4">
         <div class="planilha-tesouraria__linha-titulo">
@@ -117,7 +131,14 @@ const numero = (valor: string) => {
         <div class="planilha-tesouraria__tabela">
           <v-table density="compact">
             <thead>
-              <tr><th>Data</th><th>Nº série</th><th>Modalidade</th><th>Bandeira</th><th class="text-right">Trans.</th><th class="text-right">Valor</th></tr>
+              <tr>
+                <th>Data</th>
+                <th>Nº série</th>
+                <th>Modalidade</th>
+                <th>Bandeira</th>
+                <th class="text-right">Trans.</th>
+                <th class="text-right">Valor</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="(linha, indice) in linhasCartao" :key="`${linha.modalidade}-${linha.bandeira}-${indice}`">
@@ -126,7 +147,13 @@ const numero = (valor: string) => {
                 <td>{{ linha.modalidade }}</td>
                 <td>{{ linha.bandeira }}</td>
                 <td class="text-right">
-                  <input v-model.number="linha.transacoes" class="planilha-tesouraria__campo" type="number" min="0" :aria-label="`Transações ${linha.bandeira}`" />
+                  <input
+                    v-model.number="linha.transacoes"
+                    class="planilha-tesouraria__campo"
+                    type="number"
+                    min="0"
+                    :aria-label="`Transações ${linha.bandeira}`"
+                  />
                 </td>
                 <td class="text-right">
                   <input
@@ -138,13 +165,17 @@ const numero = (valor: string) => {
                   />
                 </td>
               </tr>
-              <tr v-if="!linhasCartao.length"><td colspan="6" class="text-medium-emphasis">Nenhuma linha para gravar.</td></tr>
+              <tr v-if="!linhasCartao.length">
+                <td colspan="6" class="text-medium-emphasis">Nenhuma linha para gravar.</td>
+              </tr>
             </tbody>
           </v-table>
         </div>
         <p class="text-body-2 mt-1">
           Soma das linhas: <strong>{{ dinheiro(somaCartao) }}</strong>
-          <template v-if="previa.cartao.totalEfetivado !== null"> · Total efetivado impresso: {{ dinheiro(previa.cartao.totalEfetivado) }}</template>
+          <template v-if="previa.cartao.totalEfetivado !== null">
+            · Total efetivado impresso: {{ dinheiro(previa.cartao.totalEfetivado) }}</template
+          >
         </p>
       </div>
 
@@ -160,8 +191,11 @@ const numero = (valor: string) => {
         </ul>
         <div class="planilha-tesouraria__pdv">
           <label>Data <input v-model="linhaPdv.data" class="planilha-tesouraria__campo" /></label>
-          <label>Operador <input v-model="linhaPdv.operador" class="planilha-tesouraria__campo planilha-tesouraria__campo--texto" /></label>
-          <label v-for="forma in (['credito', 'debito', 'voucher', 'pix', 'dinheiro', 'clientes'] as const)" :key="forma">
+          <label
+            >Operador
+            <input v-model="linhaPdv.operador" class="planilha-tesouraria__campo planilha-tesouraria__campo--texto"
+          /></label>
+          <label v-for="forma in ['credito', 'debito', 'voucher', 'pix', 'dinheiro', 'clientes'] as const" :key="forma">
             {{ forma.toUpperCase() }}
             <input
               :value="linhaPdv[forma].toFixed(2).replace('.', ',')"
@@ -173,7 +207,9 @@ const numero = (valor: string) => {
         </div>
         <p class="text-body-2 mt-1">
           Soma: <strong>{{ dinheiro(somaPdv) }}</strong>
-          <template v-if="previa.relatorioPdv.totalImpresso !== null"> · Total impresso: {{ dinheiro(previa.relatorioPdv.totalImpresso) }}</template>
+          <template v-if="previa.relatorioPdv.totalImpresso !== null">
+            · Total impresso: {{ dinheiro(previa.relatorioPdv.totalImpresso) }}</template
+          >
         </p>
       </div>
 
@@ -184,7 +220,13 @@ const numero = (valor: string) => {
         label="Conferi os valores com as fotos e quero gravar na planilha"
         class="mb-2"
       />
-      <v-btn color="primary" :disabled="!podeEnviar" :loading="enviando" prepend-icon="mdi-table-arrow-right" @click="enviar">
+      <v-btn
+        color="primary"
+        :disabled="!podeEnviar"
+        :loading="enviando"
+        prepend-icon="mdi-table-arrow-right"
+        @click="enviar"
+      >
         Enviar relatório para a planilha
       </v-btn>
 
@@ -197,7 +239,8 @@ const numero = (valor: string) => {
           density="compact"
           class="mb-2"
         >
-          <strong>{{ aba!.aba }}</strong>: {{ aba!.mensagem }}
+          <strong>{{ aba!.aba }}</strong
+          >: {{ aba!.mensagem }}
         </v-alert>
       </div>
     </template>

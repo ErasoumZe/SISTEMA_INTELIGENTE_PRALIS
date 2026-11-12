@@ -111,7 +111,8 @@ async function lerComGemini<T>(
   config: ConfigGeminiPlanilha,
   fetchImpl: typeof fetch
 ): Promise<T> {
-  if (!arquivos.length) throw new ErroDominio("Nenhuma foto do relatório anexada a este caixa.", 422, "PLANILHA_SEM_FOTO");
+  if (!arquivos.length)
+    throw new ErroDominio("Nenhuma foto do relatório anexada a este caixa.", 422, "PLANILHA_SEM_FOTO");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
@@ -150,7 +151,11 @@ async function lerComGemini<T>(
     const texto = corpo.candidates?.[0]?.content?.parts?.find((parte) => parte.text)?.text;
     const validado = texto ? validador.safeParse(JSON.parse(texto)) : null;
     if (!validado?.success) {
-      throw new ErroDominio("A IA não conseguiu ler este relatório. Preencha na prévia.", 422, "PLANILHA_IA_INCOMPLETA");
+      throw new ErroDominio(
+        "A IA não conseguiu ler este relatório. Preencha na prévia.",
+        422,
+        "PLANILHA_IA_INCOMPLETA"
+      );
     }
     return validado.data;
   } catch (erro) {
@@ -167,7 +172,11 @@ async function lerComGemini<T>(
   }
 }
 
-export function lerCartaoParaPlanilha(arquivos: Arquivo[], config: ConfigGeminiPlanilha, fetchImpl: typeof fetch = fetch) {
+export function lerCartaoParaPlanilha(
+  arquivos: Arquivo[],
+  config: ConfigGeminiPlanilha,
+  fetchImpl: typeof fetch = fetch
+) {
   return lerComGemini<LeituraCartaoPlanilha>(
     PROMPT_CARTAO,
     SCHEMA_CARTAO,
@@ -208,7 +217,12 @@ export function leituraCartaoSimulada(numeroSerie: string | null, data: string):
         totalValor: 100,
         bandeiras: [{ bandeira: "MASTER (SIMULADO)", transacoes: 2, valor: 100 }]
       },
-      { modalidade: "PIX", totalTransacoes: 2, totalValor: 100, bandeiras: [{ bandeira: "PIX", transacoes: 2, valor: 100 }] }
+      {
+        modalidade: "PIX",
+        totalTransacoes: 2,
+        totalValor: 100,
+        bandeiras: [{ bandeira: "PIX", transacoes: 2, valor: 100 }]
+      }
     ],
     camposDuvidosos: []
   };

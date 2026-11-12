@@ -158,7 +158,17 @@ describe("planilha da Tesouraria", () => {
       operador: "liliane",
       ...creare.formas
     } as never);
-    expect(celulas).toEqual(["10/11/2026", "VND CAIXA PDV - 1M", "LILIANE", 707.21, 1059.5, 449.83, 791.8, 1197.4, 197.35]);
+    expect(celulas).toEqual([
+      "10/11/2026",
+      "VND CAIXA PDV - 1M",
+      "LILIANE",
+      707.21,
+      1059.5,
+      449.83,
+      791.8,
+      1197.4,
+      197.35
+    ]);
     expect(chavePdv(celulas)).toBe("10/11/2026|VND CAIXA PDV - 1M");
     expect(chaveCartao(["10/11/2026", "J9BB07936155", "VND CAIXA PDV - 1M", "CRÉDITO", "elo", 6, 96.22])).toBe(
       "10/11/2026|J9BB07936155|VND CAIXA PDV - 1M|CRÉDITO|ELO"
