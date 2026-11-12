@@ -75,6 +75,17 @@ export const transferenciaSemLacrePayloadSchema = z.object({
 });
 export type TransferenciaSemLacrePayload = z.infer<typeof transferenciaSemLacrePayloadSchema>;
 
+// R-238 · destino da transferencia sem lacre: so PDV com caixa ABERTO agora ("usuario logado"), com posto, turno e
+// quem abriu. Sem valor nenhum: e uma lista de quem pode receber, nao do que o caixa tem.
+export const destinoSemLacreSchema = z.object({
+  contaId: uuidSchema,
+  pdvNome: z.string(),
+  turno: z.enum(["manha", "tarde"]).nullable(),
+  responsavelNome: z.string().nullable()
+});
+export type DestinoSemLacre = z.infer<typeof destinoSemLacreSchema>;
+export const destinosSemLacreQuerySchema = z.object({ empresaId: uuidSchema });
+
 // Relatorio de Transferencias (Tesouraria): os tres lacres de um malote e o estado de cada um.
 // Tudo aqui e DERIVADO de `lacres`/`transferencias` na leitura; nada novo e gravado.
 export const tipoLacreRelatorioSchema = z.enum(["abertura", "sangria", "fechamento"]);

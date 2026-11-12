@@ -1,5 +1,6 @@
 import { and, count, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   lacres,
   transferencias,
@@ -11,6 +12,7 @@ import {
   type ConfirmarTransferenciaPayload,
   type TempoConfirmacao,
   type TransferenciaDetalheDto,
+  type DestinoSemLacre,
   type TransferenciaPayload
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
@@ -763,5 +765,37 @@ export async function atualizarTransferenciaRepository(
       transferenciaId,
       contaId
     }))
+  );
+}
+
+// R-238 · PDVs que podem receber transferencia sem lacre agora: caixa ABERTO (em fechamento ja nao recebe, R-231).
+export async function listarDestinosSemLacreRepository(
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<DestinoSemLacre[]> {
+  const linhas = await db
+    .select({
+      contaId: pdvs.contaId,
+      pdvNome: pdvs.nome,
+      turno: fechamentosCaixa.turnoCaixa,
+      responsavelNome: fechamentosCaixa.caixaResponsavelNomeAbertura
+    })
+    .from(fechamentosCaixa)
+    .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .where(
+      and(eq(fechamentosCaixa.empresaId, empresaId), eq(fechamentosCaixa.status, "aberto"), isNotNull(pdvs.contaId))
+    )
+    .orderBy(pdvs.nome);
+  return linhas.flatMap((linha) =>
+    linha.contaId
+      ? [
+          {
+            contaId: linha.contaId,
+            pdvNome: linha.pdvNome,
+            turno: linha.turno === "manha" || linha.turno === "tarde" ? linha.turno : null,
+            responsavelNome: linha.responsavelNome
+          }
+        ]
+      : []
   );
 }
