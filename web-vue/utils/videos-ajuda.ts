@@ -141,11 +141,7 @@ export function gruposVisiveis(telas: Pick<ItemMenu, "id">[], grupos: GrupoVideo
   return grupos.filter((grupo) => liberadas.has(grupo.telaId));
 }
 
-const semAcento = (texto: string) =>
-  texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+const semAcento = (texto: string) => texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /** Busca por palavras soltas, sem acento: "malote bateu" acha "O malote não bateu". */
 export function filtrarVideos(grupos: GrupoVideos[], termo: string): GrupoVideos[] {
