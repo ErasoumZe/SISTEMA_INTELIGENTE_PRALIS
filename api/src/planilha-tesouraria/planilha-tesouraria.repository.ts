@@ -19,7 +19,7 @@ export async function buscarCaixaDaManhaRepository(
         eq(fechamentosCaixa.pdvId, input.pdvId),
         eq(fechamentosCaixa.dataMovimento, input.dataMovimento),
         eq(fechamentosCaixa.turnoCaixa, "manha"),
-        inArray(fechamentosCaixa.status, ["em_fechamento", "fechado", "ajustado"])
+        inArray(fechamentosCaixa.status, ["fechado", "ajustado"])
       )
     )
     .orderBy(desc(fechamentosCaixa.dataHoraAbertura))

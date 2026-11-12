@@ -46,10 +46,14 @@ import { buscarCaixaDaManhaRepository } from "./planilha-tesouraria.repository.j
 
 type Caixa = NonNullable<Awaited<ReturnType<typeof buscarCaixaPorIdRepository>>>;
 
+// ID da planilha da Tesouraria (Marco, 12/11/2026). So vale por padrao em PRODUCAO; fora dela, so com
+// PLANILHA_TESOURARIA_ID explicito (um teste local nunca grava na planilha real).
+const PLANILHA_TESOURARIA_PRODUCAO = "1Z2e8504mHpBI2v_D2TEXrUx2NtsIwfrvv4S3n1bFvg0";
+
 async function caixaEncerrado(caixaId: string, perfil: PerfilUsuario): Promise<Caixa> {
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
-  if (caixa.status === "aberto") {
+  if (caixa.status !== "fechado" && caixa.status !== "ajustado") {
     throw new ErroDominio("O relatório só vai para a planilha depois do fechamento.", 409, "PLANILHA_CAIXA_ABERTO");
   }
   return caixa;
@@ -209,6 +213,8 @@ export async function enviarParaPlanilha(
   const caixa = await caixaEncerrado(caixaId, perfil);
   const pdv = rotuloPdvPlanilha(caixa.pdvNome, caixa.turnoCaixa);
   if (!pdv) throw erroValidacao("PDV ou turno do caixa não identificado: nada foi gravado.", "PLANILHA_SEM_PDV");
+  const planilhaId =
+    env.PLANILHA_TESOURARIA_ID ?? (env.NODE_ENV === "production" ? PLANILHA_TESOURARIA_PRODUCAO : null);
   const linhasCartao = payload.cartao ?? [];
   if (linhasCartao.some((linha) => linha.pdv !== pdv) || (payload.relatorioPdv && payload.relatorioPdv.pdv !== pdv)) {
     throw erroValidacao(`O PDV das linhas precisa ser o do caixa (${pdv}).`, "PLANILHA_PDV_DIFERENTE");
@@ -223,10 +229,11 @@ export async function enviarParaPlanilha(
     linhas: Array<Array<string | number>>,
     chave: typeof chaveCartao
   ) => {
+    if (!planilhaId) return semAcesso(aba, true);
     try {
       return await gravarNaProximaLinha({
         gateway,
-        planilhaId: env.PLANILHA_TESOURARIA_ID,
+        planilhaId,
         aba,
         ultimaColuna,
         linhas,

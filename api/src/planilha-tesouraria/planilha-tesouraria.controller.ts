@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { envioPlanilhaPayloadSchema } from "@padaria/shared/planilha-tesouraria";
 import { ok } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAcessoRelatorioFechamento, exigirPermissao } from "../auth/guards.js";
 import { enviarParaPlanilha, montarPreviaPlanilha } from "./planilha-tesouraria.service.js";
 
 const paramsSchema = z.object({ caixaId: z.string().uuid() });
@@ -12,7 +12,7 @@ const paramsSchema = z.object({ caixaId: z.string().uuid() });
 export async function registrarRotasPlanilhaTesouraria(app: FastifyInstance): Promise<void> {
   app.post(
     "/api/caixa/:caixaId/planilha-tesouraria/previa",
-    { preHandler: exigirPermissao("fechamentos_caixa_conferir") },
+    { preHandler: [exigirPermissao("fechamentos_caixa_conferir"), exigirAcessoRelatorioFechamento()] },
     async (request) => {
       const { caixaId } = paramsSchema.parse(request.params);
       return ok(await montarPreviaPlanilha(caixaId, request.perfilUsuario!));
@@ -21,7 +21,7 @@ export async function registrarRotasPlanilhaTesouraria(app: FastifyInstance): Pr
 
   app.post(
     "/api/caixa/:caixaId/planilha-tesouraria/enviar",
-    { preHandler: exigirPermissao("fechamentos_caixa_conferir") },
+    { preHandler: [exigirPermissao("fechamentos_caixa_conferir"), exigirAcessoRelatorioFechamento()] },
     async (request) => {
       const { caixaId } = paramsSchema.parse(request.params);
       const payload = envioPlanilhaPayloadSchema.parse(request.body);

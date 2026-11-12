@@ -118,6 +118,11 @@ export type ResultadoEnvioPlanilha = z.infer<typeof resultadoEnvioPlanilhaSchema
 
 const centavos = (valor: number) => Math.round(valor * 100);
 const maiusculas = (texto: string) => texto.trim().replace(/\s+/gu, " ").toLocaleUpperCase("pt-BR");
+/** Celula de TEXTO na planilha: se comecar com = + - @, vai com apostrofo (o Google grava como texto, nao formula). */
+export function textoSeguro(texto: string): string {
+  const limpo = maiusculas(texto);
+  return /^[=+\-@]/u.test(limpo) ? `'${limpo}` : limpo;
+}
 
 /**
  * PDV da planilha: "VND CAIXA PDV - " + numero do PDV + M (manha) ou T (tarde). Vem SEMPRE do caixa em fechamento,
@@ -289,10 +294,10 @@ export function bandeirasDaLeitura(leitura: LeituraCartaoPlanilha): BandeiraLida
 export function celulasCartao(linha: LinhaCartao): Array<string | number> {
   return [
     linha.data,
-    maiusculas(linha.numeroSerie),
-    maiusculas(linha.pdv),
+    textoSeguro(linha.numeroSerie),
+    textoSeguro(linha.pdv),
     linha.modalidade,
-    maiusculas(linha.bandeira),
+    textoSeguro(linha.bandeira),
     linha.transacoes,
     linha.valor
   ];
@@ -300,8 +305,8 @@ export function celulasCartao(linha: LinhaCartao): Array<string | number> {
 export function celulasPdv(linha: LinhaPdv): Array<string | number> {
   return [
     linha.data,
-    maiusculas(linha.pdv),
-    maiusculas(linha.operador),
+    textoSeguro(linha.pdv),
+    textoSeguro(linha.operador),
     linha.credito,
     linha.debito,
     linha.voucher,
@@ -315,13 +320,13 @@ export function celulasPdv(linha: LinhaPdv): Array<string | number> {
 export function chaveCartao(celulas: ReadonlyArray<string | number>): string {
   return celulas
     .slice(0, 5)
-    .map((c) => maiusculas(String(c)))
+    .map((c) => maiusculas(String(c)).replace(/^'/u, ""))
     .join("|");
 }
 /** PDV: um registro por data + PDV (o turno ja esta no PDV, ex.: 2T). */
 export function chavePdv(celulas: ReadonlyArray<string | number>): string {
   return celulas
     .slice(0, 2)
-    .map((c) => maiusculas(String(c)))
+    .map((c) => maiusculas(String(c)).replace(/^'/u, ""))
     .join("|");
 }

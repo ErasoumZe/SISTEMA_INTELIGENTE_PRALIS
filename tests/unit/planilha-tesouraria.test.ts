@@ -11,6 +11,7 @@ import {
   normalizarData,
   rotuloPdvPlanilha,
   subtrairManha,
+  textoSeguro,
   type LeituraCartaoPlanilha,
   type LeituraPdvPlanilha
 } from "@padaria/shared/planilha-tesouraria";
@@ -172,6 +173,17 @@ describe("planilha da Tesouraria", () => {
     expect(chavePdv(celulas)).toBe("10/11/2026|VND CAIXA PDV - 1M");
     expect(chaveCartao(["10/11/2026", "J9BB07936155", "VND CAIXA PDV - 1M", "CRÉDITO", "elo", 6, 96.22])).toBe(
       "10/11/2026|J9BB07936155|VND CAIXA PDV - 1M|CRÉDITO|ELO"
+    );
+  });
+});
+
+describe("planilha da Tesouraria - texto seguro", () => {
+  it("texto que comeca com = + - @ vai como texto, nunca como formula", () => {
+    expect(textoSeguro('=IMPORTXML("x")')).toBe(`'=IMPORTXML("X")`);
+    expect(textoSeguro("@visa")).toBe("'@VISA");
+    expect(textoSeguro("visa")).toBe("VISA");
+    expect(chaveCartao(["10/11/2026", "S", "P", "CRÉDITO", "'=X"])).toBe(
+      chaveCartao(["10/11/2026", "S", "P", "CRÉDITO", "=X"])
     );
   });
 });

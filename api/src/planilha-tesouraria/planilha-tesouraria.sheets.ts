@@ -16,7 +16,23 @@ export type ResultadoGravacao = {
  * registro novo ja existir na aba (mesma chave), nao grava nenhum: nada de envio pela metade nem duplicado.
  * Depois de gravar, rele a faixa escrita e so diz "gravado" se o que voltou bate com o que foi enviado.
  */
-export async function gravarNaProximaLinha(input: {
+// Dois envios ao mesmo tempo leriam a mesma "ultima linha" e um sobrescreveria o outro. Fila por planilha+aba (a API
+// roda em uma replica). O envio seguinte espera o anterior terminar (inclusive a releitura).
+const filas = new Map<string, Promise<unknown>>();
+function emFila<T>(chave: string, tarefa: () => Promise<T>): Promise<T> {
+  const anterior = filas.get(chave) ?? Promise.resolve();
+  const atual = anterior.catch(() => undefined).then(tarefa);
+  filas.set(chave, atual);
+  return atual.finally(() => {
+    if (filas.get(chave) === atual) filas.delete(chave);
+  });
+}
+
+export function gravarNaProximaLinha(input: Parameters<typeof gravarSemFila>[0]): Promise<ResultadoGravacao> {
+  return emFila(`${input.planilhaId}|${input.aba}`, () => gravarSemFila(input));
+}
+
+async function gravarSemFila(input: {
   gateway: SheetsGateway;
   planilhaId: string;
   aba: string;
@@ -52,7 +68,18 @@ export async function gravarNaProximaLinha(input: {
   const faixa = a1(aba, `F${linhaInicial}:${ultimaColuna}${linhaFinal}`);
   await gateway.batchUpdateValues(planilhaId, [{ range: faixa, values: linhas }], "USER_ENTERED");
 
-  const [conferidas = []] = await gateway.batchGetValues(planilhaId, [faixa]);
+  let conferidas: string[][];
+  try {
+    [conferidas = []] = await gateway.batchGetValues(planilhaId, [faixa]);
+  } catch {
+    return {
+      aba,
+      gravado: false,
+      linhaInicial,
+      linhas: 0,
+      mensagem: `A GRAVAÇÃO FOI FEITA A PARTIR DA LINHA ${linhaInicial}, MAS NÃO FOI POSSÍVEL CONFIRMAR. CONFIRA A ABA ANTES DE ENVIAR DE NOVO.`
+    };
+  }
   const confirmadas = conferidas.filter((celulas, indice) => {
     const enviada = linhas[indice];
     return enviada !== undefined && chave(comDataNormalizada(celulas)) === chave(enviada);
