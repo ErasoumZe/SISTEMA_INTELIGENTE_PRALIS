@@ -44,6 +44,7 @@ import { registrarRotasTransferencias } from "./transferencias/transferencias.co
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
 import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
 import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
+import { registrarRotasPlanilhaTesouraria } from "./planilha-tesouraria/planilha-tesouraria.controller.js";
 import { erro } from "@padaria/shared/api";
 import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAdmissoes } from "./admissoes/admissoes.controller.js";
@@ -361,6 +362,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasUsuarios(app);
   await registrarRotasPermissoes(app);
   await registrarRotasProdutosMaisVendidos(app);
+  await registrarRotasPlanilhaTesouraria(app);
   await registrarRotasIntegracoes(app);
   await registrarRotasGoogle(app);
   await registrarRotasPedidos(app);

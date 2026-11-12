@@ -13,6 +13,7 @@ import {
   type LinhaRelatorio
 } from "~/utils/relatorio-fechamento";
 import RelatorioFechamentoDetalhes from "./RelatorioFechamentoDetalhes.vue";
+import RelatorioFechamentoPlanilha from "~/components/financeiro/RelatorioFechamentoPlanilha.vue";
 import RelatorioFechamentoFolhaDigital from "./RelatorioFechamentoFolhaDigital.vue";
 import RelatorioFechamentoPainelConferencia from "./RelatorioFechamentoPainelConferencia.vue";
 import RelatorioFechamentoParadaComputador from "./RelatorioFechamentoParadaComputador.vue";
@@ -257,6 +258,8 @@ function anexoUrl(anexo: { id: string }) {
             :numero="numero"
             :texto="texto"
           />
+          <!-- Ultima etapa da Tesouraria: relatorios do fechamento para a planilha (aditivo, nao muda o caixa). -->
+          <RelatorioFechamentoPlanilha v-if="caixa && podeConferir" :caixa-id="caixa.id" />
         </template>
         <v-alert v-else-if="erroDossie" type="error" variant="tonal" role="alert">
           {{ erroDossie }}
