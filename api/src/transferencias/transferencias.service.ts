@@ -305,7 +305,7 @@ export async function criarTransferencia(
     });
   } catch (error) {
     const banco = error as Error & { code?: string; constraint?: string };
-    if (banco.code === "23505" && banco.constraint === "lacres_numero_unico") {
+    if (banco.code === "23505" && banco.constraint === "lacres_numero_ativo_unico") {
       throw new Error("Lacre ja utilizado em outro movimento", { cause: error });
     }
     throw error;

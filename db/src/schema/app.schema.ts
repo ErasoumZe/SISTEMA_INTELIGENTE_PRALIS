@@ -3459,7 +3459,11 @@ export const lacres = pgTable(
             and ${table.transferenciaDistribuicaoId} is distinct from ${table.transferenciaId}
             and (${table.transferenciaId} is not null or ${table.rompido} = false))`
     ),
-    unique("lacres_numero_unico").on(table.empresaId, table.numero),
+    // R-239 (supera em parte a R-021): o numero nao repete enquanto o lacre esta ATIVO. Depois da baixa
+    // (aberto e conferido: `rompido`), o numero volta a valer — os lotes de lacre comprados repetem numeracao.
+    uniqueIndex("lacres_numero_ativo_unico")
+      .on(table.empresaId, table.numero)
+      .where(sql`${table.rompido} = false`),
     index("lacres_transf_idx").on(table.transferenciaId),
     foreignKey({
       columns: [table.transferenciaDistribuicaoId, table.empresaId],

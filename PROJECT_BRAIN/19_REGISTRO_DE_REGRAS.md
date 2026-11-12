@@ -1611,3 +1611,16 @@ o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que a
 `WHATSAPP_PROVEDOR=meta` sobe com o envio desligado e um aviso, sem derrubar a API. Vale só para o S1.
 Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
 (acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
+
+### R-239 — O número do lacre volta a valer depois da baixa (Marco, 12/11/2026)
+
+**Supera em parte a R-021** ("o lacre não se repete"). Os lacres vêm em lotes comprados com numeração impressa, e
+um lote futuro pode repetir números.
+
+- **Regra:** o mesmo número não pode estar **ativo** duas vezes na empresa. Depois da baixa (lacre aberto e
+  conferido, `rompido = true`), o número pode ser usado de novo por um lacre novo.
+- **Banco:** a trava `lacres_numero_unico` (empresa + número, para sempre) virou o índice
+  `lacres_numero_ativo_unico` (empresa + número, só onde `rompido = false`). Migration `0093`, sem mudança de dados.
+- **Abertura do caixa:** a busca do malote pelo número pega o lacre ativo; sem ativo, o último baixado (para
+  responder "já utilizado").
+- **Histórico:** buscar um número pode trazer mais de uma transferência, cada uma com sua data.

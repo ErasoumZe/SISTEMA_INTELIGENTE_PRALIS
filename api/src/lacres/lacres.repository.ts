@@ -28,13 +28,14 @@ export async function listarLacresRepository(
     .orderBy(desc(lacres.criadoEm));
 }
 
-// Um lacre nunca repete por empresa (constraint lacres_numero_unico). Checagem previa para devolver
-// mensagem de dominio amigavel antes de bater na constraint.
+// R-239: o numero nao repete enquanto o lacre esta ATIVO (indice lacres_numero_ativo_unico, `rompido = false`).
+// Depois da baixa o numero pode voltar num lote novo. Checagem previa para devolver mensagem de dominio
+// amigavel antes de bater no indice.
 export async function existeNumeroLacreRepository(empresaId: string, numero: string, db: ExecutorBanco = banco) {
   const [existente] = await db
     .select({ id: lacres.id, numero: lacres.numero })
     .from(lacres)
-    .where(and(eq(lacres.empresaId, empresaId), eq(lacres.numero, numero)))
+    .where(and(eq(lacres.empresaId, empresaId), eq(lacres.numero, numero), eq(lacres.rompido, false)))
     .limit(1);
   return existente ?? null;
 }
