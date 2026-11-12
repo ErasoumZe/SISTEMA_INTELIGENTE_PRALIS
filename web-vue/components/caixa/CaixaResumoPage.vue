@@ -18,6 +18,7 @@ import CaixaFechamentoWizard from "~/components/caixa/CaixaFechamentoWizard.vue"
 import CaixaAberturaConfirmacaoDialog from "~/components/caixa/CaixaAberturaConfirmacaoDialog.vue";
 import CaixaIndisponibilidadeDialog from "~/components/caixa/CaixaIndisponibilidadeDialog.vue";
 import CaixaInicioFechamentoDialog from "~/components/caixa/CaixaInicioFechamentoDialog.vue";
+import CaixaResultadoFechamentoDialog from "~/components/caixa/CaixaResultadoFechamentoDialog.vue";
 import { deCentavos, paraCentavos, type ContagemFisicaRelatorio, type Permissao } from "@padaria/shared";
 const { apiGet, apiPost } = useApi();
 const route = useRoute();
@@ -130,6 +131,16 @@ type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
+// R-236 · o resultado do fechamento (tudo certo / falta) so aparece DEPOIS de encerrar: guarda o caixa que pediu para
+// fechar e, quando ele deixa de ser o caixa aberto (o fechamento deu certo), abre o resultado.
+const caixaEncerrandoId = ref<string | null>(null);
+const caixaResultadoId = ref<string | null>(null);
+watch(caixaAberto, (atual) => {
+  if (caixaEncerrandoId.value && atual?.id !== caixaEncerrandoId.value) {
+    caixaResultadoId.value = caixaEncerrandoId.value;
+    caixaEncerrandoId.value = null;
+  }
+});
 const vinculoOperador = computed(() => props.status?.vinculoOperador ?? null);
 const pdvDesligado = computed(() => Boolean(props.status?.indisponibilidadeAberta));
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
@@ -575,6 +586,7 @@ function confirmarFechamento() {
   const caixa = caixaAberto.value;
   if (!caixa || props.salvando) return;
   revisaoFechamentoAberta.value = false;
+  caixaEncerrandoId.value = caixa.id;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
@@ -1100,7 +1112,7 @@ function confirmarFechamento() {
         />
         <CaixaFechamentoConfirmacaoDialog
           :aberto="revisaoFechamentoAberta"
-          :falta="Math.max(0, -(contagemFisica?.diferenca ?? 0))"
+          :falta="contagemFisica && contagemFisica.diferenca !== null ? Math.max(0, -contagemFisica.diferenca) : null"
           :observacao="fechamento.observacao"
           :lacre-fechamento="fechamento.lacreFechamento.trim()"
           :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
@@ -1112,6 +1124,7 @@ function confirmarFechamento() {
           @editar="revisaoFechamentoAberta = false"
           @confirmar="confirmarFechamento"
         />
+        <CaixaResultadoFechamentoDialog :caixa-id="caixaResultadoId" @fechar="caixaResultadoId = null" />
         <CaixaInicioFechamentoDialog
           :aberto="confirmacaoInicioFechamentoAberta"
           :pdv-nome="caixaAberto?.pdvNome ?? ''"

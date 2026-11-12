@@ -59,7 +59,7 @@ const podeSolicitarFechamento = computed(
     props.folhaFechamentoEnviada
 );
 
-const diferenca = computed(() => props.contagemFisica?.diferenca ?? 0);
+const diferenca = computed(() => props.contagemFisica?.diferenca ?? null);
 // Diz POR QUE ainda nao da para encerrar (antes era so "Preencha os campos obrigatorios").
 const motivoPendente = computed(() => {
   if (!props.contagemFisica) return "Registre a contagem do dinheiro em Vendas e gere o relatório.";
@@ -96,9 +96,22 @@ function solicitarFechamento() {
       </div>
     </header>
 
-    <!-- Fechamento cego (Marco, 11/11/2026): o caixa nunca ve contado x esperado. So a FALTA aparece (vira quebra e
-         pede observacao); sobra ou contagem certa e sempre "Tudo certo" — a sobra vai para a Tesouraria. -->
-    <section v-if="contagemFisica" class="fechamento-etapas__situacao" aria-label="Resultado da contagem">
+    <!-- Fechamento cego (R-236, Marco 12/11/2026): o caixa nao ve o resultado antes de fechar (nem a falta). Depois
+         de encerrar, aparece "Tudo certo" ou a falta, para explicar. Quem confere o fechamento ve aqui. -->
+    <section
+      v-if="contagemFisica && diferenca === null"
+      class="fechamento-etapas__situacao"
+      aria-label="Resultado da contagem"
+    >
+      <v-alert type="info" variant="tonal" data-teste="aviso-resultado-depois">
+        Depois de encerrar, o sistema mostra se a contagem bateu.
+      </v-alert>
+    </section>
+    <section
+      v-else-if="contagemFisica && diferenca !== null"
+      class="fechamento-etapas__situacao"
+      aria-label="Resultado da contagem"
+    >
       <v-alert
         :type="diferenca < 0 ? 'error' : 'success'"
         variant="tonal"

@@ -154,10 +154,11 @@ export const contagemFisicaRelatorioSchema = z.object({
   valorEspecie: z.number(),
   valorMoedas: z.number(),
   total: z.number(),
-  // Fechamento cego (Marco, 11/11/2026): `null` para quem nao confere o fechamento (caixa e gerente), e a `diferenca`
-  // chega a eles so quando e FALTA (sobra vira 0). A Tesouraria recebe os dois numeros reais.
+  // Fechamento cego (R-236, Marco 12/11/2026): `null` para quem nao confere o fechamento. Nem a falta chega antes de
+  // fechar (contar 0 e ver a falta revelaria o esperado); o resultado so sai depois, em /resultado-fechamento.
+  // A Tesouraria recebe os dois numeros reais.
   esperado: z.number().nullable(),
-  diferenca: z.number(),
+  diferenca: z.number().nullable(),
   registradaEm: z.string(),
   registradaPor: z.string(),
   correcoes: z.array(
@@ -171,6 +172,16 @@ export const contagemFisicaRelatorioSchema = z.object({
   )
 });
 export type ContagemFisicaRelatorio = z.infer<typeof contagemFisicaRelatorioSchema>;
+
+// R-236 · resultado do fechamento para o proprio caixa, so DEPOIS de fechar: "tudo certo" (bateu ou sobrou) ou a falta.
+export const resultadoFechamentoSchema = z.object({
+  resultado: z.enum(["tudo_certo", "falta"]),
+  falta: z.number().nullable(),
+  explicacaoPendente: z.boolean()
+});
+export type ResultadoFechamento = z.infer<typeof resultadoFechamentoSchema>;
+export const explicarFaltaPayloadSchema = z.object({ observacao: z.string().trim().min(5).max(1000) });
+export type ExplicarFaltaPayload = z.infer<typeof explicarFaltaPayloadSchema>;
 
 // Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
 // no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.

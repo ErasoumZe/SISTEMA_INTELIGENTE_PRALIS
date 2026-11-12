@@ -431,6 +431,27 @@ export async function listarQuebrasCaixaRepository(
     .orderBy(asc(quebrasCaixa.criadoEm));
 }
 
+// R-236 · a falta so aparece depois de fechar, entao a explicacao do caixa chega depois: troca o texto pendente da
+// quebra de CONTAGEM (sem transferencia) pela explicacao, uma vez so.
+export async function explicarQuebraContagemRepository(
+  input: { fechamentoCaixaId: string; empresaId: string; observacaoPendente: string; observacao: string },
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .update(quebrasCaixa)
+    .set({ observacao: input.observacao })
+    .where(
+      and(
+        eq(quebrasCaixa.fechamentoCaixaId, input.fechamentoCaixaId),
+        eq(quebrasCaixa.empresaId, input.empresaId),
+        isNull(quebrasCaixa.transferenciaId),
+        eq(quebrasCaixa.observacao, input.observacaoPendente)
+      )
+    )
+    .returning({ id: quebrasCaixa.id });
+  return linha ?? null;
+}
+
 export async function listarUsuariosTesourariaRepository(empresaId: string, db: ExecutorBanco = banco) {
   return db
     .selectDistinct({ usuarioId: colaboradores.usuarioId })

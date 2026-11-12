@@ -95,15 +95,15 @@ describe("caixa - contagem física cega (R-232)", () => {
         dados: {
           contagemFisica: {
             total: number;
-            esperado: number;
-            diferenca: number;
+            esperado: number | null;
+            diferenca: number | null;
             correcoes: Array<{ de: { valorEspecie: number }; para: { valorEspecie: number }; justificativa: string }>;
           };
         };
       };
     }>(corrigida).data.dados.contagemFisica;
-    // Fechamento cego: o caixa ve o total que contou, mas nao o esperado; sem falta, a diferenca chega como 0.
-    expect(contagem).toMatchObject({ total: 100, esperado: null, diferenca: 0 });
+    // Fechamento cego (R-236): o caixa ve o total que contou, mas nem o esperado nem a diferenca antes de fechar.
+    expect(contagem).toMatchObject({ total: 100, esperado: null, diferenca: null });
     expect(contagem.correcoes).toEqual([
       expect.objectContaining({
         de: expect.objectContaining({ valorEspecie: 90 }),

@@ -10,8 +10,8 @@ type AnexoFechamento = {
 
 const props = defineProps<{
   aberto: boolean;
-  // Fechamento cego (Marco, 11/11/2026): so a FALTA chega ao caixa (0 = tudo certo, inclusive quando sobrou).
-  falta: number;
+  // Fechamento cego (R-236): `null` para o caixa — o resultado so aparece depois de fechar. Quem confere ve a falta.
+  falta: number | null;
   observacao: string;
   lacreFechamento: string;
   caixaResponsavelNome: string;
@@ -58,6 +58,7 @@ function dinheiroRelatorio(campo: string) {
           <v-row dense>
             <v-col cols="12" sm="6"><strong>Total contado:</strong> {{ dinheiro(totalContado) }}</v-col>
             <v-col
+              v-if="falta !== null"
               cols="12"
               sm="6"
               :class="falta > 0 ? 'text-error' : 'text-success'"

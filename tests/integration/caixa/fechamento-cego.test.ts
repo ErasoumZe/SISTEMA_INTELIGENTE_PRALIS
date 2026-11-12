@@ -3,9 +3,9 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { cookieSessao } from "../../setup/auth.js";
 import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, prepararFechamentoValido } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { json } from "../../setup/integracao.js";
+import { consultarUm, json } from "../../setup/integracao.js";
 
-type Contagem = { total: number; esperado: number | null; diferenca: number };
+type Contagem = { total: number; esperado: number | null; diferenca: number | null };
 type RelatorioVendas = {
   dados: { vendas: Record<string, unknown>; creare: Record<string, unknown> | null; contagemFisica: Contagem };
 };
@@ -81,7 +81,7 @@ describe("caixa - fechamento cego", () => {
     expect(esperado).toBe(100);
 
     const doCaixa = await relatorio(caixa.caixaId, cookieCaixa);
-    expect(doCaixa.contagemFisica).toMatchObject({ total: 110, esperado: null, diferenca: 0 });
+    expect(doCaixa.contagemFisica).toMatchObject({ total: 110, esperado: null, diferenca: null });
     expect(Object.keys(doCaixa.vendas)).toEqual(["quantidade"]);
     expect(doCaixa.creare).not.toHaveProperty("comparacao");
     expect(doCaixa.creare).not.toHaveProperty("pralis");
@@ -110,7 +110,7 @@ describe("caixa - fechamento cego", () => {
     expect(fechou.statusCode, fechou.body).toBe(204);
   });
 
-  it("falta: o caixa ve so a falta e precisa explicar na observacao", async () => {
+  it("falta: so aparece DEPOIS de fechar; o caixa explica em seguida e a explicacao vai para a quebra", async () => {
     const caixa = await abrirCaixaDoOperador(contexto.app, {
       cookieAdmin,
       cookieOperador: cookieCaixa,
@@ -125,14 +125,78 @@ describe("caixa - fechamento cego", () => {
       contagem: { valorEspecie: 90, valorMoedas: 5 }
     });
 
+    // S3: antes de fechar o caixa nao ve nem a falta (contar 0 e ver a falta revelaria o esperado).
     const doCaixa = await relatorio(caixa.caixaId, cookieCaixa);
-    expect(doCaixa.contagemFisica).toMatchObject({ total: 95, esperado: null, diferenca: -5 });
+    expect(doCaixa.contagemFisica).toMatchObject({ total: 95, esperado: null, diferenca: null });
+    const resultadoAntes = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixa.caixaId}/resultado-fechamento`,
+      headers: { cookie: cookieCaixa }
+    });
+    expect(resultadoAntes.statusCode).toBeGreaterThanOrEqual(400);
 
-    const semObservacao = await fechar(caixa);
-    expect(semObservacao.statusCode).toBeGreaterThanOrEqual(400);
-    expect(semObservacao.body).toMatch(/Observa.{1,3}o obrigat.{1,3}ria quando faltar dinheiro/u);
+    // Fecha sem observacao: ela ficou opcional, porque o caixa ainda nao sabe da falta.
+    const fechou = await fechar(caixa);
+    expect(fechou.statusCode, fechou.body).toBe(204);
 
-    const comObservacao = await fechar(caixa, "Troco errado para um cliente");
-    expect(comObservacao.statusCode, comObservacao.body).toBe(204);
+    const resultado = async () => {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/${caixa.caixaId}/resultado-fechamento`,
+        headers: { cookie: cookieCaixa }
+      });
+      expect(resposta.statusCode, resposta.body).toBe(200);
+      return json<{ data: { resultado: string; falta: number | null; explicacaoPendente: boolean } }>(resposta).data;
+    };
+    expect(await resultado()).toEqual({ resultado: "falta", falta: 5, explicacaoPendente: true });
+
+    const explicar = (observacao: string) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/caixa/${caixa.caixaId}/explicar-falta`,
+        headers: { cookie: cookieCaixa },
+        payload: { observacao }
+      });
+    const explicada = await explicar("Troco errado para um cliente");
+    expect(explicada.statusCode, explicada.body).toBe(200);
+    expect(await resultado()).toEqual({ resultado: "falta", falta: 5, explicacaoPendente: false });
+    const quebra = await consultarUm<{ observacao: string }>(
+      "select observacao from quebras_caixa where fechamento_caixa_id = $1 and transferencia_id is null",
+      [caixa.caixaId]
+    );
+    expect(quebra?.observacao).toBe("Troco errado para um cliente");
+
+    // Uma vez so: a segunda explicacao e recusada (a Tesouraria trata a partir dali).
+    const deNovo = await explicar("Outra explicacao qualquer");
+    expect(deNovo.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("sobra ou acerto: depois de fechar o caixa ve so 'tudo certo'", async () => {
+    const caixa = await abrirCaixaDoOperador(contexto.app, {
+      cookieAdmin,
+      cookieOperador: cookieCaixa,
+      emailOperador: usuariosTeste.caixa.email,
+      nome: "Fechamento cego tudo certo",
+      valorAbertura: 100,
+      registrarLimpeza: false
+    });
+    await prepararFechamentoValido(contexto.app, {
+      cookieOperador: cookieCaixa,
+      caixaId: caixa.caixaId,
+      contagem: { valorEspecie: 120 }
+    });
+    const fechou = await fechar(caixa);
+    expect(fechou.statusCode, fechou.body).toBe(204);
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixa.caixaId}/resultado-fechamento`,
+      headers: { cookie: cookieCaixa }
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    expect(json<{ data: unknown }>(resposta).data).toEqual({
+      resultado: "tudo_certo",
+      falta: null,
+      explicacaoPendente: false
+    });
   });
 });

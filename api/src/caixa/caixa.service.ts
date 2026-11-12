@@ -125,7 +125,9 @@ import {
   listarCandidatosConfirmacaoRepository,
   type FiltrosHistoricoCaixa,
   type IntencaoEntregaCofre,
-  type VendaCanceladaCaixaLinha
+  type VendaCanceladaCaixaLinha,
+  explicarQuebraContagemRepository,
+  listarQuebrasCaixaRepository as listarQuebrasDoFechamentoRepository
 } from "./caixa.repository.js";
 import {
   listarRetornosPendentesRepository,
@@ -843,6 +845,9 @@ function ocultarFisicoEsperado(status: CaixaStatus, perfil: PerfilUsuario): Caix
 // Fechamento cego (Marco, 11/11/2026): so quem confere o fechamento (Tesouraria, `fechamentos_caixa_conferir`) recebe
 // o VALOR das vendas, o esperado da gaveta e as comparacoes. Caixa e gerente recebem quantas vendas houve e, no fim,
 // so a falta. A Tela esconder nao basta: o que nao pode ser visto nao sai do servidor.
+// R-236 · texto da quebra de contagem enquanto o caixa ainda nao explicou a falta (ela so aparece depois de fechar).
+export const EXPLICACAO_FALTA_PENDENTE = "Aguardando explicação do caixa";
+
 function veValoresDoFechamento(perfil: PerfilUsuario) {
   return temPermissao(perfil.permissoes, "fechamentos_caixa_conferir");
 }
@@ -878,7 +883,8 @@ function relatorioVendasParaOPerfil(
       vendas: { quantidade: typeof vendas["quantidade"] === "number" ? vendas["quantidade"] : 0 },
       // A leitura da folha e o que o proprio caixa leu do cupom; a comparacao com o sistema e da Tesouraria.
       creare: creare ? { anexoId: creare["anexoId"] ?? null, leitura: creare["leitura"] ?? null } : (creare ?? null),
-      contagemFisica: contagem ? { ...contagem, esperado: null, diferenca: Math.min(contagem.diferenca, 0) } : null
+      // R-236: nem a falta sai antes de fechar (contar 0 revelaria o esperado). O resultado vem em /resultado-fechamento.
+      contagemFisica: contagem ? { ...contagem, esperado: null, diferenca: null } : null
     } as DadosExternos
   };
 }
@@ -1506,11 +1512,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
     const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
     const observacao = dados.observacao?.trim() || null;
-    // Fechamento cego (Marco, 11/11/2026): o caixa so ve a FALTA, entao so a falta exige observacao. A sobra o
-    // caixa nao enxerga (a tela diz "Tudo certo"); ela continua registrada e vai para a Tesouraria.
-    if (diferencaFisicaCentavos < 0 && !observacao) {
-      throw new Error("Observacao obrigatoria quando faltar dinheiro na contagem do fechamento");
-    }
+    // Fechamento cego (R-236, Marco 12/11/2026): o caixa so descobre a falta DEPOIS de fechar, entao a observacao aqui
+    // e opcional. Na falta, a quebra nasce com a explicacao pendente e o caixa explica em /explicar-falta.
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final
     // sai aqui, no MESMO ato e na MESMA transacao do fechamento: se qualquer parte falhar depois,
@@ -1553,7 +1556,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
           fechamentoCaixaId: caixa.id,
           usuarioId: caixa.usuarioCaixaId,
           valorCentavos: diferencaFisicaCentavos,
-          observacao: observacao!
+          observacao: observacao ?? EXPLICACAO_FALTA_PENDENTE
         },
         tx
       );
@@ -2778,4 +2781,43 @@ export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioI
   if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;
+}
+
+// R-236 · resultado do fechamento para o proprio caixa, so DEPOIS de fechar. Bateu ou sobrou: "tudo certo" (a sobra vai
+// so para a Tesouraria). Faltou: o valor da falta e se a explicacao ainda esta pendente.
+async function caixaEncerradoDoOperador(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status === "aberto" || caixa.status === "em_fechamento") {
+    throw new ErroDominio("O resultado so aparece depois de fechar o caixa.", 409, "CAIXA_AINDA_ABERTO");
+  }
+  return caixa;
+}
+
+export async function obterResultadoFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await caixaEncerradoDoOperador(caixaId, perfil);
+  const quebra = (await listarQuebrasDoFechamentoRepository(caixa.id, caixa.empresaId)).find(
+    (item) => !item.transferenciaId
+  );
+  if (!quebra) return { resultado: "tudo_certo" as const, falta: null, explicacaoPendente: false };
+  return {
+    resultado: "falta" as const,
+    falta: Math.abs(numero(quebra.valor)),
+    explicacaoPendente: quebra.observacao === EXPLICACAO_FALTA_PENDENTE
+  };
+}
+
+export async function explicarFaltaFechamento(caixaId: string, observacao: string, perfil: PerfilUsuario) {
+  const caixa = await caixaEncerradoDoOperador(caixaId, perfil);
+  const atualizada = await explicarQuebraContagemRepository({
+    fechamentoCaixaId: caixa.id,
+    empresaId: caixa.empresaId,
+    observacaoPendente: EXPLICACAO_FALTA_PENDENTE,
+    observacao: observacao.trim()
+  });
+  if (!atualizada) {
+    throw new ErroDominio("Não há falta aguardando explicação neste caixa.", 409, "FALTA_SEM_EXPLICACAO_PENDENTE");
+  }
+  return obterResultadoFechamento(caixaId, perfil);
 }

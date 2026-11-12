@@ -195,6 +195,41 @@ describe("contas-usuarios integration", () => {
       );
     });
 
+    // R-236 · N2: o saldo da conta do PDV inclui as vendas em dinheiro (e o esperado da gaveta ao vivo). O PDV 1-3
+    // (sem Entradas, R-238) nao o recebe; as outras contas vinculadas continuam com saldo.
+    it("Deve_OcultarSaldoDaContaDoPdv_Quando_OperadorSemEntradas", async () => {
+      await executarSql("insert into contas_usuarios (empresa_id, conta_id, usuario_id) values ($1,$2,$3),($1,$4,$3)", [
+        idsTeste.empresaA,
+        idsTeste.contaCaixa,
+        usuarioCaixaId,
+        idsTeste.contaLivre
+      ]);
+      await executarSql(
+        "update permissoes_usuarios set regras = regras - 'entradas_visualizar' where usuario_id = $1",
+        [usuarioCaixaId]
+      );
+      try {
+        const cookie = await cookieSessao(contexto.app, "caixa");
+        const resposta = await contexto.app.inject({
+          method: "GET",
+          url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}`,
+          headers: { cookie }
+        });
+        assertOk(resposta);
+        const contas = json<{ data: Array<Record<string, unknown> & { id: string }> }>(resposta).data;
+        const doPdv = contas.find((conta) => conta.id === idsTeste.contaCaixa);
+        expect(doPdv).toMatchObject({ ehContaPdv: true });
+        expect(doPdv).not.toHaveProperty("saldoAtual");
+        expect(doPdv).not.toHaveProperty("saldoPendente");
+        expect(contas.find((conta) => conta.id === idsTeste.contaLivre)).toHaveProperty("saldoAtual");
+      } finally {
+        await executarSql(
+          `update permissoes_usuarios set regras = regras || '{"entradas_visualizar": true}'::jsonb where usuario_id = $1`,
+          [usuarioCaixaId]
+        );
+      }
+    });
+
     it("Deve_VerTodasAsContas_Quando_UsuarioAdmin", async () => {
       const cookie = await cookieSessao(contexto.app, "admin");
       const resposta = await contexto.app.inject({
