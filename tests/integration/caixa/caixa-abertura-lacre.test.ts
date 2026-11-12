@@ -240,6 +240,68 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(caixa).toMatchObject({ lacre_abertura: "R040-TRES-CANDIDATOS", divida_cofre: "0.00" });
   });
 
+  it("R-239: o numero do lacre volta a valer depois da baixa, mas nunca repete enquanto esta ativo", async () => {
+    const a = await criarContaEPdv("r239-lote-antigo");
+    const b = await criarContaEPdv("r239-lote-novo");
+    const lacre = "R239-LOTE-REPETE";
+
+    // Lote antigo: o malote sai, o caixa A abre por ele e o lacre e baixado (rompido).
+    await criarTransferencia(lacre, 150, [a.contaId]);
+    const abertaA = await abrir(a.pdvId, lacre);
+    expect(abertaA.statusCode, abertaA.body).toBe(201);
+
+    // Lote novo com a mesma numeracao: aceito, porque o anterior ja deu baixa. O lacre de FECHAMENTO do
+    // malote antigo continua reservado (ativo) para o caixa A, entao o novo malote leva outro.
+    const nova = await request(cookieTesouraria, "POST", "/api/transferencias", {
+      empresaId: idsTeste.empresaA,
+      dataReferencia: "2026-07-31",
+      descricao: `Fundo de troco ${lacre} (lote novo)`,
+      valorOriginal: 220,
+      valorEspecieDeclarado: 220,
+      valorMoedasDeclarado: 0,
+      lacreFechamentoPlanejado: `${lacre}-FECHAMENTO-2`,
+      contaOrigemId: idsTeste.contaCofre,
+      contaDestinoId: b.contaId,
+      contasDestinoIds: [],
+      nLacreDoc: lacre,
+      tempoConfirmacao: null
+    });
+    expect(nova.statusCode, nova.body).toBe(201);
+    const novaId = json<{ data: { id: string } }>(nova).data.id;
+
+    // Enquanto o novo esta ativo (malote a caminho), o mesmo numero e recusado.
+    const repetidoAtivo = await request(cookieTesouraria, "POST", "/api/transferencias", {
+      empresaId: idsTeste.empresaA,
+      dataReferencia: "2026-07-31",
+      descricao: "Mesmo lacre ainda ativo",
+      valorOriginal: 80,
+      valorEspecieDeclarado: 80,
+      valorMoedasDeclarado: 0,
+      lacreFechamentoPlanejado: `${lacre}-FECHAMENTO-3`,
+      contaOrigemId: idsTeste.contaCofre,
+      contaDestinoId: b.contaId,
+      nLacreDoc: lacre,
+      tempoConfirmacao: null
+    });
+    expect(repetidoAtivo.statusCode, repetidoAtivo.body).toBeGreaterThanOrEqual(400);
+    expect(repetidoAtivo.statusCode, repetidoAtivo.body).toBeLessThan(500);
+
+    // A abertura pelo numero acha o malote ATIVO (o novo), nao o antigo ja baixado.
+    // Outro operador: o admin ja esta com o caixa A aberto.
+    const abertaB = await abrir(b.pdvId, lacre, { cookie: cookieMultiempresa, usuarioId: multiempresaId });
+    expect(abertaB.statusCode, abertaB.body).toBe(201);
+    const recebida = await consultarUm<{ status: string; conta_destino_id: string }>(
+      "select status, conta_destino_id from transferencias where id = $1",
+      [novaId]
+    );
+    expect(recebida).toMatchObject({ status: "recebido", conta_destino_id: b.contaId });
+    const linhas = await consultarUm<{ total: string; ativos: string }>(
+      "select count(*)::text as total, count(*) filter (where not rompido)::text as ativos from lacres where numero = $1",
+      [lacre]
+    );
+    expect(linhas).toMatchObject({ total: "2", ativos: "0" });
+  });
+
   it("Deve RECUSAR com erro de negocio (nao 500) o segundo caixa que tentar o mesmo lacre", async () => {
     const a = await criarContaEPdv("r040-reuso-a");
     const b = await criarContaEPdv("r040-reuso-b");

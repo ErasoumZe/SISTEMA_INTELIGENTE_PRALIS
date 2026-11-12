@@ -652,6 +652,13 @@
       "when": 1793815386424,
       "tag": "0092_massive_lightspeed",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794495827719,
+      "tag": "0093_lacre_numero_ativo_unico",
+      "breakpoints": true
     }
   ]
 }
