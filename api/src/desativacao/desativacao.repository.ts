@@ -110,4 +110,3 @@ export async function desativarUsuarioRepository(usuarioId: string, emailNovo: s
     .set({ pdvPadraoId: null, turnoCaixa: null })
     .where(eq(colaboradores.usuarioId, usuarioId));
 }
-

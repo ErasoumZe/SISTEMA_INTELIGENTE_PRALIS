@@ -22,7 +22,8 @@ import {
 // continuam iguais; o item so sai das listas e deixa de aceitar operacao nova. So o administrador total.
 
 function exigirAdministrador(perfil: PerfilUsuario | undefined): PerfilUsuario {
-  if (!perfil || !ehAdministradorTotal(perfil)) throw proibido("So o administrador pode excluir.", "FORBIDDEN_PRIVILEGE");
+  if (!perfil || !ehAdministradorTotal(perfil))
+    throw proibido("So o administrador pode excluir.", "FORBIDDEN_PRIVILEGE");
   return perfil;
 }
 
@@ -74,7 +75,8 @@ export async function desativarConta(id: string, perfilEntrada?: PerfilUsuario) 
 
 export async function desativarUsuario(usuarioId: string, perfilEntrada?: PerfilUsuario) {
   const perfil = exigirAdministrador(perfilEntrada);
-  if (usuarioId === perfil.usuarioId) throw erroValidacao("Voce nao pode excluir o proprio usuario.", "USUARIO_PROPRIO");
+  if (usuarioId === perfil.usuarioId)
+    throw erroValidacao("Voce nao pode excluir o proprio usuario.", "USUARIO_PROPRIO");
   return executarEmTransacao(async (tx) => {
     const alvo = await travarUsuarioRepository(usuarioId, tx);
     if (!alvo) throw naoEncontrado("Usuario nao encontrado");
