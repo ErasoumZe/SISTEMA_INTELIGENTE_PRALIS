@@ -35,6 +35,7 @@ export type CadastroForm = {
   estado: string;
   cnpj: string;
   matriculaPrefixo: string;
+  siglaPlanilha: string;
   fusoHorario: string;
   comprasPrazoRespostaHoras: string;
   email: string;
@@ -168,6 +169,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       cnpj: form.cnpj || null,
       matriculaPrefixo: form.matriculaPrefixo,
+      siglaPlanilha: form.siglaPlanilha || null,
       fusoHorario: form.fusoHorario,
       comprasPrazoRespostaHoras: numeroCampoOuNulo(form.comprasPrazoRespostaHoras)
     };

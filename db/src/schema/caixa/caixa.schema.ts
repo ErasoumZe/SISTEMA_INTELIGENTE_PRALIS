@@ -11,6 +11,7 @@ export {
   fechamentosCaixaRelatoriosMaquininha,
   fechamentosCaixaRelatoriosVendas,
   notificacoes,
+  planilhaTesourariaEnvios,
   quebrasCaixa,
   sangriasRecusadas,
   transferenciasConferenciasFisicas

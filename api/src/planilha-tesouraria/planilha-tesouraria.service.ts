@@ -4,8 +4,7 @@
 import { readFile } from "node:fs/promises";
 import type { PerfilUsuario } from "@padaria/shared";
 import {
-  ABA_CARTOES,
-  ABA_PDV,
+  abasDaEmpresa,
   FORMAS_PDV,
   bandeirasDaLeitura,
   celulasCartao,
@@ -21,6 +20,7 @@ import {
   subtrairManha,
   type Conferencia,
   type EnvioPlanilhaPayload,
+  type EnvioRegistrado,
   type LeituraCartaoPlanilha,
   type PreviaPlanilha,
   type ResultadoEnvioPlanilha
@@ -42,7 +42,13 @@ import {
   lerPdvParaPlanilha
 } from "./gemini-planilha.js";
 import { gravarNaProximaLinha, type ResultadoGravacao } from "./planilha-tesouraria.sheets.js";
-import { buscarCaixaDaManhaRepository } from "./planilha-tesouraria.repository.js";
+import {
+  buscarCaixaDaManhaRepository,
+  buscarSiglaPlanilhaRepository,
+  listarEnviosDoCaixaRepository,
+  registrarEnvioPlanilhaRepository
+} from "./planilha-tesouraria.repository.js";
+import type { JsonValue } from "@padaria/shared/api";
 
 type Caixa = NonNullable<Awaited<ReturnType<typeof buscarCaixaPorIdRepository>>>;
 
@@ -172,25 +178,66 @@ async function previaPdv(caixa: Caixa, pdv: string): Promise<PreviaPlanilha["rel
   };
 }
 
+// O que a IA leu na ultima previa de cada caixa: vai para o registro do envio ("lido" x "enviado"). Em memoria (uma
+// replica); sem previa recente, o registro guarda que a leitura nao estava disponivel.
+const leiturasDaPrevia = new Map<string, { previa: PreviaPlanilha; em: number }>();
+const VALIDADE_PREVIA_MS = 6 * 60 * 60 * 1000;
+
+async function enviosRegistrados(caixaId: string, sigla: string) {
+  const abas = abasDaEmpresa(sigla);
+  const envios = await listarEnviosDoCaixaRepository(caixaId);
+  const registro = (aba: string): EnvioRegistrado | null => {
+    const envio = envios.find((item) => item.aba === aba);
+    return envio
+      ? { enviadoEm: envio.enviadoEm.toISOString(), enviadoPor: envio.enviadoPor, linhaInicial: envio.linhaInicial }
+      : null;
+  };
+  return { cartao: registro(abas.cartoes), relatorioPdv: registro(abas.pdv) };
+}
+
 export async function montarPreviaPlanilha(caixaId: string, perfil: PerfilUsuario): Promise<PreviaPlanilha> {
   const caixa = await caixaEncerrado(caixaId, perfil);
   const pdv = rotuloPdvPlanilha(caixa.pdvNome, caixa.turnoCaixa);
-  const turno = caixa.turnoCaixa === "manha" ? "MANHÃ" : caixa.turnoCaixa === "tarde" ? "TARDE" : null;
-  if (!pdv) {
-    return {
-      caixaId,
-      pdv: null,
-      turno,
-      cartao: null,
-      relatorioPdv: null,
-      avisos: ["PDV OU TURNO DO CAIXA NÃO IDENTIFICADO: NADA SERÁ GRAVADO ATÉ RESOLVER."]
-    };
-  }
-  const [cartao, relatorioPdv] = await Promise.all([previaCartao(caixa, pdv), previaPdv(caixa, pdv)]);
+  const turno: PreviaPlanilha["turno"] =
+    caixa.turnoCaixa === "manha" ? "MANHÃ" : caixa.turnoCaixa === "tarde" ? "TARDE" : null;
+  const sigla = await buscarSiglaPlanilhaRepository(caixa.empresaId);
+  const vazia = (aviso: string): PreviaPlanilha => ({
+    caixaId,
+    pdv,
+    turno,
+    cartao: null,
+    relatorioPdv: null,
+    enviado: { cartao: null, relatorioPdv: null },
+    avisos: [aviso]
+  });
+  if (!sigla)
+    return vazia("EMPRESA SEM ABA CONFIGURADA NA PLANILHA (SIGLA NO CADASTRO DE EMPRESAS). NADA SERÁ GRAVADO.");
+  if (!pdv) return vazia("PDV OU TURNO DO CAIXA NÃO IDENTIFICADO: NADA SERÁ GRAVADO ATÉ RESOLVER.");
+  const [cartao, relatorioPdv, enviado] = await Promise.all([
+    previaCartao(caixa, pdv),
+    previaPdv(caixa, pdv),
+    enviosRegistrados(caixaId, sigla)
+  ]);
   const avisos: string[] = [];
   if (!cartao) avisos.push("SEM FOTO DO RELATÓRIO DA MAQUININHA NESTE FECHAMENTO.");
   if (!relatorioPdv) avisos.push("SEM FOTO DO RELATÓRIO DO PDV (CREARE) NESTE FECHAMENTO.");
-  return { caixaId, pdv, turno, cartao, relatorioPdv, avisos };
+  const previa: PreviaPlanilha = { caixaId, pdv, turno, cartao, relatorioPdv, enviado, avisos };
+  leiturasDaPrevia.set(caixaId, { previa, em: Date.now() });
+  return previa;
+}
+
+function leituraDaPrevia(caixaId: string, parte: "cartao" | "relatorioPdv"): JsonValue {
+  const guardada = leiturasDaPrevia.get(caixaId);
+  if (!guardada || Date.now() - guardada.em > VALIDADE_PREVIA_MS) return { leituraIndisponivel: true };
+  return JSON.parse(JSON.stringify(guardada.previa[parte])) as JsonValue;
+}
+
+function dataHoraBr(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "short",
+    timeStyle: "short"
+  });
 }
 
 function semAcesso(aba: string, faltaConfiguracao: boolean): ResultadoGravacao {
@@ -215,6 +262,15 @@ export async function enviarParaPlanilha(
   if (!pdv) throw erroValidacao("PDV ou turno do caixa não identificado: nada foi gravado.", "PLANILHA_SEM_PDV");
   const planilhaId =
     env.PLANILHA_TESOURARIA_ID ?? (env.NODE_ENV === "production" ? PLANILHA_TESOURARIA_PRODUCAO : null);
+  const sigla = await buscarSiglaPlanilhaRepository(caixa.empresaId);
+  if (!sigla) {
+    throw erroValidacao(
+      "Empresa sem aba configurada na planilha (sigla no cadastro de empresas).",
+      "PLANILHA_SEM_SIGLA"
+    );
+  }
+  const abas = abasDaEmpresa(sigla);
+  const jaEnviado = await enviosRegistrados(caixaId, sigla);
   const linhasCartao = payload.cartao ?? [];
   if (linhasCartao.some((linha) => linha.pdv !== pdv) || (payload.relatorioPdv && payload.relatorioPdv.pdv !== pdv)) {
     throw erroValidacao(`O PDV das linhas precisa ser o do caixa (${pdv}).`, "PLANILHA_PDV_DIFERENTE");
@@ -224,30 +280,56 @@ export async function enviarParaPlanilha(
   }
 
   const gravar = async (
+    parte: "cartao" | "relatorioPdv",
     aba: string,
     ultimaColuna: "L" | "N",
     linhas: Array<Array<string | number>>,
-    chave: typeof chaveCartao
-  ) => {
-    if (!planilhaId) return semAcesso(aba, true);
-    try {
-      return await gravarNaProximaLinha({
-        gateway,
-        planilhaId,
+    chave: typeof chaveCartao,
+    enviado: JsonValue
+  ): Promise<ResultadoGravacao> => {
+    const anterior = jaEnviado[parte];
+    if (anterior) {
+      return {
         aba,
-        ultimaColuna,
-        linhas,
-        chave
-      });
+        gravado: false,
+        linhaInicial: anterior.linhaInicial,
+        linhas: 0,
+        mensagem: `JÁ ENVIADO EM ${dataHoraBr(anterior.enviadoEm)} POR ${anterior.enviadoPor.toUpperCase()}. NADA FOI GRAVADO.`
+      };
+    }
+    if (!planilhaId) return semAcesso(aba, true);
+    let resultado: ResultadoGravacao;
+    try {
+      resultado = await gravarNaProximaLinha({ gateway, planilhaId, aba, ultimaColuna, linhas, chave });
     } catch (erro) {
       return semAcesso(aba, erro instanceof GoogleConfiguracaoAusenteError);
     }
+    if (resultado.gravado && resultado.linhaInicial !== null) {
+      await registrarEnvioPlanilhaRepository({
+        empresaId: caixa.empresaId,
+        fechamentoCaixaId: caixa.id,
+        aba,
+        linhaInicial: resultado.linhaInicial,
+        linhas: resultado.linhas,
+        lido: leituraDaPrevia(caixaId, parte),
+        enviado,
+        enviadoPor: perfil.usuarioId
+      });
+    }
+    return resultado;
   };
   const cartao = linhasCartao.length
-    ? await gravar(ABA_CARTOES, "L", linhasCartao.map(celulasCartao), chaveCartao)
+    ? await gravar("cartao", abas.cartoes, "L", linhasCartao.map(celulasCartao), chaveCartao, linhasCartao as JsonValue)
     : null;
   const relatorioPdv = payload.relatorioPdv
-    ? await gravar(ABA_PDV, "N", [celulasPdv(payload.relatorioPdv)], chavePdv)
+    ? await gravar(
+        "relatorioPdv",
+        abas.pdv,
+        "N",
+        [celulasPdv(payload.relatorioPdv)],
+        chavePdv,
+        payload.relatorioPdv as JsonValue
+      )
     : null;
   return { cartao, relatorioPdv };
 }

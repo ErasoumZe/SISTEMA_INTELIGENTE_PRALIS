@@ -197,10 +197,18 @@ export const empresas = pgTable(
     contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
     fusoHorario: text("fuso_horario").notNull().default("America/Sao_Paulo"),
     comprasPrazoRespostaHoras: integer("compras_prazo_resposta_horas"),
+    // Sigla da empresa no nome das abas da planilha da Tesouraria (ex.: TNP -> ..._TNP_DADOS). Vazia: a empresa nao
+    // envia para a planilha (Marco, 12/11/2026: por enquanto so a TNP). Campo proprio, sem padrao: o prefixo da
+    // matricula nasce "TNP" em toda empresa e mandaria o caixa de outra empresa para a aba da TNP.
+    siglaPlanilha: text("sigla_planilha"),
     criadoEm
   },
   (table) => [
     check("empresas_matricula_prefixo_check", sql`${table.matriculaPrefixo} ~ '^[A-Z0-9]{2,8}$'`),
+    check(
+      "empresas_sigla_planilha_check",
+      sql`${table.siglaPlanilha} is null or ${table.siglaPlanilha} ~ '^[A-Z0-9]{2,10}$'`
+    ),
     check("empresas_fuso_horario_check", sql`btrim(${table.fusoHorario}) <> ''`),
     check(
       "empresas_compras_prazo_resposta_horas_check",
@@ -3722,6 +3730,33 @@ export const sangriasRecusadas = pgTable(
     ),
     check("sangrias_recusadas_valor_positivo_check", sql`${table.valor} > 0`),
     index("sangrias_recusadas_caixa_idx").on(table.fechamentoCaixaId)
+  ]
+);
+
+// Planilha da Tesouraria (Marco, 12/11/2026): cada envio gravado, com quem enviou, onde gravou, o que a IA leu e o que
+// foi enviado (com as correcoes da Tesouraria). Um envio por caixa e aba: o segundo e bloqueado aqui, sem depender de
+// ler a planilha.
+export const planilhaTesourariaEnvios = pgTable(
+  "planilha_tesouraria_envios",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id")
+      .notNull()
+      .references(() => fechamentosCaixa.id, { onDelete: "restrict" }),
+    aba: text("aba").notNull(),
+    linhaInicial: integer("linha_inicial").notNull(),
+    linhas: integer("linhas").notNull(),
+    lido: jsonb("lido").notNull(),
+    enviado: jsonb("enviado").notNull(),
+    enviadoPor: text("enviado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    unique("planilha_tesouraria_envios_caixa_aba_unico").on(table.fechamentoCaixaId, table.aba),
+    check("planilha_tesouraria_envios_linhas_check", sql`${table.linhas} > 0 and ${table.linhaInicial} >= 2`)
   ]
 );
 

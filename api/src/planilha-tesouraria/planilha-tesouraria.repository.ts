@@ -1,5 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { fechamentosCaixa } from "@padaria/db/schema/caixa";
+import type { JsonValue } from "@padaria/shared/api";
+import { empresas, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa, planilhaTesourariaEnvios } from "@padaria/db/schema/caixa";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 /**
@@ -25,4 +27,44 @@ export async function buscarCaixaDaManhaRepository(
     .orderBy(desc(fechamentosCaixa.dataHoraAbertura))
     .limit(1);
   return linha ?? null;
+}
+
+/** Sigla da empresa no nome das abas. Sem sigla, a empresa nao envia para a planilha. */
+export async function buscarSiglaPlanilhaRepository(empresaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ sigla: empresas.siglaPlanilha })
+    .from(empresas)
+    .where(eq(empresas.id, empresaId))
+    .limit(1);
+  return linha?.sigla ?? null;
+}
+
+export async function listarEnviosDoCaixaRepository(fechamentoCaixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      aba: planilhaTesourariaEnvios.aba,
+      linhaInicial: planilhaTesourariaEnvios.linhaInicial,
+      enviadoEm: planilhaTesourariaEnvios.enviadoEm,
+      enviadoPor: perfisUsuarios.nome
+    })
+    .from(planilhaTesourariaEnvios)
+    .innerJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, planilhaTesourariaEnvios.enviadoPor))
+    .where(eq(planilhaTesourariaEnvios.fechamentoCaixaId, fechamentoCaixaId));
+}
+
+/** Registra o envio confirmado. O unique (caixa, aba) impede o segundo registro do mesmo envio. */
+export async function registrarEnvioPlanilhaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    aba: string;
+    linhaInicial: number;
+    linhas: number;
+    lido: JsonValue;
+    enviado: JsonValue;
+    enviadoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  await db.insert(planilhaTesourariaEnvios).values(input).onConflictDoNothing();
 }

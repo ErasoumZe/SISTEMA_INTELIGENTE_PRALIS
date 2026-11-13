@@ -82,6 +82,9 @@ async function enviar() {
   }
 }
 
+const dataHora = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+
 const numero = (valor: string) => {
   const convertido = Number(String(valor).replace(/\./gu, "").replace(",", "."));
   return Number.isFinite(convertido) ? Math.round(convertido * 100) / 100 : 0;
@@ -117,6 +120,21 @@ const numero = (valor: string) => {
       <p v-if="previa.pdv" class="mb-3">
         <strong>PDV:</strong> {{ previa.pdv }} · <strong>Turno:</strong> {{ previa.turno }}
       </p>
+      <v-alert
+        v-for="item in [
+          { nome: 'Relatório de cartões', envio: previa.enviado.cartao },
+          { nome: 'Relatório do PDV', envio: previa.enviado.relatorioPdv }
+        ].filter((registro) => registro.envio)"
+        :key="item.nome"
+        type="info"
+        variant="tonal"
+        density="compact"
+        class="mb-2"
+        data-teste="planilha-ja-enviado"
+      >
+        {{ item.nome }} já enviado em {{ dataHora(item.envio!.enviadoEm) }} por {{ item.envio!.enviadoPor }} (a partir
+        da linha {{ item.envio!.linhaInicial }}).
+      </v-alert>
 
       <div v-if="previa.cartao" class="mb-4">
         <div class="planilha-tesouraria__linha-titulo">

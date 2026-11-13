@@ -31,6 +31,7 @@ export type Opcao = {
   estado?: string;
   cnpj?: string | null;
   matriculaPrefixo?: string;
+  siglaPlanilha?: string | null;
   // Configuracao operacional da empresa (migration 0060). Precisam viajar na opcao porque a grade de
   // cadastro alimenta o formulario de edicao: campo que nao chega na linha reabre vazio e o salvar
   // seguinte grava null em cima do valor correto.

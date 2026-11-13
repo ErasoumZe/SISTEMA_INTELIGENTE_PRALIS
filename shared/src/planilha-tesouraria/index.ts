@@ -6,8 +6,14 @@ import { z } from "zod";
 export const MODALIDADES_CARTAO = ["CRÉDITO", "DÉBITO", "VOUCHER", "PIX"] as const;
 export type ModalidadeCartao = (typeof MODALIDADES_CARTAO)[number];
 
-export const ABA_CARTOES = "API - LANÇAMENTOS_RELATÓRIO_CARTÕES_TNP_DADOS";
-export const ABA_PDV = "API - LANÇAMENTOS_RELATÓRIO_PDV_TNP_DADOS";
+// Mesma planilha, uma aba por empresa (Marco, 12/11/2026): a sigla da empresa entra no nome. Sem sigla, nao envia.
+export function abasDaEmpresa(sigla: string) {
+  const s = sigla.trim().toUpperCase();
+  return {
+    cartoes: `API - LANÇAMENTOS_RELATÓRIO_CARTÕES_${s}_DADOS`,
+    pdv: `API - LANÇAMENTOS_RELATÓRIO_PDV_${s}_DADOS`
+  };
+}
 
 const dinheiro = z.number().finite();
 const dinheiroOuNulo = z.number().finite().nullable();
@@ -80,6 +86,13 @@ export type StatusConferencia = z.infer<typeof statusConferenciaSchema>;
 export const conferenciaSchema = z.object({ status: statusConferenciaSchema, avisos: z.array(z.string()) });
 export type Conferencia = z.infer<typeof conferenciaSchema>;
 
+export const envioRegistradoSchema = z.object({
+  enviadoEm: z.string(),
+  enviadoPor: z.string(),
+  linhaInicial: z.number()
+});
+export type EnvioRegistrado = z.infer<typeof envioRegistradoSchema>;
+
 export const previaPlanilhaSchema = z.object({
   caixaId: z.string().uuid(),
   pdv: z.string().nullable(),
@@ -90,6 +103,8 @@ export const previaPlanilhaSchema = z.object({
   relatorioPdv: z
     .object({ linha: linhaPdvSchema, conferencia: conferenciaSchema, totalImpresso: dinheiroOuNulo })
     .nullable(),
+  // Ja enviado (registro no banco): a tela mostra quando e por quem, e o envio daquela aba fica bloqueado.
+  enviado: z.object({ cartao: envioRegistradoSchema.nullable(), relatorioPdv: envioRegistradoSchema.nullable() }),
   avisos: z.array(z.string())
 });
 export type PreviaPlanilha = z.infer<typeof previaPlanilhaSchema>;

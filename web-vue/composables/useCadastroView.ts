@@ -27,6 +27,7 @@ export function useCadastroView(params: {
         // cima do valor correto. Sem isto, corrigir o nome da empresa zerava o prazo de cotacao e
         // devolvia o fuso para America/Sao_Paulo (fio-edicao-empresa.test.ts).
         matriculaPrefixo: item.matriculaPrefixo ?? undefined,
+        siglaPlanilha: item.siglaPlanilha ?? undefined,
         fusoHorario: item.fusoHorario ?? undefined,
         comprasPrazoRespostaHoras:
           item.comprasPrazoRespostaHoras === null || item.comprasPrazoRespostaHoras === undefined

@@ -9,6 +9,7 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
       nome: empresas.nome,
       cnpj: empresas.cnpj,
       matriculaPrefixo: empresas.matriculaPrefixo,
+      siglaPlanilha: empresas.siglaPlanilha,
       fusoHorario: empresas.fusoHorario,
       comprasPrazoRespostaHoras: empresas.comprasPrazoRespostaHoras,
       contaCofreId: empresas.contaCofreId,
@@ -25,6 +26,7 @@ export async function salvarEmpresaRepository(
     nome: string;
     cnpj: string | null;
     matriculaPrefixo: string;
+    siglaPlanilha?: string | null;
     fusoHorario: string;
     comprasPrazoRespostaHoras: number | null;
   },
@@ -37,6 +39,7 @@ export async function salvarEmpresaRepository(
         nome: input.nome,
         cnpj: input.cnpj,
         matriculaPrefixo: input.matriculaPrefixo,
+        siglaPlanilha: input.siglaPlanilha ?? null,
         fusoHorario: input.fusoHorario,
         comprasPrazoRespostaHoras: input.comprasPrazoRespostaHoras
       })
