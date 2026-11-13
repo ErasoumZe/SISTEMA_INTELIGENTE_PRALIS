@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { criadoId, ok } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
-import { criarCargoPadrao, resumirCargosAcesso, trocarCargoContaPosto } from "./cargos-acesso.service.js";
+import { criarCargoPadrao, resumirCargosAcesso, seguirSoOCargo, trocarCargoContaPosto } from "./cargos-acesso.service.js";
 
 const empresaQuerySchema = z.object({ empresaId: z.string().uuid() });
 // IDs de usuario sao do Better Auth (TEXT, nao UUID).
@@ -36,6 +36,15 @@ export async function registrarRotasCargosAcesso(app: FastifyInstance): Promise<
     async (request) => {
       const { usuarioId } = usuarioParamsSchema.parse(request.params);
       return ok(await trocarCargoContaPosto(usuarioId, request.body, request.perfilUsuario));
+    }
+  );
+
+  app.post(
+    "/api/permissoes/contas-posto/:usuarioId/seguir-cargo",
+    { preHandler: exigirPermissao("cadastro_permissoes_editar") },
+    async (request) => {
+      const { usuarioId } = usuarioParamsSchema.parse(request.params);
+      return ok(await seguirSoOCargo(usuarioId, request.body, request.perfilUsuario));
     }
   );
 }

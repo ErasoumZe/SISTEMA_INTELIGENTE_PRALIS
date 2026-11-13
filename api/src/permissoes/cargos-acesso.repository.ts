@@ -5,7 +5,8 @@ import {
   colaboradoresCargos,
   pdvs,
   perfisUsuarios,
-  permissoesCargos
+  permissoesCargos,
+  permissoesUsuarios
 } from "@padaria/db/schema/cadastro";
 import type { RegrasPermissoes } from "@padaria/shared";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
@@ -41,11 +42,13 @@ export async function listarContasPostoRepository(empresaId: string, db: Executo
       pdvNome: pdvs.nome,
       turnoCaixa: colaboradores.turnoCaixa,
       cargoId: cargos.id,
-      cargoNome: cargos.nome
+      cargoNome: cargos.nome,
+      regrasIndividuais: permissoesUsuarios.regras
     })
     .from(colaboradores)
     .innerJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, colaboradores.usuarioId))
     .innerJoin(pdvs, eq(pdvs.id, colaboradores.pdvPadraoId))
+    .leftJoin(permissoesUsuarios, eq(permissoesUsuarios.usuarioId, colaboradores.usuarioId))
     .leftJoin(
       colaboradoresCargos,
       and(
@@ -133,4 +136,10 @@ export async function trocarCargoAtivoRepository(
       ],
       set: { ativo: true }
     });
+}
+
+// "Seguir so o cargo": apaga as regras individuais da conta. Quem salva em "Acessos por pessoa" grava
+// TODAS as permissoes da pessoa, e essa camada passa por cima do cargo (resolverPermissoesEfetivas).
+export async function apagarAcessoIndividualRepository(usuarioId: string, tx: TransacaoBanco) {
+  await tx.delete(permissoesUsuarios).where(eq(permissoesUsuarios.usuarioId, usuarioId));
 }

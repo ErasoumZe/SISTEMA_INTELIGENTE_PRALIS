@@ -1,5 +1,6 @@
 import {
   criarCargoPadraoPayloadSchema,
+  contaPostoEmpresaPayloadSchema,
   trocarCargoContaPostoPayloadSchema,
   type CargosAcessoResumo,
   type ContaPostoCargo
@@ -12,10 +13,11 @@ import {
   regrasPermissoes as regrasPermissoesReferencia
 } from "@padaria/db/referencia-permissoes";
 import { podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { conflito, erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { buscarCargoEmpresaRepository } from "../usuarios/usuarios.repository.js";
 import {
+  apagarAcessoIndividualRepository,
   criarCargoComRegrasRepository,
   listarCargosDaEmpresaRepository,
   listarContasPostoRepository,
@@ -60,7 +62,8 @@ export async function resumirCargosAcesso(empresaId: string, perfil?: PerfilComE
       email: linha.email,
       posto: rotuloPosto(linha.pdvNome, linha.turnoCaixa),
       cargoId: linha.cargoId,
-      cargoNome: linha.cargoNome
+      cargoNome: linha.cargoNome,
+      acessoIndividual: Object.keys(linha.regrasIndividuais ?? {}).length > 0
     });
   }
   return {
@@ -94,16 +97,20 @@ export async function criarCargoPadrao(body: DadosExternos, perfil?: PerfilComEm
   });
 }
 
+async function travarContaDePosto(usuarioId: string, empresaId: string, tx: TransacaoBanco) {
+  const conta = await travarContaPostoRepository(usuarioId, empresaId, tx);
+  if (!conta) throw naoEncontrado("Conta nao encontrada nesta empresa");
+  if (!conta.pdvPadraoId) throw erroValidacao("Por aqui so se mexe nas contas de posto do Caixa.", "CONTA_SEM_POSTO");
+  return conta;
+}
+
 export async function trocarCargoContaPosto(usuarioId: string, body: DadosExternos, perfil?: PerfilComEmpresa) {
   const dados = trocarCargoContaPostoPayloadSchema.parse(body);
   exigirEmpresa(perfil, dados.empresaId);
   return executarEmTransacao(async (tx) => {
     const cargo = await buscarCargoEmpresaRepository(dados.cargoId, tx);
     if (!cargo || cargo.empresaId !== dados.empresaId) throw naoEncontrado("Cargo nao encontrado nesta empresa");
-    const conta = await travarContaPostoRepository(usuarioId, dados.empresaId, tx);
-    if (!conta) throw naoEncontrado("Conta nao encontrada nesta empresa");
-    if (!conta.pdvPadraoId)
-      throw erroValidacao("Por aqui so se troca o cargo das contas de posto do Caixa.", "CONTA_SEM_POSTO");
+    const conta = await travarContaDePosto(usuarioId, dados.empresaId, tx);
     await trocarCargoAtivoRepository(
       {
         empresaId: dados.empresaId,
@@ -115,5 +122,16 @@ export async function trocarCargoContaPosto(usuarioId: string, body: DadosExtern
       tx
     );
     return { usuarioId, cargoId: dados.cargoId, cargoNome: cargo.nome };
+  });
+}
+
+// A conta de posto passa a seguir so o cargo: as regras salvas em "Acessos por pessoa" saem.
+export async function seguirSoOCargo(usuarioId: string, body: DadosExternos, perfil?: PerfilComEmpresa) {
+  const { empresaId } = contaPostoEmpresaPayloadSchema.parse(body);
+  exigirEmpresa(perfil, empresaId);
+  return executarEmTransacao(async (tx) => {
+    await travarContaDePosto(usuarioId, empresaId, tx);
+    await apagarAcessoIndividualRepository(usuarioId, tx);
+    return { usuarioId, acessoIndividual: false };
   });
 }

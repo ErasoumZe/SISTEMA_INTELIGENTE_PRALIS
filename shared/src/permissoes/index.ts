@@ -59,6 +59,8 @@ export const criarCargoPadraoPayloadSchema = z.object({
   nome: z.string().trim().min(1).max(80)
 });
 
+export const contaPostoEmpresaPayloadSchema = z.object({ empresaId: uuidSchema });
+
 export const trocarCargoContaPostoPayloadSchema = z.object({
   empresaId: uuidSchema,
   cargoId: uuidSchema
@@ -82,6 +84,8 @@ export type ContaPostoCargo = {
   posto: string;
   cargoId: string | null;
   cargoNome: string | null;
+  // Tem regras salvas em "Acessos por pessoa": elas passam por cima do cargo.
+  acessoIndividual: boolean;
 };
 
 export type CargosAcessoResumo = {
