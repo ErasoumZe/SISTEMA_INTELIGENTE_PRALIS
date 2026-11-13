@@ -115,7 +115,7 @@ export async function juntarProdutosAntigosRepository(
     .returning({ id: integracoesVinculos.id });
   const inativados = await tx
     .update(produtos)
-    .set({ status: "inativo", atualizadoEm: new Date() })
+    .set({ status: "inativo", liberadoCompra: false, atualizadoEm: new Date() })
     .where(and(eq(produtos.empresaId, dados.empresaId), inArray(produtos.id, dados.inativarIds)))
     .returning({ id: produtos.id });
   return { ligado: true, vinculos: vinculos.length, inativados: inativados.length };

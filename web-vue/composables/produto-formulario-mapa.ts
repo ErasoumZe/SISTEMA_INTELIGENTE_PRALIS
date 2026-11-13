@@ -46,7 +46,8 @@ export function formularioVazio(empresaId: string) {
     marca: "",
     compraAproximada: false,
     habilitarAjuda: false,
-    // Doc 59: so o liberado para compra entra no pedido de Compras. Comeca desligado.
+    // Doc 59: so o liberado para compra entra no pedido de Compras. O formulario vazio e o da BASE (que nao
+    // libera nada); na loja o produto chega pela copia da BASE e a API libera a revenda (13/11/2026).
     liberadoCompra: false,
     setorVenda1: "",
     setorVenda2: "",

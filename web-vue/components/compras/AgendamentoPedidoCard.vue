@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {
+  arvoreGruposMercadoria,
+  grupoDoRegistro,
   PRAZO_RESPOSTA_ATALHOS,
   type AgendamentoDto,
   type AgendamentoPayload,
@@ -12,6 +14,7 @@ import {
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import MargemVariacaoCampo from "~/components/compras/MargemVariacaoCampo.vue";
 import RecorrenciaCampo from "~/components/compras/RecorrenciaCampo.vue";
+import ProdutoGrupoSubgrupo from "~/components/produtos/ProdutoGrupoSubgrupo.vue";
 
 // O formulário do agendamento de pedido (doc 56 §2.2, doc 58 §1/§2/§8), em quatro partes com o porquê de cada
 // uma: o pedido (grupo e os produtos marcados na lista de baixo), quando (primeira data e repetição), quem executa
@@ -33,9 +36,11 @@ const diaLocal = (instante: Date) => DIA_LOCAL.format(instante);
 const hoje = () => diaLocal(new Date());
 const amanha = () => diaLocal(new Date(Date.now() + 86_400_000));
 
+// Grupo e Subgrupo (R-241): o agendamento guarda UM registro de grupo ("MER BEBIDAS - SUCOS"); a tela divide em
+// Grupo (BEBIDAS) e Subgrupo (SUCOS), igual ao cadastro de produto.
 const form = reactive({
-  grupo: "",
-  subgrupo: "",
+  grupo: null as string | null,
+  grupoMercadoriaId: null as string | null,
   inicioData: amanha(),
   inicioHora: "08:00",
   prazo: 24 as number,
@@ -49,8 +54,6 @@ const regra = ref<RegraRecorrencia>({ tipo: "padrao", frequencia: "semanal", int
 const termino = ref<TerminoRecorrencia>({ tipo: "nunca" });
 const erro = ref("");
 
-const gruposPai = computed(() => props.grupos.filter((grupo) => !grupo.grupoPaiId));
-const subgrupos = computed(() => props.grupos.filter((grupo) => grupo.grupoPaiId && grupo.grupoPaiId === form.grupo));
 const totalMarcados = computed(() => props.produtosMarcados.length);
 const PRAZOS = PRAZO_RESPOSTA_ATALHOS.map((horas) => ({
   value: horas,
@@ -59,8 +62,8 @@ const PRAZOS = PRAZO_RESPOSTA_ATALHOS.map((horas) => ({
 
 function limpar() {
   Object.assign(form, {
-    grupo: "",
-    subgrupo: "",
+    grupo: null,
+    grupoMercadoriaId: null,
     inicioData: amanha(),
     inicioHora: "08:00",
     prazo: 24,
@@ -79,10 +82,9 @@ watch(
   () => props.editando,
   (agenda) => {
     if (!agenda) return limpar();
-    const grupo = props.grupos.find((item) => item.id === agenda.grupoMercadoriaId);
     Object.assign(form, {
-      grupo: grupo?.grupoPaiId ?? agenda.grupoMercadoriaId,
-      subgrupo: grupo?.grupoPaiId ? agenda.grupoMercadoriaId : "",
+      grupo: grupoDoRegistro(arvoreGruposMercadoria(props.grupos), agenda.grupoMercadoriaId)?.chave ?? null,
+      grupoMercadoriaId: agenda.grupoMercadoriaId,
       inicioData: agenda.inicioData,
       inicioHora: agenda.inicioHora,
       prazo: agenda.prazoRespostaHoras,
@@ -97,18 +99,11 @@ watch(
   },
   { immediate: true }
 );
-watch(
-  () => form.grupo,
-  (novo, antigo) => {
-    if (antigo !== undefined && novo !== antigo && !subgrupos.value.some((item) => item.id === form.subgrupo))
-      form.subgrupo = "";
-  }
-);
-
 function salvar() {
   erro.value = "";
-  const grupoMercadoriaId = form.subgrupo || form.grupo;
-  if (!grupoMercadoriaId) return void (erro.value = "Escolha o grupo do pedido.");
+  const grupoMercadoriaId = form.grupoMercadoriaId;
+  if (!grupoMercadoriaId)
+    return void (erro.value = form.grupo ? "Escolha o subgrupo do pedido." : "Escolha o grupo do pedido.");
   if (!totalMarcados.value) return void (erro.value = "Marque ao menos um produto na lista abaixo.");
   if (!form.inicioData || !form.inicioHora) return void (erro.value = "Informe a data e a hora do primeiro pedido.");
   if (!form.responsavelId) return void (erro.value = "Escolha o responsável por executar o pedido.");
@@ -160,24 +155,14 @@ defineExpose({ limpar });
           <span>O grupo e os produtos marcados na lista abaixo.</span>
         </div>
         <div class="form__campos">
-          <v-select
-            v-model="form.grupo"
-            :items="gruposPai"
-            item-title="nome"
-            item-value="id"
-            label="Grupo *"
-            hide-details="auto"
-          />
-          <v-select
-            v-model="form.subgrupo"
-            :items="subgrupos"
-            item-title="nome"
-            item-value="id"
-            label="Subgrupo"
-            clearable
-            :disabled="!subgrupos.length"
-            hide-details="auto"
-          />
+          <div class="form__largo">
+            <ProdutoGrupoSubgrupo
+              v-model="form.grupoMercadoriaId"
+              v-model:grupo="form.grupo"
+              :grupos="grupos"
+              obrigatorio
+            />
+          </div>
           <p class="form__info" :class="{ 'form__info--ok': totalMarcados }" data-campo="produtos-marcados">
             <v-icon :icon="totalMarcados ? 'mdi-check-circle' : 'mdi-arrow-down-circle-outline'" size="18" />
             {{ totalMarcados }} produto(s) marcado(s) na lista abaixo

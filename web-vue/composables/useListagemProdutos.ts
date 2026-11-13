@@ -37,7 +37,8 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   const status = ref<string | null>("ativo");
   const somenteVendidos = ref(false);
   const tipo = ref<string | null>(null);
-  const grupoMercadoriaId = ref<string | null>(null);
+  // Grupo inteiro (todos os subgrupos) ou um subgrupo: lista de IDs (13/11/2026).
+  const grupoMercadoriaIds = ref<string[]>([]);
   const setorEstoque = ref<string | null>(null);
   // Doc 59: liberados, nao liberados ou pendentes (liberado com o cadastro de compra incompleto).
   const compra = ref<string | null>(null);
@@ -51,7 +52,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
       [
         status.value && status.value !== "ativo" ? status.value : null,
         tipo.value,
-        grupoMercadoriaId.value,
+        grupoMercadoriaIds.value.length ? "grupo" : null,
         setorEstoque.value,
         compra.value,
         somenteVendidos.value
@@ -63,7 +64,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     status.value = "ativo";
     somenteVendidos.value = false;
     tipo.value = null;
-    grupoMercadoriaId.value = null;
+    grupoMercadoriaIds.value = [];
     setorEstoque.value = null;
     compra.value = null;
     ordenar.value = "recentes";
@@ -81,7 +82,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     if (status.value) parametros.set("status", status.value);
     if (somenteVendidos.value) parametros.set("somenteVendidos", "true");
     if (tipo.value) parametros.set("tipo", tipo.value);
-    if (grupoMercadoriaId.value) parametros.set("grupoMercadoriaId", grupoMercadoriaId.value);
+    if (grupoMercadoriaIds.value.length) parametros.set("grupoMercadoriaId", grupoMercadoriaIds.value.join(","));
     if (setorEstoque.value) parametros.set("setorEstoque", setorEstoque.value);
     if (compra.value) parametros.set("compra", compra.value);
     return parametros.toString();
@@ -131,7 +132,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
       void carregar();
     }, ATRASO_DA_BUSCA);
   });
-  watch([status, somenteVendidos, tipo, grupoMercadoriaId, setorEstoque, compra, ordenar], () => {
+  watch([status, somenteVendidos, tipo, grupoMercadoriaIds, setorEstoque, compra, ordenar], () => {
     paginacao.page = 1;
     void carregar();
   });
@@ -141,6 +142,8 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   );
   watch(empresaId, async () => {
     paginacao.page = 1;
+    // Os IDs de grupo são da loja anterior: na loja nova o filtro esvaziaria a lista (R-241).
+    grupoMercadoriaIds.value = [];
     await Promise.all([carregar(), carregarOpcoesDeFiltro()]);
   });
 
@@ -157,7 +160,7 @@ export function useListagemProdutos(empresaId: Ref<string>) {
     status,
     somenteVendidos,
     tipo,
-    grupoMercadoriaId,
+    grupoMercadoriaIds,
     setorEstoque,
     compra,
     ordenar,

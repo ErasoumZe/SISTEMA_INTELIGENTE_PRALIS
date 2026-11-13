@@ -183,7 +183,7 @@ onMounted(async () => {
           <ProdutoFiltros
             v-model:status="lista.status.value"
             v-model:tipo="lista.tipo.value"
-            v-model:grupo="lista.grupoMercadoriaId.value"
+            v-model:grupos="lista.grupoMercadoriaIds.value"
             v-model:setor="lista.setorEstoque.value"
             v-model:compra="lista.compra.value"
             v-model:ordenar="lista.ordenar.value"

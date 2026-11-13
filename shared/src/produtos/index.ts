@@ -216,7 +216,14 @@ export const produtosListaQuerySchema = empresaQuerySchema.extend({
   busca: z.string().trim().max(120).optional(),
   status: statusProdutoSchema.optional(),
   tipo: tipoProdutoSchema.optional(),
-  grupoMercadoriaId: uuidSchema.optional(),
+  // Um ou mais grupos separados por virgula: escolher so o Grupo (ex.: BEBIDAS) filtra todos os subgrupos dele.
+  grupoMercadoriaId: z
+    .string()
+    .trim()
+    .max(8000)
+    .optional()
+    .transform((valor) => (valor ? valor.split(",").map((id) => id.trim()) : undefined))
+    .pipe(z.array(uuidSchema).min(1).max(200).optional()),
   setorEstoque: z.string().trim().max(120).optional(),
   somenteVendidos: z
     .enum(["true", "false"])
@@ -460,3 +467,5 @@ export * from "./semelhanca-de-nome.js";
 export * from "./codigo-cadastro.js";
 export * from "./custo-mer.js";
 export * from "./grupo-id.js";
+export * from "./grupo-subgrupo.js";
+export * from "./liberacao-compra.js";

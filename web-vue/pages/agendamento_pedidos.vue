@@ -65,7 +65,13 @@ function novo() {
 function editar(item: AgendamentoDto) {
   editando.value = item;
   formAberto.value = true;
-  marcados.value = item.produtos.map((produto) => produto.produtoId);
+  // A lista só traz o que está liberado para compra: produto inativado (que perde a liberação, R-241) sai dos
+  // marcados, senão a agenda não salva e ele nem aparece para ser desmarcado.
+  const disponiveis = new Set(produtos.value.map((produto) => produto.id));
+  marcados.value = item.produtos.map((produto) => produto.produtoId).filter((id) => disponiveis.has(id));
+  const fora = item.produtos.length - marcados.value.length;
+  if (fora)
+    notificar(`${fora} produto(s) desta agenda não estão mais liberados para compra e saíram da lista.`, "warning");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function salvar(payload: AgendamentoPayload, aPartirDe: string | undefined) {

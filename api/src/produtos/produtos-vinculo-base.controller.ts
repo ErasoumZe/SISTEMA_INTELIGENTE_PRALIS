@@ -6,6 +6,7 @@ import { empresasPermitidas } from "../auth/empresa.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
 import { aplicarGruposOficiais, previaGruposOficiais } from "./produtos-grupos-oficiais.service.js";
+import { aplicarLiberarRevenda, previaLiberarRevenda } from "./produtos-liberar-revenda.service.js";
 import { aplicarVinculoBase, previaVinculoBase, VinculoBaseError } from "./produtos-vinculo-base.service.js";
 
 const empresa = z.object({ empresaId: z.string().uuid() });
@@ -75,6 +76,32 @@ export async function registrarRotasVinculoBase(app: FastifyInstance): Promise<v
       const resultado = await aplicarGruposOficiais(empresaId, entrada, ator(request));
       request.log.info({
         evento: "produtos.grupos_oficiais.aplicado",
+        usuarioId: request.usuarioId,
+        empresaId,
+        ...resultado
+      });
+      return ok(resultado);
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  // Liberar para compra toda a revenda ativa (13/11/2026, igual ao S2): mesmo rito de prévia + frase + hash.
+  app.get("/api/produtos/liberar-revenda/previa", guarda, async (request, reply) => {
+    try {
+      const { empresaId } = empresa.parse(request.query);
+      return ok(await previaLiberarRevenda(empresaId, ator(request)));
+    } catch (error) {
+      return responderErro(reply, error);
+    }
+  });
+
+  app.post("/api/produtos/liberar-revenda", guarda, async (request, reply) => {
+    try {
+      const { empresaId, ...entrada } = corpo.parse(request.body);
+      const resultado = await aplicarLiberarRevenda(empresaId, entrada, ator(request));
+      request.log.info({
+        evento: "produtos.liberar_revenda.aplicado",
         usuarioId: request.usuarioId,
         empresaId,
         ...resultado

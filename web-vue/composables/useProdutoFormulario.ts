@@ -87,6 +87,13 @@ export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<stri
     },
     { deep: true }
   );
+  // Inativo nunca fica liberado para compra (13/11/2026, igual ao S2); a API garante o mesmo ao gravar.
+  watch(
+    () => form.value.status,
+    (status) => {
+      if (status === "inativo") form.value.liberadoCompra = false;
+    }
+  );
 
   const siglaDaUnidade = computed(
     () => unidades.value.find((unidade) => unidade.id === form.value.unidadeIndividualId)?.sigla ?? ""

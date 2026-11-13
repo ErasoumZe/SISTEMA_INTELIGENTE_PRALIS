@@ -4,6 +4,7 @@
  * Tabela no computador; no celular, cada produto vira um bloco com as mesmas informações.
  */
 import type { ProdutoEstoqueDto } from "@padaria/shared";
+import { rotuloGrupoMercadoria } from "@padaria/shared";
 import ComprasSituacao from "~/components/compras/base/ComprasSituacao.vue";
 import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 import type { TomSituacao } from "~/utils/compras-visual";
@@ -51,7 +52,7 @@ const local = (produto: ProdutoEstoqueDto) =>
             <td>
               <span class="produto">{{ produto.descricao }}</span>
               <span class="sub"
-                >{{ produto.grupo ?? "Sem grupo"
+                >{{ produto.grupo ? rotuloGrupoMercadoria(produto.grupo) : "Sem grupo"
                 }}<template v-if="produto.curvaAbc"> · curva {{ produto.curvaAbc }}</template></span
               >
             </td>

@@ -6,7 +6,12 @@
  * produto não vai neste pedido.
  */
 import { useDisplay } from "vuetify";
-import { podeConvidar, type EnviarSolicitacaoCompraPayload, type SolicitacaoCompraDetalheDto } from "@padaria/shared";
+import {
+  podeConvidar,
+  rotuloGrupoMercadoria,
+  type EnviarSolicitacaoCompraPayload,
+  type SolicitacaoCompraDetalheDto
+} from "@padaria/shared";
 import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
 import type { Opcao } from "~/types/padaria";
@@ -83,7 +88,7 @@ const telaPequena = useDisplay().xs;
     <v-card v-if="detalhe" class="solicitacao" data-dialogo="solicitacao-compra">
       <header class="solicitacao__topo">
         <div class="solicitacao__titulos">
-          <h2 class="solicitacao__titulo">{{ detalhe.grupoNome }}</h2>
+          <h2 class="solicitacao__titulo">{{ rotuloGrupoMercadoria(detalhe.grupoNome) }}</h2>
           <p class="solicitacao__meta">
             <span>Pedido de {{ DATA_HORA.format(new Date(detalhe.dataAtual)) }}</span>
             <span>Resposta em {{ detalhe.prazoRespostaHoras }} h</span>

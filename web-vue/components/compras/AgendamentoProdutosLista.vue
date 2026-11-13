@@ -2,7 +2,7 @@
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import BolinhasLegenda from "~/components/compras/BolinhasLegenda.vue";
 import ProdutoBolinhas from "~/components/compras/ProdutoBolinhas.vue";
-import type { GrupoAgendamentoDto, ProdutoAgendamentoDto } from "@padaria/shared";
+import { arvoreGruposMercadoria, type GrupoAgendamentoDto, type ProdutoAgendamentoDto } from "@padaria/shared";
 
 // A lista de produtos do agendamento (doc 56 §2.1): filtros por grupo/subgrupo, área, local de estoque e
 // local de venda; marca o que entra no pedido; bolinhas verde (mais vende), amarela (mais compramos) e
@@ -12,14 +12,26 @@ const props = defineProps<{ produtos: ProdutoAgendamentoDto[]; grupos: GrupoAgen
 const selecionados = defineModel<string[]>({ required: true });
 const marcado = computed(() => new Set(selecionados.value));
 
-const filtro = reactive({ grupo: "", subgrupo: "", area: "", localEstoque: "", localVenda: "", busca: "" });
+// Grupo e Subgrupo (R-241): o Grupo (BEBIDAS) junta todos os registros "MER BEBIDAS - ..."; o Subgrupo é um deles.
+const filtro = reactive({
+  grupo: null as string | null,
+  subgrupo: null as string | null,
+  area: "",
+  localEstoque: "",
+  localVenda: "",
+  busca: ""
+});
 const somenteMarcados = ref(false);
 
-const gruposPai = computed(() => props.grupos.filter((grupo) => !grupo.grupoPaiId));
-const subgrupos = computed(() => props.grupos.filter((grupo) => grupo.grupoPaiId && grupo.grupoPaiId === filtro.grupo));
+const arvore = computed(() => arvoreGruposMercadoria(props.grupos));
+const grupoEscolhido = computed(() => arvore.value.find((item) => item.chave === filtro.grupo) ?? null);
+const opcoesGrupo = computed(() => arvore.value.map((item) => ({ value: item.chave, title: item.grupo })));
+const opcoesSubgrupo = computed(() =>
+  (grupoEscolhido.value?.subgrupos ?? []).map((sub) => ({ value: sub.id, title: sub.subgrupo || "(sem subgrupo)" }))
+);
 watch(
   () => filtro.grupo,
-  () => (filtro.subgrupo = "")
+  () => (filtro.subgrupo = null)
 );
 
 const distintos = (seletor: (produto: ProdutoAgendamentoDto) => Array<string | null>) =>
@@ -32,11 +44,11 @@ const areas = distintos((produto) => [produto.areaEstoque]);
 const locaisEstoque = distintos((produto) => [produto.localEstoque]);
 const locaisVenda = distintos((produto) => produto.localVenda);
 
-/** Grupos que contam para o filtro: o subgrupo escolhido, ou o grupo e todos os subgrupos dele. */
+/** Registros que contam para o filtro: o subgrupo escolhido, ou todos os subgrupos do grupo. */
 const gruposDoFiltro = computed(() => {
   if (filtro.subgrupo) return new Set([filtro.subgrupo]);
-  if (!filtro.grupo) return null;
-  return new Set([filtro.grupo, ...subgrupos.value.map((grupo) => grupo.id)]);
+  if (!grupoEscolhido.value) return null;
+  return new Set(grupoEscolhido.value.subgrupos.map((sub) => sub.id));
 });
 
 const visiveis = computed(() => {
@@ -90,11 +102,9 @@ const numero = (valor: string | null) =>
           aria-label="Buscar produto"
           class="filtro filtro--busca"
         />
-        <v-select
+        <v-autocomplete
           v-model="filtro.grupo"
-          :items="gruposPai"
-          item-title="nome"
-          item-value="id"
+          :items="opcoesGrupo"
           label="Grupo"
           clearable
           density="compact"
@@ -103,14 +113,12 @@ const numero = (valor: string | null) =>
         />
         <v-select
           v-model="filtro.subgrupo"
-          :items="subgrupos"
-          item-title="nome"
-          item-value="id"
+          :items="opcoesSubgrupo"
           label="Subgrupo"
           clearable
           density="compact"
           hide-details
-          :disabled="!subgrupos.length"
+          :disabled="opcoesSubgrupo.length < 2"
           class="filtro"
         />
         <v-select

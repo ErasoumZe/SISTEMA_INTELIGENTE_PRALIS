@@ -1452,10 +1452,11 @@ feita pelo caixa da tarde). O sistema decide sozinho se o caixa é manhã ou tar
 **Conferência da leitura da maquininha (Marco, 11/11/2026).** A IA lê, o servidor confere a conta do próprio
 comprovante antes de devolver a leitura (`conferirSomasDaLeitura`): (1) o TOTAL de cada forma tem de ser a soma
 das bandeiras impressas; se não for, o valor some e o campo fica para o operador digitar olhando a foto; (2) crédito
-+ débito + Pix + voucher tem de dar o TOTAL EFETIVADO; se não der, o campo sem bandeiras para conferir (ou o próprio
-TOTAL EFETIVADO) fica destravado para revisão, sem apagar o que foi lido. Nada é trocado por um valor calculado. O
-texto da IA avisa que o zero cortado (Ø) da bobina é 0, nunca 8. Caso real: PagBank do PDV 1 Manhã da Lisboa 2,
-10/11, CREDITO A VISTA 707,21 lido como 787,21 e travado na tela.
+
+- débito + Pix + voucher tem de dar o TOTAL EFETIVADO; se não der, o campo sem bandeiras para conferir (ou o próprio
+  TOTAL EFETIVADO) fica destravado para revisão, sem apagar o que foi lido. Nada é trocado por um valor calculado. O
+  texto da IA avisa que o zero cortado (Ø) da bobina é 0, nunca 8. Caso real: PagBank do PDV 1 Manhã da Lisboa 2,
+  10/11, CREDITO A VISTA 707,21 lido como 787,21 e travado na tela.
 
 ### R-229 — Postos do caixa: PDV + turno do caixa, separados dos turnos do DP (Marco, 29/10/2026)
 
@@ -1698,3 +1699,32 @@ esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou f
   - **Sangria recusada por passar do caixa** (Marco, 12/11/2026): a recusa revelava o esperado (tentando valores). A
     regra do teto (D1) não muda, mas cada recusa fica registrada (`sangrias_recusadas`: caixa, quem, valor, motivo) e,
     a partir da 3ª no mesmo caixa, a Tesouraria recebe o aviso "sangrias recusadas" (uma vez por caixa).
+
+### R-241 — Grupo e subgrupo de mercadoria divididos na tela; revenda liberada para compra (José, 13/11/2026)
+
+Decisões do José, para o S1 ficar igual ao S2:
+
+- **Grupo e subgrupo.** O grupo de mercadoria continua sendo **um registro com o nome completo da planilha
+  oficial** (ex.: "MER BEBIDAS - SUCOS"): o nome não muda, porque a integração com o PDV procura o ID do grupo por
+  esse nome (R-222). A divisão é **só de leitura**, pela regra do S2: o **grupo** é o texto antes do primeiro
+  " - ", sem o prefixo "MER" (BEBIDAS), e o **subgrupo** é o resto (SUCOS). Grupo sem " - " (ex.: "Insumos") não
+  tem subgrupo. Regra pura em `shared/src/produtos/grupo-subgrupo.ts`.
+  - **Cadastro de produto:** o campo único "Grupo de mercadorias" virou **Grupo** + **Subgrupo**.
+  - **Lista de produtos:** filtro **Grupo** (todos os subgrupos dele) + **Subgrupo**; o cartão mostra
+    "BEBIDAS › SUCOS". A API aceita vários grupos em `grupoMercadoriaId`, separados por vírgula.
+  - **Estoque de produtos:** a linha mostra "BEBIDAS › SUCOS".
+  - **Agendamento de pedidos e Agendamento de conferência:** o formulário e o filtro da lista de produtos usam
+    **Grupo** + **Subgrupo** (a tela deixou de usar o `grupo_pai_id`, vazio na TNP). O agendamento continua
+    gravando **um** registro de grupo: quando o Grupo tem vários subgrupos, o Subgrupo é obrigatório no pedido; na
+    conferência, ou se escolhe o Subgrupo ou se limpa o Grupo (todo o estoque). As listas de agendamentos, a
+    Solicitação de compra e as conferências mostram "BEBIDAS › SUCOS".
+- **Liberado para compra (substitui o "começa com todos em não" do doc 59, §2.1):**
+  - produto novo de **revenda** que chega à loja nasce **liberado**; transformação (feito na casa) nasce desligado;
+  - **inativar desliga** a liberação (um produto, em lote e na limpeza da central); reativar não liga de volta;
+  - **Manutenção do catálogo → "Liberar a revenda para compra"** (só administrador): liga a liberação em toda a
+    **revenda ativa** da loja, com prévia, frase `LIBERAR REVENDA PARA COMPRA` e hash da prévia. Transformação e
+    inativos ficam como estão; nada é desligado.
+  - Em 13/11/2026 a TNP tinha 2.548 produtos ativos (2.104 de revenda e 444 de transformação), só 2 liberados.
+    O doc 59 estimava (Rodrigo) que não passam de 300 os comprados por pedido: com a revenda toda liberada, as
+    listas de pedido mostram todos os produtos do grupo. Os 1.429 ativos sem grupo não aparecem em agendamento
+    por grupo.

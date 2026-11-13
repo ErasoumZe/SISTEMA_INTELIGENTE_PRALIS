@@ -7,6 +7,7 @@
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import ProdutoCartao from "~/components/produtos/ProdutoCartao.vue";
 import ProdutoEstoqueDaLoja from "~/components/produtos/ProdutoEstoqueDaLoja.vue";
+import ProdutoGrupoSubgrupo from "~/components/produtos/ProdutoGrupoSubgrupo.vue";
 import ProdutoTransformacao from "~/components/produtos/ProdutoTransformacao.vue";
 import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
 import { AREAS_VENDA_TNP, SETORES_ESTOQUE, opcoesComAtual } from "~/utils/produto-listas";
@@ -61,24 +62,14 @@ const dicaDaMargem = computed(() =>
       <v-btn value="transformacao">Transformação</v-btn>
     </v-btn-toggle>
 
-    <v-row dense>
-      <v-col cols="12">
-        <v-autocomplete
-          v-model="form.grupoMercadoriaId"
-          :items="grupos"
-          item-title="nome"
-          item-value="id"
-          label="Grupo de mercadorias *"
-          placeholder="Digite parte do nome, ex.: LEITE"
-          :no-data-text="grupos.length ? 'Nenhum grupo encontrado' : 'Nenhum grupo fiscal disponível'"
-          :clearable="!grupoObrigatorio && !travado"
-          data-campo="grupoMercadoriaId"
-          :error-messages="erros['grupoMercadoriaId']"
-          :hint="dica('grupoMercadoria')"
-          :readonly="travado"
-        />
-      </v-col>
-    </v-row>
+    <ProdutoGrupoSubgrupo
+      v-model="form.grupoMercadoriaId"
+      :grupos="grupos"
+      :obrigatorio="grupoObrigatorio"
+      :travado="travado"
+      :erro="erros['grupoMercadoriaId']"
+      :dica="dica('grupoMercadoria')"
+    />
 
     <div class="cartao__subtitulo">
       <strong>{{ naBase ? "Operação" : "Desta loja" }}</strong
