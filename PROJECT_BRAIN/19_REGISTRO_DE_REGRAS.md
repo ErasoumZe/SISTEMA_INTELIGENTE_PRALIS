@@ -1631,6 +1631,14 @@ Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficia
   das contas "PDV 4 · Manhã/Tarde" para ele. Conta com "acesso individual" (salvo em Acessos por pessoa) ignora o
   cargo: usar "Seguir só o cargo". Conta de posto só aceita os cargos Caixa e Caixa Gerente.
 
+### R-240 — A Tesouraria transfere para qualquer conta da empresa (Marco, 13/11/2026)
+
+- "A Tesouraria, de forma natural, consegue fazer transferências para todas as contas e usuários de PDV, fluxos,
+  cofres, bancos, contas." O **destino** da Nova transferência, para quem confere o fechamento
+  (`fechamentos_caixa_conferir`), lista **todas as contas da empresa**, sem vincular conta por conta.
+- A **origem** continua sendo só as contas vinculadas à pessoa (Transferências → Contas). Os demais usuários seguem a
+  regra de 27/07 (só contas vinculadas; administrador vê todas).
+
 ### R-239 — O número do lacre volta a valer depois da baixa (Marco, 12/11/2026)
 
 **Supera em parte a R-021** ("o lacre não se repete"). Os lacres vêm em lotes comprados com numeração impressa, e

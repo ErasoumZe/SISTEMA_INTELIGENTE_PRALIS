@@ -153,6 +153,8 @@ export type PermissoesPaginadas = {
 export type Opcoes = {
   empresas: Opcao[];
   contas: Opcao[];
+  // Destino da transferencia: a Tesouraria ve todas as contas da empresa (13/11/2026). Ausente = `contas`.
+  contasDestinoTransferencia?: Opcao[];
   formasPagamento: Opcao[];
   fornecedores: Opcao[];
   clientes: Opcao[];
