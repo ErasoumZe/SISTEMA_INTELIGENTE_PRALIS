@@ -50,3 +50,42 @@ export type TipoPermissao = z.infer<typeof tipoPermissaoSchema>;
 export type PermissaoPayload = z.infer<typeof permissaoPayloadSchema>;
 export type PermissoesPaginadasQuery = z.infer<typeof permissoesPaginadasQuerySchema>;
 export type ExcluirPermissaoQuery = z.infer<typeof excluirPermissaoQuerySchema>;
+
+// Cargos de acesso (Marco, 13/11/2026): a aba "Cargos" de Permissoes mostra os cargos da empresa,
+// restaura o padrao de cada um, cria o cargo de referencia que falta (ex.: "Caixa Gerente") e troca o
+// cargo das contas de posto do Caixa. So contas de posto: o cargo de quem e do DP continua no DP.
+export const criarCargoPadraoPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().trim().min(1).max(80)
+});
+
+export const trocarCargoContaPostoPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  cargoId: uuidSchema
+});
+
+export type CriarCargoPadraoPayload = z.infer<typeof criarCargoPadraoPayloadSchema>;
+export type TrocarCargoContaPostoPayload = z.infer<typeof trocarCargoContaPostoPayloadSchema>;
+
+export type CargoAcesso = {
+  id: string;
+  nome: string;
+  temPadrao: boolean;
+  permitidas: number;
+  pessoas: number;
+};
+
+export type ContaPostoCargo = {
+  usuarioId: string;
+  nome: string;
+  email: string;
+  posto: string;
+  cargoId: string | null;
+  cargoNome: string | null;
+};
+
+export type CargosAcessoResumo = {
+  cargos: CargoAcesso[];
+  padroesFaltando: string[];
+  contasPosto: ContaPostoCargo[];
+};
