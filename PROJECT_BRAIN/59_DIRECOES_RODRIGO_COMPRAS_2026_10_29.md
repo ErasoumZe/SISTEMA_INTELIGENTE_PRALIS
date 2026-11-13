@@ -25,7 +25,7 @@
 **[PRÉ-REQUISITO] 2.1 Produto "liberado para compra"**
 
 - Cada produto ganha uma marcação **"liberado para compra (pelo pedido)": sim ou não**.
-- **Começa com todos em "não".** Quem compra vai liberando um a um, olhando a geladeira, as vitrines e a planilha.
+- ~~**Começa com todos em "não".** Quem compra vai liberando um a um, olhando a geladeira, as vitrines e a planilha.~~ **Superado pela R-240 (José, 13/11/2026):** revenda nova nasce liberada, inativar desliga, e a revenda ativa é liberada em lote pela Manutenção do catálogo.
 - Ao liberar, completa no produto:
   - **como se compra** (caixa, fardo, pacote, com quantas unidades);
   - **estoque mínimo e máximo**;

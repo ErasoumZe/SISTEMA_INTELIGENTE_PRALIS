@@ -63,7 +63,7 @@ export interface FiltroListaProdutos {
   busca?: string | undefined;
   status?: string | undefined;
   tipo?: string | undefined;
-  grupoMercadoriaId?: string | undefined;
+  grupoMercadoriaIds?: string[] | undefined;
   setorEstoque?: string | undefined;
   somenteVendidos?: boolean | undefined;
   compra?: CompraProdutoFiltro | undefined;
@@ -76,7 +76,7 @@ function condicoesDaLista(filtro: FiltroListaProdutos): SQL | undefined {
   const condicoes: Array<SQL | undefined> = [inArray(produtos.empresaId, filtro.escopoEmpresas)];
   if (filtro.status) condicoes.push(eq(produtos.status, filtro.status));
   if (filtro.tipo) condicoes.push(eq(produtos.tipo, filtro.tipo));
-  if (filtro.grupoMercadoriaId) condicoes.push(eq(produtos.grupoMercadoriaId, filtro.grupoMercadoriaId));
+  if (filtro.grupoMercadoriaIds?.length) condicoes.push(inArray(produtos.grupoMercadoriaId, filtro.grupoMercadoriaIds));
   if (filtro.setorEstoque) condicoes.push(eq(produtos.setorEstoque, filtro.setorEstoque));
   if (filtro.compra) condicoes.push(condicaoDeCompra(filtro.compra));
   if (filtro.somenteVendidos) {

@@ -4,6 +4,8 @@ import {
   calcularPrecoVendaComPromocao,
   grupoIdDaEntrada,
   grupoIdDoNome,
+  liberadoCompraAoCriar,
+  liberadoCompraAoGravar,
   normalizarTextosProduto,
   produtoPayloadSchema,
   TECLA_BALANCA_FIXA,
@@ -369,8 +371,12 @@ export async function salvarProduto(
           produtoBaseId: opcoes.produtoBaseId ?? alvo?.produtoBaseId ?? null,
           codigoInterno: opcoes.codigoInterno ?? null,
           criadoPor: ator.usuarioId ?? null,
-          // Doc 59: quem nao manda o campo (copia da BASE, fase B2) mantem o que ja estava.
-          liberadoCompra: dados.liberadoCompra ?? alvo?.liberadoCompra ?? false
+          // Quem nao manda o campo (copia da BASE, fase B2) mantem o que ja estava; produto novo de revenda nasce
+          // liberado e inativo nunca fica liberado (decisao do Jose, 13/11/2026, igual ao S2).
+          liberadoCompra: liberadoCompraAoGravar(
+            dados.status,
+            dados.liberadoCompra ?? alvo?.liberadoCompra ?? liberadoCompraAoCriar(dados.tipo)
+          )
         }
       )
     );

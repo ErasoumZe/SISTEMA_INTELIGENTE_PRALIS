@@ -7,6 +7,7 @@
  * Nao existe botao de EXCLUIR: produto e inativado, nunca apagado.
  */
 import type { ProdutoResumo } from "@padaria/shared";
+import { rotuloGrupoMercadoria } from "@padaria/shared";
 import { reais } from "~/utils/produto-preco-card";
 
 const props = defineProps<{
@@ -123,7 +124,7 @@ const nome = computed(() => props.produto.nomeCatalogo || props.produto.descrica
       </div>
       <div>
         <dt>Grupo</dt>
-        <dd>{{ produto.grupoNome || "—" }}</dd>
+        <dd>{{ produto.grupoNome ? rotuloGrupoMercadoria(produto.grupoNome) : "—" }}</dd>
       </div>
       <div>
         <dt>EAN</dt>

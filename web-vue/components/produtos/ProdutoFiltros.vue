@@ -4,14 +4,16 @@
  * no navegador, porque a tela so tem a pagina corrente na mao.
  */
 import type { FiltrosDeProduto, OrdenacaoProdutos } from "@padaria/shared";
+import { arvoreGruposMercadoria } from "@padaria/shared";
 import { ORDENACOES } from "~/composables/useListagemProdutos";
 
-defineProps<{ opcoes: FiltrosDeProduto; temFiltroOuBusca: boolean }>();
+const props = defineProps<{ opcoes: FiltrosDeProduto; temFiltroOuBusca: boolean }>();
 const emit = defineEmits<{ limpar: [] }>();
 
 const status = defineModel<string | null>("status", { default: null });
 const tipo = defineModel<string | null>("tipo", { default: null });
-const grupo = defineModel<string | null>("grupo", { default: null });
+/** IDs dos registros de grupo filtrados: o Grupo inteiro (todos os subgrupos) ou um Subgrupo (13/11/2026). */
+const grupos = defineModel<string[]>("grupos", { default: () => [] });
 const setor = defineModel<string | null>("setor", { default: null });
 const compra = defineModel<string | null>("compra", { default: null });
 const ordenar = defineModel<OrdenacaoProdutos>("ordenar", { default: "recentes" });
@@ -30,6 +32,29 @@ const TIPOS = [
   { value: "revenda", label: "Revenda" },
   { value: "transformacao", label: "Transformação" }
 ];
+
+const arvore = computed(() => arvoreGruposMercadoria(props.opcoes.grupos));
+const chaveGrupo = ref<string | null>(null);
+const grupoEscolhido = computed(() => arvore.value.find((item) => item.chave === chaveGrupo.value) ?? null);
+const opcoesGrupo = computed(() => arvore.value.map((item) => ({ value: item.chave, title: item.grupo })));
+const opcoesSubgrupo = computed(() =>
+  (grupoEscolhido.value?.subgrupos ?? []).map((sub) => ({ value: sub.id, title: sub.subgrupo || "(sem subgrupo)" }))
+);
+const subgrupoEscolhido = computed(() =>
+  grupos.value.length === 1 && opcoesSubgrupo.value.length > 1 ? grupos.value[0] : null
+);
+// "Limpar" zera os IDs por fora: o Grupo escolhido acompanha.
+watch(grupos, (ids) => {
+  if (!ids.length) chaveGrupo.value = null;
+});
+
+function escolherGrupo(chave: string | null) {
+  chaveGrupo.value = chave;
+  grupos.value = grupoEscolhido.value?.subgrupos.map((sub) => sub.id) ?? [];
+}
+function escolherSubgrupo(id: string | null) {
+  grupos.value = id ? [id] : (grupoEscolhido.value?.subgrupos.map((sub) => sub.id) ?? []);
+}
 
 /** Clicar na pilula ja marcada LIMPA o filtro — e o gesto que o app antigo tinha e funciona. */
 function alternarStatus(valor: string) {
@@ -92,15 +117,25 @@ function alternarCompra(valor: string) {
 
     <div class="produto-filtros__selects">
       <v-select
-        v-model="grupo"
-        :items="opcoes.grupos"
-        item-title="nome"
-        item-value="id"
+        :model-value="chaveGrupo"
+        :items="opcoesGrupo"
         label="Grupo"
         density="compact"
         hide-details
         clearable
         prepend-inner-icon="mdi-tag-outline"
+        @update:model-value="escolherGrupo"
+      />
+      <v-select
+        :model-value="subgrupoEscolhido"
+        :items="opcoesSubgrupo"
+        label="Subgrupo"
+        density="compact"
+        hide-details
+        clearable
+        :disabled="opcoesSubgrupo.length < 2"
+        prepend-inner-icon="mdi-tag-multiple-outline"
+        @update:model-value="escolherSubgrupo"
       />
       <v-select
         v-model="setor"
