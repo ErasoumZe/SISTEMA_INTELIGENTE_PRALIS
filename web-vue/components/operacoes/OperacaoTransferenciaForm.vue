@@ -99,19 +99,21 @@ const {
               {{ c.nome }}
             </option>
           </select>
-          <span
-            v-if="semLacre && !carregandoDestinosSemLacre && !opcoesDestinoSemLacre.length"
-            class="tr-legenda"
-            role="status"
-          >
-            Nenhum PDV com caixa aberto agora.
-          </span>
+          <!-- As caixinhas so existem com "Multiplo Destino" marcado. O `v-else` precisa vir colado no
+               `v-if` do select: um elemento no meio faz o `v-else` casar com ele (bug de 13/11). -->
           <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
             <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
               <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
               <span>{{ c.nome }}</span>
             </label>
           </div>
+          <span
+            v-if="!multiploDestino && semLacre && !carregandoDestinosSemLacre && !opcoesDestinoSemLacre.length"
+            class="tr-legenda"
+            role="status"
+          >
+            Nenhum PDV com caixa aberto agora.
+          </span>
           <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
         </div>
       </div>
