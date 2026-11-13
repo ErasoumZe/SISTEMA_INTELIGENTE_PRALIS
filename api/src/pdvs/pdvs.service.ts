@@ -1,3 +1,4 @@
+import { pdvFoiExcluido } from "@padaria/shared/pdvs";
 import type { DadosExternos } from "@padaria/shared/api";
 import { pdvPayloadSchema } from "@padaria/shared/pdvs";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
@@ -14,11 +15,9 @@ import {
 } from "./pdvs.repository.js";
 
 export async function listarPdvs(escopoDados: string[]) {
-  // PDV "excluido" (desativado, 13/11/2026) sai do cadastro; o historico do caixa continua com o nome dele.
-  return filtrarPorEmpresas(
-    (await listarPdvsRepository()).filter((pdv) => pdv.ativo),
-    escopoDados
-  );
+  // A lista leva os inativos de proposito: filtros de historico e rotulos de posto precisam deles. A tela de
+  // cadastro de PDV esconde os excluidos.
+  return filtrarPorEmpresas(await listarPdvsRepository(), escopoDados);
 }
 
 export async function salvarPdv(id: string | null, body: DadosExternos) {
@@ -26,6 +25,10 @@ export async function salvarPdv(id: string | null, body: DadosExternos) {
   return executarEmTransacao(async (tx) => {
     const conta = await buscarContaEmpresaRepository(dados.contaId, tx);
     if (!conta || conta.empresaId !== dados.empresaId) falharValidacao("Conta nao pertence a empresa");
+    if (!conta.ativa) falharValidacao("Conta excluida nao pode ser a conta de um PDV");
+    // PDV excluido nao e editado nem reativado por aqui (o so inativo continua editavel).
+    const pdvAtual = id ? await travarPdvRepository(id, dados.empresaId, tx) : null;
+    if (pdvAtual && pdvFoiExcluido(pdvAtual)) falharValidacao("PDV excluido");
     // S3 (R-164): a conta do PDV e o pivo dos sete totais de transferencia — trocar a conta com
     // caixa aberto mudaria o sinal das linhas de um caixa vivo por fora da porta. O FOR UPDATE do
     // PDV serializa com aberturas em voo; o FOR SHARE no caixa serializa com o fechamento: quem

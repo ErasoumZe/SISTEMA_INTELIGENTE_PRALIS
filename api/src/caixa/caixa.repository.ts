@@ -138,7 +138,8 @@ export async function buscarPerfilUsuarioCaixaRepository(usuarioId: string, db: 
   const [usuario] = await db
     .select({ usuarioId: perfisUsuarios.usuarioId, nome: perfisUsuarios.nome })
     .from(perfisUsuarios)
-    .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    // Usuario excluido (desativado) nao opera caixa.
+    .where(and(eq(perfisUsuarios.usuarioId, usuarioId), isNull(perfisUsuarios.desativadoEm)))
     .limit(1);
   return usuario ?? null;
 }

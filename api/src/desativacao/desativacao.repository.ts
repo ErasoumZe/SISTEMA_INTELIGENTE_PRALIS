@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { sessaoAutenticacao, usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
+import { contaAutenticacao, sessaoAutenticacao, usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
 import { colaboradores, contas, contasUsuarios, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import type { TransacaoBanco } from "../banco/conexao.js";
@@ -104,6 +104,10 @@ export async function desativarUsuarioRepository(usuarioId: string, emailNovo: s
     .where(eq(perfisUsuarios.usuarioId, usuarioId));
   await tx.update(usuarioAutenticacao).set({ email: emailNovo }).where(eq(usuarioAutenticacao.id, usuarioId));
   await tx.delete(sessaoAutenticacao).where(eq(sessaoAutenticacao.userId, usuarioId));
+  // Sem a senha, nem o e-mail renomeado abre sessao.
+  await tx
+    .delete(contaAutenticacao)
+    .where(and(eq(contaAutenticacao.userId, usuarioId), eq(contaAutenticacao.providerId, "credential")));
   await tx.delete(contasUsuarios).where(eq(contasUsuarios.usuarioId, usuarioId));
   await tx
     .update(colaboradores)

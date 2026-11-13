@@ -8,7 +8,7 @@ import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao
 // `TransacaoBanco` obrigatorio: lock fora de transacao evapora.
 export async function travarPdvRepository(pdvId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
-    .select({ id: pdvs.id, contaId: pdvs.contaId, turnosCaixa: pdvs.turnosCaixa })
+    .select({ id: pdvs.id, nome: pdvs.nome, contaId: pdvs.contaId, turnosCaixa: pdvs.turnosCaixa, ativo: pdvs.ativo })
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
     .for("update");

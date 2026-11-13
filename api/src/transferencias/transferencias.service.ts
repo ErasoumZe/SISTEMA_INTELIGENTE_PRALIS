@@ -77,6 +77,7 @@ import {
   registrarRecusaConferenciaRepository,
   listarDestinosSemLacreRepository
 } from "./transferencias.repository.js";
+import { travarContasRepository } from "../contas/contas.repository.js";
 import {
   listarTransferenciasRepository,
   type OpcoesListagemTransferencias
@@ -219,6 +220,11 @@ export async function criarTransferencia(
         tx
       );
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+      await recusarContaExcluida(
+        [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
+        dados.empresaId,
+        tx
+      );
 
       // Malote Cofre -> PDV so pode nascer com a composicao que o Caixa ira conferir. Aceitar a
       // transferencia sem isso e deixa um pendente impossivel de abrir depois.
@@ -344,6 +350,7 @@ export async function criarTransferenciaSemLacre(
       tx
     );
     if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+    await recusarContaExcluida([dados.contaOrigemId, dados.contaDestinoId], dados.empresaId, tx);
     // Dinheiro que SAI do PDV tem caminho proprio (retorno / sangria do Caixa, R-179).
     if (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaOrigemId, tx)) {
       throw new Error("Dinheiro que sai do PDV vai pelo retorno / sangria do Caixa");
@@ -1072,4 +1079,13 @@ export async function atualizarTransferencia(
 // R-238 · PDVs com caixa aberto que podem receber transferencia sem lacre agora (posto, turno, quem abriu; sem valor).
 export function listarDestinosSemLacre(empresaId: string) {
   return listarDestinosSemLacreRepository(empresaId);
+}
+
+// Conta excluida (desativada, 13/11/2026) nao envia nem recebe transferencia nova. A trava (FOR NO KEY UPDATE) fecha a
+// corrida com a exclusao, que trava a conta com FOR UPDATE: ou a exclusao ve esta transferencia e recusa por
+// pendencia, ou esta transferencia ve a conta desativada.
+async function recusarContaExcluida(contaIds: Array<string | null | undefined>, empresaId: string, tx: TransacaoBanco) {
+  const ids = contaIds.filter((id): id is string => Boolean(id));
+  const travadas = await travarContasRepository(ids, empresaId, tx);
+  if (travadas.some((conta) => !conta.ativa)) throw new Error("Conta excluida nao envia nem recebe transferencia");
 }

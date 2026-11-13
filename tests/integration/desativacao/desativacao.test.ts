@@ -75,7 +75,7 @@ describe("excluir cadastros (desativar)", () => {
       pdvId
     ]);
     expect(linha).toMatchObject({ ativo: false });
-    expect(linha!.nome).toContain("(excluido");
+    expect(linha!.nome).toContain(" (excluido ");
     expect((await post(`/api/pdvs/${pdvId}/desativar`)).statusCode).toBe(404);
 
     // O nome ficou livre: da para criar outro PDV igual.
@@ -93,6 +93,41 @@ describe("excluir cadastros (desativar)", () => {
 
     const cofre = await post(`/api/contas/${idsTeste.contaCofre}/desativar`);
     expect(cofre.statusCode).toBe(409);
+
+    // Conta excluida nao recebe transferencia nova, nem pela API direta.
+    const transferencia = await post("/api/transferencias", {
+      empresaId,
+      dataReferencia: "2026-11-13",
+      descricao: "Para conta excluida",
+      valorOriginal: 10,
+      contaOrigemId: idsTeste.contaCofre,
+      contaDestinoId: contaId,
+      nLacreDoc: `EXC-${Date.now()}`
+    });
+    expect(transferencia.statusCode).toBeGreaterThanOrEqual(400);
+    expect(transferencia.body).toContain("Conta excluida");
+  });
+
+  it("PDV excluido nao e editado (nem reativado) pelo cadastro", async () => {
+    const { pdvId, contaId } = await criarPdv(`PDV QA Editar ${Date.now()}`);
+    expect((await post(`/api/pdvs/${pdvId}/desativar`)).statusCode).toBe(200);
+    const editar = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/pdvs/${pdvId}`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId, nome: "Reativado", contaId, ativo: true }
+    });
+    expect(editar.statusCode).toBeGreaterThanOrEqual(400);
+    const linha = await consultarUm<{ ativo: boolean }>("select ativo from pdvs where id = $1", [pdvId]);
+    expect(linha!.ativo).toBe(false);
+  });
+
+  it("administrador nao e excluido por aqui", async () => {
+    const outroAdmin = await consultarUm<{ usuario_id: string }>(
+      "select usuario_id from perfis_usuarios where role <> 'usuario_comum' and desativado_em is null and usuario_id <> (select id from \"user\" where lower(email) = lower($1)) limit 1",
+      ["admin.integracao@padaria.local"]
+    );
+    if (outroAdmin) expect((await post(`/api/usuarios/${outroAdmin.usuario_id}/desativar`)).statusCode).toBe(403);
   });
 
   it("usuario: perde o acesso na hora, sai da lista e o e-mail fica livre", async () => {

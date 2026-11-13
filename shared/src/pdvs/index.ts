@@ -23,3 +23,15 @@ export const pdvPayloadSchema = z.object({
 });
 
 export type PdvPayload = z.infer<typeof pdvPayloadSchema>;
+
+// "Excluir" PDV (Marco, 13/11/2026) = desativar e marcar o nome. A marca separa o EXCLUIDO (some do cadastro, nao e
+// editado) do simplesmente INATIVO (continua no cadastro e pode ser reativado), sem coluna nova.
+export const MARCA_PDV_EXCLUIDO = " (excluido ";
+
+export function nomePdvExcluido(nome: string, dia: string): string {
+  return `${nome}${MARCA_PDV_EXCLUIDO}${dia})`;
+}
+
+export function pdvFoiExcluido(pdv: { ativo?: boolean | null; nome?: string | null }): boolean {
+  return pdv.ativo === false && Boolean(pdv.nome?.includes(MARCA_PDV_EXCLUIDO));
+}

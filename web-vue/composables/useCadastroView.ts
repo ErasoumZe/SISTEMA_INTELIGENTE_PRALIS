@@ -1,3 +1,4 @@
+import { pdvFoiExcluido } from "@padaria/shared/pdvs";
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
@@ -52,16 +53,19 @@ export function useCadastroView(params: {
       }));
     if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
     if (tela === "pdv")
-      return listas.pdvs.map((item) => ({
-        id: item.id,
-        nome: item.nome,
-        conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
-        contaId: item.contaId,
-        ativo: item.ativo === false ? "Não" : "Sim",
-        // R-229 · coluna exibida e campo do formulario de edicao.
-        turnos_do_caixa: (item.turnosCaixa ?? []).map((turno) => (turno === "manha" ? "Manhã" : "Tarde")).join(", "),
-        turnosCaixa: (item.turnosCaixa ?? []).join(",")
-      }));
+      // PDV excluido some do cadastro; o so inativo continua (da para reativar).
+      return listas.pdvs
+        .filter((item) => !pdvFoiExcluido(item))
+        .map((item) => ({
+          id: item.id,
+          nome: item.nome,
+          conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
+          contaId: item.contaId,
+          ativo: item.ativo === false ? "Não" : "Sim",
+          // R-229 · coluna exibida e campo do formulario de edicao.
+          turnos_do_caixa: (item.turnosCaixa ?? []).map((turno) => (turno === "manha" ? "Manhã" : "Tarde")).join(", "),
+          turnosCaixa: (item.turnosCaixa ?? []).join(",")
+        }));
     if (tela === "fornecedores")
       return listas.fornecedores.map((item) => ({
         id: item.id,

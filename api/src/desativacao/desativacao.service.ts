@@ -1,4 +1,5 @@
 import { ehAdministradorTotal, type PerfilUsuario } from "@padaria/shared/autenticacao";
+import { nomePdvExcluido } from "@padaria/shared/pdvs";
 import { empresasPermitidas } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { buscarContaCofreEmpresaRepository } from "../caixa/caixa.repository.js";
@@ -47,7 +48,7 @@ export async function desativarPdv(id: string, perfilEntrada?: PerfilUsuario) {
         `Este PDV tem ${postos} conta(s) de posto do Caixa. Exclua ou passe essas contas para outro PDV antes.`,
         "PDV_COM_CONTAS_DE_POSTO"
       );
-    await desativarPdvRepository(id, `${pdv.nome} (excluido ${carimbo()})`, tx);
+    await desativarPdvRepository(id, nomePdvExcluido(pdv.nome, carimbo()), tx);
     return { id, nome: pdv.nome };
   });
 }
@@ -80,6 +81,11 @@ export async function desativarUsuario(usuarioId: string, perfilEntrada?: Perfil
   return executarEmTransacao(async (tx) => {
     const alvo = await travarUsuarioRepository(usuarioId, tx);
     if (!alvo) throw naoEncontrado("Usuario nao encontrado");
+    if (alvo.role !== "usuario_comum")
+      throw proibido(
+        "Administrador nao e excluido por aqui. Tire o papel de administrador antes.",
+        "FORBIDDEN_PRIVILEGE"
+      );
     const empresas = (await listarEmpresasUsuarioRepository(usuarioId, tx)).map((item) => item.empresaId);
     if (alvo.empresaId) empresas.push(alvo.empresaId);
     const liberadas = empresasPermitidas(perfil);
