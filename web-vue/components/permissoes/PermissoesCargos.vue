@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
 import type { CargoAcesso, CargosAcessoResumo, ContaPostoCargo } from "@padaria/shared/permissoes";
 import { mensagemErro } from "~/utils/domain";
 
@@ -17,7 +18,9 @@ const aviso = ref("");
 const resumo = ref<CargosAcessoResumo | null>(null);
 const confirmacao = ref<Confirmacao | null>(null);
 
-const opcoesCargos = computed(() => (resumo.value?.cargos ?? []).map((cargo) => ({ title: cargo.nome, value: cargo.id })));
+const opcoesCargos = computed(() =>
+  (resumo.value?.cargos ?? []).map((cargo) => ({ title: cargo.nome, value: cargo.id }))
+);
 const empresaBody = computed(() => ({ empresaId: props.empresaId }));
 
 async function carregar() {
@@ -103,13 +106,19 @@ function pedirSeguirCargo(conta: ContaPostoCargo) {
     texto: `Os acessos salvos para esta conta em "Acessos por pessoa" saem, e ela passa a ter exatamente as permissões do cargo "${conta.cargoNome ?? "sem cargo"}".`,
     botao: "Seguir só o cargo",
     executar: async () => {
-      await apiPost(`/api/permissoes/contas-posto/${encodeURIComponent(conta.usuarioId)}/seguir-cargo`, empresaBody.value);
+      await apiPost(
+        `/api/permissoes/contas-posto/${encodeURIComponent(conta.usuarioId)}/seguir-cargo`,
+        empresaBody.value
+      );
       return `${conta.posto} agora segue só o cargo.`;
     }
   };
 }
 
-watch(() => props.empresaId, () => void carregar());
+watch(
+  () => props.empresaId,
+  () => void carregar()
+);
 onMounted(() => void carregar());
 </script>
 
@@ -118,17 +127,34 @@ onMounted(() => void carregar());
     <header class="permissoes-cargos__cabecalho">
       <span>Padrão de acesso</span>
       <h2 id="permissoes-cargos-titulo">Cargos</h2>
-      <p>O cargo dá o acesso padrão de quem está nele. Restaure o padrão do sistema ou troque o cargo das contas do Caixa.</p>
+      <p>
+        O cargo dá o acesso padrão de quem está nele. Restaure o padrão do sistema ou troque o cargo das contas do
+        Caixa.
+      </p>
     </header>
 
-    <v-alert v-if="erro" type="error" variant="tonal" class="mt-4" closable @click:close="erro = ''">{{ erro }}</v-alert>
-    <v-alert v-if="aviso" type="success" variant="tonal" class="mt-4" closable data-teste="cargos-aviso" @click:close="aviso = ''">
+    <v-alert v-if="erro" type="error" variant="tonal" class="mt-4" closable @click:close="erro = ''">{{
+      erro
+    }}</v-alert>
+    <v-alert
+      v-if="aviso"
+      type="success"
+      variant="tonal"
+      class="mt-4"
+      closable
+      data-teste="cargos-aviso"
+      @click:close="aviso = ''"
+    >
       {{ aviso }}
     </v-alert>
     <v-progress-linear v-if="carregando" indeterminate color="primary" class="mt-4" />
 
     <template v-if="resumo">
-      <div v-if="podeEditar && resumo.padroesFaltando.length" class="permissoes-cargos__faltando mt-4" data-teste="cargos-faltando">
+      <div
+        v-if="podeEditar && resumo.padroesFaltando.length"
+        class="permissoes-cargos__faltando mt-4"
+        data-teste="cargos-faltando"
+      >
         <div>
           <strong>Cargos do padrão que ainda não existem nesta empresa</strong>
           <span>Crie para poder passar contas para eles.</span>
@@ -147,9 +173,17 @@ onMounted(() => void carregar());
 
       <h3 class="permissoes-cargos__titulo">Cargos desta empresa</h3>
       <div class="permissoes-cargos__grade">
-        <article v-for="cargo in resumo.cargos" :key="cargo.id" class="permissoes-cargos__cargo" data-teste="cargo-card">
+        <article
+          v-for="cargo in resumo.cargos"
+          :key="cargo.id"
+          class="permissoes-cargos__cargo"
+          data-teste="cargo-card"
+        >
           <strong>{{ cargo.nome }}</strong>
-          <span>{{ cargo.permitidas }} permissões · {{ cargo.pessoas }} {{ cargo.pessoas === 1 ? "pessoa" : "pessoas" }}</span>
+          <span
+            >{{ cargo.permitidas }} permissões · {{ cargo.pessoas }}
+            {{ cargo.pessoas === 1 ? "pessoa" : "pessoas" }}</span
+          >
           <v-btn
             v-if="podeEditar && cargo.temPadrao"
             size="small"
@@ -160,12 +194,16 @@ onMounted(() => void carregar());
           >
             Restaurar padrão
           </v-btn>
-          <span v-else-if="!cargo.temPadrao" class="permissoes-cargos__sem-padrao">Cargo próprio, sem padrão do sistema</span>
+          <span v-else-if="!cargo.temPadrao" class="permissoes-cargos__sem-padrao"
+            >Cargo próprio, sem padrão do sistema</span
+          >
         </article>
       </div>
 
       <h3 class="permissoes-cargos__titulo">Contas de posto do Caixa</h3>
-      <v-alert v-if="!resumo.contasPosto.length" type="info" variant="tonal">Nenhuma conta de posto nesta empresa.</v-alert>
+      <v-alert v-if="!resumo.contasPosto.length" type="info" variant="tonal"
+        >Nenhuma conta de posto nesta empresa.</v-alert
+      >
       <ul v-else class="permissoes-cargos__contas">
         <li v-for="conta in resumo.contasPosto" :key="conta.usuarioId" data-teste="conta-posto">
           <div class="permissoes-cargos__conta">
@@ -213,24 +251,102 @@ onMounted(() => void carregar());
 </template>
 
 <style scoped>
-.permissoes-cargos { max-width: 1160px; margin: 0 auto; padding-bottom: 24px; }
-.permissoes-cargos__cabecalho > span { color: var(--cx-brand-text); font-size: .75rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.permissoes-cargos h2 { margin: 2px 0 0; }
-.permissoes-cargos__cabecalho p { margin: 6px 0 0; color: var(--cx-ink-soft); }
-.permissoes-cargos__titulo { margin: 28px 0 12px; font-size: 1rem; }
-.permissoes-cargos__faltando { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--cx-brand) 40%, var(--cx-line)); border-radius: 12px; background: color-mix(in srgb, var(--cx-brand) 12%, var(--cx-surface)); }
-.permissoes-cargos__faltando > div { flex: 1 1 260px; }
-.permissoes-cargos__faltando span, .permissoes-cargos__cargo span, .permissoes-cargos__conta span { display: block; color: var(--cx-ink-soft); font-size: .82rem; }
-.permissoes-cargos__grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.permissoes-cargos__cargo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border: 1px solid var(--cx-line); border-radius: 12px; background: var(--cx-surface); }
-.permissoes-cargos__cargo :deep(.v-btn) { margin-left: -8px; }
-.permissoes-cargos__sem-padrao { font-style: italic; }
-.permissoes-cargos__contas { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.permissoes-cargos__contas li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 260px) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--cx-line); border-radius: 12px; background: var(--cx-surface); }
-.permissoes-cargos__conta { min-width: 0; }
-.permissoes-cargos__conta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.permissoes-cargos {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-bottom: 24px;
+}
+.permissoes-cargos__cabecalho > span {
+  color: var(--cx-brand-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.permissoes-cargos h2 {
+  margin: 2px 0 0;
+}
+.permissoes-cargos__cabecalho p {
+  margin: 6px 0 0;
+  color: var(--cx-ink-soft);
+}
+.permissoes-cargos__titulo {
+  margin: 28px 0 12px;
+  font-size: 1rem;
+}
+.permissoes-cargos__faltando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--cx-brand) 40%, var(--cx-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cx-brand) 12%, var(--cx-surface));
+}
+.permissoes-cargos__faltando > div {
+  flex: 1 1 260px;
+}
+.permissoes-cargos__faltando span,
+.permissoes-cargos__cargo span,
+.permissoes-cargos__conta span {
+  display: block;
+  color: var(--cx-ink-soft);
+  font-size: 0.82rem;
+}
+.permissoes-cargos__grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.permissoes-cargos__cargo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface);
+}
+.permissoes-cargos__cargo :deep(.v-btn) {
+  margin-left: -8px;
+}
+.permissoes-cargos__sem-padrao {
+  font-style: italic;
+}
+.permissoes-cargos__contas {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.permissoes-cargos__contas li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--cx-line);
+  border-radius: 12px;
+  background: var(--cx-surface);
+}
+.permissoes-cargos__conta {
+  min-width: 0;
+}
+.permissoes-cargos__conta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @media (max-width: 760px) {
-  .permissoes-cargos__contas li { grid-template-columns: 1fr; }
-  .permissoes-cargos__faltando :deep(.v-btn), .permissoes-cargos__contas :deep(.v-btn) { width: 100%; }
+  .permissoes-cargos__contas li {
+    grid-template-columns: 1fr;
+  }
+  .permissoes-cargos__faltando :deep(.v-btn),
+  .permissoes-cargos__contas :deep(.v-btn) {
+    width: 100%;
+  }
 }
 </style>
