@@ -74,15 +74,6 @@ const podeEditarPorPermissao = computed(() =>
 const podeEditar = computed(() => podeEditarPorPermissao.value && props.podeEditar);
 const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
-  // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
-  if (props.tela === "permissoes" && podeEditar.value)
-    return [
-      {
-        label: "Restaurar padrão",
-        event: "restaurarPadraoCargo",
-        condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
-      }
-    ];
   if (
     props.tela === "usuarios" &&
     possuiPermissao(permissoesUsuario.value, "cadastro_permissoes_visualizar") &&

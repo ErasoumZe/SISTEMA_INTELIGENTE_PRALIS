@@ -1626,9 +1626,10 @@ Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficia
 - **Destino da sem lacre:** só PDV com **caixa aberto agora** ("usuário logado"), mostrado com posto, turno e quem
   abriu ("PDV 1 · Manhã · Maria"). Tudo separado por manhã e tarde.
 - **O que não se vê, some** da tela (aba, cartão, linha) em vez de aparecer desabilitado.
-- **Produção:** o seed de referência só roda com `SEED_REFERENCIA=1`. Para valer lá: "Restaurar padrão" nos cargos
-  Caixa e Tesouraria, criar o cargo "Caixa Gerente" (restaurar padrão) e passar as contas "PDV 4 · Manhã/Tarde" para
-  ele.
+- **Produção:** o seed de referência só roda com `SEED_REFERENCIA=1`. Para valer lá, tudo em **Permissões → Cargos**
+  (aba criada em 13/11/2026): "Restaurar padrão" nos cargos Caixa e Tesouraria, "Criar Caixa Gerente" e trocar o cargo
+  das contas "PDV 4 · Manhã/Tarde" para ele. Conta com "acesso individual" (salvo em Acessos por pessoa) ignora o
+  cargo: usar "Seguir só o cargo". Conta de posto só aceita os cargos Caixa e Caixa Gerente.
 
 ### R-239 — O número do lacre volta a valer depois da baixa (Marco, 12/11/2026)
 
