@@ -87,6 +87,7 @@ describe("atualizarCadastroLocal", () => {
       nome: "Padaria",
       cnpj: "123",
       matriculaPrefixo: "TNP",
+      siglaPlanilha: null,
       fusoHorario: "America/Belem",
       comprasPrazoRespostaHoras: "48"
     };

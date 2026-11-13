@@ -319,17 +319,10 @@ export async function enviarParaPlanilha(
     return resultado;
   };
   const cartao = linhasCartao.length
-    ? await gravar("cartao", abas.cartoes, "L", linhasCartao.map(celulasCartao), chaveCartao, linhasCartao as JsonValue)
+    ? await gravar("cartao", abas.cartoes, "L", linhasCartao.map(celulasCartao), chaveCartao, linhasCartao)
     : null;
   const relatorioPdv = payload.relatorioPdv
-    ? await gravar(
-        "relatorioPdv",
-        abas.pdv,
-        "N",
-        [celulasPdv(payload.relatorioPdv)],
-        chavePdv,
-        payload.relatorioPdv as JsonValue
-      )
+    ? await gravar("relatorioPdv", abas.pdv, "N", [celulasPdv(payload.relatorioPdv)], chavePdv, payload.relatorioPdv)
     : null;
   return { cartao, relatorioPdv };
 }

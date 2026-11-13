@@ -141,7 +141,7 @@ describe("planilha da Tesouraria", () => {
     } as unknown as PerfilUsuario;
     const anterior = process.env["PLANILHA_TESOURARIA_ID"];
     const { env } = await import("../../../api/src/env.js");
-    (env as { PLANILHA_TESOURARIA_ID?: string }).PLANILHA_TESOURARIA_ID = "planilha-de-teste";
+    (env as { PLANILHA_TESOURARIA_ID?: string | undefined }).PLANILHA_TESOURARIA_ID = "planilha-de-teste";
     try {
       const primeiro = await enviarParaPlanilha(caixaId, { cartao: null, relatorioPdv: linha }, perfil, gateway);
       expect(primeiro.relatorioPdv).toMatchObject({ gravado: true, linhaInicial: 2 });
@@ -169,7 +169,7 @@ describe("planilha da Tesouraria", () => {
       );
       await expect(outroPdv).rejects.toThrow(/PDV das linhas/u);
     } finally {
-      (env as { PLANILHA_TESOURARIA_ID?: string }).PLANILHA_TESOURARIA_ID = anterior;
+      (env as { PLANILHA_TESOURARIA_ID?: string | undefined }).PLANILHA_TESOURARIA_ID = anterior;
       await executarSql("update empresas set sigla_planilha = null where id = $1", [idsTeste.empresaA]);
     }
   });
