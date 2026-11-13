@@ -142,6 +142,8 @@ export function useListagemProdutos(empresaId: Ref<string>) {
   );
   watch(empresaId, async () => {
     paginacao.page = 1;
+    // Os IDs de grupo são da loja anterior: na loja nova o filtro esvaziaria a lista (R-241).
+    grupoMercadoriaIds.value = [];
     await Promise.all([carregar(), carregarOpcoesDeFiltro()]);
   });
 
