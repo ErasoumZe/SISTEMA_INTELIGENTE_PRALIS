@@ -14,7 +14,11 @@ import {
 } from "./pdvs.repository.js";
 
 export async function listarPdvs(escopoDados: string[]) {
-  return filtrarPorEmpresas(await listarPdvsRepository(), escopoDados);
+  // PDV "excluido" (desativado, 13/11/2026) sai do cadastro; o historico do caixa continua com o nome dele.
+  return filtrarPorEmpresas(
+    (await listarPdvsRepository()).filter((pdv) => pdv.ativo),
+    escopoDados
+  );
 }
 
 export async function salvarPdv(id: string | null, body: DadosExternos) {

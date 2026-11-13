@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   cargos,
   colaboradores,
@@ -41,7 +41,8 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
       role: perfisUsuarios.role
     })
     .from(perfisUsuarios)
-    .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    // Usuario "excluido" (desativado, 13/11/2026) nao tem perfil: toda rota autenticada o recusa.
+    .where(and(eq(perfisUsuarios.usuarioId, usuarioId), isNull(perfisUsuarios.desativadoEm)))
     .limit(1);
 
   if (!perfil) return null;

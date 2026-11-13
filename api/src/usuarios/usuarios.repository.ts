@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, ne } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, ne } from "drizzle-orm";
 import { contaAutenticacao, usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
 import {
   cargos,
@@ -63,6 +63,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         role: perfisUsuarios.role
       })
       .from(perfisUsuarios)
+      .where(isNull(perfisUsuarios.desativadoEm))
       .orderBy(asc(perfisUsuarios.nome)),
     banco
       .select({ usuarioId: usuariosEmpresas.usuarioId, empresaId: usuariosEmpresas.empresaId })

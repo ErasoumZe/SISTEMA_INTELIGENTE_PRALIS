@@ -115,6 +115,7 @@ export async function listarContasRepository() {
   return banco
     .select({ id: contas.id, empresaId: contas.empresaId, nome: contas.nome })
     .from(contas)
+    .where(eq(contas.ativa, true))
     .orderBy(asc(contas.nome));
 }
 
@@ -373,7 +374,9 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
       saldoInicial: contas.saldoInicial
     })
     .from(contas)
-    .where(empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined)
+    .where(
+      and(eq(contas.ativa, true), empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined)
+    )
     .orderBy(asc(contas.nome));
   if (!linhas.length) return [];
 
