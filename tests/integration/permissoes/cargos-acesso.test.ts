@@ -12,7 +12,7 @@ type ContaPosto = {
   acessoIndividual: boolean;
 };
 type Resumo = {
-  cargos: { id: string; nome: string; temPadrao: boolean }[];
+  cargos: { id: string; nome: string; temPadrao: boolean; aceitaContaPosto: boolean }[];
   padroesFaltando: string[];
   contasPosto: ContaPosto[];
 };
@@ -55,12 +55,23 @@ describe("permissoes: cargos de acesso", () => {
       [email]
     );
     usuarioPosto = perfil!.usuario_id;
-    const pdv = await consultarUm<{ id: string }>("insert into pdvs (empresa_id, nome) values ($1, $2) returning id", [
-      empresaId,
-      `PDV QA ${sufixo}`
-    ]);
+    const contaPdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId, nome: `Conta PDV QA ${sufixo}` }
+    });
+    expect(contaPdv.statusCode, contaPdv.body).toBe(201);
+    const pdvCriado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId, nome: `PDV QA ${sufixo}`, contaId: contaPdv.json().data.id, ativo: true }
+    });
+    expect(pdvCriado.statusCode, pdvCriado.body).toBe(201);
+    const pdv = { id: pdvCriado.json().data.id as string };
     await executarSql("update colaboradores set pdv_padrao_id = $1, turno_caixa = 'tarde' where usuario_id = $2", [
-      pdv!.id,
+      pdv.id,
       usuarioPosto
     ]);
   }, 120_000);
@@ -175,6 +186,20 @@ describe("permissoes: cargos de acesso", () => {
     expect((await conta())?.acessoIndividual).toBe(false);
     const linha = await consultarUm("select 1 from permissoes_usuarios where usuario_id = $1", [usuarioPosto]);
     expect(linha).toBeFalsy();
+  });
+
+  it("conta de posto nao recebe cargo que da poder pelo nome", async () => {
+    const tesouraria = await consultarUm<{ id: string }>("select id from cargos where id = $1", [
+      idsTeste.cargoTesouraria
+    ]);
+    const troca = await chamar("PUT", `/api/permissoes/contas-posto/${usuarioPosto}/cargo`, {
+      empresaId,
+      cargoId: tesouraria!.id
+    });
+    expect(troca.statusCode).toBe(400);
+    expect(troca.body).toContain("CARGO_NAO_E_DE_POSTO");
+    const lista = await resumo();
+    expect(lista.cargos.find((cargo) => cargo.id === idsTeste.cargoTesouraria)?.aceitaContaPosto).toBe(false);
   });
 
   it("conta que nao e de posto nao muda de cargo por aqui", async () => {

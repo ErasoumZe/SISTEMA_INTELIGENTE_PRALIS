@@ -19,7 +19,9 @@ const resumo = ref<CargosAcessoResumo | null>(null);
 const confirmacao = ref<Confirmacao | null>(null);
 
 const opcoesCargos = computed(() =>
-  (resumo.value?.cargos ?? []).map((cargo) => ({ title: cargo.nome, value: cargo.id }))
+  (resumo.value?.cargos ?? [])
+    .filter((cargo) => cargo.aceitaContaPosto)
+    .map((cargo) => ({ title: cargo.nome, value: cargo.id }))
 );
 const empresaBody = computed(() => ({ empresaId: props.empresaId }));
 

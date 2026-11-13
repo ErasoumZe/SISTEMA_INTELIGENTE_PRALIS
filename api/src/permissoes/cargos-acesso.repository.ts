@@ -143,3 +143,12 @@ export async function trocarCargoAtivoRepository(
 export async function apagarAcessoIndividualRepository(usuarioId: string, tx: TransacaoBanco) {
   await tx.delete(permissoesUsuarios).where(eq(permissoesUsuarios.usuarioId, usuarioId));
 }
+
+export async function buscarRoleUsuarioRepository(usuarioId: string, tx: TransacaoBanco) {
+  const [linha] = await tx
+    .select({ role: perfisUsuarios.role })
+    .from(perfisUsuarios)
+    .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    .limit(1);
+  return linha?.role ?? null;
+}

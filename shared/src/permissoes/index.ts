@@ -73,6 +73,8 @@ export type CargoAcesso = {
   id: string;
   nome: string;
   temPadrao: boolean;
+  // So Caixa e Caixa Gerente recebem conta de posto do Caixa.
+  aceitaContaPosto: boolean;
   permitidas: number;
   pessoas: number;
 };

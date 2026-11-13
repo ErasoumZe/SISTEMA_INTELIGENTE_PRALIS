@@ -5,10 +5,11 @@ import PermissoesCargos from "./PermissoesCargos.vue";
 
 const resumoBase: CargosAcessoResumo = {
   cargos: [
-    { id: "c-caixa", nome: "Caixa", temPadrao: true, permitidas: 11, pessoas: 6 },
-    { id: "c-proprio", nome: "Cargo da Loja", temPadrao: false, permitidas: 3, pessoas: 1 }
+    { id: "c-caixa", nome: "Caixa", temPadrao: true, aceitaContaPosto: true, permitidas: 11, pessoas: 6 },
+    { id: "c-gerente", nome: "Caixa Gerente", temPadrao: true, aceitaContaPosto: true, permitidas: 32, pessoas: 0 },
+    { id: "c-proprio", nome: "Cargo da Loja", temPadrao: false, aceitaContaPosto: false, permitidas: 3, pessoas: 1 }
   ],
-  padroesFaltando: ["Caixa Gerente"],
+  padroesFaltando: ["Tesouraria"],
   contasPosto: [
     {
       usuarioId: "u-pdv4m",
@@ -60,8 +61,8 @@ describe("PermissoesCargos", () => {
     const { wrapper, apiGet } = montar();
     await flushPromises();
     expect(apiGet).toHaveBeenCalledWith("/api/permissoes/cargos-acesso?empresaId=emp-1");
-    expect(wrapper.findAll('[data-teste="cargo-card"]')).toHaveLength(2);
-    expect(wrapper.text()).toContain("Criar Caixa Gerente");
+    expect(wrapper.findAll('[data-teste="cargo-card"]')).toHaveLength(3);
+    expect(wrapper.text()).toContain("Criar Tesouraria");
     expect(wrapper.text()).toContain("Cargo próprio, sem padrão do sistema");
     expect(wrapper.text()).toContain("Acesso individual: o cargo não vale");
   });
@@ -81,12 +82,12 @@ describe("PermissoesCargos", () => {
   it("cria o cargo que falta e faz a conta seguir so o cargo", async () => {
     const { wrapper, apiPost } = montar();
     await flushPromises();
-    await botao(wrapper, "Criar Caixa Gerente").trigger("click");
+    await botao(wrapper, "Criar Tesouraria").trigger("click");
     await wrapper.get('[data-teste="dialogo"]').findAll("button").at(-1)!.trigger("click");
     await flushPromises();
     expect(apiPost).toHaveBeenCalledWith("/api/permissoes/cargos-acesso/padrao", {
       empresaId: "emp-1",
-      nome: "Caixa Gerente"
+      nome: "Tesouraria"
     });
 
     await botao(wrapper, "Seguir só o cargo").trigger("click");
@@ -98,21 +99,31 @@ describe("PermissoesCargos", () => {
   it("troca o cargo da conta de posto pelo seletor, com confirmacao", async () => {
     const { wrapper, apiPut } = montar();
     await flushPromises();
-    await wrapper.get("select").setValue("c-proprio");
-    expect(wrapper.get('[data-teste="dialogo"]').text()).toContain('Passar PDV 4 · Manhã para "Cargo da Loja"?');
+    await wrapper.get("select").setValue("c-gerente");
+    expect(wrapper.get('[data-teste="dialogo"]').text()).toContain('Passar PDV 4 · Manhã para "Caixa Gerente"?');
     await wrapper.get('[data-teste="dialogo"]').findAll("button").at(-1)!.trigger("click");
     await flushPromises();
     expect(apiPut).toHaveBeenCalledWith("/api/permissoes/contas-posto/u-pdv4m/cargo", {
       empresaId: "emp-1",
-      cargoId: "c-proprio"
+      cargoId: "c-gerente"
     });
   });
 
   it("sem permissao de editar so mostra", async () => {
     const { wrapper } = montar(false);
     await flushPromises();
-    expect(wrapper.text()).not.toContain("Criar Caixa Gerente");
+    expect(wrapper.text()).not.toContain("Criar Tesouraria");
     expect(wrapper.text()).not.toContain("Restaurar padrão");
     expect(wrapper.get("select").attributes("disabled")).toBeDefined();
+  });
+
+  it("conta de posto so pode ir para Caixa ou Caixa Gerente", async () => {
+    const { wrapper } = montar();
+    await flushPromises();
+    const opcoes = wrapper
+      .get("select")
+      .findAll("option")
+      .map((opcao) => opcao.text());
+    expect(opcoes).toEqual(["Caixa", "Caixa Gerente"]);
   });
 });
