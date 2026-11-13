@@ -225,6 +225,9 @@ export const perfisUsuarios = pgTable(
     email: text("email").notNull().unique(),
     whatsapp: text("whatsapp"),
     role: text("role").$type<"usuario_comum" | "usuario_admin" | "admin">().notNull().default("usuario_comum"),
+    // "Excluir" usuario (Marco, 13/11/2026) = desativar: nao entra mais e sai das listas; o historico continua
+    // mostrando quem fez. O e-mail e renomeado na desativacao para ficar livre para um cadastro novo.
+    desativadoEm: timestamp("desativado_em", { withTimezone: true }),
     criadoEm,
     atualizadoEm
   },

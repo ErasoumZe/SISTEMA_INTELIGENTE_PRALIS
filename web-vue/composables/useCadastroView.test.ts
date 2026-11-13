@@ -172,3 +172,24 @@ describe("useCadastroView · usuários e acessos", () => {
     ]);
   });
 });
+
+describe("cadastro de PDV (excluir = desativar, 13/11/2026)", () => {
+  it("esconde o PDV excluido e mantem o so inativo", () => {
+    const opcoes = {
+      ...opcoesVazias(),
+      pdvs: [
+        { id: "p-1", nome: "PDV 1", ativo: true },
+        { id: "p-2", nome: "PDV 2", ativo: false },
+        { id: "p-3", nome: "PDV 3 (excluido 20261113)", ativo: false }
+      ] as Opcao[]
+    };
+    const view = useCadastroView({
+      opcoes,
+      opcoesEmpresa: opcoes,
+      empresas: [],
+      permissoesPagina: { itens: [], total: 0, page: 1, pageSize: 10 },
+      formCadastro: ref(formCadastroVazio())
+    });
+    expect(view.dadosCadastro("pdv").map((linha) => linha.id)).toEqual(["p-1", "p-2"]);
+  });
+});

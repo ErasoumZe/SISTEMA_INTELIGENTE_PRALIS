@@ -34,7 +34,7 @@ export async function listarContasDoUsuarioRepository(usuarioId: string, db: Exe
     .select({ id: contas.id, empresaId: contas.empresaId, nome: contas.nome })
     .from(contas)
     .innerJoin(contasUsuarios, eq(contasUsuarios.contaId, contas.id))
-    .where(eq(contasUsuarios.usuarioId, usuarioId))
+    .where(and(eq(contasUsuarios.usuarioId, usuarioId), eq(contas.ativa, true)))
     .orderBy(asc(contas.nome));
 }
 

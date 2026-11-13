@@ -100,11 +100,11 @@ export async function travarContasRepository(
   contaIds: string[],
   empresaId: string,
   db: TransacaoBanco
-): Promise<Array<{ id: string; saldoInicial: string }>> {
+): Promise<Array<{ id: string; saldoInicial: string; ativa: boolean }>> {
   const unicas = [...new Set(contaIds.filter(Boolean))];
   if (!unicas.length) return [];
   return db
-    .select({ id: contas.id, saldoInicial: contas.saldoInicial })
+    .select({ id: contas.id, saldoInicial: contas.saldoInicial, ativa: contas.ativa })
     .from(contas)
     .where(and(inArray(contas.id, unicas), eq(contas.empresaId, empresaId)))
     .orderBy(asc(contas.id))
@@ -115,6 +115,7 @@ export async function listarContasRepository() {
   return banco
     .select({ id: contas.id, empresaId: contas.empresaId, nome: contas.nome })
     .from(contas)
+    .where(eq(contas.ativa, true))
     .orderBy(asc(contas.nome));
 }
 
@@ -373,7 +374,9 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
       saldoInicial: contas.saldoInicial
     })
     .from(contas)
-    .where(empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined)
+    .where(
+      and(eq(contas.ativa, true), empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined)
+    )
     .orderBy(asc(contas.nome));
   if (!linhas.length) return [];
 
@@ -505,7 +508,7 @@ export async function salvarContaRepository(
 
 export async function buscarContaEmpresaRepository(contaId: string, db: ExecutorBanco = banco) {
   const [conta] = await db
-    .select({ id: contas.id, empresaId: contas.empresaId })
+    .select({ id: contas.id, empresaId: contas.empresaId, ativa: contas.ativa })
     .from(contas)
     .where(eq(contas.id, contaId))
     .limit(1);

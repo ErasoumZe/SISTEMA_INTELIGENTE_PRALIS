@@ -16,6 +16,8 @@ const props = defineProps<{
   abrirEdicao: (linha: Record<string, string | undefined>) => void;
   recarregar: () => Promise<void>;
   notificar: (texto: string, cor?: string) => void;
+  podeExcluir?: boolean;
+  excluir?: (linha: Record<string, string | undefined>) => Promise<void>;
 }>();
 
 const { apiPost } = useApi();
@@ -127,7 +129,8 @@ function lidarExtra(payload: { event: string; linha: Record<string, string | und
     :colunas="colunas"
     :linhas="linhas"
     :permissoes-filtro="[...permissoes]"
-    :pode-excluir="false"
+    :pode-excluir="Boolean(podeExcluir && excluir)"
+    @excluir="excluir?.($event)"
     :pode-exportar="false"
     :acoes-extras-externas="podeAjustarSaldo ? [{ label: 'Ajustar saldo', event: 'ajustarSaldo' }] : []"
     @acionar="abrirNovo"

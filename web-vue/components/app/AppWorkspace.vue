@@ -1133,6 +1133,33 @@ async function recarregarDadosCadastro() {
   await carregarDadosPagina(empresaId.value, telaAtiva.value);
 }
 
+// "Excluir" usuario, conta ou PDV (Marco, 13/11/2026) = desativar: sai das listas, o historico fica. So o
+// administrador ve o botao (a API tambem exige). Confirma antes, com o nome do item.
+const rotasDesativar: Record<string, { rota: string; rotulo: string }> = {
+  usuarios: { rota: "usuarios", rotulo: "o usuário" },
+  contas: { rota: "contas", rotulo: "a conta" },
+  pdv: { rota: "pdvs", rotulo: "o PDV" }
+};
+
+async function desativarCadastro(linha: Record<string, string | undefined>) {
+  const alvo = rotasDesativar[telaAtiva.value];
+  if (!alvo || !linha.id) return;
+  const nome = linha.nome ?? "";
+  const confirmou = await confirmarAcao(
+    `Excluir ${alvo.rotulo} "${nome}"? Ele sai das listas e não aceita operação nova; o histórico continua. Não dá para desfazer pela tela.`,
+    "Excluir cadastro",
+    "Excluir"
+  );
+  if (!confirmou) return;
+  try {
+    await apiPost(`/api/${alvo.rota}/${encodeURIComponent(linha.id)}/desativar`, {});
+    notificar(`"${nome}" excluído.`);
+    await recarregarDadosCadastro();
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
+}
+
 async function carregarTudo() {
   carregando.value = true;
   erro.value = "";
@@ -2298,6 +2325,7 @@ const pageContext = computed(() => ({
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
   recarregarDadosCadastro,
+  desativarCadastro,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,
