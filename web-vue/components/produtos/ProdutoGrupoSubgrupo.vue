@@ -4,6 +4,7 @@
  * (`grupoMercadoriaId`, ex.: "MER BEBIDAS - SUCOS"); aqui ele aparece dividido em Grupo (BEBIDAS) e Subgrupo
  * (SUCOS). Grupo que não tem subgrupo (ex.: "Insumos") é escolhido direto no primeiro campo.
  */
+import { computed, watch } from "vue";
 import { arvoreGruposMercadoria, grupoDoRegistro } from "@padaria/shared";
 
 const props = defineProps<{
