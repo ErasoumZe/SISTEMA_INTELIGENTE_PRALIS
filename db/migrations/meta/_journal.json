@@ -673,6 +673,13 @@
       "when": 1794514183658,
       "tag": "0095_planilha_tesouraria_envios",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1794591796009,
+      "tag": "0096_usuario_desativado",
+      "breakpoints": true
     }
   ]
 }

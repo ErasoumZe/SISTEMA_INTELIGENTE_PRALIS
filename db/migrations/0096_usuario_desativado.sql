@@ -1,0 +1,1 @@
+ALTER TABLE "perfis_usuarios" ADD COLUMN "desativado_em" timestamp with time zone;
