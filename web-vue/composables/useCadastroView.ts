@@ -1,4 +1,4 @@
-import { pdvFoiExcluido } from "@padaria/shared/pdvs";
+import { pdvFoiExcluido } from "@padaria/shared";
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";

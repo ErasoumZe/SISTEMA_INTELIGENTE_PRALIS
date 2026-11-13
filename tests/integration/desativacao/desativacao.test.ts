@@ -70,7 +70,9 @@ describe("excluir cadastros (desativar)", () => {
     const resposta = await post(`/api/pdvs/${pdvId}/desativar`);
     expect(resposta.statusCode, resposta.body).toBe(200);
     const lista = await get(`/api/pdvs?empresaId=${empresaId}&pageSize=100`);
-    expect(lista.body).not.toContain(pdvId);
+    // A API manda o PDV excluido de proposito (filtros de historico); a tela de cadastro e quem esconde.
+    const doExcluido = (lista.json().data as Array<{ id: string; ativo: boolean }>).find((item) => item.id === pdvId);
+    expect(doExcluido?.ativo).toBe(false);
     const linha = await consultarUm<{ ativo: boolean; nome: string }>("select ativo, nome from pdvs where id = $1", [
       pdvId
     ]);
