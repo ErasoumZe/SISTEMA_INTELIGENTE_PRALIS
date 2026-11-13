@@ -56,6 +56,7 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
         nome: form.nome,
         cnpj: form.cnpj || null,
         matriculaPrefixo: form.matriculaPrefixo,
+        siglaPlanilha: form.siglaPlanilha || null,
         fusoHorario: form.fusoHorario,
         comprasPrazoRespostaHoras: form.comprasPrazoRespostaHoras || null
       };

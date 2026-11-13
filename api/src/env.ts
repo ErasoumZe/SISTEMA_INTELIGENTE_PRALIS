@@ -53,6 +53,10 @@ const envSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: envOpcionalNaoVazio,
   GOOGLE_DRIVE_FOLDER_ID: envOpcionalNaoVazio,
   GOOGLE_SPREADSHEET_ID: envOpcionalNaoVazio,
+  // Planilha da Tesouraria (Marco, 12/11/2026): relatorios de cartao e do PDV do fechamento. O ID nao e segredo; a
+  // conta Google do sistema precisa ser EDITORA dela. Sem acesso, o envio prepara os dados e avisa que nao gravou.
+  // Fora de producao nao ha ID por padrao: um teste local nunca grava na planilha real (ver planilha-tesouraria).
+  PLANILHA_TESOURARIA_ID: envOpcionalNaoVazio,
   // Cadastro de Produtos (R-222): a MESMA planilha que o app oficial da loja le, so leitura. Sem o ID
   // o fiscal fica "fonte_indisponivel" e o produto e salvo assim mesmo (igual ao oficial sem Sheets).
   // As abas tem os mesmos padroes do oficial (stack/api/src/config/env.ts).

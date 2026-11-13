@@ -29,6 +29,15 @@ export const empresaPayloadSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z0-9]{2,8}$/)
     .default("TNP"),
+  // Sigla da empresa nas abas da planilha da Tesouraria (ex.: TNP). Vazia: a empresa nao envia para a planilha.
+  siglaPlanilha: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{2,10}$/)
+    .optional()
+    .nullable()
+    .or(z.literal("").transform(() => null)),
   fusoHorario: z.string().trim().min(1).refine(fusoHorarioValido, "Fuso horario invalido").default("America/Sao_Paulo"),
   // Teto porque a coluna e `integer`: acima de 2.147.483.647 o Postgres responde 22003 e a rota
   // devolveria 500 por um numero digitado errado no cadastro.

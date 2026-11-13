@@ -41,6 +41,11 @@
       "development": "./src/campanhas/index.ts",
       "default": "./dist/campanhas/index.js"
     },
+    "./planilha-tesouraria": {
+      "types": "./dist/planilha-tesouraria/index.d.ts",
+      "development": "./src/planilha-tesouraria/index.ts",
+      "default": "./dist/planilha-tesouraria/index.js"
+    },
     "./mensagens-admin": {
       "types": "./dist/mensagens-admin/index.d.ts",
       "development": "./src/mensagens-admin/index.ts",

@@ -23,6 +23,7 @@ export async function salvarEmpresa(id: string | null, body: DadosExternos, usua
     nome: dados.nome.trim(),
     cnpj: apenasDigitos(dados.cnpj),
     matriculaPrefixo: dados.matriculaPrefixo,
+    siglaPlanilha: dados.siglaPlanilha ?? null,
     fusoHorario: dados.fusoHorario,
     comprasPrazoRespostaHoras: dados.comprasPrazoRespostaHoras ?? null
   };

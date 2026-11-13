@@ -277,6 +277,20 @@ import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue"
               "
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'empresas'" cols="12" md="6">
+            <v-text-field
+              :model-value="formCadastro.siglaPlanilha"
+              label="Sigla na planilha da Tesouraria"
+              hint="Ex.: TNP. Nome das abas da planilha. Vazio: a empresa não envia relatórios para a planilha."
+              maxlength="10"
+              persistent-hint
+              @update:model-value="
+                formCadastro.siglaPlanilha = String($event || '')
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, '')
+              "
+            />
+          </v-col>
           <v-col v-if="cadastroTela === 'fornecedores' || cadastroTela === 'clientes'" cols="12" md="6">
             <v-text-field
               :model-value="formCadastro.documento"
