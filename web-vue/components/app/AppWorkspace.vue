@@ -2069,40 +2069,6 @@ async function executarCopia() {
   }
 }
 
-async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
-  const cargoId = linha.alvoId;
-  if (!cargoId) return;
-  const nome = linha.alvo ?? "cargo";
-  if (
-    !(await confirmarAcao(
-      `Restaurar as permissões do cargo "${nome}" para o padrão? Isso substitui as regras atuais, inclusive as desligadas manualmente.`,
-      "Restaurar permissões",
-      "Restaurar padrão"
-    ))
-  ) {
-    return;
-  }
-  try {
-    // S-06: o endpoint devolve o que gravou. Sem consumir isso, `opcoes` fica com o retrato
-    // ANTERIOR a restauracao e o proximo save pela tela reinjeta as ocultas velhas, desfazendo a
-    // restauracao em silencio. Sincronizamos com a resposta do servidor — sem chamada extra.
-    const aplicado = await apiPost<{ cargoId: string; regras: Record<string, boolean> } | undefined>(
-      `/api/permissoes/cargo/${cargoId}/restaurar-padrao`,
-      {}
-    );
-    if (!aplicado?.regras) throw new Error("Restauracao sem as regras aplicadas na resposta");
-    opcoes.value = aplicarRegrasDoAlvoNasListas(
-      opcoes.value,
-      { tipoPermissao: "cargo", cargoId, setorId: "", usuarioId: "" },
-      aplicado.regras
-    ) as Opcoes;
-    notificar(`Permissões do cargo "${nome}" restauradas para o padrão.`);
-    if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  }
-}
-
 // #152 — a forma cujo ROTEAMENTO esta sendo editado. Mora aqui porque a acao nasce numa linha da
 // tabela generica; o formulario em si vive em RoteamentoFinanceiroDialog.vue.
 const formaRoteamentoSelecionada = ref<{ id: string; nome: string } | null>(null);
@@ -2116,7 +2082,6 @@ function fecharRoteamentoDaForma() {
 }
 
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
-  if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
   if (payload.event === "gerenciarAcessosUsuario") void abrirAcessosUsuario(payload.linha);
   if (payload.event === "roteamentoFinanceiro" && payload.linha.id) {
     abrirRoteamentoDaForma({ id: payload.linha.id, nome: payload.linha.nome ?? "" });

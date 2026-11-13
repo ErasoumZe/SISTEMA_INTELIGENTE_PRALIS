@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
+import PermissoesCargos from "~/components/permissoes/PermissoesCargos.vue";
 import PermissoesMenuEmpresa from "~/components/permissoes/PermissoesMenuEmpresa.vue";
 import PermissoesUsuarioPage from "~/components/permissoes/PermissoesUsuarioPage.vue";
 
@@ -13,11 +14,18 @@ const aba = ref("pessoas");
     <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? 'Permissões'" />
     <v-tabs v-model="aba" class="mb-5" color="primary" align-tabs="start">
       <v-tab value="pessoas" prepend-icon="mdi-account-key-outline">Acessos por pessoa</v-tab>
+      <v-tab value="cargos" prepend-icon="mdi-badge-account-outline">Cargos</v-tab>
       <v-tab value="menu" prepend-icon="mdi-menu-open">Montar menu</v-tab>
     </v-tabs>
     <v-window v-model="aba">
       <v-window-item value="pessoas">
         <PermissoesUsuarioPage :empresa-id="ctx.empresaId" :usuario-inicial="usuarioInicial" />
+      </v-window-item>
+      <v-window-item value="cargos">
+        <PermissoesCargos
+          :empresa-id="ctx.empresaId"
+          :pode-editar="ctx.temPermissao('cadastro_permissoes_editar')"
+        />
       </v-window-item>
       <v-window-item value="menu">
         <PermissoesMenuEmpresa
