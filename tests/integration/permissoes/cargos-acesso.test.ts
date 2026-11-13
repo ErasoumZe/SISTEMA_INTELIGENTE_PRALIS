@@ -209,7 +209,7 @@ describe("permissoes: cargos de acesso", () => {
     );
     const troca = await chamar("PUT", `/api/permissoes/contas-posto/${gerente!.usuario_id}/cargo`, {
       empresaId,
-      cargoId: idsTeste.cargoCaixa
+      cargoId: (await resumo()).cargos.find((cargo) => cargo.nome === "Caixa Gerente")!.id
     });
     expect(troca.statusCode).toBe(400);
     expect(troca.body).toContain("CONTA_SEM_POSTO");
