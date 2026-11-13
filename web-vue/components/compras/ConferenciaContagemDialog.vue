@@ -5,7 +5,7 @@
  * Nada aqui mexe no estoque: só registra.
  */
 import { useDisplay } from "vuetify";
-import { ROTULO_RANKING_CONFERENCIA, type ConferenciaDetalheDto } from "@padaria/shared";
+import { ROTULO_RANKING_CONFERENCIA, rotuloGrupoMercadoria, type ConferenciaDetalheDto } from "@padaria/shared";
 import { formatarQuantidade } from "~/utils/formatacao";
 
 const aberto = defineModel<boolean>({ required: true });
@@ -71,7 +71,7 @@ const telaPequena = useDisplay().xs;
         <dl class="recorte">
           <div>
             <dt>Grupo</dt>
-            <dd>{{ conferencia.grupo ?? "Todos" }}</dd>
+            <dd>{{ conferencia.grupo ? rotuloGrupoMercadoria(conferencia.grupo) : "Todos" }}</dd>
           </div>
           <div>
             <dt>Área</dt>

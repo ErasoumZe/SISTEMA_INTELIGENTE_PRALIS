@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ROTULO_RANKING_CONFERENCIA, type ConferenciaResumoDto } from "@padaria/shared";
+import { ROTULO_RANKING_CONFERENCIA, rotuloGrupoMercadoria, type ConferenciaResumoDto } from "@padaria/shared";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import ComprasSituacao from "~/components/compras/base/ComprasSituacao.vue";
 import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
@@ -25,7 +25,7 @@ function tom(item: ConferenciaResumoDto): TomSituacao {
 function recorte(item: ConferenciaResumoDto) {
   return (
     [
-      item.grupo,
+      item.grupo ? rotuloGrupoMercadoria(item.grupo) : null,
       item.ranking ? ROTULO_RANKING_CONFERENCIA[item.ranking] : null,
       item.areaEstoque,
       item.localEstoque,

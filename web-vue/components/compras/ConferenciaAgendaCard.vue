@@ -5,6 +5,8 @@
  * aviso no sino e a lista de produtos com o saldo do sistema.
  */
 import {
+  arvoreGruposMercadoria,
+  grupoDoRegistro,
   ROTULO_RANKING_CONFERENCIA,
   rankingsConferencia,
   type ConferenciaAgendaDto,
@@ -16,6 +18,7 @@ import {
 } from "@padaria/shared";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import RecorrenciaCampo from "~/components/compras/RecorrenciaCampo.vue";
+import ProdutoGrupoSubgrupo from "~/components/produtos/ProdutoGrupoSubgrupo.vue";
 
 const props = defineProps<{
   empresaId: string;
@@ -30,9 +33,10 @@ const hoje = () => DIA_LOCAL.format(new Date());
 const amanha = () => DIA_LOCAL.format(new Date(Date.now() + 86_400_000));
 
 // Vazio e null: com "" o Vuetify trata o campo como preenchido e mostra o "x" de limpar.
+// Grupo e Subgrupo (R-241): a conferência guarda UM registro de grupo; a tela divide em Grupo e Subgrupo.
 const form = reactive({
   grupo: null as string | null,
-  subgrupo: null as string | null,
+  grupoMercadoriaId: null as string | null,
   ranking: null as RankingConferencia | null,
   areaEstoque: null as string | null,
   localEstoque: null as string | null,
@@ -46,15 +50,10 @@ const regra = ref<RegraRecorrencia>({ tipo: "padrao", frequencia: "semanal", int
 const termino = ref<TerminoRecorrencia>({ tipo: "nunca" });
 const erro = ref("");
 
-const gruposPai = computed(() => props.opcoes.grupos.filter((grupo) => !grupo.grupoPaiId));
-const subgrupos = computed(() =>
-  props.opcoes.grupos.filter((grupo) => grupo.grupoPaiId && grupo.grupoPaiId === form.grupo)
-);
-
 function limpar() {
   Object.assign(form, {
     grupo: null,
-    subgrupo: null,
+    grupoMercadoriaId: null,
     ranking: null,
     areaEstoque: null,
     localEstoque: null,
@@ -73,10 +72,9 @@ watch(
   () => props.editando,
   (agenda) => {
     if (!agenda) return limpar();
-    const grupo = props.opcoes.grupos.find((item) => item.id === agenda.grupoMercadoriaId);
     Object.assign(form, {
-      grupo: grupo?.grupoPaiId ?? agenda.grupoMercadoriaId,
-      subgrupo: grupo?.grupoPaiId ? agenda.grupoMercadoriaId : null,
+      grupo: grupoDoRegistro(arvoreGruposMercadoria(props.opcoes.grupos), agenda.grupoMercadoriaId)?.chave ?? null,
+      grupoMercadoriaId: agenda.grupoMercadoriaId,
       ranking: agenda.ranking,
       areaEstoque: agenda.areaEstoque,
       localEstoque: agenda.localEstoque,
@@ -91,26 +89,21 @@ watch(
   },
   { immediate: true }
 );
-watch(
-  () => form.grupo,
-  () => {
-    if (!subgrupos.value.some((item) => item.id === form.subgrupo)) form.subgrupo = null;
-  }
-);
-
 function alternarRanking(ranking: RankingConferencia) {
   form.ranking = form.ranking === ranking ? null : ranking;
 }
 
 function salvar() {
   erro.value = "";
+  if (form.grupo && !form.grupoMercadoriaId)
+    return void (erro.value = "Escolha o subgrupo ou limpe o grupo para contar todo o estoque.");
   if (!form.responsavelId) return void (erro.value = "Escolha quem vai contar.");
   if (!form.inicioData || !form.inicioHora)
     return void (erro.value = "Informe a data e a hora da primeira conferência.");
   emit("salvar", {
     empresaId: props.empresaId,
     responsavelId: form.responsavelId,
-    grupoMercadoriaId: form.subgrupo || form.grupo || null,
+    grupoMercadoriaId: form.grupoMercadoriaId,
     ranking: form.ranking,
     areaEstoque: form.areaEstoque || null,
     localEstoque: form.localEstoque || null,
@@ -144,25 +137,14 @@ defineExpose({ limpar });
           <span>Sem filtro, a conferência cobre todo o estoque.</span>
         </div>
         <div class="form__campos">
-          <v-select
-            v-model="form.grupo"
-            :items="gruposPai"
-            item-title="nome"
-            item-value="id"
-            label="Grupo"
-            clearable
-            hide-details="auto"
-          />
-          <v-select
-            v-model="form.subgrupo"
-            :items="subgrupos"
-            item-title="nome"
-            item-value="id"
-            label="Subgrupo"
-            clearable
-            :disabled="!subgrupos.length"
-            hide-details="auto"
-          />
+          <div class="form__largo">
+            <ProdutoGrupoSubgrupo
+              v-model="form.grupoMercadoriaId"
+              v-model:grupo="form.grupo"
+              :grupos="opcoes.grupos"
+              :obrigatorio="false"
+            />
+          </div>
           <v-select v-model="form.areaEstoque" :items="opcoes.areas" label="Área" clearable hide-details="auto" />
           <v-select
             v-model="form.localEstoque"

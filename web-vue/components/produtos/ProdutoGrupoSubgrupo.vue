@@ -14,15 +14,20 @@ const props = defineProps<{
   dica?: string | undefined;
 }>();
 const grupoMercadoriaId = defineModel<string | null>({ default: null });
+/** Chave do Grupo escolhido: quem usa lê para saber se falta o Subgrupo e zera junto ao limpar o formulário. */
+const chaveGrupo = defineModel<string | null>("grupo", { default: null });
 
 const arvore = computed(() => arvoreGruposMercadoria(props.grupos));
-const chaveGrupo = ref<string | null>(grupoDoRegistro(arvore.value, grupoMercadoriaId.value)?.chave ?? null);
 
 // O registro pode chegar depois (edição) ou mudar por fora (cópia da BASE): o grupo acompanha.
-watch([grupoMercadoriaId, arvore], ([id]) => {
-  const dono = grupoDoRegistro(arvore.value, id);
-  if (dono) chaveGrupo.value = dono.chave;
-});
+watch(
+  [grupoMercadoriaId, arvore],
+  ([id]) => {
+    const dono = grupoDoRegistro(arvore.value, id);
+    if (dono) chaveGrupo.value = dono.chave;
+  },
+  { immediate: true }
+);
 
 const grupoEscolhido = computed(() => arvore.value.find((item) => item.chave === chaveGrupo.value) ?? null);
 const opcoesGrupo = computed(() => arvore.value.map((item) => ({ value: item.chave, title: item.grupo })));

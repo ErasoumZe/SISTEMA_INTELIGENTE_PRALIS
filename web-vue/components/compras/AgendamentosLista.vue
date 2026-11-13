@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgendamentoDto, AgendamentoOcorrenciaDto } from "@padaria/shared";
+import { rotuloGrupoMercadoria, type AgendamentoDto, type AgendamentoOcorrenciaDto } from "@padaria/shared";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 
@@ -64,9 +64,7 @@ function confirmarMover() {
       <article v-for="agenda in agendamentos" :key="agenda.id" class="agenda" :data-agenda="agenda.id">
         <header class="agenda__topo">
           <div class="agenda__titulo">
-            <strong>{{
-              agenda.grupoPaiNome ? `${agenda.grupoPaiNome} › ${agenda.grupoNome}` : agenda.grupoNome
-            }}</strong>
+            <strong>{{ rotuloGrupoMercadoria(agenda.grupoNome) }}</strong>
             <span class="agenda__resumo" data-campo="resumo">{{ agenda.resumo }} · às {{ agenda.inicioHora }}</span>
             <span class="agenda__meta">
               {{ agenda.produtos.length }} produto(s) · resposta em {{ prazo(agenda.prazoRespostaHoras) }} · variação
@@ -141,8 +139,8 @@ function confirmarMover() {
       <v-card>
         <v-card-title>Excluir todas as futuras</v-card-title>
         <v-card-text>
-          O agendamento de <strong>{{ encerrando?.grupoNome }}</strong> para de gerar pedidos. O que já aconteceu fica
-          como está.
+          O agendamento de <strong>{{ rotuloGrupoMercadoria(encerrando?.grupoNome) }}</strong> para de gerar pedidos. O
+          que já aconteceu fica como está.
         </v-card-text>
         <v-card-actions>
           <v-spacer />

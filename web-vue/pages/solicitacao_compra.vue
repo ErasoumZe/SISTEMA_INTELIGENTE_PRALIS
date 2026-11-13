@@ -5,6 +5,7 @@ import type {
   RodadaDto,
   SolicitacaoCompraDetalheDto
 } from "@padaria/shared";
+import { rotuloGrupoMercadoria } from "@padaria/shared";
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
@@ -40,8 +41,8 @@ const { cards, fornecedores, carregando } = dados;
 const pendentes = computed(() =>
   cards.value.flatMap((card) => card.pendentes.map((pendente) => ({ ...pendente, card })))
 );
-const nomeDoGrupo = (card: { grupoPaiNome: string | null; grupoNome: string }) =>
-  card.grupoPaiNome ? `${card.grupoPaiNome} › ${card.grupoNome}` : card.grupoNome;
+// R-241: "MER BEBIDAS - SUCOS" aparece como "BEBIDAS › SUCOS".
+const nomeDoGrupo = (card: { grupoNome: string }) => rotuloGrupoMercadoria(card.grupoNome);
 const agendados = computed(() => cards.value.filter((card) => !card.pendentes.length));
 
 const dialog = ref(false);

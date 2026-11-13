@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ROTULO_RANKING_CONFERENCIA, type ConferenciaAgendaDto } from "@padaria/shared";
+import { ROTULO_RANKING_CONFERENCIA, rotuloGrupoMercadoria, type ConferenciaAgendaDto } from "@padaria/shared";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
 
@@ -21,7 +21,7 @@ const encerrando = ref<ConferenciaAgendaDto | null>(null);
 function recorte(agenda: ConferenciaAgendaDto) {
   return (
     [
-      agenda.grupo,
+      agenda.grupo ? rotuloGrupoMercadoria(agenda.grupo) : null,
       agenda.ranking ? ROTULO_RANKING_CONFERENCIA[agenda.ranking] : null,
       agenda.areaEstoque,
       agenda.localEstoque,

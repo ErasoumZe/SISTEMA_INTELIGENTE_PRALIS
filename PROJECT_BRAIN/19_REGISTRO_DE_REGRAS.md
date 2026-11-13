@@ -1692,7 +1692,7 @@ esperado ou a sobra, o caixa pode lançar venda fictícia para cobrir falta ou f
     regra do teto (D1) não muda, mas cada recusa fica registrada (`sangrias_recusadas`: caixa, quem, valor, motivo) e,
     a partir da 3ª no mesmo caixa, a Tesouraria recebe o aviso "sangrias recusadas" (uma vez por caixa).
 
-### R-240 — Grupo e subgrupo de mercadoria divididos na tela; revenda liberada para compra (José, 13/11/2026)
+### R-241 — Grupo e subgrupo de mercadoria divididos na tela; revenda liberada para compra (José, 13/11/2026)
 
 Decisões do José, para o S1 ficar igual ao S2:
 
@@ -1705,9 +1705,11 @@ Decisões do José, para o S1 ficar igual ao S2:
   - **Lista de produtos:** filtro **Grupo** (todos os subgrupos dele) + **Subgrupo**; o cartão mostra
     "BEBIDAS › SUCOS". A API aceita vários grupos em `grupoMercadoriaId`, separados por vírgula.
   - **Estoque de produtos:** a linha mostra "BEBIDAS › SUCOS".
-  - **Não mudou:** Agendamento de pedidos e Conferência continuam usando o grupo pai do cadastro de Grupos
-    (`grupo_pai_id`), que na TNP está vazio. Levar a divisão para lá muda o que o agendamento grava: fica para
-    decisão própria.
+  - **Agendamento de pedidos e Agendamento de conferência:** o formulário e o filtro da lista de produtos usam
+    **Grupo** + **Subgrupo** (a tela deixou de usar o `grupo_pai_id`, vazio na TNP). O agendamento continua
+    gravando **um** registro de grupo: quando o Grupo tem vários subgrupos, o Subgrupo é obrigatório no pedido; na
+    conferência, ou se escolhe o Subgrupo ou se limpa o Grupo (todo o estoque). As listas de agendamentos, a
+    Solicitação de compra e as conferências mostram "BEBIDAS › SUCOS".
 - **Liberado para compra (substitui o "começa com todos em não" do doc 59, §2.1):**
   - produto novo de **revenda** que chega à loja nasce **liberado**; transformação (feito na casa) nasce desligado;
   - **inativar desliga** a liberação (um produto, em lote e na limpeza da central); reativar não liga de volta;
