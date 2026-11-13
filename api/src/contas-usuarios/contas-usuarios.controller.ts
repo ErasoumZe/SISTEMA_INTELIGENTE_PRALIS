@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import {
   contaUsuarioParamsSchema,
@@ -15,6 +16,8 @@ import {
   listarContasOperaveis,
   listarContasUsuarios
 } from "./contas-usuarios.service.js";
+
+const destinoQuerySchema = z.object({ destino: z.literal("transferencia").optional() });
 
 export async function registrarRotasContasUsuarios(app: FastifyInstance): Promise<void> {
   // "As contas do usuario logado" — feed dos seletores operacionais (Origem/Destino da transferencia
@@ -40,7 +43,13 @@ export async function registrarRotasContasUsuarios(app: FastifyInstance): Promis
           query.empresaId
         );
         if (!request.perfilUsuario) return ok([]);
-        return ok(await listarContasOperaveis(request.perfilUsuario, escopo));
+        // `?destino=transferencia`: lista do DESTINO da transferencia (a Tesouraria ve todas as contas).
+        const { destino } = destinoQuerySchema.parse(request.query);
+        return ok(
+          await listarContasOperaveis(request.perfilUsuario, escopo, {
+            destinoTransferencia: destino === "transferencia"
+          })
+        );
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }

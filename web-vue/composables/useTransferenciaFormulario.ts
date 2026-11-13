@@ -63,8 +63,10 @@ export function useTransferenciaFormulario() {
   const contaOrigemSelecionada = computed(() =>
     opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaOrigemId)
   );
+  // Destino pode estar fora das contas da pessoa: a Tesouraria manda para qualquer conta (13/11/2026).
+  const contasDestino = computed(() => opcoesEmpresa.value.contasDestinoTransferencia ?? opcoesEmpresa.value.contas);
   const contaDestinoSelecionada = computed(() =>
-    opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaDestinoId)
+    contasDestino.value.find((conta) => conta.id === form.value.contaDestinoId)
   );
   // Sem lacre nao e malote: Cofre -> PDV sem lacre nao pede composicao gravada no malote nem lacres.
   const preparandoMaloteParaCaixa = computed(() => {
@@ -93,7 +95,7 @@ export function useTransferenciaFormulario() {
   const saldoOrigem = computed(() => contaOrigemSelecionada.value?.saldoAtual ?? null);
   const destinosConfirmacao = computed(() =>
     destinosSelecionados.value
-      .map((id) => opcoesEmpresa.value.contas.find((conta) => conta.id === id)?.nome)
+      .map((id) => contasDestino.value.find((conta) => conta.id === id)?.nome)
       .filter((nome): nome is string => Boolean(nome))
   );
 
@@ -223,7 +225,7 @@ export function useTransferenciaFormulario() {
       .filter((destino) => destino.contaId !== form.value.contaOrigemId)
       .map((destino) => ({ id: destino.contaId, nome: rotuloDestinoSemLacre(destino) }));
     if (somenteSemLacre.value) return abertos;
-    const outrasContas = opcoesEmpresa.value.contas.filter(
+    const outrasContas = contasDestino.value.filter(
       (conta) => !conta.ehContaPdv && conta.id !== form.value.contaOrigemId
     );
     return [...outrasContas, ...abertos];
