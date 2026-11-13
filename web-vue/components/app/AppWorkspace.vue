@@ -904,8 +904,14 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // /api/contas-usuarios/minhas-contas. Sem vinculo => vazio (o modal mostra o aviso).
     // A lista de PDVs e carregada junto: sem ela o modal nao consegue reconhecer Cofre -> PDV e
     // a opcao de retorno dependia, por acidente, de o usuario ter visitado outra tela antes.
-    [dados.contas, dados.pdvs] = await Promise.all([
+    [dados.contas, dados.contasDestinoTransferencia, dados.pdvs] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Contas de destino",
+        () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}&destino=transferencia`),
+        []
+      ),
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
     ]);
   } else if (tela === "despesas") {
@@ -1358,7 +1364,10 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
   const tarefas: Record<ChaveOpcaoOperacao, () => Promise<void>> = {
     contas: async () => {
       // Modal aberto pelo "+ NOVO" global: contas do usuario (contas_usuarios; admin ve todas).
-      alvo.contas = await apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`);
+      [alvo.contas, alvo.contasDestinoTransferencia] = await Promise.all([
+        apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+        apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}&destino=transferencia`)
+      ]);
     },
     fornecedores: async () => {
       alvo.fornecedores = await carregarOpcoesCompletas("/api/fornecedores", idEmpresa);

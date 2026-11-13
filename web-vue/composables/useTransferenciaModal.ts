@@ -53,7 +53,9 @@ export function useTransferenciaModal({ aberto, form, opcoesEmpresa }: Dependenc
   });
 
   const contasCandidatas = computed(() =>
-    opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaOrigemId)
+    (opcoesEmpresa.value.contasDestinoTransferencia ?? opcoesEmpresa.value.contas).filter(
+      (conta) => conta.id !== form.value.contaOrigemId
+    )
   );
   const destinosSelecionados = computed<string[]>({
     get: () => {

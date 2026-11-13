@@ -244,6 +244,39 @@ describe("contas-usuarios integration", () => {
       );
     });
 
+    // Marco, 13/11/2026: a Tesouraria (quem confere o fechamento) manda para qualquer conta da empresa. So o DESTINO
+    // (`?destino=transferencia`); a origem continua sendo so as contas vinculadas. O caixa nao ganha nada com isso.
+    it("Deve_VerTodasAsContasNoDestino_Quando_TesourariaPedeDestinoDaTransferencia", async () => {
+      const cookie = await cookieSessao(contexto.app, "tesouraria");
+      const destino = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}&destino=transferencia`,
+        headers: { cookie }
+      });
+      assertOk(destino);
+      const idsDestino = json<{ data: Array<{ id: string }> }>(destino).data.map((c) => c.id);
+      expect(idsDestino).toEqual(
+        expect.arrayContaining([idsTeste.contaCaixa, idsTeste.contaBanco, idsTeste.contaLivre, idsTeste.contaCofre])
+      );
+
+      const origem = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie }
+      });
+      assertOk(origem);
+      expect(json<{ data: unknown[] }>(origem).data.length).toBeLessThan(idsDestino.length);
+
+      const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+      const doCaixa = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}&destino=transferencia`,
+        headers: { cookie: cookieCaixa }
+      });
+      assertOk(doCaixa);
+      expect(json<{ data: unknown[] }>(doCaixa).data).toEqual([]);
+    });
+
     it("Deve_NaoVerNenhumaConta_Quando_UsuarioComumSemVinculo", async () => {
       const cookie = await cookieSessao(contexto.app, "caixa");
       const resposta = await contexto.app.inject({

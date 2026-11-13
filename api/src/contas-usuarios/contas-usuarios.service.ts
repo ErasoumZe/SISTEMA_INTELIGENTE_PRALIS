@@ -25,14 +25,25 @@ type PerfilEscopo = { usuarioId: string; role: string; permissoes?: Permissao[] 
 //   - usuario_admin  -> TODAS as contas do escopo (short-circuit, como nas permissoes);
 //   - demais usuarios -> SO as vinculadas em contas_usuarios;
 //   - sem nenhum vinculo -> lista VAZIA (o front mostra "peca ao administrador").
-export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas: string[]) {
+// Destino da transferencia (Marco, 13/11/2026): a Tesouraria (quem confere o fechamento do caixa) manda para
+// QUALQUER conta da empresa — PDVs, cofres, bancos — sem precisar vincular conta por conta. A origem continua sendo
+// so as contas dela.
+export const PERMISSAO_DESTINO_QUALQUER_CONTA: Permissao = "fechamentos_caixa_conferir";
+
+export async function listarContasOperaveis(
+  perfil: PerfilEscopo,
+  escopoEmpresas: string[],
+  opcoes: { destinoTransferencia?: boolean } = {}
+) {
   if (!escopoEmpresas.length) return [];
-  const contas =
-    perfil.role === "usuario_admin"
-      ? await listarContas(escopoEmpresas)
-      : (await listarContasDoUsuarioRepository(perfil.usuarioId)).filter((conta) =>
-          escopoEmpresas.includes(conta.empresaId)
-        );
+  const veTodas =
+    perfil.role === "usuario_admin" ||
+    (opcoes.destinoTransferencia === true && temPermissao(perfil.permissoes ?? [], PERMISSAO_DESTINO_QUALQUER_CONTA));
+  const contas = veTodas
+    ? await listarContas(escopoEmpresas)
+    : (await listarContasDoUsuarioRepository(perfil.usuarioId)).filter((conta) =>
+        escopoEmpresas.includes(conta.empresaId)
+      );
   const empresasDasContas = [...new Set(contas.map((conta) => conta.empresaId))];
   const [cofres, pdvs, saldos] = await Promise.all([
     Promise.all(empresasDasContas.map((empresaId) => buscarContaCofreEmpresaRepository(empresaId))),
