@@ -2,6 +2,7 @@
 import type { ProdutoEmCotacaoDto } from "@padaria/shared";
 import AppShell from "~/components/app/AppShell.vue";
 import ComprasTela from "~/components/compras/base/ComprasTela.vue";
+import ComprasAvisoWhatsapp from "~/components/compras/ComprasAvisoWhatsapp.vue";
 import ComprasPedidoRapido from "~/components/compras/ComprasPedidoRapido.vue";
 import CotacaoAcoesDialog from "~/components/cotacao/CotacaoAcoesDialog.vue";
 import CotacaoMatriz from "~/components/cotacao/CotacaoMatriz.vue";
@@ -101,6 +102,7 @@ function novoPedidoUrgente(itens: Array<{ produtoId: string; quantidade: string 
           />
         </template>
       </AppCabecalhoTela>
+      <ComprasAvisoWhatsapp />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
       <CotacaoMatriz :produtos="painel.produtos" :carregando="empresaCarregando" @abrir="abrirProduto" />
 

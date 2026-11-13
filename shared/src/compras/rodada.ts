@@ -117,6 +117,9 @@ export type RodadaDto = {
   abertaEm: string;
   itens: RodadaItemDto[];
   convites: RodadaConviteDto[];
-  // Falso: o WhatsApp da empresa ainda nao esta conectado; o link tem de ser mandado a mao.
+  // Falso: o WhatsApp da empresa esta desligado ou desconectado; o link tem de ser mandado a mao.
   whatsappConectado: boolean;
 };
+
+/** Estado do WhatsApp das cotacoes (13/11/2026): "desconectado" = a instancia caiu e precisa de QR novo. */
+export type EstadoWhatsappDto = { estado: "conectado" | "desconectado" | "desligado" };

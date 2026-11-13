@@ -11,6 +11,7 @@ import { exigirPermissao } from "../auth/guards.js";
 import { reenviarConvite } from "./compras-convidar.service.js";
 import { obterCotacaoDoProduto, obterPainelCompras } from "./compras-painel.service.js";
 import { abrirRodada, listarRodadas, obterRodada } from "./compras-rodadas.service.js";
+import { estadoConexaoWhatsapp } from "../whatsapp/whatsapp-provedor.js";
 
 const rodadaParamsSchema = z.object({ id: z.string().uuid(), conviteId: z.string().uuid() });
 const empresaQuerySchema = z.object({ empresaId: z.string().uuid() });
@@ -30,6 +31,11 @@ export async function registrarRotasComprasRodadas(app: FastifyInstance): Promis
       const { empresaId } = painelComprasQuerySchema.parse(request.query);
       return ok(await obterCotacaoDoProduto(id, empresaId, request.perfilUsuario!));
     }
+  );
+
+  // 13/11/2026: o aviso das telas de Compras quando o WhatsApp das cotacoes cai (a instancia e unica).
+  app.get("/api/compras/whatsapp/estado", { preHandler: exigirPermissao("pedidos_visualizar") }, async () =>
+    ok({ estado: await estadoConexaoWhatsapp() })
   );
 
   app.get("/api/compras/rodadas", { preHandler: exigirPermissao("pedidos_visualizar") }, async (request) =>

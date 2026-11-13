@@ -4,7 +4,7 @@ import { executarEmTransacao } from "../banco/conexao.js";
 import { env } from "../env.js";
 import {
   enviarWhatsapp,
-  provedorConfigurado,
+  estadoConexaoWhatsapp,
   telefoneParaWhatsapp,
   type MensagemWhatsapp
 } from "../whatsapp/whatsapp-provedor.js";
@@ -101,7 +101,9 @@ export async function enfileirarAvisoDeCompra(pedidoId: string, tx: Transacao): 
 
 /** Uma transacao por mensagem: uma falha nao segura as outras. Devolve quantas sairam. */
 export async function processarFilaWhatsapp(aoFalhar: (envioId: string, erro: DadosExternos) => void): Promise<number> {
-  if (!provedorConfigurado()) return 0;
+  // Desligado ou desconectado (13/11/2026): a fila espera sem gastar tentativa. Antes, com a instância caída, as
+  // 5 tentativas acabavam em minutos ("Connection Closed") e a cotação não saía mais depois de reconectar.
+  if ((await estadoConexaoWhatsapp()) !== "conectado") return 0;
   let enviadas = 0;
   for (let rodada = 0; rodada < LOTE; rodada += 1) {
     const processou = await executarEmTransacao(async (tx) => {
