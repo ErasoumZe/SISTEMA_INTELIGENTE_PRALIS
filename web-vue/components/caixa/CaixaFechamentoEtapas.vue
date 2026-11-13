@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
 import type { ContagemFisicaRelatorio } from "@padaria/shared";
-import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno } from "~/types/padaria";
+import type { CaixaOperacional, PlanejamentoRetorno } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
-import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CampoLacreFechamento from "~/components/caixa/CampoLacreFechamento.vue";
@@ -26,7 +25,6 @@ const props = defineProps<{
   responsaveisFechamentoPendentes: boolean;
   lacreFechamentoReservado: string | null;
   planejamentosPendentes: PlanejamentoRetorno[];
-  entregasPendentes: EntregaCofrePendente[];
   fechamentoTravado: boolean;
   motivoTravado: string | null;
   folhaFechamentoEnviada: boolean;
@@ -158,7 +156,6 @@ function solicitarFechamento() {
         Execute cada linha quando o dinheiro sair da gaveta. Enquanto houver linha programada, o fechamento fica
         bloqueado. Cancelamentos devem ser feitos pela retaguarda.
       </v-alert>
-      <EntregasAguardandoConferencia :entregas="entregasPendentes" />
     </div>
 
     <div
