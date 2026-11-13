@@ -80,8 +80,8 @@ async function reenviar(convite: RodadaConviteDto) {
       <v-card-subtitle>Prazo até {{ prazo }} · {{ totalItens }} item(ns)</v-card-subtitle>
       <v-card-text class="d-grid ga-3">
         <v-alert v-if="!rodada.whatsappConectado" type="warning" variant="tonal" density="compact">
-          O WhatsApp da empresa ainda não está conectado: as mensagens ficam na fila. Enquanto isso, copie o link de
-          cada fornecedor e mande você mesmo.
+          O WhatsApp da empresa está desconectado: as mensagens ficam na fila e saem quando ele reconectar. Se tiver
+          pressa, copie o link de cada fornecedor e mande você mesmo.
         </v-alert>
         <v-alert v-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
         <p v-if="!rodada.convites.length" class="text-body-2 text-medium-emphasis">

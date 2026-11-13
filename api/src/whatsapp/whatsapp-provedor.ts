@@ -32,6 +32,47 @@ export function provedorConfigurado(): boolean {
 
 const TEMPO_LIMITE_MS = 15_000;
 
+/**
+ * Estado do WhatsApp da empresa (13/11/2026). "desligado": nenhum provedor configurado. "desconectado": a
+ * instância da Evolution caiu (o celular desconectou o aparelho) e precisa de QR novo — nada sai, a fila espera.
+ */
+export type EstadoWhatsapp = "conectado" | "desconectado" | "desligado";
+
+/** Rota de estado da Evolution v2: `GET {url}/instance/connectionState/{instancia}` → `{ instance: { state } }`. */
+export function urlEstadoEvolution(base: string, instancia: string): string {
+  return `${base.replace(/\/+$/u, "")}/instance/connectionState/${encodeURIComponent(instancia)}`;
+}
+
+// A tela e o tick de 60s perguntam o estado: 30s de cache poupa a Evolution, e 3s de limite não prende a tela.
+const CACHE_ESTADO_MS = 30_000;
+const LIMITE_ESTADO_MS = 3_000;
+let estadoEmCache: { valor: EstadoWhatsapp; ate: number } | null = null;
+
+/** Descarta o estado guardado (depois de uma falha de envio, e nos testes). */
+export function esquecerEstadoWhatsapp(): void {
+  estadoEmCache = null;
+}
+
+export async function estadoConexaoWhatsapp(agora = Date.now()): Promise<EstadoWhatsapp> {
+  if (!provedorConfigurado()) return "desligado";
+  // Gateway por webhook e o provedor de teste não informam conexão: configurado conta como conectado.
+  if (env.WHATSAPP_PROVEDOR !== "evolution") return "conectado";
+  if (estadoEmCache && estadoEmCache.ate > agora) return estadoEmCache.valor;
+  let valor: EstadoWhatsapp = "desconectado";
+  try {
+    const resposta = await fetch(urlEstadoEvolution(env.WHATSAPP_EVOLUTION_URL!, env.WHATSAPP_EVOLUTION_INSTANCIA!), {
+      headers: { apikey: env.WHATSAPP_EVOLUTION_API_KEY! },
+      signal: AbortSignal.timeout(LIMITE_ESTADO_MS)
+    });
+    const corpo = (await resposta.json().catch(() => null)) as { instance?: { state?: string } } | null;
+    if (resposta.ok && corpo?.instance?.state === "open") valor = "conectado";
+  } catch {
+    // Evolution fora do ar ou lenta: para quem envia, é o mesmo que desconectado.
+  }
+  estadoEmCache = { valor, ate: agora + CACHE_ESTADO_MS };
+  return valor;
+}
+
 async function postar(url: string, cabecalhos: Record<string, string>, corpo: object): Promise<Response> {
   return fetch(url, {
     method: "POST",
@@ -76,7 +117,11 @@ async function enviarPelaEvolution(mensagem: MensagemWhatsapp): Promise<Resultad
     { number: mensagem.telefone, text: mensagem.texto }
   );
   const corpo = (await resposta.json().catch(() => null)) as RespostaEvolution;
-  if (!resposta.ok) return { ok: false, erro: erroDaEvolution(resposta.status, corpo) };
+  if (!resposta.ok) {
+    // A falha pode ser a conexão que acabou de cair: o próximo tick pergunta o estado de novo.
+    esquecerEstadoWhatsapp();
+    return { ok: false, erro: erroDaEvolution(resposta.status, corpo) };
+  }
   return { ok: true, idExterno: corpo?.key?.id ?? null };
 }
 

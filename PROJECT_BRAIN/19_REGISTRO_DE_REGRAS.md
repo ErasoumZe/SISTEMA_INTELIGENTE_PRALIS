@@ -1613,6 +1613,12 @@ o id e o status da mensagem (nunca telefone, conteúdo ou chave). Ambiente que a
 Roteiro de ligação e riscos no documento 60. Substitui a frase "O envio oficial usará Meta Cloud API"
 (acima, na regra do Compras Fase 2) e a seção 7 do documento 57.
 
+**Adendo (José, 13/11/2026) — instância desconectada.** Em 13/11 a instância `compras-tnp` caiu (o WhatsApp
+Business removeu o aparelho) e uma cotação gastou as 5 tentativas com "Connection Closed" enquanto a tela mostrava
+"Enviado". A partir daí: o S1 consulta o estado da instância (`/instance/connectionState`, 30 s de cache); enquanto
+não estiver `open`, **a fila espera sem gastar tentativa** e sai sozinha depois do QR; as telas Solicitação de compra
+e Cotação por fornecedor mostram o aviso "O WhatsApp das cotações está desconectado" com o caminho para reconectar.
+
 ### R-238 — Quem faz cada transferência; PDV 4 é o caixa do gerente (Marco, 12/11/2026)
 
 - **Tesouraria:** transferência **com lacre** (lança os malotes), **sem lacre** e entre contas que ela movimenta.

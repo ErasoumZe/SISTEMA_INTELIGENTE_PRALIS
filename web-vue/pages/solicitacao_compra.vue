@@ -11,6 +11,7 @@ import AppShell from "~/components/app/AppShell.vue";
 import ComprasSecao from "~/components/compras/base/ComprasSecao.vue";
 import ComprasTela from "~/components/compras/base/ComprasTela.vue";
 import ComprasVazio from "~/components/compras/base/ComprasVazio.vue";
+import ComprasAvisoWhatsapp from "~/components/compras/ComprasAvisoWhatsapp.vue";
 import ComprasRodadaConvitesDialog from "~/components/compras/ComprasRodadaConvitesDialog.vue";
 import SolicitacaoCompraDialog from "~/components/compras/SolicitacaoCompraDialog.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
@@ -117,6 +118,7 @@ onMounted(async () => {
         titulo="Solicitação de compra"
         subtitulo="Os pedidos agendados que você executa. Na data, faça o pedido: ponha as quantidades e envie aos fornecedores."
       />
+      <ComprasAvisoWhatsapp />
       <v-alert v-if="erro" type="error" variant="tonal">{{ erro }}</v-alert>
 
       <ComprasSecao rente data-secao="para-enviar">
