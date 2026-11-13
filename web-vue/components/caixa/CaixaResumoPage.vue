@@ -203,7 +203,6 @@ const responsaveisFechamentoPendentes = computed(
 
 // G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
-const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
 const planejamentosPendentes = computed(() => props.status?.planejamentosPendentes ?? []);
 const totalPlanejadoCentavos = computed(() =>
   planejamentosPendentes.value.reduce((total, planejamento) => total + paraCentavos(planejamento.valor), 0)
@@ -953,7 +952,6 @@ function confirmarFechamento() {
           :responsaveis-fechamento-pendentes="responsaveisFechamentoPendentes"
           :lacre-fechamento-reservado="lacreFechamentoReservado"
           :planejamentos-pendentes="planejamentosPendentes"
-          :entregas-pendentes="entregasPendentes"
           :saldo-livre="saldoLivre"
           :total-planejado-centavos="totalPlanejadoCentavos"
           :fechamento-travado="fechamentoTravado"

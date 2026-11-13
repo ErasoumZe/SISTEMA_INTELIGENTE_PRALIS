@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDuvidasContexto } from "~/composables/useDuvidasContexto";
-import type { CaixaOperacional, EntregaCofrePendente, PlanejamentoRetorno } from "~/types/padaria";
+import type { CaixaOperacional, PlanejamentoRetorno } from "~/types/padaria";
 import { formatarDataHora } from "~/utils/formatacao";
 import CaixaFechamentoAjuda from "~/components/caixa/CaixaFechamentoAjuda.vue";
 import CaixaFechamentoEtapas from "~/components/caixa/CaixaFechamentoEtapas.vue";
@@ -34,7 +34,6 @@ const props = defineProps<{
   responsaveisFechamentoPendentes: boolean;
   lacreFechamentoReservado: string | null;
   planejamentosPendentes: PlanejamentoRetorno[];
-  entregasPendentes: EntregaCofrePendente[];
   saldoLivre: number;
   totalPlanejadoCentavos: number;
   fechamentoTravado: boolean;
@@ -260,7 +259,6 @@ function formatarHora(dataHora: string | null | undefined) {
       :responsaveis-fechamento-pendentes="responsaveisFechamentoPendentes"
       :lacre-fechamento-reservado="lacreFechamentoReservado"
       :planejamentos-pendentes="planejamentosPendentes"
-      :entregas-pendentes="entregasPendentes"
       :fechamento-travado="fechamentoTravado"
       :motivo-travado="motivoTravado"
       :folha-fechamento-enviada="folhaFechamentoEnviada"
