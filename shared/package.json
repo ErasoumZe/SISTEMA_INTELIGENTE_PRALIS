@@ -41,6 +41,11 @@
       "development": "./src/campanhas/index.ts",
       "default": "./dist/campanhas/index.js"
     },
+    "./auditoria-pdv": {
+      "types": "./dist/auditoria-pdv/index.d.ts",
+      "development": "./src/auditoria-pdv/index.ts",
+      "default": "./dist/auditoria-pdv/index.js"
+    },
     "./planilha-tesouraria": {
       "types": "./dist/planilha-tesouraria/index.d.ts",
       "development": "./src/planilha-tesouraria/index.ts",

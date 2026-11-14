@@ -3881,6 +3881,7 @@ export const notificacoes = pgTable(
         | "compras_agendamento_conferir"
         | "conferencia_estoque_fazer"
         | "sangria_recusada"
+        | "auditoria_pdv"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
