@@ -17,7 +17,9 @@ export async function registrarRotasAuditoriaPdv(app: FastifyInstance): Promise<
   app.get("/api/auditoria-pdv/calendario", acesso, async (request) =>
     ok(await calendarioAuditoria(request.query, request.perfilUsuario))
   );
-  app.get("/api/auditoria-pdv/dia", acesso, async (request) => ok(await diaAuditoria(request.query, request.perfilUsuario)));
+  app.get("/api/auditoria-pdv/dia", acesso, async (request) =>
+    ok(await diaAuditoria(request.query, request.perfilUsuario))
+  );
   app.post("/api/auditoria-pdv/gerar", acesso, async (request) =>
     ok(await gerarAuditoria(request.body, request.perfilUsuario))
   );

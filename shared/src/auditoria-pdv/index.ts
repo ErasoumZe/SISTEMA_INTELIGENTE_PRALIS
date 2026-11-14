@@ -75,7 +75,11 @@ export type AuditoriaDia = AuditoriaDiaResumo & { pdvs: PdvAuditoria[] };
 export type AgendaAuditoria = { ativa: boolean; horario: string };
 
 // Status de um PDV no dia: venda fora de caixa manda; depois, caixa ainda aberto; depois, sem venda.
-export function statusAuditoria(entrada: { vendas: number; vendasFora: number; caixasAbertos: number }): StatusAuditoria {
+export function statusAuditoria(entrada: {
+  vendas: number;
+  vendasFora: number;
+  caixasAbertos: number;
+}): StatusAuditoria {
   if (entrada.vendasFora > 0) return "alerta";
   if (entrada.caixasAbertos > 0) return "andamento";
   if (entrada.vendas === 0) return "sem_vendas";

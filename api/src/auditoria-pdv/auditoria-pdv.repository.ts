@@ -12,7 +12,12 @@ const vendaAuditavel = (empresaId: string) =>
 
 const liquido = sql<string>`(${vendas.valorOriginal} - ${vendas.valorDesconto} + ${vendas.valorAcrescimo})`;
 
-export async function resumoVendasPorDiaRepository(empresaId: string, inicio: string, fim: string, db: ExecutorBanco = banco) {
+export async function resumoVendasPorDiaRepository(
+  empresaId: string,
+  inicio: string,
+  fim: string,
+  db: ExecutorBanco = banco
+) {
   return db
     .select({
       data: sql<string>`${vendas.dataReferencia}::text`,
@@ -26,7 +31,12 @@ export async function resumoVendasPorDiaRepository(empresaId: string, inicio: st
     .groupBy(vendas.dataReferencia);
 }
 
-export async function caixasEmAndamentoPorDiaRepository(empresaId: string, inicio: string, fim: string, db: ExecutorBanco = banco) {
+export async function caixasEmAndamentoPorDiaRepository(
+  empresaId: string,
+  inicio: string,
+  fim: string,
+  db: ExecutorBanco = banco
+) {
   return db
     .select({ data: sql<string>`${fechamentosCaixa.dataMovimento}::text`, abertos: sql<number>`count(*)::int` })
     .from(fechamentosCaixa)
@@ -85,7 +95,12 @@ export async function produtosDasVendasRepository(vendaIds: string[], db: Execut
 }
 
 // Caixas do dia: os abertos naquela data e os que receberam alguma venda do dia.
-export async function caixasDoDiaRepository(empresaId: string, data: string, caixaIds: string[], db: ExecutorBanco = banco) {
+export async function caixasDoDiaRepository(
+  empresaId: string,
+  data: string,
+  caixaIds: string[],
+  db: ExecutorBanco = banco
+) {
   return db
     .select({
       id: fechamentosCaixa.id,
@@ -110,15 +125,32 @@ export async function caixasDoDiaRepository(empresaId: string, data: string, cai
     .orderBy(asc(fechamentosCaixa.dataHoraAbertura));
 }
 
-export async function auditoriasGeradasRepository(empresaId: string, inicio: string, fim: string, db: ExecutorBanco = banco) {
+export async function auditoriasGeradasRepository(
+  empresaId: string,
+  inicio: string,
+  fim: string,
+  db: ExecutorBanco = banco
+) {
   return db
-    .select({ id: auditoriasPdv.id, data: sql<string>`${auditoriasPdv.data}::text`, geradaEm: auditoriasPdv.geradaEm, geradaPor: auditoriasPdv.geradaPor })
+    .select({
+      id: auditoriasPdv.id,
+      data: sql<string>`${auditoriasPdv.data}::text`,
+      geradaEm: auditoriasPdv.geradaEm,
+      geradaPor: auditoriasPdv.geradaPor
+    })
     .from(auditoriasPdv)
     .where(and(eq(auditoriasPdv.empresaId, empresaId), between(auditoriasPdv.data, inicio, fim)));
 }
 
 export async function gravarAuditoriaRepository(
-  dados: { empresaId: string; data: string; geradaPor: string | null; vendasFora: number; valorFora: string; resultado: JsonValue },
+  dados: {
+    empresaId: string;
+    data: string;
+    geradaPor: string | null;
+    vendasFora: number;
+    valorFora: string;
+    resultado: JsonValue;
+  },
   db: ExecutorBanco = banco
 ) {
   const [linha] = await db
@@ -148,7 +180,12 @@ export async function buscarAgendaRepository(empresaId: string, db: ExecutorBanc
   return linha ?? null;
 }
 
-export async function salvarAgendaRepository(empresaId: string, ativa: boolean, horario: string, db: ExecutorBanco = banco) {
+export async function salvarAgendaRepository(
+  empresaId: string,
+  ativa: boolean,
+  horario: string,
+  db: ExecutorBanco = banco
+) {
   await db
     .insert(auditoriasPdvAgenda)
     .values({ empresaId, ativa, horario, atualizadoEm: new Date() })
@@ -157,7 +194,11 @@ export async function salvarAgendaRepository(empresaId: string, ativa: boolean, 
 
 export async function agendasAtivasRepository(db: ExecutorBanco = banco) {
   return db
-    .select({ empresaId: auditoriasPdvAgenda.empresaId, horario: auditoriasPdvAgenda.horario, fuso: empresas.fusoHorario })
+    .select({
+      empresaId: auditoriasPdvAgenda.empresaId,
+      horario: auditoriasPdvAgenda.horario,
+      fuso: empresas.fusoHorario
+    })
     .from(auditoriasPdvAgenda)
     .innerJoin(empresas, eq(empresas.id, auditoriasPdvAgenda.empresaId))
     .where(eq(auditoriasPdvAgenda.ativa, true));

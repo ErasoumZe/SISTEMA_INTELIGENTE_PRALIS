@@ -40,7 +40,8 @@ const centavos = (valor: string | number) => Math.round(Number(valor) * 100);
 const reais = (c: number) => c / 100;
 
 function exigirEmpresa(perfil: PerfilComEmpresa | undefined, empresaId: string) {
-  if (!perfil || !empresasPermitidas(perfil).includes(empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+  if (!perfil || !empresasPermitidas(perfil).includes(empresaId))
+    throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
 }
 
 function diasEntre(inicio: string, fim: string): string[] {
@@ -56,7 +57,10 @@ function diasEntre(inicio: string, fim: string): string[] {
   return dias;
 }
 
-export async function calendarioAuditoria(query: DadosExternos, perfil?: PerfilComEmpresa): Promise<AuditoriaDiaResumo[]> {
+export async function calendarioAuditoria(
+  query: DadosExternos,
+  perfil?: PerfilComEmpresa
+): Promise<AuditoriaDiaResumo[]> {
   const { empresaId, inicio, fim } = auditoriaCalendarioQuerySchema.parse(query);
   exigirEmpresa(perfil, empresaId);
   const dias = diasEntre(inicio, fim);
@@ -86,7 +90,9 @@ export async function calendarioAuditoria(query: DadosExternos, perfil?: PerfilC
 function somarFormas(itens: Array<{ categoria: string; valor: number }>): FormaAuditoria[] {
   const mapa = new Map<string, number>();
   for (const item of itens) mapa.set(item.categoria, (mapa.get(item.categoria) ?? 0) + centavos(item.valor));
-  return [...mapa.entries()].map(([categoria, c]) => ({ categoria, valor: reais(c) })).sort((a, b) => b.valor - a.valor);
+  return [...mapa.entries()]
+    .map(([categoria, c]) => ({ categoria, valor: reais(c) }))
+    .sort((a, b) => b.valor - a.valor);
 }
 
 async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia> {
@@ -103,7 +109,9 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
   const formasDaVenda = new Map<string, Array<{ categoria: string; valor: number }>>();
   for (const p of pagamentos) {
     const categoria =
-      p.categoria && p.categoria !== "outros" ? p.categoria : categoriaFechamentoPorNome(p.formaNome ?? p.tipoAutomacao ?? "");
+      p.categoria && p.categoria !== "outros"
+        ? p.categoria
+        : categoriaFechamentoPorNome(p.formaNome ?? p.tipoAutomacao ?? "");
     const lista = formasDaVenda.get(p.vendaId) ?? [];
     lista.push({ categoria, valor: Number(p.valor) });
     formasDaVenda.set(p.vendaId, lista);
@@ -115,7 +123,15 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
     const chave = chavePdv(pdvId, nome);
     let pdv = pdvsMapa.get(chave);
     if (!pdv) {
-      pdv = { pdvId, pdvNome: nome ?? "PDV não identificado", status: "sem_vendas", vendas: 0, total: 0, caixas: [], fora: [] };
+      pdv = {
+        pdvId,
+        pdvNome: nome ?? "PDV não identificado",
+        status: "sem_vendas",
+        vendas: 0,
+        total: 0,
+        caixas: [],
+        fora: []
+      };
       pdvsMapa.set(chave, pdv);
     }
     return pdv;
@@ -161,7 +177,9 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
   }
   for (const [caixaId, formas] of formasPorCaixa) caixasMapa.get(caixaId)!.formas = somarFormas(formas);
 
-  const pdvsLista = [...pdvsMapa.values()].sort((a, b) => a.pdvNome.localeCompare(b.pdvNome, "pt-BR", { numeric: true }));
+  const pdvsLista = [...pdvsMapa.values()].sort((a, b) =>
+    a.pdvNome.localeCompare(b.pdvNome, "pt-BR", { numeric: true })
+  );
   for (const pdv of pdvsLista) {
     pdv.status = statusAuditoria({
       vendas: pdv.vendas,
@@ -257,7 +275,11 @@ export async function processarAuditoriasAgendadas(agora: Date, aoFalhar: (empre
       const { data, hora } = localDoInstante(agora, agenda.fuso);
       if (hora < agenda.horario) continue;
       const [ja] = await auditoriasGeradasRepository(agenda.empresaId, data, data);
-      if (ja && localDoInstante(ja.geradaEm, agenda.fuso).data === data && localDoInstante(ja.geradaEm, agenda.fuso).hora >= agenda.horario)
+      if (
+        ja &&
+        localDoInstante(ja.geradaEm, agenda.fuso).data === data &&
+        localDoInstante(ja.geradaEm, agenda.fuso).hora >= agenda.horario
+      )
         continue;
       await gerarEGravar(agenda.empresaId, data, null);
     } catch (erro) {
