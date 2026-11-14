@@ -1,103 +1,78 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import type { AgendaAuditoria, AuditoriaDia, AuditoriaDiaResumo } from "@padaria/shared";
+import { onMounted, ref, watch } from "vue";
+import type { AgendaAuditoria, AuditoriaDia, ConsultaAuditoria } from "@padaria/shared";
 import AuditoriaPdvAgenda from "~/components/auditoria/AuditoriaPdvAgenda.vue";
-import AuditoriaPdvCalendario from "~/components/auditoria/AuditoriaPdvCalendario.vue";
 import AuditoriaPdvDia from "~/components/auditoria/AuditoriaPdvDia.vue";
-import { mensagemErro } from "~/utils/domain";
+import AuditoriaPdvFiltros, { type FiltrosAuditoria } from "~/components/auditoria/AuditoriaPdvFiltros.vue";
+import { dinheiro, mensagemErro } from "~/utils/domain";
 
-// Auditoria de PDVs (Marco, 13/11/2026): calendario por dia, semana ou mes. Escolhe um dia, ve como cada PDV
-// fechou contra a CREARE e gera (ou deixa o sistema gerar sozinho) a auditoria do dia.
+// Auditoria de PDVs (Marco, 13-14/11/2026): filtros (periodo, PDV, turno, hora, forma, situacao) e a lista dos
+// dias com cada PDV contra a CREARE. Em cada dia da para gerar a auditoria; o automatico gera sozinho.
 const props = defineProps<{ empresaId: string }>();
 const { apiGet, apiPost, apiPut } = useApi();
 
-type Modo = "dia" | "semana" | "mes";
 const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-const modo = ref<Modo>("mes");
-const selecionado = ref(hoje);
-const dias = ref<AuditoriaDiaResumo[]>([]);
-const detalhe = ref<AuditoriaDia | null>(null);
+const seisDiasAtras = new Date(Date.parse(`${hoje}T12:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+const filtros = ref<FiltrosAuditoria>({
+  inicio: seisDiasAtras,
+  fim: hoje,
+  pdvId: null,
+  turno: null,
+  horaInicio: "",
+  horaFim: "",
+  forma: null,
+  status: null
+});
+const consulta = ref<ConsultaAuditoria>({
+  resumo: { vendas: 0, total: 0, vendasFora: 0, valorFora: 0 },
+  dias: [],
+  pdvs: []
+});
 const agenda = ref<AgendaAuditoria>({ ativa: false, horario: "23:30" });
 const dialogoAgenda = ref(false);
 const carregando = ref(false);
-const gerando = ref(false);
+const gerandoData = ref<string | null>(null);
 const salvandoAgenda = ref(false);
 const erro = ref("");
 const aviso = ref("");
 
-const deslocar = (data: string, dias: number) => {
-  const d = new Date(`${data}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
+const query = (extra: Record<string, string | null>) => {
+  const params = new URLSearchParams({ empresaId: props.empresaId });
+  for (const [chave, valor] of Object.entries(extra)) if (valor) params.set(chave, valor);
+  return `?${params.toString()}`;
 };
-const periodo = computed(() => {
-  if (modo.value === "dia") return { inicio: selecionado.value, fim: selecionado.value };
-  if (modo.value === "semana") {
-    const inicio = deslocar(selecionado.value, -new Date(`${selecionado.value}T12:00:00Z`).getUTCDay());
-    return { inicio, fim: deslocar(inicio, 6) };
-  }
-  const inicio = `${selecionado.value.slice(0, 7)}-01`;
-  const fim = new Date(Date.UTC(Number(inicio.slice(0, 4)), Number(inicio.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  return { inicio, fim };
-});
-const titulo = computed(() => {
-  const d = new Date(`${selecionado.value}T12:00:00Z`);
-  if (modo.value === "mes") return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
-  if (modo.value === "dia")
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
-  const { inicio, fim } = periodo.value;
-  return `${inicio.slice(8, 10)}/${inicio.slice(5, 7)} a ${fim.slice(8, 10)}/${fim.slice(5, 7)}`;
-});
-const resumoSelecionado = computed(() => dias.value.find((dia) => dia.data === selecionado.value) ?? null);
 
-function navegar(passo: number) {
-  if (modo.value === "dia") selecionado.value = deslocar(selecionado.value, passo);
-  else if (modo.value === "semana") selecionado.value = deslocar(selecionado.value, 7 * passo);
-  else {
-    const d = new Date(`${selecionado.value.slice(0, 7)}-01T12:00:00Z`);
-    d.setUTCMonth(d.getUTCMonth() + passo);
-    selecionado.value = d.toISOString().slice(0, 10);
-  }
-}
-
-const query = (extra: Record<string, string>) =>
-  "?" + new URLSearchParams({ empresaId: props.empresaId, ...extra }).toString();
-
+let pedido = 0;
 async function carregar() {
-  if (!props.empresaId) return;
+  if (!props.empresaId || !filtros.value.inicio || !filtros.value.fim) return;
+  const atual = ++pedido;
   carregando.value = true;
   erro.value = "";
   try {
-    const [lista, dia] = await Promise.all([
-      apiGet<AuditoriaDiaResumo[]>(`/api/auditoria-pdv/calendario${query(periodo.value)}`),
-      apiGet<AuditoriaDia>(`/api/auditoria-pdv/dia${query({ data: selecionado.value })}`)
-    ]);
-    dias.value = lista;
-    detalhe.value = dia;
+    const resposta = await apiGet<ConsultaAuditoria>(`/api/auditoria-pdv/consulta${query(filtros.value)}`);
+    if (atual === pedido) consulta.value = resposta;
   } catch (falha) {
-    erro.value = mensagemErro(falha);
+    if (atual === pedido) erro.value = mensagemErro(falha);
   } finally {
-    carregando.value = false;
+    if (atual === pedido) carregando.value = false;
   }
 }
 
-async function gerar() {
-  gerando.value = true;
+async function gerar(data: string) {
+  gerandoData.value = data;
   erro.value = "";
   aviso.value = "";
   try {
-    const dia = await apiPost<AuditoriaDia>("/api/auditoria-pdv/gerar", {
-      empresaId: props.empresaId,
-      data: selecionado.value
-    });
+    const dia = await apiPost<AuditoriaDia>("/api/auditoria-pdv/gerar", { empresaId: props.empresaId, data });
+    const quando = `${data.slice(8, 10)}/${data.slice(5, 7)}`;
     aviso.value = dia.vendasFora
-      ? `Auditoria gerada: ${dia.vendasFora} venda(s) fora de caixa. A Tesouraria foi avisada.`
-      : "Auditoria gerada: todas as vendas caíram em caixa.";
+      ? `Auditoria de ${quando} gerada: ${dia.vendasFora} venda(s) fora de caixa. A Tesouraria foi avisada.`
+      : `Auditoria de ${quando} gerada: todas as vendas caíram em caixa.`;
     await carregar();
   } catch (falha) {
     erro.value = mensagemErro(falha);
   } finally {
-    gerando.value = false;
+    gerandoData.value = null;
   }
 }
 
@@ -113,7 +88,7 @@ async function salvarAgenda(nova: AgendaAuditoria) {
   }
 }
 
-watch([modo, selecionado, () => props.empresaId], () => void carregar());
+watch([filtros, () => props.empresaId], () => void carregar(), { deep: true });
 onMounted(async () => {
   await carregar();
   if (props.empresaId)
@@ -128,54 +103,44 @@ onMounted(async () => {
         <span class="auditoria__marca">Vendas da CREARE × caixas</span>
         <h2 id="auditoria-titulo">Auditoria de PDVs</h2>
       </div>
-      <div class="auditoria__acoes">
-        <v-btn variant="tonal" prepend-icon="mdi-clock-outline" @click="dialogoAgenda = true">
-          {{ agenda.ativa ? `Automático ${agenda.horario}` : "Automático desligado" }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          prepend-icon="mdi-calendar-check-outline"
-          :loading="gerando"
-          data-teste="gerar-auditoria"
-          @click="gerar"
-        >
-          Gerar auditoria do dia
-        </v-btn>
-      </div>
+      <v-btn variant="tonal" prepend-icon="mdi-clock-outline" @click="dialogoAgenda = true">
+        {{ agenda.ativa ? `Automático ${agenda.horario}` : "Automático desligado" }}
+      </v-btn>
     </header>
 
-    <div class="auditoria__barra">
-      <v-btn-toggle v-model="modo" mandatory density="comfortable" color="primary" variant="outlined" divided>
-        <v-btn value="dia">Dia</v-btn>
-        <v-btn value="semana">Semana</v-btn>
-        <v-btn value="mes">Mês</v-btn>
-      </v-btn-toggle>
-      <div class="auditoria__navegar">
-        <v-btn icon="mdi-chevron-left" variant="text" aria-label="Anterior" @click="navegar(-1)" />
-        <strong>{{ titulo }}</strong>
-        <v-btn icon="mdi-chevron-right" variant="text" aria-label="Próximo" @click="navegar(1)" />
-        <v-btn variant="text" size="small" @click="selecionado = hoje">Hoje</v-btn>
-      </div>
-    </div>
+    <AuditoriaPdvFiltros v-model="filtros" :pdvs="consulta.pdvs" :hoje="hoje" />
 
     <v-alert v-if="erro" type="error" variant="tonal" closable @click:close="erro = ''">{{ erro }}</v-alert>
     <v-alert v-if="aviso" type="success" variant="tonal" closable @click:close="aviso = ''">{{ aviso }}</v-alert>
+
+    <div class="auditoria__resumo" aria-live="polite" data-teste="auditoria-resumo">
+      <span
+        ><strong>{{ consulta.resumo.vendas }}</strong> vendas</span
+      >
+      <span
+        ><strong>{{ dinheiro(consulta.resumo.total) }}</strong> na CREARE</span
+      >
+      <span :class="{ 'texto-alerta': consulta.resumo.vendasFora }"
+        ><strong>{{ consulta.resumo.vendasFora }}</strong> fora de caixa ({{
+          dinheiro(consulta.resumo.valorFora)
+        }})</span
+      >
+      <span
+        ><strong>{{ consulta.dias.length }}</strong> dia(s)</span
+      >
+    </div>
     <v-progress-linear v-if="carregando" indeterminate color="primary" />
 
-    <AuditoriaPdvCalendario
-      v-if="modo !== 'dia'"
-      :dias="dias"
-      :modo="modo"
-      :referencia="selecionado"
-      :selecionado="selecionado"
-      @selecionar="selecionado = $event"
-    />
-
-    <p v-if="resumoSelecionado?.gerada" class="auditoria__gerada">
-      Auditoria gerada {{ resumoSelecionado.gerada.automatica ? "automaticamente" : "" }} em
-      {{ new Date(resumoSelecionado.gerada.em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) }}.
+    <p v-if="!carregando && !consulta.dias.length" class="auditoria__vazio">
+      Nada encontrado com esses filtros. Mude o período ou limpe os filtros.
     </p>
-    <AuditoriaPdvDia v-if="detalhe" :dia="detalhe" />
+    <AuditoriaPdvDia
+      v-for="dia in consulta.dias"
+      :key="dia.data"
+      :dia="dia"
+      :gerando="gerandoData === dia.data"
+      @gerar="gerar(dia.data)"
+    />
 
     <AuditoriaPdvAgenda v-model="dialogoAgenda" :agenda="agenda" :salvando="salvandoAgenda" @salvar="salvarAgenda" />
   </section>
@@ -206,46 +171,28 @@ onMounted(async () => {
 .auditoria__topo h2 {
   margin: 2px 0 0;
 }
-.auditoria__acoes {
+.auditoria__resumo {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 20px;
+  color: var(--cx-ink-soft);
+  font-size: 0.9rem;
 }
-.auditoria__barra {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.auditoria__resumo strong {
+  color: var(--cx-ink);
+  font-variant-numeric: tabular-nums;
 }
-.auditoria__navegar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.auditoria__resumo .texto-alerta,
+.auditoria__resumo .texto-alerta strong {
+  color: var(--cx-negative);
 }
-.auditoria__navegar strong {
-  min-width: 150px;
-  text-align: center;
-}
-.auditoria__navegar strong::first-letter {
-  text-transform: uppercase;
-}
-.auditoria__gerada {
+.auditoria__vazio {
   margin: 0;
   color: var(--cx-ink-soft);
-  font-size: 0.84rem;
 }
 @media (max-width: 760px) {
-  .auditoria__acoes,
-  .auditoria__acoes :deep(.v-btn) {
+  .auditoria__topo :deep(.v-btn) {
     width: 100%;
-  }
-  .auditoria__barra {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .auditoria__navegar {
-    justify-content: space-between;
   }
 }
 </style>

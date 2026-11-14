@@ -4,7 +4,8 @@ import { dinheiro } from "~/utils/domain";
 
 // Auditoria de PDVs: o dia aberto. Um cartao por PDV com os caixas (turno, quem abriu, vendas e total) e, se
 // houver, as vendas que nao cairam em nenhum caixa — hora, valor, forma e produtos.
-defineProps<{ dia: AuditoriaDia }>();
+defineProps<{ dia: AuditoriaDia; gerando: boolean }>();
+const emit = defineEmits<{ (e: "gerar"): void }>();
 
 const rotulos: Record<StatusAuditoria, string> = {
   ok: "Bateu",
@@ -42,6 +43,14 @@ const dataLonga = (data: string) =>
     month: "long",
     timeZone: "UTC"
   });
+const momento = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 </script>
 
 <template>
@@ -58,8 +67,23 @@ const dataLonga = (data: string) =>
             ></template
           >
         </p>
+        <small v-if="dia.gerada" class="auditoria-dia__gerada">
+          Auditoria gerada{{ dia.gerada.automatica ? " automaticamente" : "" }} em {{ momento(dia.gerada.em) }}
+        </small>
       </div>
-      <v-chip :color="cores[dia.status]" variant="tonal" size="small">{{ rotulos[dia.status] }}</v-chip>
+      <div class="auditoria-dia__acoes">
+        <v-chip :color="cores[dia.status]" variant="tonal" size="small">{{ rotulos[dia.status] }}</v-chip>
+        <v-btn
+          size="small"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-calendar-check-outline"
+          :loading="gerando"
+          data-teste="gerar-auditoria"
+          @click="emit('gerar')"
+          >{{ dia.gerada ? "Gerar de novo" : "Gerar auditoria" }}</v-btn
+        >
+      </div>
     </header>
 
     <p v-if="!dia.pdvs.length" class="auditoria-dia__vazio">Nenhuma venda da CREARE neste dia.</p>
@@ -117,6 +141,19 @@ const dataLonga = (data: string) =>
 .auditoria-dia {
   display: grid;
   gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cx-line);
+}
+.auditoria-dia__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.auditoria-dia__gerada {
+  color: var(--cx-ink-soft);
+  font-size: 0.8rem;
 }
 .auditoria-dia__topo {
   display: flex;

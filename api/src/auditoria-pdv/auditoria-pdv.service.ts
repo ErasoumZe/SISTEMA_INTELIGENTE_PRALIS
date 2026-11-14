@@ -1,19 +1,21 @@
 import {
   agendaAuditoriaPayloadSchema,
-  auditoriaCalendarioQuerySchema,
-  auditoriaDiaQuerySchema,
+  auditoriaConsultaQuerySchema,
+  auditoriaEmpresaQuerySchema,
   gerarAuditoriaPayloadSchema,
   statusAuditoria,
   statusDoDia,
+  type AuditoriaConsultaQuery,
   type AuditoriaDia,
-  type AuditoriaDiaResumo,
   type CaixaAuditoria,
+  type ConsultaAuditoria,
   type FormaAuditoria,
   type PdvAuditoria
 } from "@padaria/shared/auditoria-pdv";
 import type { DadosExternos, JsonValue } from "@padaria/shared/api";
 import { localDoInstante } from "@padaria/shared/compras";
 import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
+import { pdvFoiExcluido } from "@padaria/shared/pdvs";
 import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
@@ -23,14 +25,14 @@ import {
   agendasAtivasRepository,
   auditoriasGeradasRepository,
   buscarAgendaRepository,
-  caixasDoDiaRepository,
-  caixasEmAndamentoPorDiaRepository,
+  caixasDoPeriodoRepository,
+  fusoDaEmpresaRepository,
   gravarAuditoriaRepository,
-  pagamentosDasVendasRepository,
-  produtosDasVendasRepository,
-  resumoVendasPorDiaRepository,
+  pagamentosDoPeriodoRepository,
+  pdvsDaEmpresaRepository,
+  produtosForaDoPeriodoRepository,
   salvarAgendaRepository,
-  vendasDoDiaRepository
+  vendasDoPeriodoRepository
 } from "./auditoria-pdv.repository.js";
 
 // Auditoria de PDVs (Marco, 13/11/2026): por dia, cruza as vendas da CREARE com os caixas abertos no sistema.
@@ -44,47 +46,11 @@ function exigirEmpresa(perfil: PerfilComEmpresa | undefined, empresaId: string) 
     throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
 }
 
-function diasEntre(inicio: string, fim: string): string[] {
-  const dias: string[] = [];
-  const atual = new Date(`${inicio}T12:00:00Z`);
-  const ultimo = new Date(`${fim}T12:00:00Z`);
-  if (atual > ultimo) throw erroValidacao("Inicio depois do fim");
-  if ((ultimo.getTime() - atual.getTime()) / 86_400_000 > 62) throw erroValidacao("Periodo de no maximo 62 dias");
-  while (atual <= ultimo) {
-    dias.push(atual.toISOString().slice(0, 10));
-    atual.setUTCDate(atual.getUTCDate() + 1);
-  }
-  return dias;
-}
+const MAX_DIAS = 31;
 
-export async function calendarioAuditoria(
-  query: DadosExternos,
-  perfil?: PerfilComEmpresa
-): Promise<AuditoriaDiaResumo[]> {
-  const { empresaId, inicio, fim } = auditoriaCalendarioQuerySchema.parse(query);
-  exigirEmpresa(perfil, empresaId);
-  const dias = diasEntre(inicio, fim);
-  const [vendasPorDia, abertosPorDia, geradas] = await Promise.all([
-    resumoVendasPorDiaRepository(empresaId, inicio, fim),
-    caixasEmAndamentoPorDiaRepository(empresaId, inicio, fim),
-    auditoriasGeradasRepository(empresaId, inicio, fim)
-  ]);
-  return dias.map((data) => {
-    const v = vendasPorDia.find((linha) => linha.data === data);
-    const abertos = abertosPorDia.find((linha) => linha.data === data)?.abertos ?? 0;
-    const gerada = geradas.find((linha) => linha.data === data);
-    const vendasQtd = v?.vendas ?? 0;
-    const vendasFora = v?.vendasFora ?? 0;
-    return {
-      data,
-      status: statusAuditoria({ vendas: vendasQtd, vendasFora, caixasAbertos: abertos }),
-      vendas: vendasQtd,
-      total: Number(v?.total ?? 0),
-      vendasFora,
-      valorFora: Number(v?.valorFora ?? 0),
-      gerada: gerada ? { em: gerada.geradaEm.toISOString(), automatica: gerada.geradaPor === null } : null
-    };
-  });
+function validarPeriodo(inicio: string, fim: string) {
+  const dias = (Date.parse(`${fim}T12:00:00Z`) - Date.parse(`${inicio}T12:00:00Z`)) / 86_400_000;
+  if (dias > MAX_DIAS - 1) throw erroValidacao(`Periodo de no maximo ${MAX_DIAS} dias`);
 }
 
 function somarFormas(itens: Array<{ categoria: string; valor: number }>): FormaAuditoria[] {
@@ -95,17 +61,24 @@ function somarFormas(itens: Array<{ categoria: string; valor: number }>): FormaA
     .sort((a, b) => b.valor - a.valor);
 }
 
-async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia> {
-  const linhas = await vendasDoDiaRepository(empresaId, data);
-  const ids = linhas.map((linha) => linha.id);
-  const foraIds = linhas.filter((linha) => !linha.caixaId).map((linha) => linha.id);
-  const caixaIds = [...new Set(linhas.map((linha) => linha.caixaId).filter((id): id is string => Boolean(id)))];
-  const [pagamentos, produtos, caixas, geradas] = await Promise.all([
-    pagamentosDasVendasRepository(ids),
-    produtosDasVendasRepository(foraIds),
-    caixasDoDiaRepository(empresaId, data, caixaIds),
-    auditoriasGeradasRepository(empresaId, data, data)
+type Filtro = Omit<AuditoriaConsultaQuery, "empresaId" | "inicio" | "fim">;
+
+// Monta os dias do periodo. Os filtros de venda (turno, hora, forma) recortam as vendas antes de agrupar; o de
+// situacao recorta os PDVs ja montados. Dia sem nenhum PDV depois do filtro sai da lista.
+async function montarPeriodo(empresaId: string, inicio: string, fim: string, filtro: Filtro = {}) {
+  const recorte = { empresaId, inicio, fim, pdvId: filtro.pdvId };
+  const [linhas, pagamentos, produtos, geradas, fuso] = await Promise.all([
+    vendasDoPeriodoRepository(recorte),
+    pagamentosDoPeriodoRepository(recorte),
+    produtosForaDoPeriodoRepository(recorte),
+    auditoriasGeradasRepository(empresaId, inicio, fim),
+    fusoDaEmpresaRepository(empresaId)
   ]);
+  const caixaIds = [...new Set(linhas.map((linha) => linha.caixaId).filter((id): id is string => Boolean(id)))];
+  const caixas = (await caixasDoPeriodoRepository(empresaId, inicio, fim, caixaIds)).filter(
+    (c) => (!filtro.pdvId || c.pdvId === filtro.pdvId) && (!filtro.turno || c.turno === filtro.turno)
+  );
+
   const formasDaVenda = new Map<string, Array<{ categoria: string; valor: number }>>();
   for (const p of pagamentos) {
     const categoria =
@@ -116,7 +89,58 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
     lista.push({ categoria, valor: Number(p.valor) });
     formasDaVenda.set(p.vendaId, lista);
   }
+  const turnoDoCaixa = new Map(caixas.map((c) => [c.id, c.turno]));
+  const horaFiltrada = Boolean(filtro.horaInicio || filtro.horaFim);
+  const vendasFiltradas = linhas.filter((v) => {
+    if (filtro.turno && !(v.caixaId && turnoDoCaixa.get(v.caixaId) === filtro.turno)) return false;
+    if (filtro.forma && !(formasDaVenda.get(v.id) ?? []).some((f) => f.categoria === filtro.forma)) return false;
+    if (horaFiltrada) {
+      if (!v.dataVenda) return false;
+      const hora = localDoInstante(v.dataVenda, fuso).hora;
+      if (filtro.horaInicio && hora < filtro.horaInicio) return false;
+      if (filtro.horaFim && hora > filtro.horaFim) return false;
+    }
+    return true;
+  });
 
+  const datas = new Set<string>([
+    ...vendasFiltradas.map((v) => v.data),
+    ...(horaFiltrada || filtro.forma ? [] : caixas.map((c) => c.data))
+  ]);
+  const dias: AuditoriaDia[] = [];
+  for (const data of [...datas]
+    .filter((d) => d >= inicio && d <= fim)
+    .sort()
+    .reverse()) {
+    const vendasDoDia = vendasFiltradas.filter((v) => v.data === data);
+    const idsCaixasComVenda = new Set(vendasDoDia.map((v) => v.caixaId).filter(Boolean));
+    const caixasDoDia = caixas.filter(
+      (c) => idsCaixasComVenda.has(c.id) || (c.data === data && !horaFiltrada && !filtro.forma)
+    );
+    const dia = montarDia(data, vendasDoDia, caixasDoDia, formasDaVenda, produtos);
+    if (filtro.status) {
+      dia.pdvs = dia.pdvs.filter((pdv) => pdv.status === filtro.status);
+      Object.assign(dia, resumir([dia]), { status: statusDoDia(dia.pdvs.map((pdv) => pdv.status)) });
+    }
+    if (!dia.pdvs.length) continue;
+    const gerada = geradas.find((g) => g.data === data);
+    dia.gerada = gerada ? { em: gerada.geradaEm.toISOString(), automatica: gerada.geradaPor === null } : null;
+    dias.push(dia);
+  }
+  return dias;
+}
+
+type VendaLinha = Awaited<ReturnType<typeof vendasDoPeriodoRepository>>[number];
+type CaixaLinha = Awaited<ReturnType<typeof caixasDoPeriodoRepository>>[number];
+type ProdutoLinha = Awaited<ReturnType<typeof produtosForaDoPeriodoRepository>>[number];
+
+function montarDia(
+  data: string,
+  linhas: VendaLinha[],
+  caixas: CaixaLinha[],
+  formasDaVenda: Map<string, Array<{ categoria: string; valor: number }>>,
+  produtos: ProdutoLinha[]
+): AuditoriaDia {
   const chavePdv = (pdvId: string | null, nome: string | null) => pdvId ?? `sem-pdv:${nome ?? "?"}`;
   const pdvsMapa = new Map<string, PdvAuditoria>();
   const garantirPdv = (pdvId: string | null, nome: string | null) => {
@@ -190,7 +214,6 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
   const vendasFora = pdvsLista.reduce((soma, pdv) => soma + pdv.fora.length, 0);
   const valorForaC = pdvsLista.reduce((soma, pdv) => soma + pdv.fora.reduce((s, v) => s + centavos(v.valor), 0), 0);
   const totalC = linhas.reduce((soma, v) => soma + centavos(v.valor), 0);
-  const gerada = geradas[0];
   return {
     data,
     status: statusDoDia(pdvsLista.map((pdv) => pdv.status)),
@@ -198,22 +221,53 @@ async function montarDia(empresaId: string, data: string): Promise<AuditoriaDia>
     total: reais(totalC),
     vendasFora,
     valorFora: reais(valorForaC),
-    gerada: gerada ? { em: gerada.geradaEm.toISOString(), automatica: gerada.geradaPor === null } : null,
+    gerada: null,
     pdvs: pdvsLista
   };
 }
 
-export async function diaAuditoria(query: DadosExternos, perfil?: PerfilComEmpresa) {
-  const { empresaId, data } = auditoriaDiaQuerySchema.parse(query);
+// Totais do que a lista mostra (depois de todos os filtros).
+function resumir(dias: AuditoriaDia[]): ConsultaAuditoria["resumo"] {
+  let vendas = 0;
+  let totalC = 0;
+  let vendasFora = 0;
+  let foraC = 0;
+  for (const pdv of dias.flatMap((dia) => dia.pdvs)) {
+    vendas += pdv.vendas;
+    totalC += centavos(pdv.total);
+    vendasFora += pdv.fora.length;
+    foraC += pdv.fora.reduce((s, v) => s + centavos(v.valor), 0);
+  }
+  return { vendas, total: reais(totalC), vendasFora, valorFora: reais(foraC) };
+}
+
+export async function consultarAuditoria(query: DadosExternos, perfil?: PerfilComEmpresa): Promise<ConsultaAuditoria> {
+  const { empresaId, inicio, fim, ...filtro } = auditoriaConsultaQuerySchema.parse(query);
   exigirEmpresa(perfil, empresaId);
-  return montarDia(empresaId, data);
+  validarPeriodo(inicio, fim);
+  const [dias, pdvs] = await Promise.all([
+    montarPeriodo(empresaId, inicio, fim, filtro),
+    pdvsDaEmpresaRepository(empresaId)
+  ]);
+  return {
+    resumo: resumir(dias),
+    dias,
+    pdvs: pdvs.filter((pdv) => !pdvFoiExcluido(pdv)).map((pdv) => ({ id: pdv.id, nome: pdv.nome }))
+  };
+}
+
+async function retratoDoDia(empresaId: string, data: string): Promise<AuditoriaDia> {
+  const [dia] = await montarPeriodo(empresaId, data, data);
+  return (
+    dia ?? { data, status: "sem_vendas", vendas: 0, total: 0, vendasFora: 0, valorFora: 0, gerada: null, pdvs: [] }
+  );
 }
 
 const dataBr = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
 const moeda = (valor: number) => valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 async function gerarEGravar(empresaId: string, data: string, geradaPor: string | null) {
-  const dia = await montarDia(empresaId, data);
+  const dia = await retratoDoDia(empresaId, data);
   const { gerada: _anterior, ...retrato } = dia;
   return executarEmTransacao(async (tx) => {
     const gravada = await gravarAuditoriaRepository(
@@ -255,7 +309,7 @@ export async function gerarAuditoria(body: DadosExternos, perfil?: PerfilComEmpr
 }
 
 export async function obterAgendaAuditoria(query: DadosExternos, perfil?: PerfilComEmpresa) {
-  const { empresaId } = auditoriaDiaQuerySchema.pick({ empresaId: true }).parse(query);
+  const { empresaId } = auditoriaEmpresaQuerySchema.parse(query);
   exigirEmpresa(perfil, empresaId);
   return (await buscarAgendaRepository(empresaId)) ?? { ativa: false, horario: "23:30" };
 }

@@ -6,27 +6,49 @@ import { z } from "zod";
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "Data no formato AAAA-MM-DD");
 const uuidSchema = z.string().uuid();
 
-export const auditoriaCalendarioQuerySchema = z.object({
-  empresaId: uuidSchema,
-  inicio: dataSchema,
-  fim: dataSchema
-});
+const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u, "Horario no formato HH:MM");
+const opcional = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), schema.optional());
 
-export const auditoriaDiaQuerySchema = z.object({ empresaId: uuidSchema, data: dataSchema });
+export const STATUS_AUDITORIA = ["ok", "alerta", "andamento", "sem_vendas"] as const;
+export const FORMAS_AUDITORIA = ["dinheiro", "credito", "debito", "pix", "voucher", "crediario", "outros"] as const;
+
+// Consulta com filtros (Marco, 14/11/2026): periodo, PDV, turno, faixa de hora, forma de pagamento e situacao.
+export const auditoriaConsultaQuerySchema = z
+  .object({
+    empresaId: uuidSchema,
+    inicio: dataSchema,
+    fim: dataSchema,
+    pdvId: opcional(uuidSchema),
+    turno: opcional(z.enum(["manha", "tarde"])),
+    horaInicio: opcional(horaSchema),
+    horaFim: opcional(horaSchema),
+    forma: opcional(z.enum(FORMAS_AUDITORIA)),
+    status: opcional(z.enum(STATUS_AUDITORIA))
+  })
+  .refine((q) => q.inicio <= q.fim, { message: "Data inicial depois da final", path: ["fim"] })
+  .refine((q) => !q.horaInicio || !q.horaFim || q.horaInicio <= q.horaFim, {
+    message: "Hora inicial depois da final",
+    path: ["horaFim"]
+  });
+
+export type AuditoriaConsultaQuery = z.infer<typeof auditoriaConsultaQuerySchema>;
+
+export const auditoriaEmpresaQuerySchema = z.object({ empresaId: uuidSchema });
 
 export const gerarAuditoriaPayloadSchema = z.object({ empresaId: uuidSchema, data: dataSchema });
 
 export const agendaAuditoriaPayloadSchema = z.object({
   empresaId: uuidSchema,
   ativa: z.boolean(),
-  horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u, "Horario no formato HH:MM")
+  horario: horaSchema
 });
 
 export type AgendaAuditoriaPayload = z.infer<typeof agendaAuditoriaPayloadSchema>;
 
 // ok = todas as vendas cairam em caixa e os caixas do dia fecharam; alerta = venda fora de caixa;
 // andamento = ainda tem caixa aberto (o dia nao terminou); sem_vendas = nenhuma venda da CREARE.
-export type StatusAuditoria = "ok" | "alerta" | "andamento" | "sem_vendas";
+export type StatusAuditoria = (typeof STATUS_AUDITORIA)[number];
 
 export type AuditoriaDiaResumo = {
   data: string;
@@ -71,6 +93,12 @@ export type PdvAuditoria = {
 };
 
 export type AuditoriaDia = AuditoriaDiaResumo & { pdvs: PdvAuditoria[] };
+
+export type ConsultaAuditoria = {
+  resumo: { vendas: number; total: number; vendasFora: number; valorFora: number };
+  dias: AuditoriaDia[];
+  pdvs: Array<{ id: string; nome: string }>;
+};
 
 export type AgendaAuditoria = { ativa: boolean; horario: string };
 

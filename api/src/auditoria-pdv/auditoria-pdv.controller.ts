@@ -2,8 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { ok } from "@padaria/shared/api";
 import { exigirAcessoRelatorioFechamento, exigirPermissao } from "../auth/guards.js";
 import {
-  calendarioAuditoria,
-  diaAuditoria,
+  consultarAuditoria,
   gerarAuditoria,
   obterAgendaAuditoria,
   salvarAgendaAuditoria
@@ -14,11 +13,8 @@ import {
 const acesso = { preHandler: [exigirPermissao("relatorio_fechamento_visualizar"), exigirAcessoRelatorioFechamento()] };
 
 export async function registrarRotasAuditoriaPdv(app: FastifyInstance): Promise<void> {
-  app.get("/api/auditoria-pdv/calendario", acesso, async (request) =>
-    ok(await calendarioAuditoria(request.query, request.perfilUsuario))
-  );
-  app.get("/api/auditoria-pdv/dia", acesso, async (request) =>
-    ok(await diaAuditoria(request.query, request.perfilUsuario))
+  app.get("/api/auditoria-pdv/consulta", acesso, async (request) =>
+    ok(await consultarAuditoria(request.query, request.perfilUsuario))
   );
   app.post("/api/auditoria-pdv/gerar", acesso, async (request) =>
     ok(await gerarAuditoria(request.body, request.perfilUsuario))

@@ -1,4 +1,4 @@
-import { and, asc, between, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, between, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { empresas, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { auditoriasPdv, auditoriasPdvAgenda, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
@@ -12,48 +12,38 @@ const vendaAuditavel = (empresaId: string) =>
 
 const liquido = sql<string>`(${vendas.valorOriginal} - ${vendas.valorDesconto} + ${vendas.valorAcrescimo})`;
 
-export async function resumoVendasPorDiaRepository(
-  empresaId: string,
-  inicio: string,
-  fim: string,
-  db: ExecutorBanco = banco
-) {
-  return db
-    .select({
-      data: sql<string>`${vendas.dataReferencia}::text`,
-      vendas: sql<number>`count(*)::int`,
-      total: sql<string>`coalesce(sum(${liquido}), 0)::text`,
-      vendasFora: sql<number>`count(*) filter (where ${vendas.caixaId} is null)::int`,
-      valorFora: sql<string>`coalesce(sum(${liquido}) filter (where ${vendas.caixaId} is null), 0)::text`
-    })
-    .from(vendas)
-    .where(and(vendaAuditavel(empresaId), between(vendas.dataReferencia, inicio, fim)))
-    .groupBy(vendas.dataReferencia);
+export async function fusoDaEmpresaRepository(empresaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ fuso: empresas.fusoHorario })
+    .from(empresas)
+    .where(eq(empresas.id, empresaId))
+    .limit(1);
+  return linha?.fuso ?? "America/Sao_Paulo";
 }
 
-export async function caixasEmAndamentoPorDiaRepository(
-  empresaId: string,
-  inicio: string,
-  fim: string,
-  db: ExecutorBanco = banco
-) {
+export async function pdvsDaEmpresaRepository(empresaId: string, db: ExecutorBanco = banco) {
   return db
-    .select({ data: sql<string>`${fechamentosCaixa.dataMovimento}::text`, abertos: sql<number>`count(*)::int` })
-    .from(fechamentosCaixa)
-    .where(
-      and(
-        eq(fechamentosCaixa.empresaId, empresaId),
-        between(fechamentosCaixa.dataMovimento, inicio, fim),
-        inArray(fechamentosCaixa.status, ["aberto", "em_fechamento"])
-      )
-    )
-    .groupBy(fechamentosCaixa.dataMovimento);
+    .select({ id: pdvs.id, nome: pdvs.nome, ativo: pdvs.ativo })
+    .from(pdvs)
+    .where(eq(pdvs.empresaId, empresaId))
+    .orderBy(asc(pdvs.nome));
 }
 
-export async function vendasDoDiaRepository(empresaId: string, data: string, db: ExecutorBanco = banco) {
+type FiltroPeriodo = { empresaId: string; inicio: string; fim: string; pdvId?: string | undefined };
+
+// Mesmo recorte de vendasDoPeriodoRepository, por join (um periodo longo passaria do limite de parametros).
+const vendaDoPeriodo = (f: FiltroPeriodo) =>
+  and(
+    vendaAuditavel(f.empresaId),
+    between(vendas.dataReferencia, f.inicio, f.fim),
+    f.pdvId ? eq(vendas.pdvId, f.pdvId) : undefined
+  );
+
+export async function vendasDoPeriodoRepository(filtro: FiltroPeriodo, db: ExecutorBanco = banco) {
   return db
     .select({
       id: vendas.id,
+      data: sql<string>`${vendas.dataReferencia}::text`,
       pdvId: vendas.pdvId,
       pdvNome: pdvs.nome,
       pdvAutomacao: vendas.pdvAutomacao,
@@ -63,12 +53,11 @@ export async function vendasDoDiaRepository(empresaId: string, data: string, db:
     })
     .from(vendas)
     .leftJoin(pdvs, eq(pdvs.id, vendas.pdvId))
-    .where(and(vendaAuditavel(empresaId), eq(vendas.dataReferencia, data)))
+    .where(vendaDoPeriodo(filtro))
     .orderBy(asc(vendas.dataVenda));
 }
 
-export async function pagamentosDasVendasRepository(vendaIds: string[], db: ExecutorBanco = banco) {
-  if (!vendaIds.length) return [];
+export async function pagamentosDoPeriodoRepository(filtro: FiltroPeriodo, db: ExecutorBanco = banco) {
   return db
     .select({
       vendaId: vendasPagamentos.vendaId,
@@ -78,12 +67,13 @@ export async function pagamentosDasVendasRepository(vendaIds: string[], db: Exec
       valor: sql<string>`${vendasPagamentos.totalPago}::text`
     })
     .from(vendasPagamentos)
+    .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
     .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
-    .where(inArray(vendasPagamentos.vendaId, vendaIds));
+    .where(vendaDoPeriodo(filtro));
 }
 
-export async function produtosDasVendasRepository(vendaIds: string[], db: ExecutorBanco = banco) {
-  if (!vendaIds.length) return [];
+// Produtos so das vendas sem caixa: e o detalhe que o alerta mostra.
+export async function produtosForaDoPeriodoRepository(filtro: FiltroPeriodo, db: ExecutorBanco = banco) {
   return db
     .select({
       vendaId: vendasProdutos.vendaId,
@@ -91,19 +81,23 @@ export async function produtosDasVendasRepository(vendaIds: string[], db: Execut
       quantidade: sql<string>`${vendasProdutos.quantidade}::text`
     })
     .from(vendasProdutos)
-    .where(and(inArray(vendasProdutos.vendaId, vendaIds), eq(vendasProdutos.cancelado, false)));
+    .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+    .where(and(vendaDoPeriodo(filtro), isNull(vendas.caixaId), eq(vendasProdutos.cancelado, false)));
 }
 
-// Caixas do dia: os abertos naquela data e os que receberam alguma venda do dia.
-export async function caixasDoDiaRepository(
+// Caixas do periodo: os abertos nessas datas e os que receberam alguma venda do periodo.
+export async function caixasDoPeriodoRepository(
   empresaId: string,
-  data: string,
+  inicio: string,
+  fim: string,
   caixaIds: string[],
   db: ExecutorBanco = banco
 ) {
+  const doPeriodo = between(fechamentosCaixa.dataMovimento, inicio, fim);
   return db
     .select({
       id: fechamentosCaixa.id,
+      data: sql<string>`${fechamentosCaixa.dataMovimento}::text`,
       pdvId: fechamentosCaixa.pdvId,
       pdvNome: pdvs.nome,
       turno: fechamentosCaixa.turnoCaixa,
@@ -117,9 +111,7 @@ export async function caixasDoDiaRepository(
     .where(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
-        caixaIds.length
-          ? or(eq(fechamentosCaixa.dataMovimento, data), inArray(fechamentosCaixa.id, caixaIds))
-          : eq(fechamentosCaixa.dataMovimento, data)
+        caixaIds.length ? or(doPeriodo, inArray(fechamentosCaixa.id, caixaIds)) : doPeriodo
       )
     )
     .orderBy(asc(fechamentosCaixa.dataHoraAbertura));
