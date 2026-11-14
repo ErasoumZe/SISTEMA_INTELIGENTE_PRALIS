@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AuditoriaDia, FormaAuditoria, StatusAuditoria } from "@padaria/shared";
+import type { AuditoriaDia, CaixaAuditoria, FormaAuditoria, StatusAuditoria } from "@padaria/shared";
 import { dinheiro } from "~/utils/domain";
 
 // Auditoria de PDVs: o dia aberto. Um cartao por PDV com os caixas (turno, quem abriu, vendas e total) e, se
@@ -32,8 +32,28 @@ const hora = (iso: string | null) =>
   iso
     ? new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
     : "--:--";
-const turno = (valor: "manha" | "tarde" | null) =>
-  valor === "manha" ? "Manhã" : valor === "tarde" ? "Tarde" : "Caixa";
+// Manha e Tarde sempre aparecem lado a lado; caixa sem turno (PDV de turno unico) ganha a propria coluna.
+function colunasTurno(caixas: CaixaAuditoria[]) {
+  const coluna = (rotulo: string, lista: CaixaAuditoria[]) => ({
+    rotulo,
+    caixas: lista,
+    vendas: lista.reduce((soma, c) => soma + c.vendas, 0),
+    total: lista.reduce((soma, c) => soma + Math.round(c.total * 100), 0) / 100
+  });
+  const colunas = [
+    coluna(
+      "Manhã",
+      caixas.filter((c) => c.turno === "manha")
+    ),
+    coluna(
+      "Tarde",
+      caixas.filter((c) => c.turno === "tarde")
+    )
+  ];
+  const semTurno = caixas.filter((c) => !c.turno);
+  if (semTurno.length) colunas.push(coluna("Sem turno", semTurno));
+  return colunas;
+}
 const listaFormas = (lista: FormaAuditoria[]) =>
   lista.map((f) => `${formas[f.categoria] ?? f.categoria} ${dinheiro(f.valor)}`).join(" · ");
 const dataLonga = (data: string) =>
@@ -96,21 +116,27 @@ const momento = (iso: string) =>
     >
       <header class="auditoria-pdv__topo">
         <strong>{{ pdv.pdvNome }}</strong>
-        <span>{{ pdv.vendas }} vendas · {{ dinheiro(pdv.total) }}</span>
         <v-chip :color="cores[pdv.status]" variant="tonal" size="x-small">{{ rotulos[pdv.status] }}</v-chip>
+        <span class="auditoria-pdv__dia"
+          >Dia (manhã + tarde): {{ pdv.vendas }} vendas · <strong>{{ dinheiro(pdv.total) }}</strong></span
+        >
       </header>
 
-      <ul class="auditoria-pdv__caixas">
-        <li v-for="caixa in pdv.caixas" :key="caixa.caixaId">
-          <span class="auditoria-pdv__turno">{{ turno(caixa.turno) }}</span>
-          <span>{{ caixa.operador ?? "—" }} · {{ hora(caixa.abertura) }}–{{ hora(caixa.fechamento) }}</span>
-          <span
-            >{{ caixa.vendas }} vendas · <strong>{{ dinheiro(caixa.total) }}</strong></span
-          >
-          <small v-if="caixa.formas.length">{{ listaFormas(caixa.formas) }}</small>
-        </li>
-        <li v-if="!pdv.caixas.length" class="auditoria-pdv__sem-caixa">Nenhum caixa aberto neste PDV no dia.</li>
-      </ul>
+      <div class="auditoria-pdv__turnos">
+        <section v-for="coluna in colunasTurno(pdv.caixas)" :key="coluna.rotulo" class="auditoria-turno">
+          <header class="auditoria-turno__topo">
+            <span class="auditoria-turno__nome">{{ coluna.rotulo }}</span>
+            <span v-if="coluna.caixas.length"
+              >{{ coluna.vendas }} vendas · <strong>{{ dinheiro(coluna.total) }}</strong></span
+            >
+          </header>
+          <p v-if="!coluna.caixas.length" class="auditoria-turno__vazio">Sem caixa neste turno.</p>
+          <div v-for="caixa in coluna.caixas" :key="caixa.caixaId" class="auditoria-turno__caixa">
+            <span>{{ caixa.operador ?? "—" }} · {{ hora(caixa.abertura) }}–{{ hora(caixa.fechamento) }}</span>
+            <small v-if="caixa.formas.length">{{ listaFormas(caixa.formas) }}</small>
+          </div>
+        </section>
+      </div>
 
       <div v-if="pdv.fora.length" class="auditoria-pdv__fora" role="alert">
         <strong>{{ pdv.fora.length }} venda(s) sem caixa aberto</strong>
@@ -203,32 +229,54 @@ const momento = (iso: string) =>
   color: var(--cx-ink-soft);
   font-size: 0.86rem;
 }
-.auditoria-pdv__topo .v-chip {
+.auditoria-pdv__topo .auditoria-pdv__dia {
   margin-left: auto;
 }
-.auditoria-pdv__caixas {
-  display: grid;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
+.auditoria-pdv__dia strong {
+  color: var(--cx-ink);
+  font-variant-numeric: tabular-nums;
 }
-.auditoria-pdv__caixas li {
+.auditoria-pdv__turnos {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
-  gap: 2px 12px;
-  align-items: baseline;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.auditoria-turno {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--cx-line);
+  border-radius: 8px;
   font-size: 0.86rem;
 }
-.auditoria-pdv__caixas small {
-  grid-column: 2 / -1;
-  color: var(--cx-ink-soft);
+.auditoria-turno__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--cx-line);
 }
-.auditoria-pdv__turno {
-  font-weight: 700;
+.auditoria-turno__topo strong {
+  font-variant-numeric: tabular-nums;
 }
-.auditoria-pdv__caixas .auditoria-pdv__sem-caixa {
-  display: block;
+.auditoria-turno__nome {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--cx-brand-text);
+}
+.auditoria-turno__caixa {
+  display: grid;
+  gap: 2px;
+}
+.auditoria-turno__caixa small,
+.auditoria-turno__vazio {
+  margin: 0;
   color: var(--cx-ink-soft);
 }
 .auditoria-pdv__fora {
@@ -258,11 +306,9 @@ const momento = (iso: string) =>
   vertical-align: top;
 }
 @media (max-width: 760px) {
-  .auditoria-pdv__caixas li {
-    grid-template-columns: 1fr;
-  }
-  .auditoria-pdv__caixas small {
-    grid-column: auto;
+  .auditoria-pdv__topo .auditoria-pdv__dia {
+    flex-basis: 100%;
+    margin-left: 0;
   }
   .auditoria-pdv__fora table,
   .auditoria-pdv__fora tbody,
