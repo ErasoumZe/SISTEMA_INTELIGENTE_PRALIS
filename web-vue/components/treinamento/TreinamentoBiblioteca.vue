@@ -22,9 +22,13 @@ const totalVideos = computed(() => liberados.value.reduce((soma, grupo) => soma 
 const buscando = computed(() => Boolean(termo.value?.trim()));
 
 const aberto = ref<{ grupo: GrupoVideos; inicio: number } | null>(null);
+// Ao fechar o player o foco volta para quem o abriu (cartao ou "Assistir em sequencia"); sem isto,
+// quem usa teclado cai no comeco da pagina e perde o lugar.
+let origemDoFoco: HTMLElement | null = null;
 function abrir(grupoId: string, videoId?: string) {
   const grupo = liberados.value.find((item) => item.id === grupoId);
   if (!grupo) return;
+  origemDoFoco = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const inicio = videoId ? grupo.videos.findIndex((item) => item.id === videoId) : 0;
   aberto.value = { grupo, inicio: Math.max(0, inicio) };
 }
@@ -32,6 +36,12 @@ function abrir(grupoId: string, videoId?: string) {
 function numero(grupoId: string, videoId: string) {
   const grupo = liberados.value.find((item) => item.id === grupoId);
   return (grupo?.videos.findIndex((item) => item.id === videoId) ?? 0) + 1;
+}
+function fechar() {
+  aberto.value = null;
+  const alvo = origemDoFoco;
+  origemDoFoco = null;
+  if (alvo?.isConnected) void nextTick(() => alvo.focus());
 }
 const grupoInteiro = (grupoId: string) => liberados.value.find((item) => item.id === grupoId)!;
 </script>
@@ -111,7 +121,7 @@ const grupoInteiro = (grupoId: string) => liberados.value.find((item) => item.id
       </section>
     </template>
 
-    <AppVideoTelaCheia v-if="aberto" :grupo="aberto.grupo" :inicio="aberto.inicio" @fechar="aberto = null" />
+    <AppVideoTelaCheia v-if="aberto" :grupo="aberto.grupo" :inicio="aberto.inicio" @fechar="fechar" />
   </div>
 </template>
 

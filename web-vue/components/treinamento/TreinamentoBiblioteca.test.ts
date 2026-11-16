@@ -1,11 +1,12 @@
 import { mount } from "@vue/test-utils";
-import { computed, defineComponent, h, ref } from "vue";
+import { computed, defineComponent, h, nextTick, ref } from "vue";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { GRUPOS_VIDEOS } from "~/utils/videos-ajuda";
 
 beforeAll(() => {
   vi.stubGlobal("ref", ref);
   vi.stubGlobal("computed", computed);
+  vi.stubGlobal("nextTick", nextTick);
 });
 
 const { default: TreinamentoBiblioteca } = await import("./TreinamentoBiblioteca.vue");
@@ -30,9 +31,12 @@ const BotaoStub = defineComponent({
 });
 const PlayerStub = defineComponent({
   props: { grupo: { type: Object, required: true }, inicio: { type: Number, required: true } },
-  setup(props) {
+  emits: ["fechar"],
+  setup(props, { emit }) {
     return () =>
-      h("div", {
+      h("button", {
+        type: "button",
+        onClick: () => emit("fechar"),
         "data-teste": "player",
         "data-grupo": (props.grupo as { id: string }).id,
         "data-videos": (props.grupo as { videos: unknown[] }).videos.length,
@@ -45,6 +49,7 @@ const caixa = GRUPOS_VIDEOS.find((grupo) => grupo.id === "caixa")!;
 
 function montar(telas: { id: string }[]) {
   return mount(TreinamentoBiblioteca, {
+    attachTo: document.body,
     props: { telas },
     global: {
       stubs: { "v-text-field": CampoStub, "v-btn": BotaoStub, "v-icon": true, AppVideoTelaCheia: PlayerStub }
@@ -101,5 +106,17 @@ describe("TreinamentoBiblioteca", () => {
     const tela = montar([{ id: "caixa" }]);
     await tela.get(".assunto__sequencia").trigger("click");
     expect(tela.get("[data-teste='player']").attributes("data-inicio")).toBe("0");
+  });
+
+  it("ao fechar o player, o foco volta para o cartao que o abriu", async () => {
+    const tela = montar([{ id: "caixa" }]);
+    const cartao = tela.findAll(".aula")[2]!;
+    (cartao.element as HTMLElement).focus();
+    await cartao.trigger("click");
+    await tela.get("[data-teste='player']").trigger("click");
+    await nextTick();
+    expect(tela.find("[data-teste='player']").exists()).toBe(false);
+    expect(document.activeElement).toBe(cartao.element);
+    tela.unmount();
   });
 });

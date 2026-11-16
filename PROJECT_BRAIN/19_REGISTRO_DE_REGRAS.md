@@ -1676,6 +1676,9 @@ um lote futuro pode repetir números.
 
 ### R-237 — Vídeos de ajuda no painel, separados do chat de Dúvidas (Marco, 12/11/2026)
 
+> **Atualizada pela R-242 (16/11/2026):** os vídeos saíram do painel e vivem na página **Treinamento**
+> (`/treinamento`). O "Onde" abaixo é histórico; quem vê, formato e player continuam valendo.
+
 - **Onde:** no painel inicial, faixa "Vídeos de ajuda", com busca. O chat de Dúvidas (bolinha) continua igual: lá
   se pergunta, aqui se assiste.
 - **Quem vê:** cada grupo de vídeos pertence a uma tela do menu. O grupo do Caixa aparece para quem tem a tela
