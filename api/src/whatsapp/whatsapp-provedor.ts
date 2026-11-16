@@ -34,7 +34,7 @@ const TEMPO_LIMITE_MS = 15_000;
 
 /**
  * Estado do WhatsApp da empresa (13/11/2026). "desligado": nenhum provedor configurado. "desconectado": a
- * Evolution respondeu que a instância NÃO está aberta (close/connecting) — nada sai, a fila espera.
+ * Evolution respondeu que a instância está fechada ("close") — nada sai, a fila espera.
  * "indefinido" (16/11/2026): a consulta de estado falhou (HTTP de erro, sem resposta, corpo sem estado). Não se
  * sabe se a instância caiu, então a fila tenta enviar como antes e a tela não acusa queda — só a resposta clara da
  * Evolution segura a fila.
@@ -74,8 +74,12 @@ async function perguntarEstadoEvolution(): Promise<EstadoWhatsappDetalhado> {
     const corpo = (await resposta.json().catch(() => null)) as { instance?: { state?: string | null } } | null;
     const estado = corpo?.instance?.state;
     if (estado === "open") return { estado: "conectado", detalhe: null };
+    // Só "close" é queda. "connecting" (16/11/2026): na v2.3.7 a instância fica alternando entre conectando e
+    // conectada enquanto o painel mostra Connected, e as mensagens saem nas brechas. Segurar a fila nesse estado
+    // só atrasava as cotações e mostrava aviso falso; se o envio falhar, as tentativas da fila cuidam.
+    if (estado === "close") return { estado: "desconectado", detalhe: "Estado na Evolution: close" };
     if (typeof estado === "string" && estado.trim())
-      return { estado: "desconectado", detalhe: `Estado na Evolution: ${estado.slice(0, 40)}` };
+      return { estado: "indefinido", detalhe: `Estado na Evolution: ${estado.slice(0, 40)}` };
     return { estado: "indefinido", detalhe: "Evolution respondeu sem o estado da instância" };
   } catch {
     return { estado: "indefinido", detalhe: "Sem resposta da Evolution" };
