@@ -1619,6 +1619,15 @@ Business removeu o aparelho) e uma cotação gastou as 5 tentativas com "Connect
 não estiver `open`, **a fila espera sem gastar tentativa** e sai sozinha depois do QR; as telas Solicitação de compra
 e Cotação por fornecedor mostram o aviso "O WhatsApp das cotações está desconectado" com o caminho para reconectar.
 
+**Adendo (José, 16/11/2026) — número banido e cadência anti-bloqueio.** Em 16/11 o WhatsApp baniu a conta do
+número da padaria ("Esta conta não pode usar o WhatsApp", Termos do WhatsApp Business); o José pediu análise. Os
+LOGOUTs de 12, 13 e 16/11 eram o WhatsApp derrubando o aparelho. Decisão do José: continuar na Evolution (a Meta está
+descartada) e reduzir o risco. Pela Evolution: **uma mensagem por minuto** (uma por tick), **"digitando…" de 3 a 8 s**
+antes de cada uma e **no máximo 40 mensagens em 24 h** (todas as empresas, a instância é única); o que passar espera
+na fila, sem gastar tentativa. Na operação: cada fornecedor salva o número da padaria e manda um "oi" antes da
+primeira cotação; perfil comercial completo; poucas cotações nos primeiros dias depois de reconectar. Nenhum ajuste
+zera o risco de bloqueio de uma conexão não oficial.
+
 ### R-238 — Quem faz cada transferência; PDV 4 é o caixa do gerente (Marco, 12/11/2026)
 
 - **Tesouraria:** transferência **com lacre** (lança os malotes), **sem lacre** e entre contas que ela movimenta.
