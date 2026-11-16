@@ -12,7 +12,7 @@ import {
   type FormaAuditoria,
   type PdvAuditoria
 } from "@padaria/shared/auditoria-pdv";
-import type { DadosExternos, JsonValue } from "@padaria/shared/api";
+import type { DadosExternos } from "@padaria/shared/api";
 import { localDoInstante } from "@padaria/shared/compras";
 import { categoriaFechamentoPorNome } from "@padaria/shared/formas-pagamento";
 import { pdvFoiExcluido } from "@padaria/shared/pdvs";
@@ -89,6 +89,8 @@ async function montarPeriodo(empresaId: string, inicio: string, fim: string, fil
     lista.push({ categoria, valor: Number(p.valor) });
     formasDaVenda.set(p.vendaId, lista);
   }
+  const produtosDaVenda = new Map<string, ProdutoLinha[]>();
+  for (const item of produtos) produtosDaVenda.set(item.vendaId, [...(produtosDaVenda.get(item.vendaId) ?? []), item]);
   const turnoDoCaixa = new Map(caixas.map((c) => [c.id, c.turno]));
   const horaFiltrada = Boolean(filtro.horaInicio || filtro.horaFim);
   const vendasFiltradas = linhas.filter((v) => {
@@ -117,7 +119,7 @@ async function montarPeriodo(empresaId: string, inicio: string, fim: string, fil
     const caixasDoDia = caixas.filter(
       (c) => idsCaixasComVenda.has(c.id) || (c.data === data && !horaFiltrada && !filtro.forma)
     );
-    const dia = montarDia(data, vendasDoDia, caixasDoDia, formasDaVenda, produtos);
+    const dia = montarDia(data, vendasDoDia, caixasDoDia, formasDaVenda, produtosDaVenda);
     if (filtro.status) {
       dia.pdvs = dia.pdvs.filter((pdv) => pdv.status === filtro.status);
       Object.assign(dia, resumir([dia]), { status: statusDoDia(dia.pdvs.map((pdv) => pdv.status)) });
@@ -139,7 +141,7 @@ function montarDia(
   linhas: VendaLinha[],
   caixas: CaixaLinha[],
   formasDaVenda: Map<string, Array<{ categoria: string; valor: number }>>,
-  produtos: ProdutoLinha[]
+  produtosDaVenda: Map<string, ProdutoLinha[]>
 ): AuditoriaDia {
   const chavePdv = (pdvId: string | null, nome: string | null) => pdvId ?? `sem-pdv:${nome ?? "?"}`;
   const pdvsMapa = new Map<string, PdvAuditoria>();
@@ -193,9 +195,10 @@ function montarDia(
         hora: v.dataVenda?.toISOString() ?? null,
         valor: Number(v.valor),
         formas: somarFormas(formas),
-        produtos: produtos
-          .filter((item) => item.vendaId === v.id)
-          .map((item) => ({ descricao: item.descricao, quantidade: Number(item.quantidade) }))
+        produtos: (produtosDaVenda.get(v.id) ?? []).map((item) => ({
+          descricao: item.descricao,
+          quantidade: Number(item.quantidade)
+        }))
       });
     }
   }
@@ -277,7 +280,7 @@ async function gerarEGravar(empresaId: string, data: string, geradaPor: string |
         geradaPor,
         vendasFora: dia.vendasFora,
         valorFora: dia.valorFora.toFixed(2),
-        resultado: retrato as unknown as JsonValue
+        resultado: retrato
       },
       tx
     );
@@ -323,7 +326,10 @@ export async function salvarAgendaAuditoria(body: DadosExternos, perfil?: Perfil
 
 // Agendador (a cada minuto): no horario da empresa, gera a auditoria do dia uma vez. Se ja houver uma gerada
 // depois do horario agendado de hoje, nao gera de novo.
-export async function processarAuditoriasAgendadas(agora: Date, aoFalhar: (empresaId: string, erro: unknown) => void) {
+export async function processarAuditoriasAgendadas(
+  agora: Date,
+  aoFalhar: (empresaId: string, erro: DadosExternos) => void
+) {
   for (const agenda of await agendasAtivasRepository()) {
     try {
       const { data, hora } = localDoInstante(agora, agenda.fuso);

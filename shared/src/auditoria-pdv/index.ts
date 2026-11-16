@@ -3,7 +3,14 @@ import { z } from "zod";
 // Auditoria de PDVs (Marco, 13/11/2026). Por dia, cruza as vendas da CREARE com os caixas abertos no sistema:
 // "PDV 1 · Manhã bateu (6 vendas, R$ 4.878,91)". Venda que nao caiu em nenhum caixa e alerta.
 
-const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "Data no formato AAAA-MM-DD");
+// Data de calendario de verdade: 2026-02-31 cai aqui (400), em vez de estourar no banco (500).
+const dataSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u, "Data no formato AAAA-MM-DD")
+  .refine((d) => {
+    const instante = Date.parse(`${d}T00:00:00Z`);
+    return !Number.isNaN(instante) && new Date(instante).toISOString().slice(0, 10) === d;
+  }, "Data inexistente");
 const uuidSchema = z.string().uuid();
 
 const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u, "Horario no formato HH:MM");

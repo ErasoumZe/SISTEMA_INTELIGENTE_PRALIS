@@ -42,11 +42,11 @@ try {
     void materializarConferencias(new Date(), (agendaId, erro) =>
       app.log.error({ err: erro, agendaId }, "falha ao materializar conferencia de estoque")
     ).catch((error) => app.log.error(error));
-    // Doc 57 §3: a fila do WhatsApp (cotacoes e "pode entregar"). Sem provedor configurado, nao faz nada.
     // Auditoria de PDVs (13/11/2026): gera a auditoria do dia no horario agendado pela empresa.
     void processarAuditoriasAgendadas(new Date(), (empresaId, erro) =>
       app.log.error({ err: erro, empresaId }, "falha ao gerar auditoria de PDVs agendada")
     ).catch((error) => app.log.error(error));
+    // Doc 57 §3: a fila do WhatsApp (cotacoes e "pode entregar"). Sem provedor configurado, nao faz nada.
     void processarFilaWhatsapp((envioId, erro) =>
       app.log.warn({ err: erro, envioId }, "falha ao enviar mensagem do WhatsApp")
     ).catch((error) => app.log.error(error));

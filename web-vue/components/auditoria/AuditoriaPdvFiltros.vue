@@ -191,6 +191,10 @@ function limpar() {
     </div>
 
     <div v-if="ativos" class="filtros__limpar">
+      <ul v-if="modelValue.turno || modelValue.forma" class="filtros__avisos" data-teste="filtro-avisos">
+        <li v-if="modelValue.turno">Com turno, as vendas fora de caixa não aparecem (elas não têm turno).</li>
+        <li v-if="modelValue.forma">Com forma, aparecem as vendas que usaram essa forma, pelo valor inteiro.</li>
+      </ul>
       <span>{{ ativos }} filtro(s) ativo(s)</span>
       <v-btn size="small" variant="text" prepend-icon="mdi-filter-off-outline" @click="limpar">Limpar filtros</v-btn>
     </div>
@@ -224,11 +228,17 @@ function limpar() {
 }
 .filtros__limpar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   color: var(--cx-ink-soft);
   font-size: 0.84rem;
+}
+.filtros__avisos {
+  margin: 0 auto 0 0;
+  padding: 0;
+  list-style: none;
 }
 @media (max-width: 1100px) {
   .filtros__grade {

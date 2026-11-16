@@ -120,13 +120,32 @@ describe("Auditoria de PDVs - vendas da CREARE x caixas", () => {
     assertProblem(agenda, 403);
   });
 
-  it("nao deixa consultar empresa de fora do usuario", async () => {
+  it("nao deixa consultar, gerar nem agendar empresa de fora do usuario; sem sessao e 401", async () => {
     const resposta = await contexto.app.inject({
       method: "GET",
       url: `/api/auditoria-pdv/consulta?empresaId=${idsTeste.empresaB}&inicio=${DIA}&fim=${DIA}`,
       headers: { cookie: cookieTesouraria }
     });
     assertProblem(resposta, 403);
+    const gerar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/auditoria-pdv/gerar",
+      headers: { cookie: cookieTesouraria },
+      payload: { empresaId: idsTeste.empresaB, data: DIA }
+    });
+    assertProblem(gerar, 403);
+    const agenda = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/auditoria-pdv/agenda",
+      headers: { cookie: cookieTesouraria },
+      payload: { empresaId: idsTeste.empresaB, ativa: true, horario: "22:00" }
+    });
+    assertProblem(agenda, 403);
+    const semSessao = await contexto.app.inject({
+      method: "GET",
+      url: `/api/auditoria-pdv/consulta?empresaId=${idsTeste.empresaA}&inicio=${DIA}&fim=${DIA}`
+    });
+    assertProblem(semSessao, 401);
   });
 
   it("cruza o dia: venda no caixa da manha bate, venda da CREARE sem caixa vira alerta com produtos", async () => {
@@ -136,9 +155,14 @@ describe("Auditoria de PDVs - vendas da CREARE x caixas", () => {
     const [pdv] = consulta.dias[0]!.pdvs;
     expect(consulta.dias[0]!.status).toBe("alerta");
     expect(pdv).toMatchObject({ pdvId: idsTeste.pdvLivre, status: "alerta", vendas: 2, total: 32.5 });
-    expect(pdv!.caixas).toEqual([expect.objectContaining({ caixaId: caixaManha, turno: "manha", vendas: 1, total: 20 })]);
+    expect(pdv!.caixas).toEqual([
+      expect.objectContaining({ caixaId: caixaManha, turno: "manha", vendas: 1, total: 20 })
+    ]);
     expect(pdv!.fora).toHaveLength(1);
-    expect(pdv!.fora[0]).toMatchObject({ valor: 12.5, produtos: [expect.objectContaining({ descricao: "Pao de queijo" })] });
+    expect(pdv!.fora[0]).toMatchObject({
+      valor: 12.5,
+      produtos: [expect.objectContaining({ descricao: "Pao de queijo" })]
+    });
     expect(consulta.pdvs.some((p) => p.id === idsTeste.pdvLivre)).toBe(true);
   });
 
@@ -159,6 +183,8 @@ describe("Auditoria de PDVs - vendas da CREARE x caixas", () => {
     expect((await consultar({ inicio: "2026-03-11", fim: DIA })).statusCode).toBe(400);
     expect((await consultar({ inicio: "2026-02-01", fim: DIA })).statusCode).toBe(400);
     expect((await consultar({ horaInicio: "14:00", horaFim: "10:00" })).statusCode).toBe(400);
+    // Data que nao existe no calendario: 400, nunca 500 do banco.
+    expect((await consultar({ inicio: "2026-02-31", fim: "2026-03-01" })).statusCode).toBe(400);
   });
 
   it("gerar grava a auditoria do dia, avisa a Tesouraria no sino e gerar de novo nao duplica", async () => {

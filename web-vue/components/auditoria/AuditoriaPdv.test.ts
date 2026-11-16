@@ -5,7 +5,12 @@ import AuditoriaPdvDia from "./AuditoriaPdvDia.vue";
 import AuditoriaPdvFiltros, { type FiltrosAuditoria } from "./AuditoriaPdvFiltros.vue";
 
 const botao = { template: '<button v-bind="$attrs"><slot /></button>' };
-const stubs = { "v-btn": botao, "v-chip": { template: "<span><slot /></span>" }, "v-text-field": true, "v-select": true };
+const stubs = {
+  "v-btn": botao,
+  "v-chip": { template: "<span><slot /></span>" },
+  "v-text-field": true,
+  "v-select": true
+};
 
 const caixa = (turno: CaixaAuditoria["turno"], operador: string, vendas: number, total: number): CaixaAuditoria => ({
   caixaId: `${turno}-${operador}`,
@@ -109,6 +114,8 @@ describe("AuditoriaPdvFiltros", () => {
   it("conta os filtros ativos e limpa sem mexer no periodo", async () => {
     const tela = montar();
     expect(tela.text()).toContain("3 filtro");
+    // Turno escolhido: avisa que venda fora de caixa some com esse filtro.
+    expect(tela.find('[data-teste="filtro-avisos"]').text()).toContain("vendas fora de caixa não aparecem");
     const limpar = tela.findAll("button").find((b) => b.text().includes("Limpar"));
     await limpar!.trigger("click");
     expect(tela.emitted("update:modelValue")?.[0]?.[0]).toEqual({

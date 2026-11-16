@@ -3736,9 +3736,6 @@ export const sangriasRecusadas = pgTable(
   ]
 );
 
-// Planilha da Tesouraria (Marco, 12/11/2026): cada envio gravado, com quem enviou, onde gravou, o que a IA leu e o que
-// foi enviado (com as correcoes da Tesouraria). Um envio por caixa e aba: o segundo e bloqueado aqui, sem depender de
-// ler a planilha.
 // Auditoria de PDVs (Marco, 13/11/2026): por dia, cruza as vendas da CREARE com os caixas abertos. Cada "Gerar"
 // (manual ou automatico) grava o retrato do dia; venda fora de qualquer caixa vira alerta para a Tesouraria.
 export const auditoriasPdv = pgTable(
@@ -3774,6 +3771,9 @@ export const auditoriasPdvAgenda = pgTable(
   (table) => [check("auditorias_pdv_agenda_horario_check", sql`${table.horario} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`)]
 );
 
+// Planilha da Tesouraria (Marco, 12/11/2026): cada envio gravado, com quem enviou, onde gravou, o que a IA leu e o que
+// foi enviado (com as correcoes da Tesouraria). Um envio por caixa e aba: o segundo e bloqueado aqui, sem depender de
+// ler a planilha.
 export const planilhaTesourariaEnvios = pgTable(
   "planilha_tesouraria_envios",
   {
