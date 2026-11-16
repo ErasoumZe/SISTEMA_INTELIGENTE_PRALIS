@@ -9,7 +9,7 @@ import {
   telefoneParaWhatsapp,
   type MensagemWhatsapp
 } from "../whatsapp/whatsapp-provedor.js";
-import { resumoDosItens } from "../whatsapp/texto-whatsapp.js";
+import { resumoDosItens, textoDoConvite, textoDoPedidoConfirmado } from "../whatsapp/texto-whatsapp.js";
 import { hashTokenRodada } from "./compras-rodadas.service.js";
 import {
   dadosDoConviteParaEnvioRepository,
@@ -71,11 +71,13 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
     return {
       telefone: envio.telefone,
       tipo: "convite",
-      texto: [
-        `Olá, ${dados.fornecedorNome}!`,
-        `A ${dados.empresaNome} tem uma cotação de ${dados.totalItens} item(ns) para você.`,
-        `Responda até ${prazo}: ${link}`
-      ].join("\n\n")
+      texto: textoDoConvite({
+        fornecedorNome: dados.fornecedorNome,
+        empresaNome: dados.empresaNome,
+        totalItens: dados.totalItens,
+        prazo,
+        link
+      })
     };
   }
   if (envio.tipo === "pedido_confirmado" && envio.pedidoId) {
@@ -85,11 +87,7 @@ async function montarMensagem(envio: Envio, tx: Transacao): Promise<MensagemWhat
     return {
       telefone: envio.telefone,
       tipo: "pedido_confirmado",
-      texto: [
-        `Olá, ${dados.fornecedorNome}!`,
-        `A ${dados.empresaNome} comprou estes produtos de você. Pode separar e entregar.`,
-        resumo
-      ].join("\n\n")
+      texto: textoDoPedidoConfirmado({ fornecedorNome: dados.fornecedorNome, empresaNome: dados.empresaNome, resumo })
     };
   }
   return null;
