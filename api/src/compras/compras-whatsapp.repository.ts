@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import {
   comprasConvitesItens,
   comprasRodadas,
@@ -35,6 +35,20 @@ export async function enfileirarEnviosRepository(
       telefone: linha.telefone
     }))
   );
+}
+
+/** Mensagens que sairam nas ultimas 24 h (a instancia da Evolution e unica: conta todas as empresas). */
+export async function enviadosNasUltimas24hRepository(agora: Date = new Date(), executor: ExecutorBanco = banco) {
+  const [linha] = await executor
+    .select({ total: count() })
+    .from(comprasWhatsappEnvios)
+    .where(
+      and(
+        eq(comprasWhatsappEnvios.status, "enviado"),
+        gte(comprasWhatsappEnvios.enviadoEm, new Date(agora.getTime() - 86_400_000))
+      )
+    );
+  return Number(linha?.total ?? 0);
 }
 
 /** Proximas da fila, travadas para este processo (SKIP LOCKED: duas instancias nunca mandam a mesma). */

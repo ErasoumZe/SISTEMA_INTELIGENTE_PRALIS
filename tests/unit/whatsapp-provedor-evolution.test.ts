@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "../../api/src/env.js";
 import {
+  atrasoDigitandoMs,
   enviarWhatsapp,
   erroDaEvolution,
   provedorConfigurado,
@@ -66,7 +67,17 @@ describe("provedor Evolution do WhatsApp", () => {
     const [url, opcoes] = chamada.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://evolution.exemplo.com.br/message/sendText/padaria%20tnp");
     expect((opcoes.headers as Record<string, string>)["apikey"]).toBe("chave-ficticia");
-    expect(JSON.parse(opcoes.body as string)).toEqual({ number: "5531999998888", text: mensagem.texto });
+    const corpo = JSON.parse(opcoes.body as string) as { number: string; text: string; delay: number };
+    expect(corpo).toEqual({ number: "5531999998888", text: mensagem.texto, delay: expect.any(Number) });
+    // 16/11/2026: "digitando…" de 3 a 8 s antes de cada mensagem (anti-bloqueio).
+    expect(corpo.delay).toBeGreaterThanOrEqual(3_000);
+    expect(corpo.delay).toBeLessThanOrEqual(8_000);
+  });
+
+  it("o tempo de digitando vai de 3 a 8 segundos", () => {
+    expect(atrasoDigitandoMs(0)).toBe(3_000);
+    expect(atrasoDigitandoMs(0.5)).toBe(5_500);
+    expect(atrasoDigitandoMs(1)).toBe(8_000);
   });
 
   it("numero sem WhatsApp vira motivo legivel, sem o telefone", async () => {

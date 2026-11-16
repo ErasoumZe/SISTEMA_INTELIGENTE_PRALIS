@@ -137,11 +137,19 @@ export function erroDaEvolution(status: number, corpo: RespostaEvolution): strin
   return textos.length ? `Evolution: ${textos.join("; ").slice(0, 200)}` : `Evolution respondeu HTTP ${status}`;
 }
 
+/**
+ * Tempo de "digitando…" antes de cada mensagem (16/11/2026): o número foi bloqueado pelo WhatsApp e mensagem
+ * instantânea, sem presença, é um dos sinais de envio automático. Entre 3 e 8 segundos, sorteado a cada envio.
+ */
+export function atrasoDigitandoMs(sorteio: number = Math.random()): number {
+  return 3_000 + Math.round(sorteio * 5_000);
+}
+
 async function enviarPelaEvolution(mensagem: MensagemWhatsapp): Promise<ResultadoEnvio> {
   const resposta = await postar(
     urlEnvioEvolution(env.WHATSAPP_EVOLUTION_URL!, env.WHATSAPP_EVOLUTION_INSTANCIA!),
     { apikey: env.WHATSAPP_EVOLUTION_API_KEY! },
-    { number: mensagem.telefone, text: mensagem.texto }
+    { number: mensagem.telefone, text: mensagem.texto, delay: atrasoDigitandoMs() }
   );
   const corpo = (await resposta.json().catch(() => null)) as RespostaEvolution;
   if (!resposta.ok) {
