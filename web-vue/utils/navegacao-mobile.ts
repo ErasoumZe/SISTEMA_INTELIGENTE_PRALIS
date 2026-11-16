@@ -1,4 +1,5 @@
 import type { ItemMenu } from "~/types/padaria";
+import { gruposVisiveis } from "~/utils/videos-ajuda";
 
 export type AtalhoNavegacaoMobile = {
   id: string;
@@ -15,6 +16,16 @@ const atalhoPainel: AtalhoNavegacaoMobile = {
   titulo: "Início",
   icone: "mdi-home-variant-outline",
   rota: "/"
+};
+
+/* TREINAMENTO fica NO MEIO da barra (Marco, R-242): Inicio, Caixa, Treinamento, Saidas,
+   Transferencias. So aparece para quem tem algum grupo de video liberado, pela mesma lista do menu;
+   sem grupo, o botao levaria a uma pagina vazia. */
+const atalhoTreinamento: AtalhoNavegacaoMobile = {
+  id: "treinamento",
+  titulo: "Treinamento",
+  icone: "mdi-school-outline",
+  rota: "/treinamento"
 };
 
 /**
@@ -36,11 +47,19 @@ export function atalhosDaNavegacaoMobile(
       if (!tela || bloqueadas.has(id)) return [];
       return [{ id: tela.id, titulo: tela.titulo, icone: tela.icone, rota }];
     }),
+    ...(gruposVisiveis(telas).length ? [atalhoTreinamento] : []),
     ...(acoesPermitidas.includes("saidas")
       ? [{ id: "saidas", titulo: "Saídas", icone: "mdi-arrow-up-right", acao: "saidas" as const }]
       : []),
     ...(acoesPermitidas.includes("transferencias")
-      ? [{ id: "transferencias", titulo: "Transferências", icone: "mdi-swap-horizontal", acao: "transferencias" as const }]
+      ? [
+          {
+            id: "transferencias",
+            titulo: "Transferências",
+            icone: "mdi-swap-horizontal",
+            acao: "transferencias" as const
+          }
+        ]
       : [])
   ];
 }

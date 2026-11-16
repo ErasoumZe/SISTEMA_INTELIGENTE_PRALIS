@@ -18,6 +18,7 @@ describe("atalhosDaNavegacaoMobile", () => {
     expect(atalhosDaNavegacaoMobile(telas, [], ["saidas", "transferencias"])).toEqual([
       { id: "painel", titulo: "Início", icone: "mdi-home-variant-outline", rota: "/" },
       { id: "caixa", titulo: "Caixa", icone: "mdi-cash-register", rota: "/caixa" },
+      { id: "treinamento", titulo: "Treinamento", icone: "mdi-school-outline", rota: "/treinamento" },
       { id: "saidas", titulo: "Saídas", icone: "mdi-arrow-up-right", acao: "saidas" },
       { id: "transferencias", titulo: "Transferências", icone: "mdi-swap-horizontal", acao: "transferencias" }
     ]);
@@ -26,7 +27,13 @@ describe("atalhosDaNavegacaoMobile", () => {
   it("nao exibe atalho sem permissao para o ato correspondente", () => {
     expect(atalhosDaNavegacaoMobile(telas, ["caixa"], ["saidas"]).map((atalho) => atalho.id)).toEqual([
       "painel",
+      "treinamento",
       "saidas"
     ]);
+  });
+
+  it("treinamento so aparece para quem tem algum grupo de video liberado pelo menu", () => {
+    const semCaixa = telas.filter((tela) => tela.id !== "caixa");
+    expect(atalhosDaNavegacaoMobile(semCaixa, [], ["saidas"]).map((atalho) => atalho.id)).toEqual(["painel", "saidas"]);
   });
 });

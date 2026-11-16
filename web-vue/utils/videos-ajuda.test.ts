@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   arquivoDoVideo,
   capaDoVideo,
+  duracaoTotal,
   filtrarVideos,
   GRUPOS_VIDEOS,
   gruposVisiveis,
@@ -16,6 +17,13 @@ const PASTA = dirname(fileURLToPath(import.meta.url));
 const publico = (caminho: string) => join(PASTA, "..", "public", caminho);
 
 describe("videos de ajuda", () => {
+  it("soma a duracao do grupo para a pagina Treinamento", () => {
+    const grupo = (segundos: number[]) => ({ videos: segundos.map((duracao) => ({ duracao })) as never });
+    expect(duracaoTotal(grupo([20, 25]))).toBe("45 s");
+    expect(duracaoTotal(grupo([60, 60]))).toBe("2 min");
+    expect(duracaoTotal(grupo([51, 9, 17]))).toBe("1 min 17 s");
+  });
+
   it("o grupo do Caixa so aparece para quem tem a tela Caixa no menu", () => {
     expect(gruposVisiveis([{ id: "caixa" }]).map((g) => g.id)).toEqual(["caixa"]);
     expect(gruposVisiveis([{ id: "transferencias" }, { id: "despesas" }])).toEqual([]);

@@ -103,6 +103,29 @@ describe("callback de status da Evolution", () => {
     expect(linhasDeLog.join("\n")).not.toContain("whatsapp evolution status");
   });
 
+  // 16/11/2026: a instancia cai com frequencia; o log guarda estado e motivo da queda, nunca o numero.
+  it("CONNECTION_UPDATE registra estado e motivo, sem numero nem chave", async () => {
+    linhasDeLog.length = 0;
+    const resposta = await app.inject({
+      method: "POST",
+      url: ROTA_WEBHOOK_EVOLUTION,
+      headers: autorizado,
+      payload: {
+        event: "CONNECTION_UPDATE",
+        instance: "padaria",
+        apikey: "chave-da-instancia-que-nao-pode-ir-ao-log",
+        data: { instance: "padaria", wuid: "5511999990000@s.whatsapp.net", state: "close", statusReason: 401 }
+      }
+    });
+    expect(resposta.statusCode).toBe(200);
+    const log = linhasDeLog.join("\n");
+    expect(log).toContain("whatsapp evolution conexao");
+    expect(log).toContain('"estado":"close"');
+    expect(log).toContain('"motivo":401');
+    expect(log).not.toContain("5511999990000");
+    expect(log).not.toContain("chave-da-instancia");
+  });
+
   it("corpo fora do formato responde 400", async () => {
     const resposta = await app.inject({
       method: "POST",

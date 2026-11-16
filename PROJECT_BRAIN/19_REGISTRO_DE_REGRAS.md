@@ -1619,6 +1619,15 @@ Business removeu o aparelho) e uma cotação gastou as 5 tentativas com "Connect
 não estiver `open`, **a fila espera sem gastar tentativa** e sai sozinha depois do QR; as telas Solicitação de compra
 e Cotação por fornecedor mostram o aviso "O WhatsApp das cotações está desconectado" com o caminho para reconectar.
 
+**Adendo (José, 16/11/2026) — número banido e cadência anti-bloqueio.** Em 16/11 o WhatsApp baniu a conta do
+número da padaria ("Esta conta não pode usar o WhatsApp", Termos do WhatsApp Business); o José pediu análise. Os
+LOGOUTs de 12, 13 e 16/11 eram o WhatsApp derrubando o aparelho. Decisão do José: continuar na Evolution (a Meta está
+descartada) e reduzir o risco. Pela Evolution: **uma mensagem por minuto** (uma por tick), **"digitando…" de 3 a 8 s**
+antes de cada uma e **no máximo 40 mensagens em 24 h** (todas as empresas, a instância é única); o que passar espera
+na fila, sem gastar tentativa. Na operação: cada fornecedor salva o número da padaria e manda um "oi" antes da
+primeira cotação; perfil comercial completo; poucas cotações nos primeiros dias depois de reconectar. Nenhum ajuste
+zera o risco de bloqueio de uma conexão não oficial.
+
 ### R-238 — Quem faz cada transferência; PDV 4 é o caixa do gerente (Marco, 12/11/2026)
 
 - **Tesouraria:** transferência **com lacre** (lança os malotes), **sem lacre** e entre contas que ela movimenta.
@@ -1659,7 +1668,26 @@ um lote futuro pode repetir números.
   responder "já utilizado").
 - **Histórico:** buscar um número pode trazer mais de uma transferência, cada uma com sua data.
 
+### R-242 — Página Treinamento: os vídeos saem da home e ganham página própria (Marco, 16/11/2026)
+
+**Supera em parte a R-237** (só o "Onde"; quem vê, formato e player continuam).
+
+- **Onde:** página **Treinamento** (`/treinamento`), organizada por assunto (um bloco por grupo de vídeos), com
+  busca, capa em pé, número na ordem do grupo, duração de cada vídeo e do grupo, e "Assistir em sequência". O
+  player é o mesmo (tela cheia, setas por passo).
+- **Botão:** no desktop, no topo, ao lado de "Painel"; no celular, **no meio** da barra de baixo (Início, Caixa,
+  Treinamento, Saídas, Transferências). No celular o topo não tem o botão: um caminho por tamanho de tela.
+  De 769 a 1024px, Painel e Treinamento aparecem só com o ícone (com os rótulos a topbar passava da tela).
+- **Home:** a faixa "Vídeos de ajuda" **saiu** do painel (regra-mãe: nada de dois caminhos).
+- **Quem vê:** igual à R-237, pela mesma lista do menu. Sem nenhum grupo liberado, o botão não aparece (nem no topo
+  nem na barra); quem abrir o endereço direto vê "Ainda não há treinamento para o seu acesso".
+- **Outros assuntos:** cada grupo novo entra em `web-vue/utils/videos-ajuda.ts`, ligado à sua tela; com mais de um
+  assunto, a página mostra atalhos para pular entre eles.
+
 ### R-237 — Vídeos de ajuda no painel, separados do chat de Dúvidas (Marco, 12/11/2026)
+
+> **Atualizada pela R-242 (16/11/2026):** os vídeos saíram do painel e vivem na página **Treinamento**
+> (`/treinamento`). O "Onde" abaixo é histórico; quem vê, formato e player continuam valendo.
 
 - **Onde:** no painel inicial, faixa "Vídeos de ajuda", com busca. O chat de Dúvidas (bolinha) continua igual: lá
   se pergunta, aqui se assiste.

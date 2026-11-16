@@ -1,4 +1,4 @@
-// Videos de ajuda do painel: um video curto por duvida ("Como abro o caixa?"), com legenda gravada no
+// Videos da pagina Treinamento (`/treinamento`, R-242): um video curto por duvida ("Como abro o caixa?"), com legenda gravada no
 // proprio video. Os arquivos ficam em `public/videos/<grupo>/`.
 //
 // A ORDEM DA LISTA E A ORDEM DA TELA: primeiro o passo a passo inteiro, depois as duvidas na ordem
@@ -29,6 +29,8 @@ export type GrupoVideos = {
   titulo: string;
   /** Tela do menu que libera o grupo. */
   telaId: string;
+  /** Como a lista esta ordenada, dito ao operador (ex.: "na ordem da abertura"). */
+  ordem?: string;
   videos: VideoAjuda[];
 };
 
@@ -37,6 +39,7 @@ export const GRUPOS_VIDEOS: GrupoVideos[] = [
     id: "caixa",
     titulo: "Abrir o caixa",
     telaId: "caixa",
+    ordem: "na ordem da abertura",
     videos: [
       {
         id: "como-abrir-o-caixa",
@@ -171,6 +174,15 @@ export function passoAnterior(inicios: number[], agora: number): number {
 }
 export function proximoPasso(inicios: number[], agora: number): number | null {
   return inicios.find((inicio) => inicio > agora + FOLGA) ?? null;
+}
+
+/** Soma das duracoes do grupo, para o operador saber quanto tempo leva assistir tudo. */
+export function duracaoTotal(grupo: Pick<GrupoVideos, "videos">): string {
+  const segundos = grupo.videos.reduce((soma, video) => soma + video.duracao, 0);
+  if (segundos < 60) return `${segundos} s`;
+  const minutos = Math.floor(segundos / 60);
+  const resto = segundos % 60;
+  return resto ? `${minutos} min ${resto} s` : `${minutos} min`;
 }
 
 export const arquivoDoVideo = (grupo: string, video: string) => `/videos/${grupo}/${video}.mp4`;

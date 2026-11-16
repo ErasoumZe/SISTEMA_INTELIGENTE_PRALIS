@@ -5,6 +5,7 @@ import { env } from "../env.js";
 import {
   enviarWhatsapp,
   estadoConexaoWhatsapp,
+  whatsappSegurandoFila,
   telefoneParaWhatsapp,
   type MensagemWhatsapp
 } from "../whatsapp/whatsapp-provedor.js";
@@ -14,6 +15,7 @@ import {
   dadosDoConviteParaEnvioRepository,
   dadosDoPedidoParaEnvioRepository,
   enfileirarEnviosRepository,
+  enviadosNasUltimas24hRepository,
   proximosEnviosRepository,
   registrarResultadoEnvioRepository,
   trocarTokenDoConviteRepository,
@@ -25,6 +27,20 @@ import {
 
 const LOTE = 20;
 const BYTES_DO_TOKEN = 32;
+
+/**
+ * Cadência anti-bloqueio da Evolution (16/11/2026): o WhatsApp baniu o número da padaria depois de rajadas de até
+ * 20 mensagens com link. Pela Evolution sai UMA mensagem por tick (o tick roda a cada 60 s) e no máximo
+ * `LIMITE_DIARIO_EVOLUTION` em 24 h; o resto espera na fila, sem gastar tentativa. Gateway por webhook e o
+ * provedor de teste seguem em lote.
+ */
+export const LIMITE_DIARIO_EVOLUTION = 40;
+
+/** Quantas mensagens este tick pode mandar: 0 quando o limite de 24 h da Evolution já foi atingido. */
+export function loteDoTick(provedor: string, enviadasEm24h: number): number {
+  if (provedor !== "evolution") return LOTE;
+  return enviadasEm24h >= LIMITE_DIARIO_EVOLUTION ? 0 : 1;
+}
 
 function prazoLocal(instante: Date, fuso: string): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, dateStyle: "short", timeStyle: "short" }).format(instante);
@@ -103,9 +119,13 @@ export async function enfileirarAvisoDeCompra(pedidoId: string, tx: Transacao): 
 export async function processarFilaWhatsapp(aoFalhar: (envioId: string, erro: DadosExternos) => void): Promise<number> {
   // Desligado ou desconectado (13/11/2026): a fila espera sem gastar tentativa. Antes, com a instância caída, as
   // 5 tentativas acabavam em minutos ("Connection Closed") e a cotação não saía mais depois de reconectar.
-  if ((await estadoConexaoWhatsapp()) !== "conectado") return 0;
+  if (whatsappSegurandoFila(await estadoConexaoWhatsapp())) return 0;
+  const lote = loteDoTick(
+    env.WHATSAPP_PROVEDOR,
+    env.WHATSAPP_PROVEDOR === "evolution" ? await enviadosNasUltimas24hRepository() : 0
+  );
   let enviadas = 0;
-  for (let rodada = 0; rodada < LOTE; rodada += 1) {
+  for (let rodada = 0; rodada < lote; rodada += 1) {
     const processou = await executarEmTransacao(async (tx) => {
       const [envio] = await proximosEnviosRepository(1, tx);
       if (!envio) return false;
