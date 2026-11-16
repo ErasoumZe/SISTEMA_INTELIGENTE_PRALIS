@@ -50,16 +50,24 @@ describe("estado da conexao do WhatsApp (Evolution)", () => {
     expect((opcoes.headers as Record<string, string>)["apikey"]).toBe("chave-ficticia");
   });
 
-  it("instancia fechada ou conectando conta como desconectado, com o estado no detalhe", async () => {
+  it("so a instancia fechada conta como desconectado, com o estado no detalhe", async () => {
     vi.stubGlobal("fetch", responder("close"));
     await expect(estadoDetalhadoWhatsapp()).resolves.toEqual({
       estado: "desconectado",
       detalhe: "Estado na Evolution: close"
     });
     expect(whatsappSegurandoFila("desconectado")).toBe(true);
-    esquecerEstadoWhatsapp();
+  });
+
+  // 16/11/2026: com o painel em Connected, a consulta respondia "connecting" e o aviso aparecia; as mensagens saiam
+  // atrasadas porque a fila esperava. "connecting" nao e queda: nao segura a fila nem mostra aviso.
+  it("instancia conectando fica indefinida e nao segura a fila", async () => {
     vi.stubGlobal("fetch", responder("connecting"));
-    await expect(estadoConexaoWhatsapp()).resolves.toBe("desconectado");
+    await expect(estadoDetalhadoWhatsapp()).resolves.toEqual({
+      estado: "indefinido",
+      detalhe: "Estado na Evolution: connecting"
+    });
+    expect(whatsappSegurandoFila("indefinido")).toBe(false);
   });
 
   // 16/11/2026: o aviso apareceu com a instância Connected. Consulta que falha não prova queda: não segura a fila
