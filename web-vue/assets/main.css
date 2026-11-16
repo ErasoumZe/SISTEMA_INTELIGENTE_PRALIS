@@ -3031,7 +3031,10 @@ body {
   background: var(--cx-brand-wash);
   color: var(--cx-brand-text);
 }
-@media (width <= 768px) {
+/* Ate 1024 (rail) os rotulos de Painel e Treinamento recolhem e fica o icone: com os dois rotulos
+   inteiros, a 780px a topbar passava da tela e cortava o avatar (medido, R-242). Abaixo de 769 os
+   dois botoes nem aparecem no topo (o celular usa a barra de baixo). */
+@media (width <= 1024px) {
   .shell-mobills .topbar-painel-rotulo {
     display: none;
   }

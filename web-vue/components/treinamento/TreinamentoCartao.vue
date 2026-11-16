@@ -13,7 +13,7 @@ const emit = defineEmits<{ abrir: [] }>();
   <button
     type="button"
     class="aula"
-    :aria-label="`Assistir: ${video.titulo}. ${video.duracao} segundos`"
+    :aria-label="`Assistir: ${video.titulo} (${video.duracao} segundos)`"
     @click="emit('abrir')"
   >
     <span class="aula__capa">

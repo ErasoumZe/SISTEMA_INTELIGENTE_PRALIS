@@ -63,7 +63,9 @@ function estaAtivo(atalho: { id: string; rota?: string }) {
   bottom: 0;
   left: 0;
   display: grid;
-  grid-template-columns: repeat(var(--quantidade-atalhos), minmax(0, 1fr));
+  /* Com 5 atalhos (Treinamento no meio, R-242), colunas iguais cortavam "Transferências" a 390px.
+     Cada coluna tem no minimo a largura do proprio rotulo e o resto da barra e dividido igual. */
+  grid-template-columns: repeat(var(--quantidade-atalhos), minmax(min-content, 1fr));
   min-height: calc(64px + env(safe-area-inset-bottom));
   gap: 4px;
   padding: 8px 18px calc(8px + env(safe-area-inset-bottom));
@@ -95,10 +97,10 @@ function estaAtivo(atalho: { id: string; rota?: string }) {
   cursor: pointer;
 }
 
+/* Sem reticencias: o rotulo inteiro define a largura minima da coluna (ver `grid-template-columns`).
+   Com corte, a coluna encolhia ate o "Transferências" virar "Transferên...". Os 5 rotulos somam
+   ~270px com o respiro e cabem ate em 320px. */
 .navegacao-mobile-item span {
-  overflow: hidden;
-  max-width: 100%;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
