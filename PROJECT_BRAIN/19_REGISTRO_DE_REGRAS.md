@@ -1659,6 +1659,21 @@ um lote futuro pode repetir números.
   responder "já utilizado").
 - **Histórico:** buscar um número pode trazer mais de uma transferência, cada uma com sua data.
 
+### R-242 — Página Treinamento: os vídeos saem da home e ganham página própria (Marco, 16/11/2026)
+
+**Supera em parte a R-237** (só o "Onde"; quem vê, formato e player continuam).
+
+- **Onde:** página **Treinamento** (`/treinamento`), organizada por assunto (um bloco por grupo de vídeos), com
+  busca, capa em pé, número na ordem do grupo, duração de cada vídeo e do grupo, e "Assistir em sequência". O
+  player é o mesmo (tela cheia, setas por passo).
+- **Botão:** no desktop, no topo, ao lado de "Painel"; no celular, **no meio** da barra de baixo (Início, Caixa,
+  Treinamento, Saídas, Transferências). No celular o topo não tem o botão: um caminho por tamanho de tela.
+- **Home:** a faixa "Vídeos de ajuda" **saiu** do painel (regra-mãe: nada de dois caminhos).
+- **Quem vê:** igual à R-237, pela mesma lista do menu. Sem nenhum grupo liberado, o botão não aparece (nem no topo
+  nem na barra); quem abrir o endereço direto vê "Ainda não há treinamento para o seu acesso".
+- **Outros assuntos:** cada grupo novo entra em `web-vue/utils/videos-ajuda.ts`, ligado à sua tela; com mais de um
+  assunto, a página mostra atalhos para pular entre eles.
+
 ### R-237 — Vídeos de ajuda no painel, separados do chat de Dúvidas (Marco, 12/11/2026)
 
 - **Onde:** no painel inicial, faixa "Vídeos de ajuda", com busca. O chat de Dúvidas (bolinha) continua igual: lá
