@@ -1668,6 +1668,7 @@ um lote futuro pode repetir números.
   player é o mesmo (tela cheia, setas por passo).
 - **Botão:** no desktop, no topo, ao lado de "Painel"; no celular, **no meio** da barra de baixo (Início, Caixa,
   Treinamento, Saídas, Transferências). No celular o topo não tem o botão: um caminho por tamanho de tela.
+  De 769 a 1024px, Painel e Treinamento aparecem só com o ícone (com os rótulos a topbar passava da tela).
 - **Home:** a faixa "Vídeos de ajuda" **saiu** do painel (regra-mãe: nada de dois caminhos).
 - **Quem vê:** igual à R-237, pela mesma lista do menu. Sem nenhum grupo liberado, o botão não aparece (nem no topo
   nem na barra); quem abrir o endereço direto vê "Ainda não há treinamento para o seu acesso".
