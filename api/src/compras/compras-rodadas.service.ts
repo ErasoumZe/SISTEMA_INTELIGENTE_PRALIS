@@ -14,7 +14,7 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { erroValidacao, naoEncontrado, naoProcessavel, proibido } from "../erros.js";
 import { marcarOcorrenciaEnviadaRepository } from "./compras-agendamento.repository.js";
 import { enfileirarEnviosRepository } from "./compras-whatsapp.repository.js";
-import { estadoConexaoWhatsapp, telefoneParaWhatsapp } from "../whatsapp/whatsapp-provedor.js";
+import { estadoConexaoWhatsapp, telefoneParaWhatsapp, whatsappSegurandoFila } from "../whatsapp/whatsapp-provedor.js";
 import { ultimoEnvioDosConvitesRepository } from "./compras-whatsapp.repository.js";
 import {
   buscarEmpresaComprasRepository,
@@ -223,7 +223,7 @@ export async function abrirRodadaNaTransacao(
     abertaEm: abertaEm.toISOString(),
     itens,
     convites,
-    whatsappConectado: (await estadoConexaoWhatsapp()) === "conectado"
+    whatsappConectado: !whatsappSegurandoFila(await estadoConexaoWhatsapp())
   };
 }
 
@@ -292,6 +292,6 @@ export async function obterRodada(rodadaId: string, empresaId: string, perfil: P
           }
         : null
     })),
-    whatsappConectado: (await estadoConexaoWhatsapp()) === "conectado"
+    whatsappConectado: !whatsappSegurandoFila(await estadoConexaoWhatsapp())
   };
 }
