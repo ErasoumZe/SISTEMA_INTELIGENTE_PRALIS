@@ -3,7 +3,9 @@ import { env } from "../../api/src/env.js";
 import {
   esquecerEstadoWhatsapp,
   estadoConexaoWhatsapp,
-  urlEstadoEvolution
+  estadoDetalhadoWhatsapp,
+  urlEstadoEvolution,
+  whatsappSegurandoFila
 } from "../../api/src/whatsapp/whatsapp-provedor.js";
 
 // 13/11/2026: a instancia da Evolution caiu ("Connection Closed") e a cotacao gastou as 5 tentativas sem ninguem
@@ -48,25 +50,44 @@ describe("estado da conexao do WhatsApp (Evolution)", () => {
     expect((opcoes.headers as Record<string, string>)["apikey"]).toBe("chave-ficticia");
   });
 
-  it("instancia fechada ou conectando conta como desconectado", async () => {
+  it("instancia fechada ou conectando conta como desconectado, com o estado no detalhe", async () => {
     vi.stubGlobal("fetch", responder("close"));
-    await expect(estadoConexaoWhatsapp()).resolves.toBe("desconectado");
+    await expect(estadoDetalhadoWhatsapp()).resolves.toEqual({
+      estado: "desconectado",
+      detalhe: "Estado na Evolution: close"
+    });
+    expect(whatsappSegurandoFila("desconectado")).toBe(true);
     esquecerEstadoWhatsapp();
     vi.stubGlobal("fetch", responder("connecting"));
     await expect(estadoConexaoWhatsapp()).resolves.toBe("desconectado");
   });
 
-  it("Evolution fora do ar ou respondendo erro conta como desconectado", async () => {
+  // 16/11/2026: o aviso apareceu com a instância Connected. Consulta que falha não prova queda: não segura a fila
+  // nem acusa desconexão, mas devolve o motivo para o diagnóstico.
+  it("consulta que falha fica indefinida e nao segura a fila", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
         throw new Error("fetch failed");
       })
     );
-    await expect(estadoConexaoWhatsapp()).resolves.toBe("desconectado");
+    await expect(estadoDetalhadoWhatsapp()).resolves.toEqual({
+      estado: "indefinido",
+      detalhe: "Sem resposta da Evolution"
+    });
     esquecerEstadoWhatsapp();
     vi.stubGlobal("fetch", responder("open", 401));
-    await expect(estadoConexaoWhatsapp()).resolves.toBe("desconectado");
+    await expect(estadoDetalhadoWhatsapp()).resolves.toEqual({
+      estado: "indefinido",
+      detalhe: "Evolution respondeu HTTP 401"
+    });
+    esquecerEstadoWhatsapp();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    );
+    await expect(estadoConexaoWhatsapp()).resolves.toBe("indefinido");
+    expect(whatsappSegurandoFila("indefinido")).toBe(false);
   });
 
   it("guarda o estado por 30s e pergunta de novo depois", async () => {

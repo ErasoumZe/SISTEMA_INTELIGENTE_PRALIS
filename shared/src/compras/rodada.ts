@@ -122,4 +122,8 @@ export type RodadaDto = {
 };
 
 /** Estado do WhatsApp das cotacoes (13/11/2026): "desconectado" = a instancia caiu e precisa de QR novo. */
-export type EstadoWhatsappDto = { estado: "conectado" | "desconectado" | "desligado" };
+export type EstadoWhatsappDto = {
+  estado: "conectado" | "desconectado" | "indefinido" | "desligado";
+  // Motivo legivel quando nao esta conectado (ex.: "Estado na Evolution: close", "Evolution respondeu HTTP 401").
+  detalhe: string | null;
+};
