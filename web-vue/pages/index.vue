@@ -2,7 +2,6 @@
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import AppCabecalhoTela from "~/components/app/AppCabecalhoTela.vue";
 import AppDashboard from "~/components/app/AppDashboard.vue";
-import AppVideosAjuda from "~/components/app/AppVideosAjuda.vue";
 </script>
 
 <template>
@@ -32,8 +31,8 @@ import AppVideosAjuda from "~/components/app/AppVideosAjuda.vue";
         :desabilitadas="ctx.telasMenuDesabilitadas"
         :motivos="ctx.motivosTelasMenuDesabilitadas"
       />
-      <!-- Videos curtos de duvida. Recebe a mesma lista do menu: grupo sem tela liberada some. -->
-      <AppVideosAjuda :telas="ctx.telasMenu" />
+      <!-- Os videos de ajuda SAIRAM daqui (R-242): vivem na pagina Treinamento (/treinamento), com
+           botao no topo e na barra do celular. Faixa na home junto da pagina seria segundo caminho. -->
     </section>
   </AppWorkspace>
 </template>

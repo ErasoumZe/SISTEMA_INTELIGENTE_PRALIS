@@ -11,6 +11,7 @@ import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 import { limitarNotificacoesDoSino } from "~/utils/notificacoes";
 import { telasComSubmenuDeProdutos } from "~/utils/menu";
+import { gruposVisiveis } from "~/utils/videos-ajuda";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -79,6 +80,10 @@ const rota = useRoute();
 // Verdade sobre "estou no painel" vem da ROTA, e nao de `telaAtiva`: o botao aponta para "/", entao
 // quem responde se ele ja esta no destino e o proprio caminho atual.
 const naHome = computed(() => rota.path === "/");
+// Treinamento (R-242): no topo do desktop; no celular ele vive na barra de baixo. So aparece com
+// algum grupo de video liberado pela mesma lista do menu.
+const temTreinamento = computed(() => gruposVisiveis(props.telas).length > 0);
+const noTreinamento = computed(() => rota.path === "/treinamento");
 const telaTemCategoria = computed(() => Boolean(CATEGORIA_POR_TELA[props.telaAtiva]));
 const notificacoesRecentes = computed(() => limitarNotificacoesDoSino(props.notificacoes ?? []));
 
@@ -317,6 +322,22 @@ onMounted(() => {
             :aria-current="naHome ? 'page' : undefined"
           >
             <span class="topbar-painel-rotulo">Painel</span>
+          </v-btn>
+
+          <!-- TREINAMENTO (R-242), ao lado do Painel: os dois sao navegacao. Mesmo tile, mesmo
+               `aria-current`, e o rotulo recolhe junto em tela estreita. No celular nao aparece
+               aqui: la o caminho e a barra de baixo, e dois botoes para o mesmo ato nao. -->
+          <v-btn
+            v-if="!viewportMobile && temTreinamento"
+            to="/treinamento"
+            variant="text"
+            class="topbar-painel"
+            prepend-icon="mdi-school-outline"
+            title="Vídeos de treinamento"
+            aria-label="Treinamento"
+            :aria-current="noTreinamento ? 'page' : undefined"
+          >
+            <span class="topbar-painel-rotulo">Treinamento</span>
           </v-btn>
 
           <v-btn
