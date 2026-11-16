@@ -17,8 +17,11 @@ const emit = defineEmits<{
 const rota = useRoute();
 const atalhos = computed(() => atalhosDaNavegacaoMobile(props.telas, props.telasDesabilitadas, props.acoesNovoIds));
 
+// Painel e Treinamento nao sao telas do menu (`telaAtiva` fica vazia neles): quem diz se o atalho
+// esta ativo e a propria rota.
+const ATALHOS_POR_ROTA = new Set(["painel", "treinamento"]);
 function estaAtivo(atalho: { id: string; rota?: string }) {
-  return atalho.id === "painel" ? rota.path === "/" : props.telaAtiva === atalho.id;
+  return ATALHOS_POR_ROTA.has(atalho.id) ? rota.path === atalho.rota : props.telaAtiva === atalho.id;
 }
 </script>
 
