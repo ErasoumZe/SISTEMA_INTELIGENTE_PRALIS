@@ -26,3 +26,8 @@ ALTER TABLE "auditorias_pdv_agenda" ADD CONSTRAINT "auditorias_pdv_agenda_empres
 ALTER TABLE "notificacoes" ADD CONSTRAINT "notificacoes_tipo_check" CHECK ("notificacoes"."tipo" in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
         'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer',
         'sangria_recusada', 'auditoria_pdv'));
+--> statement-breakpoint
+CREATE TRIGGER "auditorias_pdv_agenda_set_atualizado_em"
+BEFORE UPDATE ON "auditorias_pdv_agenda"
+FOR EACH ROW
+EXECUTE FUNCTION set_atualizado_em();

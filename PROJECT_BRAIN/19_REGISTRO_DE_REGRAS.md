@@ -1763,7 +1763,7 @@ Decisões do José, para o S1 ficar igual ao S2:
     listas de pedido mostram todos os produtos do grupo. Os 1.429 ativos sem grupo não aparecem em agendamento
     por grupo.
 
-### R-242 — Auditoria de PDVs: vendas da CREARE x caixas (Marco, 13-16/11/2026)
+### R-243 — Auditoria de PDVs: vendas da CREARE x caixas (Marco, 13-16/11/2026)
 
 - **O que é:** tela "Auditoria de PDVs" (menu `auditoria_pdv`). Cruza, por dia e por PDV, as vendas que vieram da
   CREARE (integradas, não canceladas) com os caixas abertos no sistema. Venda manual não entra.

@@ -26,7 +26,7 @@ export async function listarNotificacoes(empresaId: string, perfil: PerfilUsuari
     // de Pedidos, onde mora a fila de decisao.
     // Agendamento de pedido (doc 58 §2): chegou a data; o sino leva a Solicitacao de compra.
     // Conferencia de estoque agendada (doc 57 §1): leva a tela de conferencias.
-    // Auditoria de PDVs (R-242): venda fora de caixa leva a tela da Auditoria.
+    // Auditoria de PDVs (R-243): venda fora de caixa leva a tela da Auditoria.
     detalhes:
       item.tipo === "compras_decisao_pendente"
         ? { setor: "Compras", descricao: null, dataVencimento: null, rota: "/pedidos" }
