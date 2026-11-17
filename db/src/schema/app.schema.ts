@@ -3736,6 +3736,41 @@ export const sangriasRecusadas = pgTable(
   ]
 );
 
+// Auditoria de PDVs (Marco, 13/11/2026): por dia, cruza as vendas da CREARE com os caixas abertos. Cada "Gerar"
+// (manual ou automatico) grava o retrato do dia; venda fora de qualquer caixa vira alerta para a Tesouraria.
+export const auditoriasPdv = pgTable(
+  "auditorias_pdv",
+  {
+    id: idUuid,
+    empresaId,
+    data: date("data").notNull(),
+    // null = gerada pelo agendamento automatico.
+    geradaPor: text("gerada_por").references(() => perfisUsuarios.usuarioId),
+    geradaEm: timestamp("gerada_em", { withTimezone: true }).notNull().defaultNow(),
+    vendasFora: integer("vendas_fora").notNull(),
+    valorFora: valorMonetario("valor_fora").notNull(),
+    resultado: jsonb("resultado").notNull()
+  },
+  (table) => [
+    unique("auditorias_pdv_empresa_data_unica").on(table.empresaId, table.data),
+    check("auditorias_pdv_vendas_fora_check", sql`${table.vendasFora} >= 0`)
+  ]
+);
+
+// Agendamento da auditoria automatica, uma linha por empresa.
+export const auditoriasPdvAgenda = pgTable(
+  "auditorias_pdv_agenda",
+  {
+    empresaId: uuid("empresa_id")
+      .primaryKey()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    ativa: boolean("ativa").notNull().default(false),
+    horario: text("horario").notNull().default("23:30"),
+    atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [check("auditorias_pdv_agenda_horario_check", sql`${table.horario} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`)]
+);
+
 // Planilha da Tesouraria (Marco, 12/11/2026): cada envio gravado, com quem enviou, onde gravou, o que a IA leu e o que
 // foi enviado (com as correcoes da Tesouraria). Um envio por caixa e aba: o segundo e bloqueado aqui, sem depender de
 // ler a planilha.
@@ -3846,6 +3881,7 @@ export const notificacoes = pgTable(
         | "compras_agendamento_conferir"
         | "conferencia_estoque_fazer"
         | "sangria_recusada"
+        | "auditoria_pdv"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -3874,7 +3910,7 @@ export const notificacoes = pgTable(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
         'mensagem_admin', 'campanha', 'lancamento_vencimento', 'compras_decisao_pendente', 'compras_agendamento_conferir', 'conferencia_estoque_fazer',
-        'sangria_recusada')`
+        'sangria_recusada', 'auditoria_pdv')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(

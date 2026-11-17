@@ -18,7 +18,9 @@ export const tipoNotificacaoSchema = z.enum([
   // R-236: 3a sangria recusada por passar do dinheiro do caixa no mesmo turno. Referencia o caixa.
   "sangria_recusada",
   // Conferencia de estoque agendada (doc 57 §1): chegou a data de contar.
-  "conferencia_estoque_fazer"
+  "conferencia_estoque_fazer",
+  // Auditoria de PDVs (13/11/2026): venda fora de qualquer caixa no dia. Referencia a auditoria.
+  "auditoria_pdv"
 ]);
 
 // O sino continua recebendo apenas o que ainda pede acao. A central de Pendencias, por outro

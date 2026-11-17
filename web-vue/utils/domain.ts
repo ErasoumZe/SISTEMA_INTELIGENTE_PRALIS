@@ -106,6 +106,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "relatorio_fechamento_visualizar",
     icone: "mdi-clipboard-text-search"
   },
+  // Auditoria de PDVs (Marco, 13/11/2026): mesmo acesso do Relatorio de fechamento (Tesouraria e administrador).
+  auditoria_pdv: {
+    id: "auditoria_pdv",
+    titulo: "Auditoria de PDVs",
+    permissao: "relatorio_fechamento_visualizar",
+    icone: "mdi-calendar-check-outline"
+  },
   // R-200: a UNICA tela nova das duas frentes. Mensagem para PDV nao entra aqui de proposito — ela
   // vive dentro do Monitor de caixas abertos, sem rota e sem item de menu.
   campanhas: {

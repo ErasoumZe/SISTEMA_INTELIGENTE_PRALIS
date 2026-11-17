@@ -23,6 +23,7 @@ export * from "./discriminacao-ia/index.js";
 export * from "./integracoes/index.js";
 export * from "./patrimonio/index.js";
 export * from "./pdvs/index.js";
+export * from "./auditoria-pdv/index.js";
 export * from "./permissoes/index.js";
 export * from "./produtos/index.js";
 export * from "./recorrencia/index.js";

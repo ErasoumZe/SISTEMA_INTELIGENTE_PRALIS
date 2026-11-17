@@ -135,6 +135,7 @@ export const SECOES_MENU: { titulo: string; ids: string[]; cor?: CorMenuGrupo; c
     ids: [
       "fechamento",
       "relatorio_fechamento",
+      "auditoria_pdv",
       "relatorio_vendas",
       "relatorio_produtos",
       "relatorio_dre",

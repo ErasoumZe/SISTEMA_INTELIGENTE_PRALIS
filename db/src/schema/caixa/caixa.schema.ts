@@ -12,6 +12,8 @@ export {
   fechamentosCaixaRelatoriosVendas,
   notificacoes,
   planilhaTesourariaEnvios,
+  auditoriasPdv,
+  auditoriasPdvAgenda,
   quebrasCaixa,
   sangriasRecusadas,
   transferenciasConferenciasFisicas
