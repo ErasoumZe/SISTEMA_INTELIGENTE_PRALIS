@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import type { AuditoriaDia, CaixaAuditoria, FormaAuditoria, StatusAuditoria } from "@padaria/shared";
+import { ref, watch } from "vue";
+import type { AuditoriaDia, CaixaAuditoria, PdvAuditoria, StatusAuditoria } from "@padaria/shared";
 import { dinheiro } from "~/utils/domain";
+import AuditoriaPdvFora from "./AuditoriaPdvFora.vue";
+import { horaAuditoria as hora, listaFormasAuditoria as listaFormas } from "./auditoria-formato";
 
 // Auditoria de PDVs: o dia aberto. Um cartao por PDV com os caixas (turno, quem abriu, vendas e total) e, se
 // houver, as vendas que nao cairam em nenhum caixa — hora, valor, forma e produtos.
-defineProps<{ dia: AuditoriaDia; gerando: boolean }>();
+// mostrarFora: a escolha da pagina (mostrar ou ocultar as vendas sem caixa de todos os PDVs); cada PDV ainda pode
+// abrir ou fechar a sua lista.
+const props = defineProps<{ dia: AuditoriaDia; gerando: boolean; mostrarFora: boolean }>();
 const emit = defineEmits<{ (e: "gerar"): void }>();
+
+const chavePdv = (pdv: PdvAuditoria) => pdv.pdvId ?? pdv.pdvNome;
+const foraAberta = ref<Record<string, boolean>>({});
+watch(
+  () => props.mostrarFora,
+  () => (foraAberta.value = {})
+);
 
 const rotulos: Record<StatusAuditoria, string> = {
   ok: "Bateu",
@@ -19,19 +31,6 @@ const cores: Record<StatusAuditoria, string> = {
   andamento: "primary",
   sem_vendas: "default"
 };
-const formas: Record<string, string> = {
-  dinheiro: "Dinheiro",
-  credito: "Crédito",
-  debito: "Débito",
-  pix: "PIX",
-  voucher: "Voucher",
-  crediario: "Clientes",
-  outros: "Outros"
-};
-const hora = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
-    : "--:--";
 // Manha e Tarde sempre aparecem lado a lado; caixa sem turno (PDV de turno unico) ganha a propria coluna.
 function colunasTurno(caixas: CaixaAuditoria[]) {
   const coluna = (rotulo: string, lista: CaixaAuditoria[]) => ({
@@ -54,8 +53,6 @@ function colunasTurno(caixas: CaixaAuditoria[]) {
   if (semTurno.length) colunas.push(coluna("Sem turno", semTurno));
   return colunas;
 }
-const listaFormas = (lista: FormaAuditoria[]) =>
-  lista.map((f) => `${formas[f.categoria] ?? f.categoria} ${dinheiro(f.valor)}`).join(" · ");
 const dataLonga = (data: string) =>
   new Date(`${data}T12:00:00Z`).toLocaleDateString("pt-BR", {
     weekday: "long",
@@ -108,12 +105,7 @@ const momento = (iso: string) =>
 
     <p v-if="!dia.pdvs.length" class="auditoria-dia__vazio">Nenhuma venda da CREARE neste dia.</p>
 
-    <article
-      v-for="pdv in dia.pdvs"
-      :key="pdv.pdvId ?? pdv.pdvNome"
-      class="auditoria-pdv"
-      :class="`auditoria-pdv--${pdv.status}`"
-    >
+    <article v-for="pdv in dia.pdvs" :key="chavePdv(pdv)" class="auditoria-pdv" :class="`auditoria-pdv--${pdv.status}`">
       <header class="auditoria-pdv__topo">
         <strong>{{ pdv.pdvNome }}</strong>
         <v-chip :color="cores[pdv.status]" variant="tonal" size="x-small">{{ rotulos[pdv.status] }}</v-chip>
@@ -138,27 +130,12 @@ const momento = (iso: string) =>
         </section>
       </div>
 
-      <div v-if="pdv.fora.length" class="auditoria-pdv__fora" role="alert">
-        <strong>{{ pdv.fora.length }} venda(s) sem caixa aberto</strong>
-        <table>
-          <thead>
-            <tr>
-              <th>Hora</th>
-              <th>Valor</th>
-              <th>Forma</th>
-              <th>Produtos</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="venda in pdv.fora" :key="venda.vendaId">
-              <td>{{ hora(venda.hora) }}</td>
-              <td>{{ dinheiro(venda.valor) }}</td>
-              <td>{{ listaFormas(venda.formas) || "—" }}</td>
-              <td>{{ venda.produtos.map((p) => `${p.quantidade}× ${p.descricao}`).join(", ") || "—" }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <AuditoriaPdvFora
+        v-if="pdv.fora.length"
+        :vendas="pdv.fora"
+        :aberta="foraAberta[chavePdv(pdv)] ?? mostrarFora"
+        @update:aberta="foraAberta[chavePdv(pdv)] = $event"
+      />
     </article>
   </section>
 </template>
@@ -279,49 +256,10 @@ const momento = (iso: string) =>
   margin: 0;
   color: var(--cx-ink-soft);
 }
-.auditoria-pdv__fora {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--cx-negative) 9%, var(--cx-surface));
-}
-.auditoria-pdv__fora strong {
-  color: var(--cx-negative);
-  font-size: 0.88rem;
-}
-.auditoria-pdv__fora table {
-  width: 100%;
-  margin-top: 6px;
-  border-collapse: collapse;
-  font-size: 0.84rem;
-}
-.auditoria-pdv__fora th {
-  color: var(--cx-ink-soft);
-  font-weight: 600;
-  text-align: left;
-}
-.auditoria-pdv__fora th,
-.auditoria-pdv__fora td {
-  padding: 4px 8px 4px 0;
-  vertical-align: top;
-}
 @media (max-width: 760px) {
   .auditoria-pdv__topo .auditoria-pdv__dia {
     flex-basis: 100%;
     margin-left: 0;
-  }
-  .auditoria-pdv__fora table,
-  .auditoria-pdv__fora tbody,
-  .auditoria-pdv__fora tr,
-  .auditoria-pdv__fora td {
-    display: block;
-  }
-  .auditoria-pdv__fora thead {
-    display: none;
-  }
-  .auditoria-pdv__fora tr {
-    padding: 6px 0;
-    border-top: 1px solid var(--cx-line);
   }
 }
 </style>

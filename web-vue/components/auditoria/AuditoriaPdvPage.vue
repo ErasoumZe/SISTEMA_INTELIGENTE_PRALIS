@@ -36,6 +36,18 @@ const salvandoAgenda = ref(false);
 const erro = ref("");
 const aviso = ref("");
 
+// Vendas sem caixa (Marco, 17/11/2026): comecam ocultas; a escolha fica guardada neste navegador.
+const CHAVE_FORA = "auditoria-pdv:mostrar-vendas-sem-caixa";
+const mostrarFora = ref(false);
+function alternarFora() {
+  mostrarFora.value = !mostrarFora.value;
+  try {
+    localStorage.setItem(CHAVE_FORA, mostrarFora.value ? "1" : "0");
+  } catch {
+    // Sem armazenamento (aba privada): vale so ate recarregar.
+  }
+}
+
 const query = (extra: Record<string, string | null>) => {
   const params = new URLSearchParams({ empresaId: props.empresaId });
   for (const [chave, valor] of Object.entries(extra)) if (valor) params.set(chave, valor);
@@ -90,6 +102,11 @@ async function salvarAgenda(nova: AgendaAuditoria) {
 
 watch([filtros, () => props.empresaId], () => void carregar(), { deep: true });
 onMounted(async () => {
+  try {
+    mostrarFora.value = localStorage.getItem(CHAVE_FORA) === "1";
+  } catch {
+    mostrarFora.value = false;
+  }
   await carregar();
   if (props.empresaId)
     agenda.value = await apiGet<AgendaAuditoria>(`/api/auditoria-pdv/agenda${query({})}`).catch(() => agenda.value);
@@ -128,6 +145,17 @@ onMounted(async () => {
       <span
         ><strong>{{ consulta.dias.length }}</strong> dia(s)</span
       >
+      <v-btn
+        v-if="consulta.resumo.vendasFora"
+        class="auditoria__alternar-fora"
+        size="small"
+        variant="tonal"
+        :prepend-icon="mostrarFora ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+        :aria-pressed="mostrarFora"
+        data-teste="alternar-fora-todas"
+        @click="alternarFora"
+        >{{ mostrarFora ? "Ocultar vendas sem caixa" : "Mostrar vendas sem caixa" }}</v-btn
+      >
     </div>
     <v-progress-linear v-if="carregando" indeterminate color="primary" />
 
@@ -139,6 +167,7 @@ onMounted(async () => {
       :key="dia.data"
       :dia="dia"
       :gerando="gerandoData === dia.data"
+      :mostrar-fora="mostrarFora"
       @gerar="gerar(dia.data)"
     />
 
@@ -171,9 +200,13 @@ onMounted(async () => {
 .auditoria__topo h2 {
   margin: 2px 0 0;
 }
+.auditoria__alternar-fora {
+  margin-left: auto;
+}
 .auditoria__resumo {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px 20px;
   color: var(--cx-ink-soft);
   font-size: 0.9rem;
