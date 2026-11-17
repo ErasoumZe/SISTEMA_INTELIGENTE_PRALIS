@@ -1803,7 +1803,7 @@ da folha do relatório do CREARE".
   não está no futuro, **não invade o caixa anterior** (início depois do fim dele) nem o **próximo caixa** do mesmo
   PDV (fim antes do início dele), e o período não fica invertido. O lado que não passa fica como estava e a tela
   avisa o motivo; o relatório final da Tesouraria mostra o motivo e quantas vendas entraram/saíram.
-- **Sem limite de 60 min:** a folha é a fonte do horário (decisão desta regra; o limite da R-224 era para a escolha
+- **Sem limite de 60 min (aprovado pelo Marco, 17/11/2026):** a folha é a fonte do horário (o limite da R-224 era para a escolha
   manual). A proteção é o mesmo dia e os caixas vizinhos.
 - **Log:** cada mudança de período grava em `edicoes_caixa` (horas antigas e novas, abertura oficial e quantas
   vendas entraram/saíram), com quem gerou. Gerar de novo sem mudança não grava outro.
