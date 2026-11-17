@@ -14,6 +14,7 @@ import {
   lt,
   lte,
   max,
+  min,
   ne,
   or,
   sum
@@ -1460,13 +1461,40 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
   );
 }
 
-// R-224 · inicio das vendas do caixa. Muda SO `data_hora_abertura` (o periodo das vendas); `aberto_em` continua
-// sendo o carimbo oficial da abertura e o log fica em `edicoes_caixa`.
-export async function atualizarInicioVendasCaixaRepository(caixaId: string, inicio: Date, db: ExecutorBanco = banco) {
-  await db.update(fechamentosCaixa).set({ dataHoraAbertura: inicio }).where(eq(fechamentosCaixa.id, caixaId));
+// R-244 · periodo das vendas do caixa alinhado a folha do CREARE. Muda SO `data_hora_abertura` e
+// `data_hora_fechamento` (o periodo das vendas); `aberto_em` e `fechamento_iniciado_em` continuam sendo os
+// carimbos oficiais (abertura e corte) e o log fica em `edicoes_caixa`.
+export async function atualizarPeriodoVendasCaixaRepository(
+  caixaId: string,
+  periodo: { inicio: Date; fim: Date },
+  db: ExecutorBanco = banco
+) {
+  await db
+    .update(fechamentosCaixa)
+    .set({ dataHoraAbertura: periodo.inicio, dataHoraFechamento: periodo.fim })
+    .where(eq(fechamentosCaixa.id, caixaId));
 }
 
-// Fim do ultimo caixa do MESMO PDV aberto antes deste: o inicio retroativo nunca entra no periodo dele.
+// Inicio do primeiro caixa do MESMO PDV aberto depois deste: o fim alinhado a folha nunca entra no periodo dele.
+export async function buscarInicioDoProximoCaixaNoPdvRepository(
+  input: { empresaId: string; pdvId: string; caixaId: string; abertoDepoisDe: Date },
+  db: ExecutorBanco = banco
+): Promise<Date | null> {
+  const [linha] = await db
+    .select({ inicio: min(fechamentosCaixa.dataHoraAbertura) })
+    .from(fechamentosCaixa)
+    .where(
+      and(
+        eq(fechamentosCaixa.empresaId, input.empresaId),
+        eq(fechamentosCaixa.pdvId, input.pdvId),
+        ne(fechamentosCaixa.id, input.caixaId),
+        gt(fechamentosCaixa.abertoEm, input.abertoDepoisDe)
+      )
+    );
+  return linha?.inicio ? new Date(linha.inicio) : null;
+}
+
+// Fim do ultimo caixa do MESMO PDV aberto antes deste: o inicio alinhado a folha nunca entra no periodo dele.
 export async function buscarFimDoCaixaAnteriorNoPdvRepository(
   input: { empresaId: string; pdvId: string; caixaId: string; abertoAte: Date },
   db: ExecutorBanco = banco

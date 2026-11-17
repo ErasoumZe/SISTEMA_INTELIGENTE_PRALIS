@@ -1368,6 +1368,9 @@ Relatório de fechamento. Tela: `CampoLacreFechamento.vue`.
 
 ### R-224 — Início das vendas do caixa pode recuar até 60 min, com motivo (Marco, 28/10/2026)
 
+> **Substituída pela R-244 (16/11/2026):** o período do caixa passa a seguir a folha do CREARE sozinho, ao gerar o
+> relatório de vendas. O **Ajustar início** (rota e tela) foi removido.
+
 **Supera em parte a R-209** (que proibia o operador de escolher o período). Quando o operador abre o caixa no sistema
 depois de já estar vendendo no PDV (ex.: abriu 13:18, vende desde 13:00), ele pode, na etapa **Vendas** do
 fechamento, tocar em **Ajustar início** e escolher uma hora anterior. As vendas do CREARE desse intervalo **que
@@ -1421,7 +1424,10 @@ lacre 4284). A linha vai para o rodapé "só na folha"; a sangria continua confe
   Mas o cupom não tem linha de suprimento, então ele **não é comparado**, e o Troco Inicial compara só a
   transferência de abertura. Pendente com o Rodrigo: confirmar se o CREARE soma o reforço no "Troco Inicial".
 
-**Horário:** o "Período de" (início) da folha é comparado com o início das vendas do caixa, com tolerância de
+**Horário (atualizado pela R-244, 16/11/2026):** desde a R-244 o período do caixa passa a ser o da folha ao gerar o
+relatório; a comparação abaixo vale para os relatórios gerados antes disso.
+
+O "Período de" (início) da folha é comparado com o início das vendas do caixa, com tolerância de
 **2 min**. Se não bate e cabe na janela da R-224, a tela destaca o **Ajustar início** já com a hora da folha
 (minuto cheio, para baixo) e o motivo preenchido; fora da janela, só avisa. A "Data da emissão" é comparada com
 o corte do fechamento só para informar (de 2 min antes a 15 min depois = bate). O "até 23:59:59" é fim de dia, não
@@ -1762,3 +1768,31 @@ Decisões do José, para o S1 ficar igual ao S2:
     O doc 59 estimava (Rodrigo) que não passam de 300 os comprados por pedido: com a revenda toda liberada, as
     listas de pedido mostram todos os produtos do grupo. Os 1.429 ativos sem grupo não aparecem em agendamento
     por grupo.
+
+### R-244 — O período das vendas do caixa segue a folha do CREARE (Marco, 13/11 e 16/11/2026)
+
+**Substitui a R-224** (Ajustar início manual, até 60 min) e atualiza o horário da R-225. Pedido do Marco: "quando
+gera o relatório de vendas no fechamento, tem que bater automático com o horário de abertura e fechamento do caixa
+da folha do relatório do CREARE".
+
+- **Quando:** ao tocar em **Gerar relatório de vendas** (etapa Vendas do fechamento), com a folha lida.
+- **O quê:** o período das vendas do caixa passa a ser o da folha: **início = "Período de"**, **fim = "Data da
+  emissão"** (ex.: manhã de 11/11, 05:43:33 até 13:53:27), mesmo que o caixa do sistema tenha aberto depois ou o
+  corte tenha sido em outra hora. As vendas do CREARE **sem caixa** desse período entram neste caixa; as deste caixa
+  que ficaram fora voltam a ficar sem caixa (aparecem na Auditoria de PDVs). Venda de **outro caixa** nunca é tirada
+  de lá; venda **manual** nunca é mexida.
+- **O que não muda:** a **abertura oficial** (`aberto_em`) e o **corte real** (`fechamento_iniciado_em`, o toque em
+  "Encerrar vendas"). Muda só o período das vendas (`data_hora_abertura` e `data_hora_fechamento`).
+- **Limites (servidor), lado a lado:** cada lado só segue a folha se a hora foi lida, é do **mesmo dia** da abertura,
+  não está no futuro, **não invade o caixa anterior** (início depois do fim dele) nem o **próximo caixa** do mesmo
+  PDV (fim antes do início dele), e o período não fica invertido. O lado que não passa fica como estava e a tela
+  avisa o motivo; o relatório final da Tesouraria mostra o motivo e quantas vendas entraram/saíram.
+- **Sem limite de 60 min:** a folha é a fonte do horário (decisão desta regra; o limite da R-224 era para a escolha
+  manual). A proteção é o mesmo dia e os caixas vizinhos.
+- **Log:** cada mudança de período grava em `edicoes_caixa` (horas antigas e novas, abertura oficial e quantas
+  vendas entraram/saíram), com quem gerou. Gerar de novo sem mudança não grava outro.
+- **Leitura errada:** se a hora da folha foi lida errada, o operador corrige na leitura (com justificativa, como
+  hoje) e gera de novo; o período segue a leitura corrigida.
+- **Código:** `alinharPeriodoAFolhaCreare` (shared, regra pura) e `alinharPeriodoDoCaixaAFolha` (api, dentro de
+  `gerarRelatorioVendasFechamento`). Removidos: `POST /api/caixa/:caixaId/inicio-vendas`,
+  `CaixaInicioVendasAjuste.vue` e as dúvidas do Ajustar início.

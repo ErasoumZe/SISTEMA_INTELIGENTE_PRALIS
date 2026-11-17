@@ -13,7 +13,7 @@ type RelatorioGerado = {
       comparacao: Comparacao;
       pralis: Record<string, number>;
       somaFormasConfereTotal: boolean | null;
-      horario: { inicio: { situacao: string; sugestaoInicio: string | null }; emissao: { situacao: string } };
+      horario: { inicio: { situacao: string; diferencaMinutos: number | null }; emissao: { situacao: string } };
     };
   };
 };
@@ -126,11 +126,8 @@ describe("Caixa - comparacao da folha do CREARE (R-225)", () => {
     expect(new Set(Object.values(igual.creare.comparacao))).toEqual(new Set(["ok"]));
     expect(igual.creare.comparacao).not.toHaveProperty("clientes");
     expect(igual.creare.comparacao).not.toHaveProperty("saldoFinalDinheiro");
-    // A folha comeca 13:01:30 e o caixa 13:18: sugere o ajuste para 13:01 (R-224).
-    expect(igual.creare.horario.inicio).toMatchObject({
-      situacao: "divergente",
-      sugestaoInicio: "2026-07-30T16:01:00.000Z"
-    });
+    // A folha comeca 13:01:30 e o caixa 13:18: ao gerar, o inicio do caixa passa a ser o da folha (R-244).
+    expect(igual.creare.horario.inicio).toMatchObject({ situacao: "ok", diferencaMinutos: 0 });
 
     // Um centavo de diferenca ja e divergente.
     const centavo = await gerar({ ...pralis, total: (pralis["total"] ?? 0) + 0.01 });

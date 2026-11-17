@@ -6,11 +6,15 @@ import { normalizarTotaisRelatorioVendas, type TotaisRelatorioVendas } from "~/u
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import CapturaCameraDialog from "~/components/comum/CapturaCameraDialog.vue";
-import CaixaInicioVendasAjuste from "~/components/caixa/CaixaInicioVendasAjuste.vue";
 import CaixaFolhaCreareLeitura from "~/components/caixa/CaixaFolhaCreareLeitura.vue";
 import CaixaCorrecaoManual from "~/components/caixa/CaixaCorrecaoManual.vue";
 import CaixaFechamentoRelatorioVendasResumo from "~/components/caixa/CaixaFechamentoRelatorioVendasResumo.vue";
-import { conferenciaInicioDaFolha, numerosTravados, type SugestaoFolhaCreare } from "~/utils/folha-creare";
+import {
+  avisoAlinhamentoFolhaCreare,
+  numerosTravados,
+  type FolhaCreareGerada,
+  type SugestaoFolhaCreare
+} from "~/utils/folha-creare";
 import { useCapturaCamera } from "~/composables/useCapturaCamera";
 import { useLeituraFolhaCreare } from "~/composables/useLeituraFolhaCreare";
 
@@ -21,8 +25,9 @@ type DadosRelatorioVendas = {
   contagemFisica?: ContagemFisicaRelatorio;
   vendas: TotaisRelatorioVendas;
   canceladas: VendaCanceladaCaixa[];
-  // A comparacao da folha com o Pralis e da Tesouraria (dossie, fechamento cego); aqui so volta a leitura revisada.
-  creare?: { anexoId?: string; leitura?: SugestaoFolhaCreare } | null;
+  // A comparacao da folha com o Pralis e da Tesouraria (dossie, fechamento cego); aqui so volta a leitura revisada
+  // e o periodo alinhado a folha (R-244).
+  creare?: { anexoId?: string; leitura?: SugestaoFolhaCreare; alinhamento?: FolhaCreareGerada["alinhamento"] } | null;
 };
 type RelatorioGerado = {
   periodoInicio: string;
@@ -31,10 +36,10 @@ type RelatorioGerado = {
   geradoEm: string;
 };
 type Anexo = { id: string; tipo: "folha_fechamento" | "comprovante_cartao" | "relatorio_vendas_creare" };
-// `aberturaOficial`/`inicioVendas`: opcionais para nao quebrar quem ainda nao passa (o ajuste so aparece com eles).
-const props = defineProps<{ caixaId: string; aberturaOficial?: string; inicioVendas?: string }>();
+const props = defineProps<{ caixaId: string }>();
 const emit = defineEmits<{
-  (event: "inicioAjustado"): void;
+  // R-244 · o periodo do caixa mudou para o da folha: o pai recarrega o caixa (cabecalho e saldo).
+  (event: "periodoAlinhado"): void;
   (event: "contagem", contagem: ContagemFisicaRelatorio | null): void;
 }>();
 const { apiUrl, apiGet, apiPost } = useApi();
@@ -45,6 +50,7 @@ const galeriaCreare = useTemplateRef<HTMLInputElement>("galeriaCreare");
 const carregando = ref(false);
 const erro = ref("");
 const aviso = ref("");
+const avisoPeriodo = ref("");
 const gerado = ref(false);
 const totais = ref<ReturnType<typeof normalizarTotaisRelatorioVendas> | null>(null);
 const intervalo = ref<{ abertura: string; fechamento: string } | null>(null);
@@ -88,10 +94,12 @@ const {
     ).sugestao
 });
 
-// R-225: o "Periodo de" da folha comparado com o inicio das vendas do caixa, ja na leitura (antes de gerar).
-const inicioFolha = computed(() =>
-  conferenciaInicioDaFolha(leituraCreare.value.periodoInicio, props.aberturaOficial, props.inicioVendas)
-);
+// R-244 · ao gerar, o periodo do caixa passa a ser o da folha: avisa antes, com as horas lidas.
+const periodoDaFolha = computed(() => {
+  const inicio = leituraCreare.value.periodoInicio.trim();
+  const fim = leituraCreare.value.dataEmissao.trim();
+  return inicio && fim ? { inicio, fim } : null;
+});
 
 function aplicarRelatorio(relatorio: RelatorioGerado) {
   registrarContagem(relatorio.dados.contagemFisica ?? null);
@@ -103,6 +111,7 @@ function aplicarRelatorio(relatorio: RelatorioGerado) {
   totais.value = normalizarTotaisRelatorioVendas(relatorio.dados.vendas);
   intervalo.value = { abertura: relatorio.periodoInicio, fechamento: relatorio.periodoFim };
   canceladas.value = relatorio.dados.canceladas;
+  avisoPeriodo.value = avisoAlinhamentoFolhaCreare(relatorio.dados.creare?.alinhamento);
   restaurarDoRelatorio(relatorio.dados.creare?.leitura, relatorio.dados.versao ?? 0);
   gerado.value = true;
   leituraAlterada.value = false;
@@ -113,6 +122,7 @@ function limparRelatorio() {
   intervalo.value = null;
   gerado.value = false;
   canceladas.value = [];
+  avisoPeriodo.value = "";
   leituraAlterada.value = false;
 }
 
@@ -144,17 +154,9 @@ async function carregarRelatorioExistente() {
   }
 }
 
-// R-224: depois de ajustar o inicio, o relatorio gerado antes vale para o periodo antigo e e descartado.
-function aoAjustarInicio(resultado: {
-  vendasAnexadas: number;
-  vendasDesanexadas: number;
-  relatorioVendasInvalidado: boolean;
-}) {
-  limparRelatorio();
-  const saidas = resultado.vendasDesanexadas ? `, ${resultado.vendasDesanexadas} saíram` : "";
-  aviso.value = `Início ajustado (${resultado.vendasAnexadas} venda(s) entraram neste caixa${saidas}). Gere o relatório de novo.`;
-  // O saldo esperado e o cabecalho do caixa vem do status: o pai recarrega agora, nao no proximo minuto.
-  emit("inicioAjustado");
+function periodoMudou(alinhamento: FolhaCreareGerada["alinhamento"] | undefined) {
+  if (!alinhamento) return false;
+  return alinhamento.inicio.depois !== alinhamento.inicio.antes || alinhamento.fim.depois !== alinhamento.fim.antes;
 }
 
 async function gerarRelatorio() {
@@ -174,6 +176,8 @@ async function gerarRelatorio() {
         : {}
     );
     aplicarRelatorio(relatorio);
+    // O saldo esperado e o cabecalho do caixa vem do status: o pai recarrega agora, nao no proximo minuto.
+    if (periodoMudou(relatorio.dados.creare?.alinhamento)) emit("periodoAlinhado");
   } catch (falha) {
     limparRelatorio();
     erro.value = mensagemErro(falha);
@@ -292,18 +296,10 @@ watch(
       Valores da folha alterados depois de gerar. Gere o relatório de novo para atualizar a comparação.
     </v-alert>
 
-    <v-alert v-if="inicioFolha.aviso" type="warning" variant="tonal" density="compact" class="mt-4" role="status">
-      {{ inicioFolha.aviso }}
-    </v-alert>
-
-    <CaixaInicioVendasAjuste
-      v-if="aberturaOficial && inicioVendas"
-      :caixa-id="caixaId"
-      :abertura-oficial="aberturaOficial"
-      :inicio-vendas="inicioVendas"
-      :sugestao="inicioFolha.sugestao"
-      @ajustado="aoAjustarInicio"
-    />
+    <p v-if="periodoDaFolha" class="relatorio-vendas__lendo mt-4" data-teste="periodo-da-folha">
+      Ao gerar, as vendas deste caixa passam a ser as do período da folha: {{ periodoDaFolha.inicio }} até
+      {{ periodoDaFolha.fim }}.
+    </p>
 
     <v-btn
       class="relatorio-vendas__gerar mt-4"
@@ -326,10 +322,20 @@ watch(
     <template v-if="gerado && totais">
       <v-alert type="success" variant="tonal" density="comfortable" class="mt-4">
         <strong>Relatório atualizado.</strong>
-        <span v-if="intervalo" class="d-block text-body-2 mt-1">
+        <span v-if="intervalo" class="d-block text-body-2 mt-1" data-teste="periodo-relatorio">
           {{ formatarDataHora(intervalo.abertura) }} até {{ formatarDataHora(intervalo.fechamento) }}
         </span>
       </v-alert>
+      <v-alert
+        v-if="avisoPeriodo"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mt-2"
+        role="status"
+        data-teste="aviso-periodo"
+        >{{ avisoPeriodo }}</v-alert
+      >
 
       <CaixaFechamentoRelatorioVendasResumo :totais="totais" :quantidade-canceladas="canceladas.length" />
 

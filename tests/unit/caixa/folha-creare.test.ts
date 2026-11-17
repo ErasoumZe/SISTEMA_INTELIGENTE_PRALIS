@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   conferirEmissaoFolhaCreare,
+  alinharPeriodoAFolhaCreare,
   conferirInicioFolhaCreare,
   instanteDaFolhaCreare,
   relatorioVendasCreareSchema
@@ -17,41 +18,15 @@ describe("horario da folha do CREARE", () => {
 
   const aberturaOficial = "2026-10-26T09:30:00.000Z"; // 06:30 em Sao Paulo
 
-  it("confere quando o inicio da folha esta a ate 2 minutos do inicio das vendas", () => {
-    const conferencia = conferirInicioFolhaCreare({
-      periodoInicio: "26/10/2026 06:31:02",
-      inicioVendas: aberturaOficial,
-      aberturaOficial
+  it("confere o inicio da folha com o inicio das vendas, com 2 minutos de tolerancia", () => {
+    const base = { inicioVendas: aberturaOficial };
+    expect(conferirInicioFolhaCreare({ ...base, periodoInicio: "26/10/2026 06:31:02" })).toEqual({
+      situacao: "ok",
+      diferencaMinutos: 1
     });
-    expect(conferencia).toMatchObject({ situacao: "ok", sugestaoInicio: null });
-  });
-
-  it("sugere o ajuste no minuto cheio, para baixo, quando a folha comeca antes", () => {
-    const conferencia = conferirInicioFolhaCreare({
-      periodoInicio: "26/10/2026 06:14:58",
-      inicioVendas: aberturaOficial,
-      aberturaOficial
-    });
-    expect(conferencia).toMatchObject({
+    expect(conferirInicioFolhaCreare({ ...base, periodoInicio: "26/10/2026 06:14:58" })).toEqual({
       situacao: "divergente",
-      diferencaMinutos: -15,
-      sugestaoInicio: "2026-10-26T09:14:00.000Z",
-      motivoSemSugestao: null
-    });
-  });
-
-  it("nao sugere alem de 60 minutos, depois da abertura oficial ou em outro dia", () => {
-    const base = { inicioVendas: aberturaOficial, aberturaOficial };
-    expect(conferirInicioFolhaCreare({ ...base, periodoInicio: "26/10/2026 05:20:00" })).toMatchObject({
-      situacao: "divergente",
-      sugestaoInicio: null,
-      motivoSemSugestao: "alem_do_recuo_maximo"
-    });
-    expect(conferirInicioFolhaCreare({ ...base, periodoInicio: "26/10/2026 07:00:00" })).toMatchObject({
-      motivoSemSugestao: "depois_da_abertura_oficial"
-    });
-    expect(conferirInicioFolhaCreare({ ...base, periodoInicio: "25/10/2026 06:20:00" })).toMatchObject({
-      motivoSemSugestao: "outro_dia"
+      diferencaMinutos: -15
     });
     expect(conferirInicioFolhaCreare({ ...base, periodoInicio: null }).situacao).toBe("pendente");
   });
@@ -63,6 +38,75 @@ describe("horario da folha do CREARE", () => {
     expect(conferirEmissaoFolhaCreare({ dataEmissao: "26/10/2026 13:40:00", corte }).situacao).toBe("antes_do_corte");
     expect(conferirEmissaoFolhaCreare({ dataEmissao: "26/10/2026 14:30:00", corte }).situacao).toBe("depois_do_corte");
     expect(conferirEmissaoFolhaCreare({ dataEmissao: "26/10/2026 14:00:00", corte: null }).situacao).toBe("pendente");
+  });
+});
+
+// R-244 · ao gerar o relatorio de vendas, o periodo do caixa passa a ser o da folha (Periodo de -> Data da emissao).
+describe("alinhamento do periodo do caixa a folha do CREARE", () => {
+  // Caixa da manha: aberto no sistema 06:30, corte 13:50 (Sao Paulo).
+  const base = {
+    periodoInicio: "11/11/2026 05:43:33",
+    dataEmissao: "11/11/2026 13:53:27",
+    aberturaOficial: "2026-11-11T09:30:00.000Z",
+    inicioAtual: "2026-11-11T09:30:00.000Z",
+    fimAtual: "2026-11-11T16:50:00.000Z",
+    fimCaixaAnterior: null,
+    inicioProximoCaixa: null,
+    agora: new Date("2026-11-11T17:00:00.000Z")
+  };
+
+  it("usa o Periodo de e a Data da emissao, mesmo com o caixa aberto depois no sistema", () => {
+    const alinhamento = alinharPeriodoAFolhaCreare(base);
+    expect(alinhamento.inicio).toEqual({
+      antes: "2026-11-11T09:30:00.000Z",
+      depois: "2026-11-11T08:43:33.000Z",
+      daFolha: true,
+      motivo: null
+    });
+    expect(alinhamento.fim).toEqual({
+      antes: "2026-11-11T16:50:00.000Z",
+      depois: "2026-11-11T16:53:27.000Z",
+      daFolha: true,
+      motivo: null
+    });
+  });
+
+  it("nao invade o caixa anterior nem o proximo do mesmo PDV", () => {
+    const alinhamento = alinharPeriodoAFolhaCreare({
+      ...base,
+      fimCaixaAnterior: "2026-11-11T08:43:33.000Z",
+      inicioProximoCaixa: "2026-11-11T16:52:00.000Z"
+    });
+    expect(alinhamento.inicio).toMatchObject({
+      depois: base.inicioAtual,
+      daFolha: false,
+      motivo: "antes_do_caixa_anterior"
+    });
+    expect(alinhamento.fim).toMatchObject({ depois: base.fimAtual, daFolha: false, motivo: "depois_do_proximo_caixa" });
+  });
+
+  it("mantem o lado sem hora lida, de outro dia ou no futuro", () => {
+    const semHora = alinharPeriodoAFolhaCreare({ ...base, periodoInicio: null, dataEmissao: "" });
+    expect(semHora.inicio).toMatchObject({ depois: base.inicioAtual, motivo: "sem_horario" });
+    expect(semHora.fim).toMatchObject({ depois: base.fimAtual, motivo: "sem_horario" });
+    expect(alinharPeriodoAFolhaCreare({ ...base, periodoInicio: "10/11/2026 05:43:33" }).inicio.motivo).toBe(
+      "outro_dia"
+    );
+    expect(alinharPeriodoAFolhaCreare({ ...base, dataEmissao: "11/11/2026 14:30:00" }).fim.motivo).toBe("no_futuro");
+  });
+
+  it("nunca inverte o periodo", () => {
+    // Emissao antes do inicio da folha: o fim fica no corte do sistema.
+    const fimAntes = alinharPeriodoAFolhaCreare({ ...base, dataEmissao: "11/11/2026 05:00:00" });
+    expect(fimAntes.fim.motivo).toBe("fim_antes_do_inicio");
+    // Inicio da folha depois do fim mantido: os dois ficam como estavam.
+    const inicioDepois = alinharPeriodoAFolhaCreare({
+      ...base,
+      periodoInicio: "11/11/2026 13:55:00",
+      inicioProximoCaixa: "2026-11-11T16:52:00.000Z"
+    });
+    expect(inicioDepois.fim.motivo).toBe("depois_do_proximo_caixa");
+    expect(inicioDepois.inicio).toMatchObject({ depois: base.inicioAtual, motivo: "fim_antes_do_inicio" });
   });
 });
 

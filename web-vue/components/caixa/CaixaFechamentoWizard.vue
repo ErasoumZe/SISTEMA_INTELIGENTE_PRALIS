@@ -47,7 +47,7 @@ const emit = defineEmits<{
   (event: "executarPlanejamento", payload: { caixaId: string; planejamentoId: string }): void;
   (event: "folhaEnviada", valor: boolean): void;
   (event: "anexosAtualizados", anexos: AnexoFechamento[]): void;
-  (event: "inicioAjustado"): void;
+  (event: "periodoAlinhado"): void;
   (event: "contagem", contagem: ContagemFisicaRelatorio | null): void;
 }>();
 
@@ -85,7 +85,7 @@ const etapas = [
       "Primeiro digite as cédulas e as moedas com que você fecha a gaveta (o que vai no malote de fechamento).",
       "Envie a folha de vendas do CREARE deste turno pela câmera ou galeria.",
       "Revise os campos como estão no cupom: período, troco inicial, formas de pagamento, total, despesas e sangria.",
-      "Se o horário da folha não bater com o início das vendas, use Ajustar início.",
+      "Ao gerar, as vendas do caixa passam a ser as do período da folha (do “Período de” até a “Data da emissão”).",
       "Gere o relatório para o sistema comparar a folha com as vendas e saídas registradas.",
       "A folha CREARE é diferente da folha do malote usada no fechamento físico."
     ],
@@ -239,9 +239,7 @@ function formatarHora(dataHora: string | null | undefined) {
       v-if="etapaAtual === 1"
       id="fechamento-painel-1"
       :caixa-id="caixa.id"
-      :abertura-oficial="caixa.abertoEm"
-      :inicio-vendas="caixa.dataHoraAbertura"
-      @inicio-ajustado="emit('inicioAjustado')"
+      @periodo-alinhado="emit('periodoAlinhado')"
       @contagem="emit('contagem', $event)"
     />
 

@@ -1,7 +1,8 @@
-import {
-  conferirInicioFolhaCreare,
-  type ConferenciaEmissaoFolhaCreare,
-  type ConferenciaInicioFolhaCreare
+import type {
+  AlinhamentoPeriodoFolhaCreare,
+  ConferenciaEmissaoFolhaCreare,
+  ConferenciaInicioFolhaCreare,
+  MotivoSemAlinhamentoFolhaCreare
 } from "@padaria/shared";
 
 // R-225 · a folha "Relatorio de Venda Geral" do CREARE, na ordem e com os rotulos impressos no cupom.
@@ -149,24 +150,39 @@ export function camposAlteradosFolha(leitura: LeituraFolhaCreare, sugestao: Suge
     .map(rotuloCampoFolha);
 }
 
-/** Quando a folha nao bate com o inicio e o ajuste nao cabe na janela, o que dizer ao operador. */
-export function avisoInicioFolhaCreare(conferencia: ConferenciaInicioFolhaCreare | null) {
-  if (!conferencia || conferencia.situacao !== "divergente" || conferencia.sugestaoInicio) return "";
-  if (conferencia.motivoSemSugestao === "depois_da_abertura_oficial") {
-    return "A folha do CREARE começa depois da abertura do caixa no sistema. Confira se é a folha deste turno.";
-  }
-  if (conferencia.motivoSemSugestao === "outro_dia")
-    return "A data da folha do CREARE é de outro dia. Confira a folha.";
-  return "A folha do CREARE começa mais de 60 minutos antes da abertura no sistema. Fale com a gerência.";
+const MOTIVOS_SEM_ALINHAMENTO: Record<MotivoSemAlinhamentoFolhaCreare, string> = {
+  sem_horario: "a hora não foi lida na folha",
+  outro_dia: "a data da folha é de outro dia",
+  no_futuro: "a hora da folha está no futuro",
+  antes_do_caixa_anterior: "invadiria o caixa anterior deste PDV",
+  depois_do_proximo_caixa: "invadiria o próximo caixa deste PDV",
+  fim_antes_do_inicio: "o período ficaria invertido"
+};
+
+/**
+ * R-244 · o que dizer quando um lado do periodo nao pode seguir a folha (o outro pode ter seguido).
+ * Vazio quando os dois lados vieram da folha.
+ */
+export function avisoAlinhamentoFolhaCreare(alinhamento: AlinhamentoPeriodoFolhaCreare | null | undefined) {
+  if (!alinhamento) return "";
+  const lados = [
+    { nome: "O início", lado: alinhamento.inicio },
+    { nome: "O fim", lado: alinhamento.fim }
+  ].filter(({ lado }) => lado && !lado.daFolha && lado.motivo);
+  return lados
+    .map(({ nome, lado }) => `${nome} ficou no horário do sistema: ${MOTIVOS_SEM_ALINHAMENTO[lado.motivo!]}.`)
+    .join(" ");
 }
 
-/** O que o relatorio de vendas (versao 4) grava da folha; lido no Relatorio final. */
+/** O que o relatorio de vendas grava da folha; lido no Relatorio final. */
 export type FolhaCreareGerada = {
   leitura?: Partial<SugestaoFolhaCreare>;
   comparacao: Partial<Record<CampoValorFolhaCreare, SituacaoComparacaoCreare>>;
   pralis?: Partial<Record<CampoValorFolhaCreare, number>>;
   somaFormasConfereTotal?: boolean | null;
   horario?: { inicio: ConferenciaInicioFolhaCreare; emissao: ConferenciaEmissaoFolhaCreare };
+  /** R-244 (relatorios gerados desde 16/11/2026). */
+  alinhamento?: AlinhamentoPeriodoFolhaCreare & { vendasAnexadas?: number; vendasDesanexadas?: number };
 };
 
 const ROTULOS_DATAS: Record<string, string> = {
@@ -180,17 +196,6 @@ const ROTULOS_DATAS: Record<string, string> = {
 export function rotuloCampoFolha(chave: string) {
   const campo = GRUPOS_FOLHA_CREARE.flatMap((grupo) => grupo.campos).find((item) => item.chave === chave);
   return campo?.rotulo ?? ROTULOS_DATAS[chave] ?? chave;
-}
-
-/** Etapa Vendas: sugestao para o "Ajustar inicio" e aviso quando a folha nao bate e o ajuste nao cabe. */
-export function conferenciaInicioDaFolha(periodoInicio: string, aberturaOficial?: string, inicioVendas?: string) {
-  const texto = periodoInicio.trim();
-  if (!texto || !aberturaOficial || !inicioVendas) return { sugestao: null, aviso: "" };
-  const conferencia = conferirInicioFolhaCreare({ periodoInicio: texto, inicioVendas, aberturaOficial });
-  return {
-    sugestao: conferencia.sugestaoInicio ? { inicio: conferencia.sugestaoInicio, periodoTexto: texto } : null,
-    aviso: avisoInicioFolhaCreare(conferencia)
-  };
 }
 
 /** Numeros que a IA leu com seguranca: ficam travados na tela (o resto o operador digita). */
