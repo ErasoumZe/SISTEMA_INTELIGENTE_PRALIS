@@ -21,6 +21,7 @@ const categorias = [
   { title: "Transferências", value: "transferencia" },
   { title: "Quebras de caixa", value: "quebra_caixa" },
   { title: "Sangrias recusadas", value: "sangria_recusada" },
+  { title: "Auditoria de PDVs", value: "auditoria_pdv" },
   { title: "Mensagens", value: "mensagem_admin" },
   { title: "Campanhas", value: "campanha" },
   { title: "Compras", value: "compras" }
@@ -66,7 +67,8 @@ function rotuloTipo(tipo: Notificacao["tipo"]) {
     compras_decisao_pendente: "Compras",
     compras_agendamento_conferir: "Compras",
     conferencia_estoque_fazer: "Estoque",
-    sangria_recusada: "Caixa"
+    sangria_recusada: "Caixa",
+    auditoria_pdv: "Auditoria"
   }[tipo];
 }
 </script>

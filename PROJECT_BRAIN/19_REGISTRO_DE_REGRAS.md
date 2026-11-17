@@ -1769,6 +1769,22 @@ Decisões do José, para o S1 ficar igual ao S2:
     listas de pedido mostram todos os produtos do grupo. Os 1.429 ativos sem grupo não aparecem em agendamento
     por grupo.
 
+### R-243 — Auditoria de PDVs: vendas da CREARE x caixas (Marco, 13-16/11/2026)
+
+- **O que é:** tela "Auditoria de PDVs" (menu `auditoria_pdv`). Cruza, por dia e por PDV, as vendas que vieram da
+  CREARE (integradas, não canceladas) com os caixas abertos no sistema. Venda manual não entra.
+- **Alerta:** venda da CREARE que não caiu em nenhum caixa é "venda fora de caixa": aparece em vermelho com hora,
+  valor, forma e produtos.
+- **Organização:** por filtros, não por calendário. Período (Hoje, Ontem, 7 dias, 30 dias ou datas livres, até 31
+  dias), PDV, turno, faixa de hora, forma de pagamento e situação (Bateu, Venda fora de caixa, Caixa aberto, Sem
+  vendas). O filtro de turno mostra só as vendas dos caixas daquele turno (venda fora de caixa não tem turno).
+- **Relatório:** um bloco por dia; em cada dia, um cartão por PDV com o total do dia (manhã + tarde) e as colunas
+  Manhã e Tarde lado a lado (operador, horário, vendas, total e formas). Caixa sem turno ganha coluna própria.
+- **Gerar:** o botão de cada dia grava a auditoria (uma por empresa e dia; gerar de novo substitui) e, se houver
+  venda fora de caixa, avisa a Tesouraria no sino. O **Automático** gera sozinho no horário escolhido (padrão
+  23:30, desligado até alguém ligar).
+- **Quem vê:** o mesmo acesso do Relatório de fechamento (Tesouraria, Diretor Geral e administrador).
+
 ### R-244 — O período das vendas do caixa segue a folha do CREARE (Marco, 13/11 e 16/11/2026)
 
 **Substitui a R-224** (Ajustar início manual, até 60 min) e atualiza o horário da R-225. Pedido do Marco: "quando

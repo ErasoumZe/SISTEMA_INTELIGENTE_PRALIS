@@ -324,6 +324,8 @@ describe("migracoes integration", () => {
       "admissoes_processos_ficha",
       "admissoes_processos_internos",
       "admissoes_testes",
+      // R-243 (0097): a agenda da Auditoria de PDVs e editada (horario, ativa).
+      "auditorias_pdv_agenda",
       "colaboradores_dados_bancarios",
       "colaboradores_dados_pessoais",
       "colaboradores_enderecos",

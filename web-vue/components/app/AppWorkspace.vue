@@ -115,6 +115,7 @@ type TipoPagina =
   | "caixa"
   | "historico_caixas"
   | "relatorio_fechamento"
+  | "auditoria_pdv"
   | "campanhas"
   | "fechamento"
   | "relatorio_produtos"
@@ -381,7 +382,9 @@ const podeAcessarFolhaFechamento = computed(() =>
   Boolean(sessao.value?.perfil && podeAcessarRelatorioFechamento(sessao.value.perfil))
 );
 const telasComAcessoDeCargo = computed(() =>
-  telasPermitidas.value.filter((tela) => tela.id !== "relatorio_fechamento" || podeAcessarFolhaFechamento.value)
+  telasPermitidas.value.filter(
+    (tela) => !["relatorio_fechamento", "auditoria_pdv"].includes(tela.id) || podeAcessarFolhaFechamento.value
+  )
 );
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 const podeCriarTransferencia = computed(() => temPermissao("transferencias_criar"));
