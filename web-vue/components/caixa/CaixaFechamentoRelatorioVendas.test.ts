@@ -5,7 +5,6 @@ import CaixaFechamentoRelatorioVendas from "./CaixaFechamentoRelatorioVendas.vue
 
 const apiGet = vi.fn();
 const apiPost = vi.fn();
-const OFICIAL = new Date(2026, 9, 26, 6, 30, 0).toISOString();
 
 const sugestao = {
   documentoLegivel: true,
@@ -42,7 +41,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function montar() {
   return mount(CaixaFechamentoRelatorioVendas, {
-    props: { caixaId: "cx-1", aberturaOficial: OFICIAL, inicioVendas: OFICIAL },
+    props: { caixaId: "cx-1" },
     global: {
       stubs: {
         CapturaCameraDialog: true,
@@ -68,7 +67,7 @@ describe("CaixaFechamentoRelatorioVendas · folha do CREARE", () => {
     expect(wrapper.text()).not.toContain("CREDITO (VND/TRANS)");
   });
 
-  it("com a folha anexada e lida mostra os valores e sugere o Ajustar inicio pelo Periodo de", async () => {
+  it("com a folha anexada e lida mostra os valores e avisa que o periodo sera o da folha (R-244)", async () => {
     apiGet.mockImplementation(async (url: string) =>
       url.endsWith("/anexos") ? [{ id: "anexo-1", tipo: "relatorio_vendas_creare" }] : null
     );
@@ -77,9 +76,53 @@ describe("CaixaFechamentoRelatorioVendas · folha do CREARE", () => {
     await flushPromises();
     expect(wrapper.find('[data-teste="folha-creare"]').exists()).toBe(true);
     expect(wrapper.text()).toContain("CREDITO (VND/TRANS)");
-    // A folha comeca 06:14:58 e o caixa 06:30: o Ajustar inicio fica destacado com a hora da folha.
-    expect(wrapper.get('[data-teste="inicio-vendas-sugerido"]').text()).toContain("26/10/2026 06:14:58");
+    // Ao gerar, o periodo do caixa passa a ser o da folha: do "Periodo de" ate a "Data da emissao".
+    const periodo = wrapper.get('[data-teste="periodo-da-folha"]').text();
+    expect(periodo).toContain("26/10/2026 06:14:58");
+    expect(periodo).toContain("26/10/2026 13:58:46");
+    expect(wrapper.find('[data-teste="botao-ajustar-inicio"]').exists()).toBe(false);
     // A comparacao com o Pralis fica no Relatorio final, nao aqui.
     expect(wrapper.text()).not.toContain("Confere");
+  });
+
+  it("com o relatorio gerado, avisa o lado do periodo que ficou no horario do sistema", async () => {
+    const relatorio = {
+      periodoInicio: "2026-10-26T09:14:58.000Z",
+      periodoFim: "2026-10-26T16:40:00.000Z",
+      geradoEm: "2026-10-26T16:41:00.000Z",
+      dados: {
+        versao: 5,
+        contagemFisica: null,
+        vendas: { quantidade: 0 },
+        canceladas: [],
+        creare: {
+          anexoId: "anexo-1",
+          leitura: sugestao,
+          alinhamento: {
+            inicio: {
+              antes: "2026-10-26T09:30:00.000Z",
+              depois: "2026-10-26T09:14:58.000Z",
+              daFolha: true,
+              motivo: null
+            },
+            fim: {
+              antes: "2026-10-26T16:40:00.000Z",
+              depois: "2026-10-26T16:40:00.000Z",
+              daFolha: false,
+              motivo: "depois_do_proximo_caixa"
+            }
+          }
+        }
+      }
+    };
+    apiGet.mockImplementation(async (url: string) =>
+      url.endsWith("/anexos") ? [{ id: "anexo-1", tipo: "relatorio_vendas_creare" }] : relatorio
+    );
+    apiPost.mockResolvedValue({ sugestao });
+    const wrapper = montar();
+    await flushPromises();
+    expect(wrapper.get('[data-teste="aviso-periodo"]').text()).toBe(
+      "O fim ficou no horário do sistema: invadiria o próximo caixa deste PDV."
+    );
   });
 });

@@ -3,8 +3,6 @@ import { diaNegocio, instanteNegocio } from "../datas/index.js";
 // Folha "Relatorio de Venda Geral" do CREARE/Compilart (cupom termico anexado na etapa Vendas).
 // Regras puras usadas pelo servidor (gravacao do relatorio) e pela tela (aviso imediato apos a leitura).
 
-/** R-224: o inicio das vendas pode recuar no maximo isto da abertura oficial. */
-export const RECUO_MAXIMO_INICIO_VENDAS_MIN = 60;
 /** Diferenca aceita entre o "Periodo de" da folha e o inicio das vendas do caixa (R-225). */
 export const TOLERANCIA_INICIO_FOLHA_CREARE_MIN = 2;
 /** A emissao da folha "bate" com o corte se for de 2 min antes ate 15 min depois dele (R-225). */
@@ -42,43 +40,112 @@ export type ConferenciaInicioFolhaCreare = {
   situacao: "pendente" | "ok" | "divergente";
   /** Folha menos inicio das vendas do caixa, em minutos (negativo: a folha comeca antes). */
   diferencaMinutos: number | null;
-  /** Hora para o "Ajustar inicio" (minuto cheio, para baixo, para nao perder venda). */
-  sugestaoInicio: string | null;
-  motivoSemSugestao: "outro_dia" | "alem_do_recuo_maximo" | "depois_da_abertura_oficial" | null;
 };
 
 /**
- * R-225 · o "Periodo de" da folha comparado com o inicio das vendas do caixa. Se nao bate, sugere o
- * ajuste do inicio (R-224) quando ele cabe na janela: mesmo dia, ate 60 min antes da abertura OFICIAL e
- * nunca depois dela. O limite do caixa anterior do PDV so o servidor conhece e confere no ajuste.
+ * R-225 · o "Periodo de" da folha comparado com o inicio das vendas do caixa (tolerancia de 2 min). Desde a
+ * R-244 o servidor ja alinha o periodo a folha ao gerar o relatorio; "divergente" sobra so quando o
+ * alinhamento nao pode ser aplicado (ver `alinharPeriodoAFolhaCreare`).
  */
 export function conferirInicioFolhaCreare(entrada: {
   periodoInicio: string | null | undefined;
   inicioVendas: Date | string;
-  aberturaOficial: Date | string;
 }): ConferenciaInicioFolhaCreare {
   const folha = instanteDaFolhaCreare(entrada.periodoInicio);
-  if (!folha) return { situacao: "pendente", diferencaMinutos: null, sugestaoInicio: null, motivoSemSugestao: null };
-  const inicio = new Date(entrada.inicioVendas);
-  const oficial = new Date(entrada.aberturaOficial);
-  const diferencaMs = folha.getTime() - inicio.getTime();
+  if (!folha) return { situacao: "pendente", diferencaMinutos: null };
+  const diferencaMs = folha.getTime() - new Date(entrada.inicioVendas).getTime();
   const diferencaMinutos = Math.round(diferencaMs / MINUTO_MS);
-  if (Math.abs(diferencaMs) <= TOLERANCIA_INICIO_FOLHA_CREARE_MIN * MINUTO_MS) {
-    return { situacao: "ok", diferencaMinutos, sugestaoInicio: null, motivoSemSugestao: null };
+  const bate = Math.abs(diferencaMs) <= TOLERANCIA_INICIO_FOLHA_CREARE_MIN * MINUTO_MS;
+  return { situacao: bate ? "ok" : "divergente", diferencaMinutos };
+}
+
+/** Por que um lado do periodo nao foi alinhado a folha (R-244). */
+export type MotivoSemAlinhamentoFolhaCreare =
+  | "sem_horario"
+  | "outro_dia"
+  | "no_futuro"
+  | "antes_do_caixa_anterior"
+  | "depois_do_proximo_caixa"
+  | "fim_antes_do_inicio";
+
+export type LadoAlinhamentoFolhaCreare = {
+  antes: string;
+  depois: string;
+  /** true: o lado passou a ser o horario da folha. */
+  daFolha: boolean;
+  motivo: MotivoSemAlinhamentoFolhaCreare | null;
+};
+
+export type AlinhamentoPeriodoFolhaCreare = {
+  inicio: LadoAlinhamentoFolhaCreare;
+  fim: LadoAlinhamentoFolhaCreare;
+};
+
+/**
+ * R-244 · ao gerar o relatorio de vendas do fechamento, o periodo do caixa passa a ser o da folha do CREARE:
+ * inicio = "Periodo de", fim = "Data da emissao" (mesmo que o caixa do sistema tenha aberto depois ou o corte
+ * tenha sido antes/depois). Cada lado so e aplicado se for seguro:
+ * - a hora existe na leitura e e do mesmo dia de negocio da abertura oficial;
+ * - nao esta no futuro;
+ * - o inicio fica DEPOIS do fim do caixa anterior do mesmo PDV (a venda daquele instante casaria com os dois);
+ * - o fim fica ANTES do inicio do proximo caixa do mesmo PDV;
+ * - o fim fica depois do inicio.
+ * O lado que nao passa fica como estava e leva o motivo (a tela e o dossie mostram).
+ */
+export function alinharPeriodoAFolhaCreare(entrada: {
+  periodoInicio: string | null | undefined;
+  dataEmissao: string | null | undefined;
+  aberturaOficial: Date | string;
+  inicioAtual: Date | string;
+  fimAtual: Date | string;
+  fimCaixaAnterior: Date | string | null;
+  inicioProximoCaixa: Date | string | null;
+  agora: Date;
+}): AlinhamentoPeriodoFolhaCreare {
+  const dia = diaNegocio(entrada.aberturaOficial);
+  const inicioAtual = new Date(entrada.inicioAtual);
+  const fimAtual = new Date(entrada.fimAtual);
+  const anterior = entrada.fimCaixaAnterior ? new Date(entrada.fimCaixaAnterior) : null;
+  const proximo = entrada.inicioProximoCaixa ? new Date(entrada.inicioProximoCaixa) : null;
+
+  const motivoComum = (instante: Date | null): MotivoSemAlinhamentoFolhaCreare | null => {
+    if (!instante) return "sem_horario";
+    if (diaNegocio(instante) !== dia) return "outro_dia";
+    if (instante.getTime() > entrada.agora.getTime()) return "no_futuro";
+    return null;
+  };
+
+  const folhaInicio = instanteDaFolhaCreare(entrada.periodoInicio);
+  const folhaFim = instanteDaFolhaCreare(entrada.dataEmissao);
+
+  let motivoInicio = motivoComum(folhaInicio);
+  if (!motivoInicio && anterior && folhaInicio && folhaInicio.getTime() <= anterior.getTime()) {
+    motivoInicio = "antes_do_caixa_anterior";
   }
-  const sugestao = new Date(Math.floor(folha.getTime() / MINUTO_MS) * MINUTO_MS);
-  const semSugestao = (motivo: NonNullable<ConferenciaInicioFolhaCreare["motivoSemSugestao"]>) => ({
-    situacao: "divergente" as const,
-    diferencaMinutos,
-    sugestaoInicio: null,
-    motivoSemSugestao: motivo
-  });
-  if (diaNegocio(sugestao) !== diaNegocio(oficial)) return semSugestao("outro_dia");
-  if (sugestao.getTime() > oficial.getTime()) return semSugestao("depois_da_abertura_oficial");
-  if (oficial.getTime() - sugestao.getTime() > RECUO_MAXIMO_INICIO_VENDAS_MIN * MINUTO_MS) {
-    return semSugestao("alem_do_recuo_maximo");
+  let inicio = !motivoInicio && folhaInicio ? folhaInicio : inicioAtual;
+
+  let motivoFim = motivoComum(folhaFim);
+  if (!motivoFim && proximo && folhaFim && folhaFim.getTime() >= proximo.getTime()) {
+    motivoFim = "depois_do_proximo_caixa";
   }
-  return { situacao: "divergente", diferencaMinutos, sugestaoInicio: sugestao.toISOString(), motivoSemSugestao: null };
+  if (!motivoFim && folhaFim && folhaFim.getTime() <= inicio.getTime()) motivoFim = "fim_antes_do_inicio";
+  const fim = !motivoFim && folhaFim ? folhaFim : fimAtual;
+
+  // Fim mantido e inicio da folha depois dele: o periodo ficaria invertido, entao o inicio tambem fica.
+  if (!motivoInicio && inicio.getTime() >= fim.getTime()) {
+    motivoInicio = "fim_antes_do_inicio";
+    inicio = inicioAtual;
+  }
+
+  return {
+    inicio: {
+      antes: inicioAtual.toISOString(),
+      depois: inicio.toISOString(),
+      daFolha: !motivoInicio,
+      motivo: motivoInicio
+    },
+    fim: { antes: fimAtual.toISOString(), depois: fim.toISOString(), daFolha: !motivoFim, motivo: motivoFim }
+  };
 }
 
 export type ConferenciaEmissaoFolhaCreare = {

@@ -98,7 +98,7 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     tema: "abertura",
     pergunta: "Posso mudar a hora da abertura?",
     resposta:
-      "Não. A hora é a do sistema. Se o cupom do CREARE começar um pouco antes, no fechamento você usa “Ajustar início” (até 60 minutos antes da abertura).",
+      "Não. A hora é a do sistema. No fechamento, ao gerar o relatório de vendas, o período do caixa passa a ser o da folha do CREARE.",
     palavras: ["horario", "abri atrasado"]
   },
   {
@@ -383,20 +383,12 @@ export const DUVIDAS_CAIXA: readonly Duvida[] = [
     palavras: ["leitura automatica nao ficou disponivel", "preencha os valores"]
   },
   {
-    id: "vendas-ajustar-inicio",
+    id: "vendas-periodo-da-folha",
     tema: "vendas",
-    pergunta: "O horário da folha não bate. O que é “Ajustar início”?",
+    pergunta: "O horário da folha não bate com o do caixa. O que faço?",
     resposta:
-      "Serve para quando o cupom começa antes da abertura do caixa. Você recua o início das vendas em até 60 minutos, no mesmo dia, e explica o motivo. Depois gere o relatório de novo.",
-    palavras: ["periodo", "horario nao bate", "inicio das vendas"]
-  },
-  {
-    id: "vendas-ajustar-inicio-erros",
-    tema: "vendas",
-    pergunta: "Deu erro no “Ajustar início”.",
-    resposta:
-      "O início só pode ir para antes da abertura, no máximo 60 minutos antes, no mesmo dia, e nunca antes do fechamento do caixa anterior do PDV. Se precisa de mais que isso, chame o gerente.",
-    palavras: ["no maximo 60 minutos", "mesmo dia", "caixa anterior"]
+      "Nada. Ao gerar o relatório, as vendas do caixa passam a ser as do período da folha do CREARE: do “Período de” até a “Data da emissão”. Se a hora estiver errada na leitura, corrija na folha e gere de novo. Se aparecer o aviso de que um lado ficou no horário do sistema, chame o gerente.",
+    palavras: ["periodo", "horario nao bate", "inicio das vendas", "data da emissao", "ajustar inicio"]
   },
   {
     id: "vendas-folhas-diferentes",

@@ -2,7 +2,12 @@
 import { computed } from "vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import { GRUPOS_FOLHA_CREARE, type CampoValorFolhaCreare, type FolhaCreareGerada } from "~/utils/folha-creare";
+import {
+  avisoAlinhamentoFolhaCreare,
+  GRUPOS_FOLHA_CREARE,
+  type CampoValorFolhaCreare,
+  type FolhaCreareGerada
+} from "~/utils/folha-creare";
 
 // R-225 · Relatorio final: a conferencia do turno em cartoes (um por linha da folha, cada um abre e fecha). Cada linha da folha do CREARE (espelho do
 // fechamento manual do PDV) contra o relatorio de vendas do Pralis e, nas formas de cartao/Pix, contra o
@@ -96,25 +101,41 @@ function selo(linha: { problemas: string[]; diferenca: number }) {
 }
 
 // Horario em datas legiveis ("folha 26/10/2026 06:14:58 · caixa 28/10/2026 13:18"), nunca em minutos.
+// R-244: com o periodo alinhado a folha, cada lado "confere" quando veio da folha; o motivo do lado que nao veio
+// aparece abaixo. Relatorios de antes da R-244 seguem a comparacao antiga (inicio x folha, emissao x corte).
 const horarios = computed(() => {
   const situacao = (valor?: string) =>
     !valor || valor === "pendente" ? "pendente" : valor === "ok" ? "ok" : "divergente";
+  const alinhamento = props.creare.alinhamento;
+  const doLado = (daFolha: boolean | undefined, antigo?: string) =>
+    alinhamento ? (daFolha ? "ok" : "divergente") : situacao(antigo);
   return [
     {
       titulo: "Início das vendas",
       folha: props.creare.leitura?.periodoInicio ?? null,
       caixa: props.periodo ? formatarDataHora(props.periodo.inicio) : null,
-      situacao: situacao(props.creare.horario?.inicio.situacao)
+      situacao: doLado(alinhamento?.inicio.daFolha, props.creare.horario?.inicio.situacao)
     },
     {
-      titulo: "Emissão da folha × corte",
+      titulo: alinhamento ? "Fim das vendas (emissão da folha)" : "Emissão da folha × corte",
       folha: props.creare.leitura?.dataEmissao ?? null,
       caixa: props.periodo ? formatarDataHora(props.periodo.fim) : null,
-      situacao: situacao(props.creare.horario?.emissao.situacao)
+      situacao: doLado(alinhamento?.fim.daFolha, props.creare.horario?.emissao.situacao)
     }
   ];
 });
 const horarioConfere = computed(() => horarios.value.every((horario) => horario.situacao === "ok"));
+const notaAlinhamento = computed(() => {
+  const alinhamento = props.creare.alinhamento;
+  if (!alinhamento) return "";
+  const partes = [avisoAlinhamentoFolhaCreare(alinhamento)];
+  const entraram = alinhamento.vendasAnexadas ?? 0;
+  const sairam = alinhamento.vendasDesanexadas ?? 0;
+  if (entraram || sairam) {
+    partes.push(`Ao seguir a folha, ${entraram} venda(s) entraram neste caixa e ${sairam} saíram.`);
+  }
+  return partes.filter(Boolean).join(" ");
+});
 </script>
 
 <template>
@@ -189,6 +210,9 @@ const horarioConfere = computed(() => horarios.value.every((horario) => horario.
             </dd>
           </div>
         </dl>
+        <p v-if="notaAlinhamento" class="conferencia__explicacao" data-teste="final-alinhamento">
+          {{ notaAlinhamento }}
+        </p>
       </details>
 
       <details

@@ -18,7 +18,7 @@ const creare = {
   pralis: { credito: 947.05, debito: 779.72, total: 3674.27, sangria: 600 },
   somaFormasConfereTotal: false,
   horario: {
-    inicio: { situacao: "divergente", diferencaMinutos: -15, sugestaoInicio: null, motivoSemSugestao: null },
+    inicio: { situacao: "divergente", diferencaMinutos: -15 },
     emissao: { situacao: "ok", diferencaMinutos: 0 }
   } as const
 };
@@ -74,6 +74,28 @@ describe("CaixaRelatorioFinalFolhaCreare · conferencia do turno", () => {
     expect(conteudo).toContain("Não bate");
     expect(conteudo).not.toContain(" min ");
     expect(conteudo).toContain("não dá o Total impresso");
+  });
+
+  it("periodo alinhado a folha (R-244): confere o lado que veio da folha e explica o outro", () => {
+    const wrapper = mount(CaixaRelatorioFinalFolhaCreare, {
+      props: {
+        ...props,
+        creare: {
+          ...creare,
+          alinhamento: {
+            inicio: { antes: "a", depois: "b", daFolha: true, motivo: null },
+            fim: { antes: "c", depois: "c", daFolha: false, motivo: "depois_do_proximo_caixa" as const },
+            vendasAnexadas: 3,
+            vendasDesanexadas: 0
+          }
+        }
+      }
+    });
+    const conteudo = texto(wrapper);
+    expect(conteudo).toContain("Fim das vendas (emissão da folha)");
+    expect(texto(wrapper.get('[data-teste="final-alinhamento"]'))).toBe(
+      "O fim ficou no horário do sistema: invadiria o próximo caixa deste PDV. Ao seguir a folha, 3 venda(s) entraram neste caixa e 0 saíram."
+    );
   });
 
   it("relatorio do modelo antigo pede para gerar de novo", () => {

@@ -6,7 +6,7 @@ import { basename } from "node:path";
 import { readFile, unlink } from "node:fs/promises";
 import type {
   AbrirCaixaPayload,
-  AjustarInicioVendasCaixaPayload,
+  AlinhamentoPeriodoFolhaCreare,
   CancelarPlanejamentoRetornoPayload,
   CaixaOperacional,
   CaixaStatus,
@@ -32,10 +32,10 @@ import type {
 } from "@padaria/shared/caixa";
 import { rotuloTurnoCaixa } from "@padaria/shared/pdvs";
 import {
+  alinharPeriodoAFolhaCreare,
   conferirEmissaoFolhaCreare,
   conferirInicioFolhaCreare,
   montarResumoCaixa,
-  RECUO_MAXIMO_INICIO_VENDAS_MIN,
   saldoFisicoCaixaCentavos,
   statusCaixaSchema
 } from "@padaria/shared/caixa";
@@ -75,8 +75,9 @@ import {
   salvarRelatorioVendasFechamentoRepository,
   invalidarRelatorioMaquininhaFechamentoRepository,
   invalidarRelatorioVendasFechamentoRepository,
-  atualizarInicioVendasCaixaRepository,
+  atualizarPeriodoVendasCaixaRepository,
   buscarFimDoCaixaAnteriorNoPdvRepository,
+  buscarInicioDoProximoCaixaNoPdvRepository,
   registrarEdicaoCaixaRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
@@ -867,6 +868,13 @@ function statusParaOPerfil(status: CaixaStatus, perfil: PerfilUsuario): CaixaSta
   };
 }
 
+// R-244 · so os dois lados do periodo; a contagem de vendas que entraram/sairam fica para quem confere o fechamento.
+function periodoDoAlinhamento(alinhamento: DadosExternos): DadosExternos {
+  if (!alinhamento || typeof alinhamento !== "object" || Array.isArray(alinhamento)) return null;
+  const { inicio, fim } = alinhamento as Record<string, DadosExternos>;
+  return { inicio: inicio ?? null, fim: fim ?? null };
+}
+
 /** O relatorio de vendas do fechamento como o perfil pode ver (fechamento cego). */
 function relatorioVendasParaOPerfil(
   relatorio: ReturnType<typeof serializarRelatorioVendasFechamento>,
@@ -883,7 +891,14 @@ function relatorioVendasParaOPerfil(
       ...dados,
       vendas: { quantidade: typeof vendas["quantidade"] === "number" ? vendas["quantidade"] : 0 },
       // A leitura da folha e o que o proprio caixa leu do cupom; a comparacao com o sistema e da Tesouraria.
-      creare: creare ? { anexoId: creare["anexoId"] ?? null, leitura: creare["leitura"] ?? null } : (creare ?? null),
+      // R-244 · o periodo alinhado a folha (horas e motivo) tambem: nao revela valor.
+      creare: creare
+        ? {
+            anexoId: creare["anexoId"] ?? null,
+            leitura: creare["leitura"] ?? null,
+            alinhamento: periodoDoAlinhamento(creare["alinhamento"])
+          }
+        : (creare ?? null),
       // R-236: nem a falta sai antes de fechar (contar 0 revelaria o esperado). O resultado vem em /resultado-fechamento.
       contagemFisica: contagem ? { ...contagem, esperado: null, diferenca: null } : null
     } as DadosExternos
@@ -937,80 +952,76 @@ export async function registrarRetornoIndisponibilidadeCaixa(caixaId: string, pe
   });
 }
 
-// R-224 · o operador recua o inicio das vendas do caixa (abriu no sistema depois de ja estar vendendo).
-// Limites: no maximo 60 min antes da abertura OFICIAL (`abertoEm`, que nunca muda), no mesmo dia de negocio,
-// nunca antes do fim do caixa anterior do mesmo PDV, e so com motivo. As vendas sem caixa desse intervalo passam
-// a ser deste caixa (as que ja sao de outro caixa nunca sao tiradas de la). Se o fechamento ja comecou, o
-// relatorio de vendas gerado fica invalido e precisa ser gerado de novo com o periodo novo.
-const RECUO_MAXIMO_INICIO_VENDAS_MS = RECUO_MAXIMO_INICIO_VENDAS_MIN * 60_000;
-export async function ajustarInicioVendasCaixa(
+// R-244 · ao gerar o relatorio de vendas do fechamento, o periodo do caixa passa a ser o da folha do CREARE
+// ("Periodo de" ate a "Data da emissao"), mesmo que o caixa do sistema tenha aberto depois ou o corte tenha sido
+// em outra hora. Os limites ficam em `alinharPeriodoAFolhaCreare` (shared); aqui o servidor busca os caixas
+// vizinhos do PDV, grava o periodo, revincula as vendas do CREARE (as sem caixa entram, as que ficaram fora saem;
+// venda de outro caixa nunca e tirada de la) e registra o log. A abertura oficial (`abertoEm`) e o corte
+// (`fechamentoIniciadoEm`) nunca mudam. Sem mudanca, nao grava nada.
+async function alinharPeriodoDoCaixaAFolha(
   caixaId: string,
-  dados: AjustarInicioVendasCaixaPayload,
+  leitura: { periodoInicio: string | null; dataEmissao: string | null },
   perfil: PerfilUsuario
-) {
+): Promise<AlinhamentoPeriodoFolhaCreare & { vendasAnexadas: number; vendasDesanexadas: number }> {
   return executarEmTransacao(async (tx) => {
-    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (!(await travarCaixaRepository(caixa.id, tx))) throw new Error("Caixa nao encontrado");
-    const travado = await buscarCaixaPorIdRepository(caixa.id, tx);
-    if (!travado || !["aberto", "em_fechamento"].includes(travado.status)) {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const travado = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!travado || travado.status !== "em_fechamento") {
       throw new ErroDominio(
-        "O inicio das vendas so pode ser ajustado com o caixa aberto ou em fechamento.",
+        "O fechamento nao esta mais disponivel para gerar o relatorio.",
         409,
-        "CAIXA_NAO_AJUSTAVEL"
+        "RELATORIO_FORA_DO_CORTE"
       );
     }
-    if (!travado.abertoEm || !travado.pdvId || !travado.dataHoraAbertura)
-      throw new Error("Caixa sem abertura registrada");
-    const oficial = new Date(travado.abertoEm);
-    const inicio = new Date(dados.inicio);
-    if (inicio.getTime() > oficial.getTime()) {
-      throw new ErroDominio("O inicio so pode ser antes da abertura oficial.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
+    if (!travado.pdvId || !travado.dataHoraAbertura || !travado.dataHoraFechamento) {
+      throw new Error("Caixa sem periodo registrado");
     }
-    if (oficial.getTime() - inicio.getTime() > RECUO_MAXIMO_INICIO_VENDAS_MS) {
-      throw new ErroDominio(
-        "O inicio pode recuar no maximo 60 minutos da abertura oficial.",
-        422,
-        "INICIO_VENDAS_FORA_DA_JANELA"
-      );
-    }
-    if (diaNegocio(inicio) !== diaNegocio(oficial)) {
-      throw new ErroDominio("O inicio precisa ser no mesmo dia da abertura.", 422, "INICIO_VENDAS_FORA_DA_JANELA");
-    }
-    const fimAnterior = await buscarFimDoCaixaAnteriorNoPdvRepository(
-      { empresaId: travado.empresaId, pdvId: travado.pdvId, caixaId: travado.id, abertoAte: oficial },
+    const oficial = new Date(travado.abertoEm ?? travado.dataHoraAbertura);
+    const vizinhos = { empresaId: travado.empresaId, pdvId: travado.pdvId, caixaId: travado.id };
+    const fimCaixaAnterior = await buscarFimDoCaixaAnteriorNoPdvRepository({ ...vizinhos, abertoAte: oficial }, tx);
+    const inicioProximoCaixa = await buscarInicioDoProximoCaixaNoPdvRepository(
+      { ...vizinhos, abertoDepoisDe: oficial },
       tx
     );
-    if (fimAnterior && inicio.getTime() <= fimAnterior.getTime()) {
-      throw new ErroDominio(
-        "O inicio nao pode ser antes do fechamento do caixa anterior deste PDV.",
-        422,
-        "INICIO_VENDAS_ANTES_DO_CAIXA_ANTERIOR"
-      );
+    const alinhamento = alinharPeriodoAFolhaCreare({
+      periodoInicio: leitura.periodoInicio,
+      dataEmissao: leitura.dataEmissao,
+      aberturaOficial: oficial,
+      inicioAtual: travado.dataHoraAbertura,
+      fimAtual: travado.dataHoraFechamento,
+      fimCaixaAnterior,
+      inicioProximoCaixa,
+      agora: new Date()
+    });
+    const { inicio, fim } = alinhamento;
+    if (inicio.depois === inicio.antes && fim.depois === fim.antes) {
+      return { ...alinhamento, vendasAnexadas: 0, vendasDesanexadas: 0 };
     }
 
-    await atualizarInicioVendasCaixaRepository(travado.id, inicio, tx);
+    await atualizarPeriodoVendasCaixaRepository(
+      travado.id,
+      { inicio: new Date(inicio.depois), fim: new Date(fim.depois) },
+      tx
+    );
     const atualizado = await buscarCaixaPorIdRepository(travado.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
-    // Dentro da janela o operador tambem pode corrigir para mais tarde: as vendas que ficam antes do novo
-    // inicio voltam a ficar sem caixa, e a contagem vai para o log e para a resposta.
     const { anexadas, desanexadas } = await revincularVendasAoCaixa(atualizado, tx);
-    // `dataHoraAbertura` e a chave que o historico do caixa ja mostra; a abertura oficial vai junto.
-    // Sem autorizador: e o proprio operador (ou o gerente) que ajusta, nao ha segunda pessoa.
+    // Sem autorizador: e o sistema que alinha a folha anexada por quem fecha; o log guarda quem gerou.
     await registrarEdicaoCaixaRepository(
       {
         caixaId: travado.id,
         tokenUsado: null,
         autorizadorId: null,
-        observacao: dados.motivo.trim(),
+        observacao: "Periodo das vendas alinhado a folha do CREARE (R-244)",
         editadoPor: perfil.usuarioId,
         valoresAntigos: {
-          dataHoraAbertura: new Date(travado.dataHoraAbertura).toISOString(),
+          dataHoraAbertura: inicio.antes,
+          dataHoraFechamento: fim.antes,
           aberturaOficial: oficial.toISOString()
         },
         valoresNovos: {
-          dataHoraAbertura: inicio.toISOString(),
+          dataHoraAbertura: inicio.depois,
+          dataHoraFechamento: fim.depois,
           aberturaOficial: oficial.toISOString(),
           vendasAnexadas: anexadas,
           vendasDesanexadas: desanexadas
@@ -1018,16 +1029,7 @@ export async function ajustarInicioVendasCaixa(
       },
       tx
     );
-    if (travado.status === "em_fechamento") {
-      await invalidarRelatorioVendasFechamentoRepository(travado.id, travado.empresaId, tx);
-    }
-    return {
-      inicioVendas: inicio.toISOString(),
-      aberturaOficial: oficial.toISOString(),
-      vendasAnexadas: anexadas,
-      vendasDesanexadas: desanexadas,
-      relatorioVendasInvalidado: travado.status === "em_fechamento"
-    };
+    return { ...alinhamento, vendasAnexadas: anexadas, vendasDesanexadas: desanexadas };
   });
 }
 
@@ -2433,10 +2435,26 @@ export async function gerarRelatorioVendasFechamento(
     );
   }
 
-  // A hora limite e gravada pelo servidor antes desta etapa. Regerar atualiza somente o retrato
-  // de leitura; nenhuma venda posterior consegue entrar no periodo encerrado.
+  const anexoFolha = await buscarAnexoFechamentoCaixaRepository(caixa.id, leituraCreare.anexoId, caixa.empresaId);
+  if (!anexoFolha || anexoFolha.tipo !== "relatorio_vendas_creare") {
+    throw new ErroDominio("O relatório informado não pertence a este caixa.", 409, "RELATORIO_CREARE_INVALIDO");
+  }
+  // R-244 · antes de consolidar, o periodo do caixa passa a ser o da folha do CREARE (inicio e emissao).
+  const alinhamento = await alinharPeriodoDoCaixaAFolha(
+    caixa.id,
+    {
+      periodoInicio: leituraCreare.leituraCreare.periodoInicio,
+      dataEmissao: leituraCreare.leituraCreare.dataEmissao
+    },
+    perfil
+  );
+  const alinhado = await buscarCaixaPorIdRepository(caixa.id);
+  if (!alinhado) throw new Error("Caixa nao encontrado");
+
+  // O periodo (alinhado a folha) e gravado pelo servidor antes desta etapa. Regerar atualiza somente o retrato
+  // de leitura; nenhuma venda fora do periodo entra.
   // O fechamento guarda o consolidado, e não replica potencialmente milhares de cupons no JSON.
-  // A consulta usa o corte gravado do Caixa; a linha desta página existe porque a função compartilhada
+  // A consulta usa o periodo gravado do Caixa; a linha desta página existe porque a função compartilhada
   // também devolve uma página, enquanto `totais` cobre integralmente o período.
   const primeiraPagina = await consultarVendasDoCaixaAberto(caixa.id, { page: 1, pageSize: 1 }, perfil);
   const canceladas = await listarVendasCanceladasCaixa(caixa.id, perfil);
@@ -2453,8 +2471,8 @@ export async function gerarRelatorioVendasFechamento(
     if (!travado.dataHoraAbertura) throw new Error("Caixa sem horario de abertura");
     const instante = (valor: Date | string | null) => (valor ? new Date(valor).getTime() : null);
     if (
-      instante(travado.dataHoraAbertura) !== instante(caixa.dataHoraAbertura) ||
-      instante(travado.dataHoraFechamento) !== instante(caixa.dataHoraFechamento)
+      instante(travado.dataHoraAbertura) !== instante(alinhado.dataHoraAbertura) ||
+      instante(travado.dataHoraFechamento) !== instante(alinhado.dataHoraFechamento)
     ) {
       throw new ErroDominio(
         "O periodo do caixa mudou enquanto o relatorio era gerado. Gere de novo.",
@@ -2534,10 +2552,13 @@ export async function gerarRelatorioVendasFechamento(
     const horario = {
       inicio: conferirInicioFolhaCreare({
         periodoInicio: leitura.periodoInicio,
-        inicioVendas: travado.dataHoraAbertura,
-        aberturaOficial: travado.abertoEm ?? travado.dataHoraAbertura
+        inicioVendas: travado.dataHoraAbertura
       }),
-      emissao: conferirEmissaoFolhaCreare({ dataEmissao: leitura.dataEmissao, corte: travado.dataHoraFechamento })
+      // Informativo: a folha impressa longe do toque em "Encerrar vendas" (o corte real, que nao muda).
+      emissao: conferirEmissaoFolhaCreare({
+        dataEmissao: leitura.dataEmissao,
+        corte: travado.fechamentoIniciadoEm ?? travado.dataHoraFechamento
+      })
     };
     return salvarRelatorioVendasFechamentoRepository(
       {
@@ -2561,6 +2582,8 @@ export async function gerarRelatorioVendasFechamento(
             pralis,
             somaFormasConfereTotal,
             horario,
+            // R-244 · o que mudou no periodo ao alinhar a folha (e o motivo do lado que nao foi alinhado).
+            alinhamento,
             saidasSemSangria
           }
         },
