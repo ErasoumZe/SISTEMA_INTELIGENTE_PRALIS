@@ -66,6 +66,10 @@ export async function desativarContaRepository(id: string, tx: TransacaoBanco) {
   await tx.delete(contasUsuarios).where(eq(contasUsuarios.contaId, id));
 }
 
+export async function reativarContaRepository(id: string, tx: TransacaoBanco) {
+  await tx.update(contas).set({ ativa: true }).where(eq(contas.id, id));
+}
+
 export async function travarUsuarioRepository(usuarioId: string, tx: TransacaoBanco) {
   const [perfil] = await tx
     .select({

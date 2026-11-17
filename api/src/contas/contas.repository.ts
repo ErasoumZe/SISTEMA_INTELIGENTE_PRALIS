@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { ajustesContas, contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -365,19 +365,24 @@ export async function inserirAjustesContasRepository(
 }
 
 // Contas da empresa com fundo, saldo derivado e os usuarios vinculados — a tela de Contas (D8).
-export async function listarContasComSaldoRepository(empresasPermitidasIds: string[] | null) {
+// R-245 · `incluirInativas` traz tambem as desativadas (a tela de Contas mostra e reativa); ativas primeiro.
+export async function listarContasComSaldoRepository(empresasPermitidasIds: string[] | null, incluirInativas = false) {
   const linhas = await banco
     .select({
       id: contas.id,
       empresaId: contas.empresaId,
       nome: contas.nome,
-      saldoInicial: contas.saldoInicial
+      saldoInicial: contas.saldoInicial,
+      ativa: contas.ativa
     })
     .from(contas)
     .where(
-      and(eq(contas.ativa, true), empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined)
+      and(
+        incluirInativas ? undefined : eq(contas.ativa, true),
+        empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined
+      )
     )
-    .orderBy(asc(contas.nome));
+    .orderBy(desc(contas.ativa), asc(contas.nome));
   if (!linhas.length) return [];
 
   const [saldos, vinculos] = await Promise.all([
@@ -407,7 +412,8 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
     saldoInicial: deCentavos(paraCentavos(linha.saldoInicial)),
     saldoAtual: saldos.get(linha.id)?.disponivel ?? deCentavos(paraCentavos(linha.saldoInicial)),
     saldoPendente: saldos.get(linha.id)?.pendente ?? 0,
-    usuariosIds: usuariosPorConta.get(linha.id) ?? []
+    usuariosIds: usuariosPorConta.get(linha.id) ?? [],
+    ativa: linha.ativa
   }));
 }
 

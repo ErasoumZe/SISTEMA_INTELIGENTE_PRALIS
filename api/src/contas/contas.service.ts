@@ -30,8 +30,8 @@ export async function listarContas(escopoDados: string[]) {
 // Tela de Contas (D8): fundo + saldo ATUAL derivado + usuarios vinculados. Separada de listarContas
 // porque aquela e a lista de OPCAO de formulario (id/nome) e e chamada em quase toda tela — nao vale
 // pagar as consultas de movimento so para preencher um <select>.
-export async function listarContasComSaldo(escopoDados: string[]) {
-  return listarContasComSaldoRepository(escopoDados);
+export async function listarContasComSaldo(escopoDados: string[], incluirInativas = false) {
+  return listarContasComSaldoRepository(escopoDados, incluirInativas);
 }
 
 function exigirPodeAjustarSaldo(perfil?: PerfilUsuario): asserts perfil is PerfilUsuario {
