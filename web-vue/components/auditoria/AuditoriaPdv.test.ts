@@ -39,7 +39,16 @@ function dia(caixas: CaixaAuditoria[], fora: AuditoriaDia["pdvs"][number]["fora"
   };
 }
 
-const montarDia = (d: AuditoriaDia) => mount(AuditoriaPdvDia, { props: { dia: d, gerando: false }, global: { stubs } });
+const montarDia = (d: AuditoriaDia, mostrarFora = false) =>
+  mount(AuditoriaPdvDia, { props: { dia: d, gerando: false, mostrarFora }, global: { stubs } });
+
+const vendaFora = {
+  vendaId: "v-1",
+  hora: "2026-11-14T15:00:00Z",
+  valor: 12.5,
+  formas: [{ categoria: "dinheiro", valor: 12.5 }],
+  produtos: [{ descricao: "Pão de queijo", quantidade: 2 }]
+};
 
 describe("AuditoriaPdvDia", () => {
   it("mostra Manha e Tarde lado a lado e o total do dia somado no PDV", () => {
@@ -60,28 +69,37 @@ describe("AuditoriaPdvDia", () => {
     expect(colunas[2]!.text()).toContain("Caio");
   });
 
-  it("lista as vendas fora de caixa com produtos e pede para gerar", async () => {
-    const tela = montarDia(
-      dia(
-        [caixa("manha", "Ana", 1, 10)],
-        [
-          {
-            vendaId: "v-1",
-            hora: "2026-11-14T15:00:00Z",
-            valor: 12.5,
-            formas: [{ categoria: "dinheiro", valor: 12.5 }],
-            produtos: [{ descricao: "Pão de queijo", quantidade: 2 }]
-          }
-        ]
-      )
-    );
-    const alerta = tela.find(".auditoria-pdv__fora");
-    expect(alerta.attributes("role")).toBe("alert");
-    expect(alerta.text()).toContain("1 venda(s) sem caixa aberto");
-    expect(alerta.text()).toContain("12:00");
-    expect(alerta.text()).toContain("2× Pão de queijo");
+  it("vendas fora de caixa comecam ocultas, com contagem e total, e abrem e fecham no botao", async () => {
+    const tela = montarDia(dia([caixa("manha", "Ana", 1, 10)], [vendaFora]));
+    const bloco = () => tela.find('[data-teste="vendas-fora"]');
+    const alternar = () => tela.find('[data-teste="alternar-fora"]');
+    expect(bloco().text()).toContain("1 venda(s) sem caixa aberto · R$");
+    expect(bloco().text()).toContain("12,50");
+    expect(bloco().find("table").exists()).toBe(false);
+    expect(alternar().attributes("aria-expanded")).toBe("false");
+    expect(alternar().text()).toBe("Ver vendas");
+
+    await alternar().trigger("click");
+    expect(bloco().find("table").exists()).toBe(true);
+    expect(bloco().text()).toContain("12:00");
+    expect(bloco().text()).toContain("2× Pão de queijo");
+    expect(alternar().text()).toBe("Ocultar vendas");
+
+    await alternar().trigger("click");
+    expect(bloco().find("table").exists()).toBe(false);
+
     await tela.find('[data-teste="gerar-auditoria"]').trigger("click");
     expect(tela.emitted("gerar")).toHaveLength(1);
+  });
+
+  it("a escolha da pagina abre todas as listas e desfaz o que cada PDV escolheu", async () => {
+    const tela = montarDia(dia([], [vendaFora]), true);
+    expect(tela.find('[data-teste="vendas-fora"] table').exists()).toBe(true);
+    await tela.find('[data-teste="alternar-fora"]').trigger("click");
+    expect(tela.find('[data-teste="vendas-fora"] table').exists()).toBe(false);
+    await tela.setProps({ mostrarFora: false });
+    await tela.setProps({ mostrarFora: true });
+    expect(tela.find('[data-teste="vendas-fora"] table').exists()).toBe(true);
   });
 });
 
