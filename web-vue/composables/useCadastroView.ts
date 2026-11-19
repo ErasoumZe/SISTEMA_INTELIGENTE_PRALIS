@@ -49,7 +49,9 @@ export function useCadastroView(params: {
         fundo: dinheiro(item.saldoInicial ?? 0),
         saldo_atual: dinheiro(item.saldoAtual ?? 0),
         saldoInicial: item.saldoInicial != null ? String(item.saldoInicial) : "",
-        usuariosIds: (item.usuariosIds ?? []).join(",")
+        usuariosIds: (item.usuariosIds ?? []).join(","),
+        // R-245 · coluna "Ativa": a tela de Contas recebe as inativas para reativar.
+        ativa: item.ativa === false ? "Não" : "Sim"
       }));
     if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
     if (tela === "pdv")
@@ -281,7 +283,7 @@ export function useCadastroView(params: {
     const colunas: Record<string, string[]> = {
       empresas: ["Nome", "CNPJ"],
       // Fundo = ponto de partida declarado; Saldo atual = derivado dos movimentos (D8).
-      contas: ["Nome", "Fundo", "Saldo atual"],
+      contas: ["Nome", "Fundo", "Saldo atual", "Ativa"],
       formas_pagamento: ["Nome"],
       pdv: ["Nome", "Conta", "Turnos do caixa", "Ativo"],
       grupos: ["Nome", "Tipo"],

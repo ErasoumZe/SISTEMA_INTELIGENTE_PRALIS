@@ -1829,3 +1829,22 @@ da folha do relatório do CREARE".
   segundo envio da mesma aba é recusado e a tela mostra quando e por quem foi enviada. Nada muda o fechamento.
 - **Ainda não feito:** a aba `API - LANÇAMENTOS_FOLHA_DE_CAIXA_<SIGLA>_DADOS` (troco, transferências e retornos)
   existe na planilha mas não recebe dados do sistema.
+
+### R-245 — Contas ativas e inativas; plano de contas da Comercial Tudonupao (Marco, 17/11/2026)
+
+- **Ativa / inativa:** a tela **Contas** mostra todas as contas com a coluna **Ativa** (Sim/Não). Na linha, o
+  administrador usa **Desativar** ou **Ativar**. O antigo **Excluir** da conta saiu: era o mesmo ato.
+- **Desativar** segue as travas de antes: só administrador; não vale para o Cofre da empresa, para conta de PDV
+  ativo, nem para conta com saldo ou transferência pendente. A conta sai das listas de transferência e lançamento
+  e perde quem movimenta. O histórico fica.
+- **Ativar** devolve a conta às listas **sem ninguém vinculado**: quem movimenta é marcado de novo em Editar.
+- **Plano de contas (nomes iguais à planilha do Marco, "CNT CONTA - ...")** na empresa Comercial Tudonupao LTDA:
+  - Ativas: Caixa Econômica, Nubank, PagBank, Fluxo Crédito, Fluxo Débito, Fluxo Voucher, Fluxo Pix,
+    Fluxo Crediário, Fluxo Cartões, Cofre Principal (o Cofre da empresa, renomeado), Cofre Troco, Fluxo Caixa,
+    Diretor Financeiro.
+  - Inativas: Caixa Poupança, Santander, Safra, Itaú, Bradesco, Stone, Getnet, SafraPay, Diretor, Diretor Operação,
+    Gerência, Compras, Manutenção.
+  - As "Caixa 1M … 4T" da planilha **não** viram conta: no sistema cada PDV tem **uma** conta, usada pelos dois
+    turnos (Conta TNP-PC-CXPDV-1 a 4).
+- **Quem movimenta:** contas de banco e fluxo, Administrador e Tesouraria; Cofre Troco e Fluxo Caixa também o
+  Gerente (origem da transferência sem lacre para os PDVs abertos).

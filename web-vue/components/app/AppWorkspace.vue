@@ -856,7 +856,13 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // de opcao de formulario e nao paga as consultas de movimento.
     // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
     [dados.contas, dados.usuarios] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
+      // R-245 · a tela de Contas mostra tambem as inativas, para reativar.
+      carregarOpcaoOpcional(
+        faltas,
+        "Contas",
+        () => apiGet<Opcao[]>(`/api/contas/saldos${query}&incluirInativas=true`),
+        []
+      ),
       carregarOpcaoOpcional(faltas, "Usuários", () => carregarOpcoesCompletas("/api/usuarios", idEmpresa), [])
     ]);
   } else if (tela === "entradas") {
@@ -1138,11 +1144,35 @@ async function recarregarDadosCadastro() {
 
 // "Excluir" usuario, conta ou PDV (Marco, 13/11/2026) = desativar: sai das listas, o historico fica. So o
 // administrador ve o botao (a API tambem exige). Confirma antes, com o nome do item.
+// Conta nao entra aqui: desde a R-245 ela e ATIVADA/DESATIVADA na propria tela (alternarContaAtiva), e "Excluir"
+// seria o segundo caminho para o mesmo ato.
 const rotasDesativar: Record<string, { rota: string; rotulo: string }> = {
   usuarios: { rota: "usuarios", rotulo: "o usuário" },
-  contas: { rota: "contas", rotulo: "a conta" },
   pdv: { rota: "pdvs", rotulo: "o PDV" }
 };
+
+// R-245 (Marco, 17/11/2026): conta ativa/inativa. Desativar tira a conta das listas de operacao e dos vinculos;
+// ativar devolve, sem ninguem vinculado (quem movimenta e escolhido de novo no Editar). So o administrador.
+async function alternarContaAtiva(linha: Record<string, string | undefined>) {
+  if (!linha.id) return;
+  const nome = linha.nome ?? "";
+  const ativar = linha.ativa === "Não";
+  const confirmou = await confirmarAcao(
+    ativar
+      ? `Ativar a conta "${nome}"? Ela volta para as listas. Depois, em Editar, marque quem pode movimentar.`
+      : `Desativar a conta "${nome}"? Ela sai das listas de transferência e lançamento e perde quem movimenta. O histórico continua e dá para ativar de novo.`,
+    ativar ? "Ativar conta" : "Desativar conta",
+    ativar ? "Ativar" : "Desativar"
+  );
+  if (!confirmou) return;
+  try {
+    await apiPost(`/api/contas/${encodeURIComponent(linha.id)}/${ativar ? "reativar" : "desativar"}`, {});
+    notificar(ativar ? `"${nome}" ativada.` : `"${nome}" desativada.`);
+    await recarregarDadosCadastro();
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
+}
 
 async function desativarCadastro(linha: Record<string, string | undefined>) {
   const alvo = rotasDesativar[telaAtiva.value];
@@ -2329,6 +2359,7 @@ const pageContext = computed(() => ({
   linhasCadastro: dadosCadastro(telaAtiva.value),
   recarregarDadosCadastro,
   desativarCadastro,
+  alternarContaAtiva,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,

@@ -16,8 +16,9 @@ const props = defineProps<{
   abrirEdicao: (linha: Record<string, string | undefined>) => void;
   recarregar: () => Promise<void>;
   notificar: (texto: string, cor?: string) => void;
-  podeExcluir?: boolean;
-  excluir?: (linha: Record<string, string | undefined>) => Promise<void>;
+  // R-245 · ativar/desativar a conta (so o administrador). Substitui o "Excluir" da conta.
+  podeAlternarAtiva?: boolean;
+  alternarAtiva?: (linha: Record<string, string | undefined>) => Promise<void>;
 }>();
 
 const { apiPost } = useApi();
@@ -96,8 +97,22 @@ async function salvarAjuste() {
   }
 }
 
-function lidarExtra(payload: { event: string; linha: Record<string, string | undefined> }) {
+type Linha = Record<string, string | undefined>;
+const ativa = (linha: Linha) => linha.ativa !== "Não";
+// Ajustar saldo so em conta ativa; a linha mostra Desativar ou Ativar conforme a situacao (R-245).
+const acoesLinha = computed(() => [
+  ...(podeAjustarSaldo.value ? [{ label: "Ajustar saldo", event: "ajustarSaldo", condicao: ativa }] : []),
+  ...(props.podeAlternarAtiva && props.alternarAtiva
+    ? [
+        { label: "Desativar", event: "alternarAtiva", condicao: ativa },
+        { label: "Ativar", event: "alternarAtiva", condicao: (linha: Linha) => !ativa(linha) }
+      ]
+    : [])
+]);
+
+function lidarExtra(payload: { event: string; linha: Linha }) {
   if (payload.event === "ajustarSaldo") abrirAjuste(payload.linha);
+  if (payload.event === "alternarAtiva") void props.alternarAtiva?.(payload.linha);
 }
 </script>
 
@@ -129,10 +144,9 @@ function lidarExtra(payload: { event: string; linha: Record<string, string | und
     :colunas="colunas"
     :linhas="linhas"
     :permissoes-filtro="[...permissoes]"
-    :pode-excluir="Boolean(podeExcluir && excluir)"
-    @excluir="excluir?.($event)"
+    :pode-excluir="false"
     :pode-exportar="false"
-    :acoes-extras-externas="podeAjustarSaldo ? [{ label: 'Ajustar saldo', event: 'ajustarSaldo' }] : []"
+    :acoes-extras-externas="acoesLinha"
     @acionar="abrirNovo"
     @importar="abrirImportacao"
     @exportar="abrirExportacao"
