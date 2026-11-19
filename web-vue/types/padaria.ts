@@ -45,6 +45,8 @@ export type Opcao = {
   saldoAtual?: number;
   saldoPendente?: number;
   usuariosIds?: string[];
+  /** R-245 · so a tela de Contas recebe inativas (false); nas listas de opcao toda conta e ativa. */
+  ativa?: boolean;
   /** Derivados da configuração da empresa; usados para orientar o malote Cofre → PDV. */
   ehCofre?: boolean;
   ehContaPdv?: boolean;

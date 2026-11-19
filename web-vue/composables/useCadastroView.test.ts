@@ -82,6 +82,20 @@ describe("useCadastroView · tela de Contas (#172)", () => {
     const { dadosCadastro } = vista([CONTA_COFRE]);
     expect(Object.keys(dadosCadastro("contas")[0]!)).toContain(chaveColuna("Saldo atual"));
   });
+
+  // R-245 · a tela de Contas recebe tambem as inativas; a coluna Ativa diz qual e qual.
+  it("coluna Ativa: Sim para conta ativa (ou sem o campo) e Não para a inativa", () => {
+    const { colunasCadastro, dadosCadastro } = vista([
+      { ...CONTA_COFRE, ativa: true },
+      { ...CONTA_COFRE, id: "c-9", nome: "CNT CONTA - SANTANDER", ativa: false },
+      { id: "c-10", nome: "CONTA SEM CAMPO" }
+    ]);
+    expect(colunasCadastro("contas")).toContain("Ativa");
+    const [ativa, inativa, semCampo] = dadosCadastro("contas");
+    expect(celula(ativa!, "Ativa")).toBe("Sim");
+    expect(celula(inativa!, "Ativa")).toBe("Não");
+    expect(celula(semCampo!, "Ativa")).toBe("Sim");
+  });
 });
 
 // Mesmo contrato do #172 na tela de Maquininhas: a linha gravava `nome`/`numeroSerie` e a tabela procurava

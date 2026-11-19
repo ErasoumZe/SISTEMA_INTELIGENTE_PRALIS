@@ -30,10 +30,16 @@ export const contaComSaldoSchema = z.object({
   saldoInicial: z.number(),
   saldoAtual: z.number(),
   saldoPendente: z.number(),
-  usuariosIds: z.array(z.string())
+  usuariosIds: z.array(z.string()),
+  // R-245 · conta inativa continua no cadastro (para reativar), fora das listas de operacao.
+  ativa: z.boolean()
 });
 
 export const contasQuerySchema = empresaQuerySchema;
+// R-245 · so a tela de Contas pede as inativas; as listas de opcao (GET /api/contas) seguem so com as ativas.
+export const contasSaldosQuerySchema = empresaQuerySchema.extend({
+  incluirInativas: z.enum(["true", "1"]).optional()
+});
 export const importarContasSchema = importarEmpresaPayloadSchema;
 export const exportarContaSchema = exportarEmpresaPayloadSchema;
 export const contaParamsSchema = apiIdParamsSchema;

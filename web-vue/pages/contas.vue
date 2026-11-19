@@ -17,8 +17,8 @@ import ContasPage from "~/components/contas/ContasPage.vue";
       :abrir-edicao="ctx.abrirCadastroEditar"
       :recarregar="ctx.recarregarDadosCadastro"
       :notificar="ctx.notificar"
-      :pode-excluir="ctx.ehAdministradorDoPainel"
-      :excluir="ctx.desativarCadastro"
+      :pode-alternar-ativa="ctx.ehAdministradorDoPainel"
+      :alternar-ativa="ctx.alternarContaAtiva"
     />
   </AppWorkspace>
 </template>

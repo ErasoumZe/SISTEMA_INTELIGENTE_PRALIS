@@ -13,6 +13,7 @@ import {
   desativarPdvRepository,
   desativarUsuarioRepository,
   pdvTemCaixaEmAndamentoRepository,
+  reativarContaRepository,
   travarContaRepository,
   travarPdvRepository,
   travarUsuarioRepository,
@@ -70,6 +71,20 @@ export async function desativarConta(id: string, perfilEntrada?: PerfilUsuario) 
         "CONTA_COM_SALDO"
       );
     await desativarContaRepository(id, tx);
+    return { id, nome: conta.nome };
+  });
+}
+
+// R-245 (Marco, 17/11/2026): a conta desativada fica no cadastro e pode voltar. Volta SEM ninguem vinculado
+// (a desativacao apagou os vinculos): quem movimenta e escolhido de novo no Editar da conta.
+export async function reativarConta(id: string, perfilEntrada?: PerfilUsuario) {
+  const perfil = exigirAdministrador(perfilEntrada);
+  return executarEmTransacao(async (tx) => {
+    const conta = await travarContaRepository(id, tx);
+    if (!conta) throw naoEncontrado("Conta nao encontrada");
+    exigirEmpresa(perfil, conta.empresaId);
+    if (conta.ativa) throw conflito("A conta ja esta ativa.", "CONTA_JA_ATIVA");
+    await reativarContaRepository(id, tx);
     return { id, nome: conta.nome };
   });
 }

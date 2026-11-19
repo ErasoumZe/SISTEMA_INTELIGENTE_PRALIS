@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import {
   contaParamsSchema as idParamsSchema,
   contasQuerySchema as empresaQuerySchema,
+  contasSaldosQuerySchema,
   exportarContaSchema as exportarPayloadSchema,
   importarContasSchema as importarPayloadSchema
 } from "@padaria/shared/contas";
@@ -115,13 +116,13 @@ export async function registrarRotasContas(app: FastifyInstance): Promise<void> 
     "/api/contas/saldos",
     { preHandler: exigirPermissao("cadastro_contas_visualizar") },
     async (request, reply) => {
-      const query = empresaQuerySchema.parse(request.query);
+      const query = contasSaldosQuerySchema.parse(request.query);
       try {
         const escopo = escopoEmpresaAtiva(
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        return ok(await listarContasComSaldo(escopo));
+        return ok(await listarContasComSaldo(escopo, Boolean(query.incluirInativas)));
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }

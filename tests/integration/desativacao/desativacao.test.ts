@@ -110,6 +110,30 @@ describe("excluir cadastros (desativar)", () => {
     expect(transferencia.body).toContain("Conta excluida");
   });
 
+  it("conta (R-245): desativada fica na tela de Contas como inativa e volta ao ativar", async () => {
+    const contaId = await criarConta(`Conta QA Ativa ${Date.now()}`);
+    expect((await post(`/api/contas/${contaId}/desativar`)).statusCode).toBe(200);
+
+    // Lista de operacao e a tela por padrao: sem a inativa. A tela de Contas pede as inativas.
+    expect((await get(`/api/contas/saldos?empresaId=${empresaId}`)).body).not.toContain(contaId);
+    const comInativas = await get(`/api/contas/saldos?empresaId=${empresaId}&incluirInativas=true`);
+    expect(comInativas.statusCode, comInativas.body).toBe(200);
+    const inativa = (comInativas.json().data as Array<{ id: string; ativa: boolean }>).find((c) => c.id === contaId);
+    expect(inativa?.ativa).toBe(false);
+
+    // So o administrador ativa.
+    expect((await post(`/api/contas/${contaId}/reativar`, {}, cookieGerente)).statusCode).toBe(403);
+    const reativar = await post(`/api/contas/${contaId}/reativar`);
+    expect(reativar.statusCode, reativar.body).toBe(200);
+    expect((await get(`/api/contas?empresaId=${empresaId}&pageSize=100`)).body).toContain(contaId);
+    const linha = await consultarUm<{ ativa: boolean }>("select ativa from contas where id = $1", [contaId]);
+    expect(linha?.ativa).toBe(true);
+
+    // Ativar o que ja esta ativo e recusado (inclusive o Cofre).
+    expect((await post(`/api/contas/${contaId}/reativar`)).statusCode).toBe(409);
+    expect((await post(`/api/contas/${idsTeste.contaCofre}/reativar`)).statusCode).toBe(409);
+  });
+
   it("PDV excluido nao e editado (nem reativado) pelo cadastro", async () => {
     const { pdvId, contaId } = await criarPdv(`PDV QA Editar ${Date.now()}`);
     expect((await post(`/api/pdvs/${pdvId}/desativar`)).statusCode).toBe(200);
