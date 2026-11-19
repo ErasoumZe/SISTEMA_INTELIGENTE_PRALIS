@@ -1,0 +1,59 @@
+/* Estilos comuns dos blocos da planilha da Tesouraria (cartoes e folha de caixa). */
+.planilha-bloco {
+  display: grid;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-3);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-md);
+}
+.planilha-bloco__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-2);
+}
+.planilha-bloco__titulo h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.planilha-bloco__avisos {
+  margin: 0;
+  padding-left: 18px;
+  color: rgb(var(--v-theme-warning));
+  font-size: var(--cx-fs-micro);
+}
+.planilha-bloco__tabela {
+  overflow-x: auto;
+}
+.planilha-bloco__campo {
+  width: 96px;
+  padding: 2px 6px;
+  border: 1px solid var(--cx-line-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: right;
+}
+.planilha-bloco__campo--texto {
+  width: 180px;
+  text-align: left;
+  text-transform: uppercase;
+}
+.planilha-bloco__pdv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--cx-sp-2);
+}
+.planilha-bloco__pdv label {
+  display: grid;
+  gap: 2px;
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+}
+.planilha-bloco__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cx-sp-2);
+}

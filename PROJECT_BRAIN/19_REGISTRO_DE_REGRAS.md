@@ -1812,3 +1812,20 @@ da folha do relatório do CREARE".
 - **Código:** `alinharPeriodoAFolhaCreare` (shared, regra pura) e `alinharPeriodoDoCaixaAFolha` (api, dentro de
   `gerarRelatorioVendasFechamento`). Removidos: `POST /api/caixa/:caixaId/inicio-vendas`,
   `CaixaInicioVendasAjuste.vue` e as dúvidas do Ajustar início.
+
+### R-246 — Planilha da Tesouraria: cartões e folha de caixa em envios separados (Marco, 12/11 e 19/11/2026)
+
+- **Onde grava:** a planilha "CICLUZ GP - TNP/LI/HORA - APIS FECHAMENTO CAIXA (IMP/EXP)" (ID padrão de produção),
+  uma aba por empresa com a sigla do cadastro de empresas (TNP). Os dados começam na **coluna F** (A a E vazias),
+  na próxima linha livre.
+- **Aba de cartões** (`API - LANÇAMENTOS_RELATÓRIO_CARTÕES_<SIGLA>_DADOS`), lida da foto da maquininha, uma linha
+  por bandeira: DATA | Nº SÉRIE TERMINAL | PDV | MODALIDADE | BANDEIRA | TRANSAÇÕES | VALOR RELATÓRIO.
+- **Aba do PDV, a "folha de caixa"** (`API - LANÇAMENTOS_RELATÓRIO_PDV_<SIGLA>_DADOS`), lida da folha do CREARE, uma
+  linha por fechamento: DATA | PDV | NOME OPERADOR | CRÉDITO | DÉBITO | VOUCHER | PIX | DINHEIRO | CLIENTES.
+- **PDV na planilha:** `VND CAIXA PDV - <n><M|T>`, com o número do PDV e o turno do caixa (os 4 PDVs, manhã e tarde).
+  Caixa sem turno do caixa (aberto antes da R-229) não é enviado.
+- **Dois botões (19/11/2026):** um "Ler relatórios" lê as duas fotos; cada aba tem a sua conferência e o seu envio:
+  **Exportar cartão para a planilha** e **Gerar relatório da folha de caixa**. Cada aba vai uma vez por caixa; o
+  segundo envio da mesma aba é recusado e a tela mostra quando e por quem foi enviada. Nada muda o fechamento.
+- **Ainda não feito:** a aba `API - LANÇAMENTOS_FOLHA_DE_CAIXA_<SIGLA>_DADOS` (troco, transferências e retornos)
+  existe na planilha mas não recebe dados do sistema.
