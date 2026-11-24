@@ -4,6 +4,8 @@ import { paginationQuerySchema } from "../api/index.js";
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 const dataHoraComFusoSchema = z.string().datetime({ offset: true });
+// Hora do dia (HH:MM ou HH:MM:SS) no fuso da loja: janela que se repete em cada dia do periodo.
+const horaDoDiaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/u);
 
 export const vendasQuerySchema = z
   .object({
@@ -12,6 +14,10 @@ export const vendasQuerySchema = z
     dataFim: z.string().min(10).optional(),
     dataHoraInicio: dataHoraComFusoSchema.optional(),
     dataHoraFim: dataHoraComFusoSchema.optional(),
+    // Janela diaria (ex.: 06:00 a 14:00 em todos os dias do periodo), em America/Sao_Paulo. Inicio maior
+    // que o fim cruza a meia-noite (22:00 a 02:00). Diferente de dataHora*, que e um intervalo continuo.
+    horaDoDiaInicio: horaDoDiaSchema.optional(),
+    horaDoDiaFim: horaDoDiaSchema.optional(),
     idVenda: z.string().trim().min(1).max(120).optional(),
     produto: z.string().trim().min(1).max(200).optional(),
     caixaId: uuidSchema.optional(),

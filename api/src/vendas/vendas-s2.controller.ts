@@ -1,0 +1,103 @@
+import { timingSafeEqual } from "node:crypto";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { erro, ok, paginadoDeResultado } from "@padaria/shared/api";
+import { vendasQuerySchema, type VendaDto } from "@padaria/shared/vendas";
+import { env } from "../env.js";
+import { CreareIndisponivelError, empresaDaLojaCreare } from "../produtos/produtos-creare.service.js";
+import { listarPdvs } from "../pdvs/pdvs.service.js";
+import { listarFormasPagamento } from "../formas-pagamento/formas-pagamento.service.js";
+import { listarTurnos } from "../turnos/turnos.service.js";
+import { listarVendasPaginadas, totaisVendas } from "./vendas.service.js";
+
+/**
+ * Leitura das vendas pelo S2 (sistema do Rodrigo). O S2 nao copia vendas: consulta aqui, ao vivo, com os
+ * MESMOS filtros e a MESMA conta do Relatorio de Vendas (listarVendasPaginadas/totaisVendas), para os numeros
+ * dos dois sistemas nunca divergirem. So GET. Autentica por `Authorization: Bearer <S2_LEITURA_TOKEN>` e
+ * enxerga uma unica empresa, a da loja `S2_LEITURA_LOJA`. Sem token configurado, tudo responde 503.
+ * Dados de cliente (nome/id) e comprovantes nao saem daqui.
+ */
+// As tres rotas estao na allowlist de autenticacao propria do app.ts (fora do default-deny de sessao).
+
+// O S2 nao escolhe empresa, cliente nem caixa: a empresa vem da configuracao e o resto nao e exposto.
+const consultaS2Schema = vendasQuerySchema.omit({ empresaId: true, clienteId: true, caixaId: true });
+
+const limiteLeitura = {
+  config: { rateLimit: { max: 120, timeWindow: "1 minute" } }
+};
+
+function mesmoToken(recebido: string, esperado: string): boolean {
+  const a = Buffer.from(recebido);
+  const b = Buffer.from(esperado);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Valida o Bearer do S2 e devolve a empresa configurada, ou responde o erro e devolve null. */
+async function empresaDoS2(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
+  if (env.S2_LEITURA_TOKEN.length < 32 || !env.S2_LEITURA_LOJA) {
+    erro(reply, 503, "Leitura do S2 não configurada.", "S2_LEITURA_DESLIGADA");
+    return null;
+  }
+  const bearer = /^Bearer\s+(.+)$/iu.exec(request.headers.authorization ?? "")?.[1]?.trim() ?? "";
+  if (!bearer || !mesmoToken(bearer, env.S2_LEITURA_TOKEN)) {
+    erro(reply, 401, "Token de leitura inválido.", "S2_TOKEN_INVALIDO");
+    return null;
+  }
+  try {
+    return await empresaDaLojaCreare(env.S2_LEITURA_LOJA);
+  } catch (error) {
+    if (error instanceof CreareIndisponivelError) {
+      erro(reply, 503, "Loja da leitura do S2 não encontrada.", "S2_LOJA_DESCONHECIDA");
+      return null;
+    }
+    throw error;
+  }
+}
+
+function semDadosDeCliente(venda: VendaDto) {
+  const { clienteId: _clienteId, clienteNome: _clienteNome, empresaId: _empresaId, totalComprovantes: _c, ...resto } =
+    venda;
+  return resto;
+}
+
+export async function registrarRotasLeituraS2(app: FastifyInstance): Promise<void> {
+  app.get("/api/s2/vendas", limiteLeitura, async (request, reply) => {
+    const empresaId = await empresaDoS2(request, reply);
+    if (!empresaId) return reply;
+    const query = consultaS2Schema.parse(request.query);
+    const resultado = await listarVendasPaginadas(query, [empresaId]);
+    return paginadoDeResultado({ ...resultado, itens: resultado.itens.map(semDadosDeCliente) });
+  });
+
+  app.get("/api/s2/vendas/totais", limiteLeitura, async (request, reply) => {
+    const empresaId = await empresaDoS2(request, reply);
+    if (!empresaId) return reply;
+    const query = consultaS2Schema.parse(request.query);
+    return ok(await totaisVendas(query, [empresaId]));
+  });
+
+  // Listas para os filtros do S2 (PDV, forma de pagamento, turno). Ids do S1: o S2 filtra por id, nunca por nome.
+  app.get("/api/s2/vendas/opcoes", limiteLeitura, async (request, reply) => {
+    const empresaId = await empresaDoS2(request, reply);
+    if (!empresaId) return reply;
+    const [pdvs, formas, turnos] = await Promise.all([
+      listarPdvs([empresaId]),
+      listarFormasPagamento([empresaId], false),
+      listarTurnos([empresaId])
+    ]);
+    return ok({
+      pdvs: pdvs.map((pdv) => ({ id: pdv.id, nome: pdv.nome, codigo: pdv.codigo, ativo: pdv.ativo })),
+      formasPagamento: formas.map((forma) => ({
+        id: forma.id,
+        nome: forma.nome,
+        categoria: forma.categoriaFechamentoCaixa
+      })),
+      turnos: turnos.map((turno) => ({
+        id: turno.id,
+        nome: turno.nome,
+        horaInicio: turno.horaInicio,
+        horaFim: turno.horaFim,
+        ativo: turno.ativo
+      }))
+    });
+  });
+}
