@@ -120,9 +120,10 @@ const envSchema = z.object({
   // Download pelo robo da loja (Bearer). Menos de 32 caracteres = desligado, nunca enfraquecido.
   CREARE_EXPORT_TOKEN: z.string().default(""),
   // Leitura das vendas pelo S2 (sistema do Rodrigo), so GET, por Bearer. Menos de 32 caracteres = desligado.
-  // A loja (prefixo de matricula, ex.: TNP) fixa a UNICA empresa que o token enxerga.
+  // A empresa (id) e a UNICA que o token enxerga. Pelo id, nao pelo prefixo de matricula: "TNP" e o padrao de toda
+  // empresa e nao identifica uma so.
   S2_LEITURA_TOKEN: z.string().default(""),
-  S2_LEITURA_LOJA: z.string().trim().default(""),
+  S2_LEITURA_EMPRESA_ID: z.union([z.literal(""), z.string().uuid()]).default(""),
   // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde
   // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
   GEMINI_API_KEY: envOpcionalNaoVazio,

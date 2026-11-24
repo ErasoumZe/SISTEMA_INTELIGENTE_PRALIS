@@ -4,9 +4,9 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-// Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio, uma empresa so (a da loja configurada),
+// Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio, uma empresa so (a de S2_LEITURA_EMPRESA_ID),
 // os MESMOS numeros do Relatorio de Vendas e nenhum dado de cliente.
 const TOKEN = "s2-leitura-".padEnd(48, "x");
 const DIA = "2026-08-20"; // dia isolado (sem vendas do seed)
@@ -16,19 +16,11 @@ type Pagina = { data: Array<Record<string, unknown>>; meta: { pagination: { tota
 describe("vendas - leitura pelo S2", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
-  const prefixosOriginais = new Map<string, string>();
-  const original = { token: env.S2_LEITURA_TOKEN, loja: env.S2_LEITURA_LOJA };
+  const original = { token: env.S2_LEITURA_TOKEN, empresa: env.S2_LEITURA_EMPRESA_ID };
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
-    for (const empresa of await consultarTodos<{ id: string; p: string }>(
-      "select id, matricula_prefixo as p from empresas"
-    )) {
-      prefixosOriginais.set(empresa.id, empresa.p);
-    }
-    await executarSql("update empresas set matricula_prefixo = 'OUTRA' where id <> $1", [idsTeste.empresaA]);
-    await executarSql("update empresas set matricula_prefixo = 'TNP' where id = $1", [idsTeste.empresaA]);
 
     const inserir = (empresaId: string, descricao: string, quando: string, valor: string) =>
       consultarUm<{ id: string }>(
@@ -57,10 +49,7 @@ describe("vendas - leitura pelo S2", () => {
 
   afterAll(async () => {
     env.S2_LEITURA_TOKEN = original.token;
-    env.S2_LEITURA_LOJA = original.loja;
-    for (const [id, prefixo] of prefixosOriginais) {
-      await executarSql("update empresas set matricula_prefixo = $2 where id = $1", [id, prefixo]);
-    }
+    env.S2_LEITURA_EMPRESA_ID = original.empresa;
     await executarSql("delete from vendas where descricao like 'S2 %'");
     await contexto.fechar();
   });
@@ -74,13 +63,13 @@ describe("vendas - leitura pelo S2", () => {
 
   it("Deve_FicarDesligado_SemTokenConfigurado", async () => {
     env.S2_LEITURA_TOKEN = "";
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     assertProblem(await pedir(`/api/s2/vendas?dataInicio=${DIA}&dataFim=${DIA}`, TOKEN), 503, "S2_LEITURA_DESLIGADA");
   });
 
   it("Deve_RecusarTokenErrado_E_SessaoDeUsuario", async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     assertProblem(await pedir("/api/s2/vendas", "y".repeat(48)), 401, "S2_TOKEN_INVALIDO");
     assertProblem(await pedir("/api/s2/vendas/totais"), 401, "S2_TOKEN_INVALIDO");
     // A sessao do ERP nao abre esta porta: ela e so do S2.
@@ -94,7 +83,7 @@ describe("vendas - leitura pelo S2", () => {
 
   it("Deve_ListarSoAEmpresaDaLoja_SemDadosDeCliente", async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     // empresaId na URL e ignorado: o S2 nao escolhe empresa.
     const resposta = await pedir(
       `/api/s2/vendas?dataInicio=${DIA}&dataFim=${DIA}&empresaId=${idsTeste.empresaB}&ordem=asc`,
@@ -114,7 +103,7 @@ describe("vendas - leitura pelo S2", () => {
 
   it("Deve_DarOsMesmosTotaisDoRelatorioDeVendas", async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     const doS2 = await pedir(`/api/s2/vendas/totais?dataInicio=${DIA}&dataFim=${DIA}`, TOKEN);
     const doRelatorio = await contexto.app.inject({
       method: "GET",
@@ -131,7 +120,7 @@ describe("vendas - leitura pelo S2", () => {
 
   it("Deve_FiltrarPelaJanelaDiaria_NaHoraDeBrasilia", async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     const manha = json<Pagina>(
       await pedir(`/api/s2/vendas?dataInicio=${DIA}&dataFim=${DIA}&horaDoDiaInicio=06:00&horaDoDiaFim=12:00`, TOKEN)
     );
@@ -146,7 +135,7 @@ describe("vendas - leitura pelo S2", () => {
 
   it("Deve_EntregarAsOpcoesDosFiltros_DaEmpresaDaLoja", async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = idsTeste.empresaA;
     const resposta = await pedir("/api/s2/vendas/opcoes", TOKEN);
     expect(resposta.statusCode, resposta.body).toBe(200);
     const { data } = json<{
