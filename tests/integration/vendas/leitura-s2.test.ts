@@ -11,7 +11,7 @@ import { consultarTodos, consultarUm, executarSql, json } from "../../setup/inte
 const TOKEN = "s2-leitura-".padEnd(48, "x");
 const DIA = "2026-08-20"; // dia isolado (sem vendas do seed)
 
-type Pagina = { data: Array<Record<string, unknown>>; meta: { total: number } };
+type Pagina = { data: Array<Record<string, unknown>>; meta: { pagination: { total: number } } };
 
 describe("vendas - leitura pelo S2", () => {
   let contexto: ContextoApiTeste;

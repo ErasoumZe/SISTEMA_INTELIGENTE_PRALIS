@@ -22,7 +22,7 @@ import { listarVendasPaginadas, totaisVendas } from "./vendas.service.js";
 const consultaS2Schema = vendasQuerySchema.omit({ empresaId: true, clienteId: true, caixaId: true });
 
 const limiteLeitura = {
-  config: { rateLimit: { max: 120, timeWindow: "1 minute" } }
+  config: { rateLimit: { max: 300, timeWindow: "1 minute" } }
 };
 
 function mesmoToken(recebido: string, esperado: string): boolean {
@@ -54,8 +54,13 @@ async function empresaDoS2(request: FastifyRequest, reply: FastifyReply): Promis
 }
 
 function semDadosDeCliente(venda: VendaDto) {
-  const { clienteId: _clienteId, clienteNome: _clienteNome, empresaId: _empresaId, totalComprovantes: _c, ...resto } =
-    venda;
+  const {
+    clienteId: _clienteId,
+    clienteNome: _clienteNome,
+    empresaId: _empresaId,
+    totalComprovantes: _c,
+    ...resto
+  } = venda;
   return resto;
 }
 

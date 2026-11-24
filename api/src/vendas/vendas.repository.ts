@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sum } from "drizzle-orm";
+import { janelaDiariaBrasilia } from "@padaria/db/expressions";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
@@ -25,19 +26,6 @@ async function caixaIdsPorTurno(turnoId: string): Promise<string[]> {
   return caixas.map((caixa) => caixa.id);
 }
 
-// Janela diaria pela hora LOCAL da venda (dia de negocio em America/Sao_Paulo). Venda sem hora (manual)
-// nao entra quando ha janela. Inicio > fim cruza a meia-noite.
-function filtroJanelaDiaria(inicio: string | undefined, fim: string | undefined) {
-  if (!inicio && !fim) return null;
-  const horaLocal = sql`(${vendas.dataVenda} at time zone 'America/Sao_Paulo')::time`;
-  if (inicio && fim) {
-    return inicio <= fim
-      ? and(sql`${horaLocal} >= ${inicio}::time`, sql`${horaLocal} <= ${fim}::time`)
-      : or(sql`${horaLocal} >= ${inicio}::time`, sql`${horaLocal} <= ${fim}::time`);
-  }
-  return inicio ? sql`${horaLocal} >= ${inicio}::time` : sql`${horaLocal} <= ${fim}::time`;
-}
-
 // Ordem cronologica da listagem. Em "asc"/"desc" a chave e data_venda (hora real); data_referencia
 // entra como desempate para a venda manual, que nao tem hora.
 function ordenacaoVendas(ordem: "asc" | "desc" | undefined) {
@@ -56,7 +44,7 @@ async function filtrosDasVendas(query: VendasQuery, empresasPermitidasIds: strin
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
   if (query.dataHoraInicio) filtros.push(gte(vendas.dataVenda, new Date(query.dataHoraInicio)));
   if (query.dataHoraFim) filtros.push(lte(vendas.dataVenda, new Date(query.dataHoraFim)));
-  const janelaDiaria = filtroJanelaDiaria(query.horaDoDiaInicio, query.horaDoDiaFim);
+  const janelaDiaria = janelaDiariaBrasilia(vendas.dataVenda, query.horaDoDiaInicio, query.horaDoDiaFim);
   if (janelaDiaria) filtros.push(janelaDiaria);
   if (query.idVenda) filtros.push(ilike(vendas.identificadorExterno, `%${query.idVenda}%`));
   if (query.produto) {
