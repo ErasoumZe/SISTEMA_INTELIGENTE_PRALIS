@@ -107,6 +107,8 @@ describe("vendas - leitura pelo S2", () => {
       expect(venda).not.toHaveProperty("clienteId");
       expect(venda).not.toHaveProperty("clienteNome");
       expect(venda).not.toHaveProperty("empresaId");
+      expect(venda).not.toHaveProperty("colaboradorId");
+      expect(venda).not.toHaveProperty("cancelamentoAutorizadoPorAutomacao");
     }
   });
 
