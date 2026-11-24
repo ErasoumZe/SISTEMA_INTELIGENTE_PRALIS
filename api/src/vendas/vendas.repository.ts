@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sum } from "drizzle-orm";
+import { janelaDiariaBrasilia } from "@padaria/db/expressions";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
@@ -43,6 +44,8 @@ async function filtrosDasVendas(query: VendasQuery, empresasPermitidasIds: strin
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
   if (query.dataHoraInicio) filtros.push(gte(vendas.dataVenda, new Date(query.dataHoraInicio)));
   if (query.dataHoraFim) filtros.push(lte(vendas.dataVenda, new Date(query.dataHoraFim)));
+  const janelaDiaria = janelaDiariaBrasilia(vendas.dataVenda, query.horaDoDiaInicio, query.horaDoDiaFim);
+  if (janelaDiaria) filtros.push(janelaDiaria);
   if (query.idVenda) filtros.push(ilike(vendas.identificadorExterno, `%${query.idVenda}%`));
   if (query.produto) {
     const vendaIdsDoProduto = banco

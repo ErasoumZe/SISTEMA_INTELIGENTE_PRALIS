@@ -42,6 +42,7 @@ import { registrarRotasTema } from "./tema/tema.controller.js";
 import { registrarRotasMenuEmpresa } from "./menu-empresa/menu-empresa.controller.js";
 import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
+import { registrarRotasLeituraS2 } from "./vendas/vendas-s2.controller.js";
 import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
 import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
 import { registrarRotasPlanilhaTesouraria } from "./planilha-tesouraria/planilha-tesouraria.controller.js";
@@ -137,7 +138,11 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/creare/produtos.txt",
   "/api/creare/lotes/pendente",
   "/api/creare/lotes/:id/entrega",
-  "/api/creare/lotes/:id/confirmar"
+  "/api/creare/lotes/:id/confirmar",
+  // Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio, so GET. Ver vendas-s2.controller.ts.
+  "/api/s2/vendas",
+  "/api/s2/vendas/totais",
+  "/api/s2/vendas/opcoes"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -315,6 +320,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasTema(app);
   await registrarRotasMenuEmpresa(app);
   await registrarRotasVendas(app);
+  await registrarRotasLeituraS2(app);
   await registrarRotasVendasComprovantes(app);
   await registrarRotasDespesas(app);
   await registrarRotasDiscriminacaoIa(app);

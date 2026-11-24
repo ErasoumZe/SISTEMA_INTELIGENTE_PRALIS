@@ -88,6 +88,8 @@ services:
       CREARE_EXPORT_ENABLED: ${CREARE_EXPORT_ENABLED:-false}
       CREARE_STORE_CONFIG_JSON: ${CREARE_STORE_CONFIG_JSON:-}
       CREARE_EXPORT_TOKEN: ${CREARE_EXPORT_TOKEN:-}
+      S2_LEITURA_TOKEN: ${S2_LEITURA_TOKEN:-}
+      S2_LEITURA_LOJA: ${S2_LEITURA_LOJA:-}
       CREARE_DRIVE_ENABLED: ${CREARE_DRIVE_ENABLED:-false}
       CREARE_DRIVE_FOLDERS_JSON: ${CREARE_DRIVE_FOLDERS_JSON:-}
       # E-mail transacional (recuperacao de senha + verificacao), via Resend. Estavam declaradas no

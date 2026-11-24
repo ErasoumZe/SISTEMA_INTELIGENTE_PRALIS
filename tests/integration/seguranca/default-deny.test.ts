@@ -82,6 +82,11 @@ describe("seguranca default-deny integration", () => {
       "/api/rodada/rascunho",
       "/api/rodada/responder",
       "/api/rodada/separacao",
+      // Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio (S2_LEITURA_TOKEN), so GET.
+      // Testado em vendas/leitura-s2.test.ts.
+      "/api/s2/vendas",
+      "/api/s2/vendas/opcoes",
+      "/api/s2/vendas/totais",
       "/api/sessao",
       "/api/whatsapp/evolution/webhook",
       "/health"
