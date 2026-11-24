@@ -2,18 +2,13 @@ import { writeFileSync } from "node:fs";
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { env } from "../../api/src/env.js";
-import type * as CreareService from "../../api/src/produtos/produtos-creare.service.js";
 
 // Leitura das vendas pelo S2, SEM banco: as rotas reais do S1 com os servicos simulados. Trava o CONTRATO que o S2 le
 // (formato da resposta, lista branca, empresa da loja) e, com CONTRATO_SAIDA=<pasta>, grava as respostas para o S2
 // conferir o proprio cliente contra elas. O comportamento com banco esta em tests/integration/vendas/leitura-s2.test.ts.
-const EMPRESA = "11111111-1111-4111-8111-1111111111aa";
+const EMPRESA = "11111111-1111-4111-8111-1111111111aa" as const;
 const TOKEN = "s2-leitura-unidade-".padEnd(48, "u");
 
-vi.mock("../../api/src/produtos/produtos-creare.service.js", async (original) => ({
-  ...(await original<typeof CreareService>()),
-  empresaDaLojaCreare: vi.fn(async (loja: string) => (loja === "TNP" ? EMPRESA : "outra"))
-}));
 vi.mock("../../api/src/vendas/vendas.service.js", () => ({
   listarVendasPaginadas: vi.fn(async (_query: unknown, empresas: string[]) => ({
     itens: [
@@ -113,19 +108,19 @@ const { listarVendasPaginadas } = await import("../../api/src/vendas/vendas.serv
 
 describe("leitura do S2 - contrato das rotas (sem banco)", () => {
   const app = Fastify();
-  const anterior = { token: env.S2_LEITURA_TOKEN, loja: env.S2_LEITURA_LOJA };
+  const anterior = { token: env.S2_LEITURA_TOKEN, empresa: env.S2_LEITURA_EMPRESA_ID };
   const pedir = (url: string, token = TOKEN) =>
     app.inject({ method: "GET", url, headers: { authorization: `Bearer ${token}` } });
 
   beforeAll(async () => {
     env.S2_LEITURA_TOKEN = TOKEN;
-    env.S2_LEITURA_LOJA = "TNP";
+    env.S2_LEITURA_EMPRESA_ID = EMPRESA;
     await registrarRotasLeituraS2(app);
     await app.ready();
   });
   afterAll(async () => {
     env.S2_LEITURA_TOKEN = anterior.token;
-    env.S2_LEITURA_LOJA = anterior.loja;
+    env.S2_LEITURA_EMPRESA_ID = anterior.empresa;
     await app.close();
   });
 
@@ -169,7 +164,7 @@ describe("leitura do S2 - contrato das rotas (sem banco)", () => {
       formasPagamento: [{ id: "fp-1", nome: "Pix", categoria: "pix" }],
       turnos: [{ id: "t-1", nome: "Manha", horaInicio: "06:00:00", horaFim: "14:00:00", ativo: true }]
     });
-    // A empresa e sempre a da loja (o empresaId da URL nao chega ao servico) e a janela de hora chega.
+    // A empresa e sempre a configurada (o empresaId da URL nao chega ao servico) e a janela de hora chega.
     const [consulta, empresas] = vi.mocked(listarVendasPaginadas).mock.calls[0]!;
     expect(empresas).toEqual([EMPRESA]);
     expect(consulta).toMatchObject({ horaDoDiaInicio: "06:00", horaDoDiaFim: "14:00" });

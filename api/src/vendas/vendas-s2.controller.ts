@@ -3,7 +3,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { erro, ok, paginadoDeResultado } from "@padaria/shared/api";
 import { vendasQuerySchema, type VendaDto } from "@padaria/shared/vendas";
 import { env } from "../env.js";
-import { CreareIndisponivelError, empresaDaLojaCreare } from "../produtos/produtos-creare.service.js";
 import { listarPdvs } from "../pdvs/pdvs.service.js";
 import { listarFormasPagamento } from "../formas-pagamento/formas-pagamento.service.js";
 import { listarTurnos } from "../turnos/turnos.service.js";
@@ -13,7 +12,7 @@ import { listarVendasPaginadas, totaisVendas } from "./vendas.service.js";
  * Leitura das vendas pelo S2 (sistema do Rodrigo). O S2 nao copia vendas: consulta aqui, ao vivo, com os
  * MESMOS filtros e a MESMA conta do Relatorio de Vendas (listarVendasPaginadas/totaisVendas), para os numeros
  * dos dois sistemas nunca divergirem. So GET. Autentica por `Authorization: Bearer <S2_LEITURA_TOKEN>` e
- * enxerga uma unica empresa, a da loja `S2_LEITURA_LOJA`. Sem token configurado, tudo responde 503.
+ * enxerga uma unica empresa, a de id `S2_LEITURA_EMPRESA_ID`. Sem token ou empresa, tudo responde 503.
  * Dados de cliente (nome/id) e comprovantes nao saem daqui (lista branca em paraOS2).
  * O token deve ser aleatorio e longo: `openssl rand -hex 32` (64 caracteres).
  */
@@ -45,8 +44,8 @@ function mesmoToken(recebido: string, esperado: string): boolean {
 }
 
 /** Valida o Bearer do S2 e devolve a empresa configurada, ou responde o erro e devolve null. */
-async function empresaDoS2(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
-  if (env.S2_LEITURA_TOKEN.length < 32 || !env.S2_LEITURA_LOJA) {
+function empresaDoS2(request: FastifyRequest, reply: FastifyReply): string | null {
+  if (env.S2_LEITURA_TOKEN.length < 32 || !env.S2_LEITURA_EMPRESA_ID) {
     erro(reply, 503, "Leitura do S2 não configurada.", "S2_LEITURA_DESLIGADA");
     return null;
   }
@@ -55,15 +54,7 @@ async function empresaDoS2(request: FastifyRequest, reply: FastifyReply): Promis
     erro(reply, 401, "Token de leitura inválido.", "S2_TOKEN_INVALIDO");
     return null;
   }
-  try {
-    return await empresaDaLojaCreare(env.S2_LEITURA_LOJA);
-  } catch (error) {
-    if (error instanceof CreareIndisponivelError) {
-      erro(reply, 503, "Loja da leitura do S2 não encontrada.", "S2_LOJA_DESCONHECIDA");
-      return null;
-    }
-    throw error;
-  }
+  return env.S2_LEITURA_EMPRESA_ID;
 }
 
 // Lista BRANCA: so sai o que a tela do S2 usa. Campo novo no VendaDto nao vaza sozinho para o outro sistema.
@@ -102,7 +93,7 @@ function paraOS2(venda: VendaDto) {
 
 export async function registrarRotasLeituraS2(app: FastifyInstance): Promise<void> {
   app.get("/api/s2/vendas", limiteLeitura, async (request, reply) => {
-    const empresaId = await empresaDoS2(request, reply);
+    const empresaId = empresaDoS2(request, reply);
     if (!empresaId) return reply;
     const query = consultaS2Schema.parse(request.query);
     const resultado = await listarVendasPaginadas(query, [empresaId]);
@@ -110,7 +101,7 @@ export async function registrarRotasLeituraS2(app: FastifyInstance): Promise<voi
   });
 
   app.get("/api/s2/vendas/totais", limiteLeitura, async (request, reply) => {
-    const empresaId = await empresaDoS2(request, reply);
+    const empresaId = empresaDoS2(request, reply);
     if (!empresaId) return reply;
     const query = consultaS2Schema.parse(request.query);
     return ok(await totaisVendas(query, [empresaId]));
@@ -118,7 +109,7 @@ export async function registrarRotasLeituraS2(app: FastifyInstance): Promise<voi
 
   // Listas para os filtros do S2 (PDV, forma de pagamento, turno). Ids do S1: o S2 filtra por id, nunca por nome.
   app.get("/api/s2/vendas/opcoes", limiteLeitura, async (request, reply) => {
-    const empresaId = await empresaDoS2(request, reply);
+    const empresaId = empresaDoS2(request, reply);
     if (!empresaId) return reply;
     const [pdvs, formas, turnos] = await Promise.all([
       listarPdvs([empresaId]),
