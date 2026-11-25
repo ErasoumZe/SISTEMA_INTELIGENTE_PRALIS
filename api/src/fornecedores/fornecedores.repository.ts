@@ -65,15 +65,6 @@ export async function salvarFornecedorRepository(
   return criado;
 }
 
-/** Apaga o fornecedor da empresa. Devolve quantas linhas saíram (0 = não existe nesta empresa). */
-export async function excluirFornecedorRepository(id: string, empresaId: string, db: ExecutorBanco = banco) {
-  const apagados = await db
-    .delete(fornecedores)
-    .where(and(eq(fornecedores.id, id), eq(fornecedores.empresaId, empresaId)))
-    .returning({ id: fornecedores.id });
-  return apagados.length;
-}
-
 export async function copiarFornecedoresRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,

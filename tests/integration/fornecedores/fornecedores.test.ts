@@ -110,20 +110,51 @@ describe("fornecedores integration", () => {
     ).resolves.toBeNull();
   });
 
-  // Historico nunca e apagado: com pedido, a exclusao e recusada e orienta inativar.
-  it("Deve_RecusarExclusao_Quando_FornecedorTemHistorico", async () => {
-    const id = await criarFornecedor("Fornecedor com pedido");
+  async function criarPedido(fornecedorId: string): Promise<string> {
+    const pedido = await consultarUm<{ id: string }>(
+      "insert into pedidos (empresa_id, fornecedor_id, criado_por) values ($1, $2, (select usuario_id from perfis_usuarios limit 1)) returning id",
+      [idsTeste.empresaA, fornecedorId]
+    );
     await executarSql(
-      "insert into pedidos (empresa_id, fornecedor_id, criado_por) values ($1, $2, (select usuario_id from perfis_usuarios limit 1))",
-      [idsTeste.empresaA, id]
+      "insert into pedidos_eventos (empresa_id, pedido_id, status, criado_por) values ($1, $2, 'a_fazer', (select usuario_id from perfis_usuarios limit 1))",
+      [idsTeste.empresaA, pedido!.id]
+    );
+    return pedido!.id;
+  }
+
+  // Decisao do Jose (25/11/2026): pedido que nunca foi recebido e "compra sem efeito" e sai junto.
+  it("Deve_ExcluirJuntoPedidoNaoRecebido", async () => {
+    const id = await criarFornecedor("Fornecedor com pedido nao recebido");
+    const pedidoId = await criarPedido(id);
+
+    const resposta = await excluir(id, idsTeste.empresaA);
+    expect(resposta.statusCode, resposta.body).toBe(204);
+    await expect(consultarUm("select id from fornecedores where id = $1", [id])).resolves.toBeNull();
+    await expect(consultarUm("select id from pedidos where id = $1", [pedidoId])).resolves.toBeNull();
+    await expect(consultarUm("select id from pedidos_eventos where pedido_id = $1", [pedidoId])).resolves.toBeNull();
+  });
+
+  // Pedido recebido ja mexeu no estoque: bloqueia, nomeia o motivo e orienta inativar. Nada e apagado.
+  it("Deve_RecusarExclusao_Quando_TemPedidoRecebido", async () => {
+    const id = await criarFornecedor("Fornecedor com pedido recebido");
+    const pedidoId = await criarPedido(id);
+    await executarSql(
+      "insert into pedidos_recebimentos (empresa_id, pedido_id, idempotencia_chave, recebido_por) values ($1, $2, gen_random_uuid(), (select usuario_id from perfis_usuarios limit 1))",
+      [idsTeste.empresaA, pedidoId]
     );
 
     const resposta = await excluir(id, idsTeste.empresaA);
     expect(resposta.statusCode).toBe(409);
-    expect(json<{ code?: string }>(resposta).code).toBe("FORNECEDOR_EM_USO");
+    const corpo = json<{ code?: string; title?: string }>(resposta);
+    expect(corpo.code).toBe("FORNECEDOR_EM_USO");
+    expect(corpo.title).toContain("pedido recebido");
+    expect(corpo.title).toContain("inativo");
     await expect(consultarUm("select id from fornecedores where id = $1", [id])).resolves.toBeTruthy();
+    await expect(consultarUm("select id from pedidos where id = $1", [pedidoId])).resolves.toBeTruthy();
 
-    await executarSql("delete from pedidos where fornecedor_id = $1", [id]);
+    await executarSql("delete from pedidos_recebimentos where pedido_id = $1", [pedidoId]);
+    await executarSql("delete from pedidos_eventos where pedido_id = $1", [pedidoId]);
+    await executarSql("delete from pedidos where id = $1", [pedidoId]);
     await executarSql("delete from fornecedores where id = $1", [id]);
   });
 
