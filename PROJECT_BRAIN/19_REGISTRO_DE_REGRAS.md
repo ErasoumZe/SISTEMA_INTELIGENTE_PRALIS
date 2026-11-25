@@ -1872,8 +1872,10 @@ da folha do relatório do CREARE".
   3 cancelada; 4 desconhecido (antigas, nunca fechadas); 5 fechada (virou venda).
 - **Situação mostrada:** fechada (5); cancelada (3); **esquecida** = status 4, ou status 1/2 sem lançamento há
   mais de 24 h; **conta** = status 1/2 aberta há mais de 24 h mas ainda recebendo itens (regra genérica, sem número
-  fixo; ex.: comandas 1 e 430) — fica fora do alerta; **abandonada** = status 2 puxada há mais de 1 h (hora do log
-  "IMPORTOU A COMANDA" do CREARE; sem ela, o último lançamento, e a tela avisa que é aproximação); puxada; aberta.
+  fixo; ex.: comandas 1 e 430) — fica fora do alerta. Comanda **sem item válido** (só cancelados) aberta há
+  mais de 24 h é **esquecida**, nunca conta: o CREARE mexe na hora do item e do último lançamento quando cancela (25/11); **abandonada** = status 2 puxada há mais de 1 h (hora do log
+  "IMPORTOU A COMANDA" do log do CREARE, lido pela faixa da PK; na venda fechada, a importação; sem nenhuma das
+  duas, o último lançamento, e a tela avisa que é aproximação); puxada; aberta.
 - **Valor da comanda × valor da venda:** mostrar os dois e a diferença (em 145 de 393 comandas diferiram: item
   somado no caixa ou desconto).
 - **Nome do cliente:** aparece quando preenchido. **Backfill:** últimos 7 dias. **Retenção no S1:** fechadas e

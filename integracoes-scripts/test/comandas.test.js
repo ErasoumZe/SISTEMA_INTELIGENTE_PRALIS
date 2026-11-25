@@ -121,6 +121,18 @@ test("montarComandas: hora de puxar e venda da importacao; valor da venda so na 
   assert.equal(puxada.vendaValorTotal, null);
 });
 
+test("montarComandas: comanda no caixa pega a hora de puxar do log quando a importacao nao tem", () => {
+  const [noCaixa, fechada] = montarComandas([comanda(30, 2), comanda(31, 5)], [], {
+    importacoes: [{ idComanda: 31, puxadaEm: "2026-11-25 08:00:00", vendaCreareId: 9 }],
+    puxadasDoLog: [
+      { idComanda: 30, puxadaEm: "2026-11-25 07:10:00" },
+      { idComanda: 31, puxadaEm: "2026-11-25 07:59:00" }
+    ]
+  });
+  assert.equal(noCaixa.puxadaEm, "2026-11-25T10:10:00.000Z");
+  assert.equal(fechada.puxadaEm, "2026-11-25T11:00:00.000Z");
+});
+
 test("dividirEmLotes: no maximo 100 comandas por lote", () => {
   const muitas = Array.from({ length: 250 }, (_, i) => ({ idComanda: i + 1, itens: [] }));
   assert.deepEqual(
@@ -134,7 +146,10 @@ test("sincronizarComandas: retrato, novas pela PK, conferir e lotes — tudo em 
   const { pool, executados } = poolFalso([
     ["STATUS_COMANDA IN (1, 2, 4)", () => [{ idComanda: 10 }, { idComanda: 30 }]],
     ["WHERE c.ID_COMANDA > ?", ([desde]) => (desde === 30 ? [{ idComanda: 31 }, { idComanda: 32 }] : [])],
-    ["FROM comanda c\nWHERE c.ID_COMANDA IN", (ids) => ids.map((id) => comanda(id, id === 20 || id === 31 ? 5 : 1))],
+    [
+      "FROM comanda c\nWHERE c.ID_COMANDA IN",
+      (ids) => ids.map((id) => comanda(id, id === 20 || id === 31 ? 5 : id === 30 ? 2 : 1))
+    ],
     ["FROM item_comanda", () => []],
     [
       "FROM importacao_comanda_venda_balcao",
@@ -143,7 +158,15 @@ test("sincronizarComandas: retrato, novas pela PK, conferir e lotes — tudo em 
           .filter((id) => id === 20)
           .map((id) => ({ idComanda: id, puxadaEm: "2026-11-25 08:09:00", vendaCreareId: 555 }))
     ],
-    ["FROM venda_balcao", (ids) => ids.map((id) => ({ idVendaBalcao: id, valorTotal: 12.5 }))]
+    ["FROM venda_balcao", (ids) => ids.map((id) => ({ idVendaBalcao: id, valorTotal: 12.5 }))],
+    ["MAX(l.ID_LOG)", () => [{ maior: 50_000 }]],
+    [
+      "FROM log_comanda_venda_balcao l\nWHERE l.ID_LOG > ?",
+      ([desde, ...ids]) => {
+        assert.equal(desde, 30_000);
+        return ids.map((id) => ({ idComanda: id, puxadaEm: "2026-11-25 07:00:00" }));
+      }
+    ]
   ]);
   const lotes = [];
   const resultado = await sincronizarComandas({
@@ -156,6 +179,8 @@ test("sincronizarComandas: retrato, novas pela PK, conferir e lotes — tudo em 
       },
       lote: async (comandas) => {
         lotes.push(comandas.map((c) => c.idComanda));
+        const trinta = comandas.find((c) => c.idComanda === 30);
+        if (trinta) assert.equal(trinta.puxadaEm, "2026-11-25T10:00:00.000Z");
         const vinte = comandas.find((c) => c.idComanda === 20);
         if (vinte) assert.equal(vinte.vendaValorTotal, 12.5);
         return { gravadas: comandas.length, semMudanca: 0 };

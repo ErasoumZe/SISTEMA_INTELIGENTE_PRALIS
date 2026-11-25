@@ -151,7 +151,8 @@ function resumir(comanda: ComandaLinha, itens: ItemLinha[], agora: Date): Comand
     status: comanda.status,
     abertaEm: iso(comanda.abertaEm),
     ultimoLancamentoEm: iso(comanda.ultimoLancamentoEm),
-    puxadaEm: iso(comanda.puxadaEm)
+    puxadaEm: iso(comanda.puxadaEm),
+    itensValidos: validos.length
   };
   const valorTotalCentavos = paraCentavos(comanda.valorTotal);
   const valorVendaCentavos = comanda.vendaValorTotal === null ? null : paraCentavos(comanda.vendaValorTotal);
@@ -261,13 +262,21 @@ export async function indicadoresComandasS2(
     listarPorStatusRepository(empresaId, [STATUS_COMANDA.desconhecido]),
     fechadasDaJanelaRepository(empresaId, inicio, fim)
   ]);
+  // Itens das abertas (poucas): a situacao depende de ter item valido (comanda vazia nunca e "conta").
+  const itensPorComanda = agruparItens(
+    await itensDasComandasRepository(
+      empresaId,
+      abertas.map((linha) => linha.idComanda)
+    )
+  );
   const situacoes = abertas.map((linha) =>
     situacaoComanda(
       {
         status: linha.status,
         abertaEm: iso(linha.abertaEm),
         ultimoLancamentoEm: iso(linha.ultimoLancamentoEm),
-        puxadaEm: iso(linha.puxadaEm)
+        puxadaEm: iso(linha.puxadaEm),
+        itensValidos: (itensPorComanda.get(linha.idComanda) ?? []).filter((item) => !item.cancelado).length
       },
       agora
     )
