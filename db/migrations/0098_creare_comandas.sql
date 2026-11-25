@@ -11,7 +11,7 @@ CREATE TABLE "creare_comanda_itens" (
 	"cancelado" boolean DEFAULT false NOT NULL,
 	"motivo_cancelamento" text,
 	"lancado_em" timestamp with time zone,
-	CONSTRAINT "creare_comanda_itens_empresa_id_id_item_pk" PRIMARY KEY("empresa_id","id_item")
+	CONSTRAINT "creare_comanda_itens_empresa_id_id_comanda_id_item_pk" PRIMARY KEY("empresa_id","id_comanda","id_item")
 );
 --> statement-breakpoint
 CREATE TABLE "creare_comandas" (
@@ -45,7 +45,6 @@ CREATE TABLE "creare_comandas_retrato" (
 ALTER TABLE "creare_comanda_itens" ADD CONSTRAINT "creare_comanda_itens_comanda_fk" FOREIGN KEY ("empresa_id","id_comanda") REFERENCES "public"."creare_comandas"("empresa_id","id_comanda") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "creare_comandas" ADD CONSTRAINT "creare_comandas_empresa_id_empresas_id_fk" FOREIGN KEY ("empresa_id") REFERENCES "public"."empresas"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "creare_comandas_retrato" ADD CONSTRAINT "creare_comandas_retrato_empresa_id_empresas_id_fk" FOREIGN KEY ("empresa_id") REFERENCES "public"."empresas"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "creare_comanda_itens_comanda_idx" ON "creare_comanda_itens" USING btree ("empresa_id","id_comanda");--> statement-breakpoint
 CREATE INDEX "creare_comanda_itens_funcionario_idx" ON "creare_comanda_itens" USING btree ("empresa_id","funcionario_codigo");--> statement-breakpoint
 CREATE INDEX "creare_comandas_status_idx" ON "creare_comandas" USING btree ("empresa_id","status");--> statement-breakpoint
 CREATE INDEX "creare_comandas_fechada_idx" ON "creare_comandas" USING btree ("empresa_id","fechada_em");--> statement-breakpoint

@@ -116,7 +116,7 @@ describe("comandas do CREARE - contratos", () => {
   it("Deve_RecusarLoteForaDosLimites", () => {
     expect(() => retratoComandasCreareSchema.parse({ abertasIds: [0] })).toThrow();
     expect(() =>
-      retratoComandasCreareSchema.parse({ abertasIds: Array.from({ length: 3001 }, (_, i) => i + 1) })
+      retratoComandasCreareSchema.parse({ abertasIds: Array.from({ length: 20_001 }, (_, i) => i + 1) })
     ).toThrow();
     expect(() =>
       comandaCreareSchema.parse({

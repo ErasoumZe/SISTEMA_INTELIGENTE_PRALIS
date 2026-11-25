@@ -37,6 +37,7 @@ import {
   listarFechadasRepository,
   listarPorStatusRepository,
   maiorIdComandaRepository,
+  marcarConferidasRepository,
   retratoRepository,
   type ComandaLinha,
   type ItemLinha
@@ -67,6 +68,7 @@ export async function receberRetratoComandas(chaveApi: string, corpo: DadosExter
   ]);
   // Em aberto aqui e nao mais no CREARE: fechou ou foi cancelada. O robo rele pela PK e manda no lote.
   const conferirIds = noSistema.filter((id) => !noCreare.has(id)).slice(0, LIMITE_CONFERIR);
+  await marcarConferidasRepository(chave.empresaId, conferirIds);
   await gravarRetratoRepository(chave.empresaId, abertasIds.length);
   await apagarFechadasAntesDeRepository(chave.empresaId, new Date(Date.now() - RETENCAO_COMANDAS_DIAS * DIA_MS));
   return { maiorIdComanda, conferirIds };

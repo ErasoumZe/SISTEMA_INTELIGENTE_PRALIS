@@ -1,5 +1,5 @@
 {
-  "id": "ae0efc21-7b68-490e-a8a9-4a427d9a5e9b",
+  "id": "26a98061-2907-4193-88f2-3d4a62301ab8",
   "prevId": "b8935147-c3ef-4e60-ad4c-7bdbff7bd927",
   "version": "7",
   "dialect": "postgresql",
@@ -9526,27 +9526,6 @@
         }
       },
       "indexes": {
-        "creare_comanda_itens_comanda_idx": {
-          "name": "creare_comanda_itens_comanda_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id_comanda",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "creare_comanda_itens_funcionario_idx": {
           "name": "creare_comanda_itens_funcionario_idx",
           "columns": [
@@ -9581,9 +9560,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "creare_comanda_itens_empresa_id_id_item_pk": {
-          "name": "creare_comanda_itens_empresa_id_id_item_pk",
-          "columns": ["empresa_id", "id_item"]
+        "creare_comanda_itens_empresa_id_id_comanda_id_item_pk": {
+          "name": "creare_comanda_itens_empresa_id_id_comanda_id_item_pk",
+          "columns": ["empresa_id", "id_comanda", "id_item"]
         }
       },
       "uniqueConstraints": {},

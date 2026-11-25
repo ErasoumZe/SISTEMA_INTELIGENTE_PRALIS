@@ -6137,13 +6137,13 @@ export const creareComandaItens = pgTable(
     lancadoEm: timestamp("lancado_em", { withTimezone: true })
   },
   (table) => [
-    primaryKey({ columns: [table.empresaId, table.idItem] }),
+    // A comanda entra na chave: nada garante que o ID_ITEM_COMANDA do CREARE seja unico fora da comanda.
+    primaryKey({ columns: [table.empresaId, table.idComanda, table.idItem] }),
     foreignKey({
       name: "creare_comanda_itens_comanda_fk",
       columns: [table.empresaId, table.idComanda],
       foreignColumns: [creareComandas.empresaId, creareComandas.idComanda]
     }).onDelete("cascade"),
-    index("creare_comanda_itens_comanda_idx").on(table.empresaId, table.idComanda),
     index("creare_comanda_itens_funcionario_idx").on(table.empresaId, table.funcionarioCodigo)
   ]
 );

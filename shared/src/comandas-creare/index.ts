@@ -10,7 +10,8 @@ export const STATUS_COMANDA_EM_ABERTO = [1, 2, 4] as const;
 
 export const LIMITE_COMANDAS_POR_LOTE = 100;
 export const LIMITE_ITENS_POR_COMANDA = 300;
-export const LIMITE_IDS_ABERTOS = 3000;
+// As status 4 so acumulam (117 em 25/11/2026): folga larga para o retrato nunca ser recusado.
+export const LIMITE_IDS_ABERTOS = 20_000;
 // Retencao no S1 (Marco, 25/11/2026): fechadas e canceladas ficam 1 ano.
 export const RETENCAO_COMANDAS_DIAS = 365;
 

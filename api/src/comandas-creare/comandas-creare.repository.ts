@@ -12,12 +12,23 @@ export type ItemLinha = typeof creareComandaItens.$inferSelect;
 
 const EM_ABERTO = [1, 2, 4];
 
+// Ordem pela ultima atualizacao (as mais antigas primeiro): quem fica preso no corte de conferencia vai para o fim
+// da fila quando e pedido (marcarConferidasRepository), e a fila anda.
 export async function idsEmAbertoNoSistemaRepository(empresaId: string, db: ExecutorBanco = banco) {
   const linhas = await db
     .select({ idComanda: creareComandas.idComanda })
     .from(creareComandas)
-    .where(and(eq(creareComandas.empresaId, empresaId), inArray(creareComandas.status, EM_ABERTO)));
+    .where(and(eq(creareComandas.empresaId, empresaId), inArray(creareComandas.status, EM_ABERTO)))
+    .orderBy(asc(creareComandas.atualizadaEm), asc(creareComandas.idComanda));
   return linhas.map((linha) => linha.idComanda);
+}
+
+export async function marcarConferidasRepository(empresaId: string, ids: number[], db: ExecutorBanco = banco) {
+  if (!ids.length) return;
+  await db
+    .update(creareComandas)
+    .set({ atualizadaEm: new Date() })
+    .where(and(eq(creareComandas.empresaId, empresaId), inArray(creareComandas.idComanda, ids)));
 }
 
 export async function maiorIdComandaRepository(empresaId: string, db: ExecutorBanco = banco) {
