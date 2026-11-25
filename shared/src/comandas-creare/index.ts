@@ -233,6 +233,8 @@ export type ComandasIndicadores = {
   abandonadas: number;
   contas: number;
   esquecidas: number;
+  // Comandas em status 4 (antigas, nunca fechadas): o contador da aba.
+  status4: number;
   valorEmAbertoCentavos: number;
   dia: string;
   fechadasNoDia: number;

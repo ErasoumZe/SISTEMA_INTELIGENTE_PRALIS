@@ -284,6 +284,7 @@ export async function indicadoresComandasS2(
     abandonadas: conta("abandonada"),
     contas: conta("conta"),
     esquecidas: conta("esquecida") + status4.length,
+    status4: status4.length,
     valorEmAbertoCentavos: abertas.reduce((soma, linha) => soma + paraCentavos(linha.valorTotal), 0),
     dia,
     fechadasNoDia: fechadas.length,
