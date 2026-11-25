@@ -18,6 +18,8 @@ const MAX_BYTES_POR_LOTE = 600_000;
 const MAX_ITENS_POR_COMANDA = 300;
 const MAX_NOVAS_POR_CICLO = 20_000;
 const PAGINA_IDS = 500;
+// Janela do log lida a cada ciclo (pela PK): ~20 mil linhas, perto de 10 dias de comandas.
+export const JANELA_LOG = 20_000;
 
 /* ---------- Leitura (so leitura) ---------- */
 
@@ -30,7 +32,7 @@ export async function lerSomenteLeitura(pool, trabalho) {
       const executar = async (arquivo, parametros = [], ids = null) => {
         let sql = await carregarQuery(arquivo);
         if (ids) sql = sql.replace("/*IDS*/", ids.map(() => "?").join(", "));
-        const [linhas] = await conexao.execute(sql, ids ?? parametros);
+        const [linhas] = await conexao.execute(sql, ids ? [...parametros, ...ids] : parametros);
         return linhas;
       };
       return await trabalho(executar);
@@ -48,9 +50,9 @@ function emPaginas(lista, tamanho) {
   return paginas;
 }
 
-async function porIds(executar, arquivo, ids) {
+async function porIds(executar, arquivo, ids, parametros = []) {
   const linhas = [];
-  for (const pagina of emPaginas(ids, PAGINA_IDS)) linhas.push(...(await executar(arquivo, [], pagina)));
+  for (const pagina of emPaginas(ids, PAGINA_IDS)) linhas.push(...(await executar(arquivo, parametros, pagina)));
   return linhas;
 }
 
@@ -98,8 +100,13 @@ const instante = (valor, offset) => {
  * `vendas`: linhas de comandas-vendas-ids.sql (valor final da venda). O valor da venda so vai para comanda fechada
  * (status 5): enquanto esta no caixa a venda ainda esta sendo montada.
  */
-export function montarComandas(comandas, itens, { offsetFuso = "-03:00", importacoes = [], vendas = [] } = {}) {
+export function montarComandas(
+  comandas,
+  itens,
+  { offsetFuso = "-03:00", importacoes = [], vendas = [], puxadasDoLog = [] } = {}
+) {
   const importacaoPorComanda = new Map(importacoes.map((linha) => [Number(linha.idComanda), linha]));
+  const logPorComanda = new Map(puxadasDoLog.map((linha) => [Number(linha.idComanda), linha.puxadaEm]));
   const valorPorVenda = new Map(vendas.map((linha) => [Number(linha.idVendaBalcao), dinheiro(linha.valorTotal)]));
   const itensPorComanda = new Map();
   for (const item of itens) {
@@ -125,7 +132,8 @@ export function montarComandas(comandas, itens, { offsetFuso = "-03:00", importa
       status,
       abertaEm: instante(comanda.abertaEm, offsetFuso),
       ultimoLancamentoEm: instante(comanda.ultimoLancamentoEm, offsetFuso),
-      puxadaEm: importacao ? instante(importacao.puxadaEm, offsetFuso) : null,
+      // A mais recente entre a importacao (venda fechada) e o "IMPORTOU A COMANDA" do log (comanda no caixa).
+      puxadaEm: maisRecente(instante(importacao?.puxadaEm, offsetFuso), instante(logPorComanda.get(id), offsetFuso)),
       fechadaEm: instante(comanda.fechadaEm, offsetFuso),
       valorSubtotal: dinheiro(comanda.valorSubtotal),
       valorDesconto: dinheiro(comanda.valorDesconto),
@@ -152,6 +160,12 @@ export function montarComandas(comandas, itens, { offsetFuso = "-03:00", importa
       }))
     };
   });
+}
+
+function maisRecente(a, b) {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return Date.parse(a) >= Date.parse(b) ? a : b;
 }
 
 /** Lotes de ate 100 comandas e ~600 KB (o limite do corpo na API e 1 MB). */
@@ -221,7 +235,19 @@ export async function sincronizarComandas({ pool, api, hoje, offsetFuso }) {
     const importacoes = await porIds(executar, "comandas-importacao-ids.sql", ids);
     const idsVendas = [...new Set(importacoes.map((linha) => Number(linha.vendaCreareId)).filter((id) => id > 0))];
     const vendas = idsVendas.length ? await porIds(executar, "comandas-vendas-ids.sql", idsVendas) : [];
-    return montarComandas(linhas, itens, { offsetFuso, importacoes, vendas });
+    // Comandas no caixa (status 2): a hora de puxar vem do log, pela faixa da PK.
+    const noCaixa = linhas.filter((linha) => Number(linha.status) === 2).map((linha) => Number(linha.idComanda));
+    let puxadasDoLog = [];
+    if (noCaixa.length) {
+      const [faixa] = await executar("comandas-log-maior-id.sql");
+      const maior = Number(faixa?.maior ?? 0);
+      if (maior > 0) {
+        puxadasDoLog = await porIds(executar, "comandas-log-puxada-ids.sql", noCaixa, [
+          Math.max(0, maior - JANELA_LOG)
+        ]);
+      }
+    }
+    return montarComandas(linhas, itens, { offsetFuso, importacoes, vendas, puxadasDoLog });
   });
 
   const contagem = {

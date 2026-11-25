@@ -106,6 +106,8 @@ export type TemposComanda = {
   abertaEm: string | null;
   ultimoLancamentoEm: string | null;
   puxadaEm: string | null;
+  // Itens validos (nao cancelados). Comanda sem item valido nunca e "conta" (25/11/2026).
+  itensValidos?: number;
 };
 
 const ms = (valor: string | null): number | null => {
@@ -120,6 +122,8 @@ const ms = (valor: string | null): number | null => {
  * - 1/2 sem lancamento ha mais de 24 h: esquecida.
  * - 1/2 aberta ha mais de 24 h mas ainda recebendo itens: "conta" (acumula itens por dias, como as comandas 1 e
  *   430). Fica fora do alerta de abandonada. Regra generica, sem numero fixo.
+ * - 1/2 aberta ha mais de 24 h SEM item valido (so cancelados ou nenhum): esquecida, nunca "conta". O CREARE mexe na
+ *   hora do item e no ultimo lancamento quando a linha muda (cancelar), entao essas horas nao provam uso (25/11/2026).
  * - 2 puxada ha mais de 1 h: abandonada. A hora de puxar vem do log do CREARE; sem ela, o ultimo lancamento.
  * - 2 puxada; 1 aberta.
  */
@@ -131,7 +135,9 @@ export function situacaoComanda(comanda: TemposComanda, agora: Date = new Date()
   const abertaMs = ms(comanda.abertaEm);
   const ultimoMs = ms(comanda.ultimoLancamentoEm) ?? abertaMs;
   if (ultimoMs !== null && agoraMs - ultimoMs > LIMITE_ESQUECIDA_MS) return "esquecida";
-  if (abertaMs !== null && agoraMs - abertaMs > LIMITE_ESQUECIDA_MS) return "conta";
+  if (abertaMs !== null && agoraMs - abertaMs > LIMITE_ESQUECIDA_MS) {
+    return comanda.itensValidos === 0 ? "esquecida" : "conta";
+  }
   if (comanda.status === STATUS_COMANDA.puxada) {
     const puxadaMs = ms(comanda.puxadaEm) ?? ultimoMs;
     return puxadaMs !== null && agoraMs - puxadaMs > LIMITE_ABANDONADA_MS ? "abandonada" : "puxada";

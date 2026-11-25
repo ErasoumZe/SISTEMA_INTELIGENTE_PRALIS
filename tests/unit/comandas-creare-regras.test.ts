@@ -50,6 +50,15 @@ describe("comandas do CREARE - situacao", () => {
     expect(situacaoComanda(tempos(1, 4320, 10), AGORA)).toBe("conta");
   });
 
+  it("Deve_MarcarEsquecida_ComandaVaziaAbertaHaMaisDe24h_MesmoComLancamentoRecente", () => {
+    // Como as 448, 399 e 394: so itens cancelados, e o CREARE mexeu na hora do ultimo lancamento hoje.
+    expect(situacaoComanda({ ...tempos(2, 4320, 120), itensValidos: 0 }, AGORA)).toBe("esquecida");
+    expect(situacaoComanda({ ...tempos(1, 4320, 10), itensValidos: 0 }, AGORA)).toBe("esquecida");
+    expect(situacaoComanda({ ...tempos(2, 4320, 120), itensValidos: 3 }, AGORA)).toBe("conta");
+    // Vazia, mas aberta ha pouco: segue a regra de sempre.
+    expect(situacaoComanda({ ...tempos(1, 30, 5), itensValidos: 0 }, AGORA)).toBe("aberta");
+  });
+
   it("Deve_CalcularSegundos_SoComOsDoisInstantesEmOrdem", () => {
     expect(segundosEntre(antes(10), antes(5))).toBe(300);
     expect(segundosEntre(null, antes(5))).toBeNull();
