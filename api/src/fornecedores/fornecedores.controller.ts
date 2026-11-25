@@ -11,6 +11,7 @@ import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import {
+  excluirFornecedor,
   exportarFornecedor,
   importarFornecedores,
   listarFornecedores,
@@ -83,6 +84,22 @@ export async function registrarRotasFornecedores(app: FastifyInstance): Promise<
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);
       }
+    }
+  );
+
+  // So fornecedor sem historico sai; com historico o service responde 409 FORNECEDOR_EM_USO (inativar).
+  app.delete(
+    "/api/fornecedores/:id",
+    { preHandler: exigirPermissao("cadastro_fornecedores_excluir") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      const { empresaId } = empresaQuerySchema.parse(request.query);
+      if (!empresaId) return erro(reply, 400, "empresaId obrigatorio");
+      if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      await excluirFornecedor(id, empresaId);
+      return semConteudo(reply);
     }
   );
 

@@ -7,8 +7,10 @@ import {
 import { temAlgumaPermissao, type PerfilUsuario } from "@padaria/shared";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
+import { conflito, naoEncontrado } from "../erros.js";
 import {
   copiarFornecedoresRepository,
+  excluirFornecedorRepository,
   listarFornecedoresRepository,
   salvarFornecedorRepository
 } from "./fornecedores.repository.js";
@@ -42,6 +44,38 @@ export async function salvarFornecedor(id: string | null, body: DadosExternos) {
     situacao: dados.situacao,
     categoria: dados.categoria === undefined ? undefined : dados.categoria?.trim() || null
   });
+}
+
+/**
+ * Excluir fornecedor so vale para quem NUNCA foi usado. Pedido, despesa, mercadoria, retirada, nota,
+ * cotacao e historico de preco apontam para ele com FK restrict/no action: o banco recusa com 23503 e
+ * aqui a recusa vira mensagem que diz o que fazer (inativar). Historico financeiro nunca e apagado.
+ * O que e so configuracao do fornecedor (catalogo fornecedor-produto e apelidos) sai junto por cascade.
+ */
+function ehFornecedorEmUso(erro: Error): boolean {
+  // O driver embrulha o erro em `cause` quando passa pelo Drizzle (mesma forma de turnos.service).
+  const candidatos = [erro, erro.cause instanceof Error ? erro.cause : null];
+  return candidatos.some((atual) => {
+    if (!atual) return false;
+    const detalhes = atual as Error & { code?: string };
+    return detalhes.code === "23503";
+  });
+}
+
+export async function excluirFornecedor(id: string, empresaId: string) {
+  let apagados: number;
+  try {
+    apagados = await excluirFornecedorRepository(id, empresaId);
+  } catch (erro) {
+    if (erro instanceof Error && ehFornecedorEmUso(erro)) {
+      throw conflito(
+        "Este fornecedor ja tem historico (pedidos, lancamentos ou cotacoes) e nao pode ser excluido. Para tira-lo de uso, edite e marque como inativo.",
+        "FORNECEDOR_EM_USO"
+      );
+    }
+    throw erro;
+  }
+  if (!apagados) throw naoEncontrado("Fornecedor nao encontrado");
 }
 
 export async function importarFornecedores(body: ImportarPayload, perfil?: PerfilComEmpresa) {

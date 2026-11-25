@@ -75,6 +75,66 @@ describe("fornecedores integration", () => {
 
     await executarSql("delete from fornecedores where id = $1", [id]);
   });
+
+  async function criarFornecedor(nome: string): Promise<string> {
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/fornecedores",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome }
+    });
+    expect(criado.statusCode, criado.body).toBe(201);
+    return json<{ data: { id: string } }>(criado).data.id;
+  }
+  function excluir(id: string, empresaId: string) {
+    return contexto.app.inject({
+      method: "DELETE",
+      url: `/api/fornecedores/${id}?empresaId=${empresaId}`,
+      headers: { cookie: cookieAdmin }
+    });
+  }
+
+  // 25/11/2026: fornecedor sem historico sai do cadastro, com o catalogo dele junto.
+  it("Deve_ExcluirFornecedor_Quando_NaoTemHistorico", async () => {
+    const id = await criarFornecedor("Fornecedor sem historico");
+    await executarSql(
+      "insert into fornecedores_produtos (empresa_id, fornecedor_id, produto_id, origem) values ($1, $2, $3, 'compras')",
+      [idsTeste.empresaA, id, idsTeste.produto]
+    );
+
+    const resposta = await excluir(id, idsTeste.empresaA);
+    expect(resposta.statusCode, resposta.body).toBe(204);
+    await expect(consultarUm("select id from fornecedores where id = $1", [id])).resolves.toBeNull();
+    await expect(
+      consultarUm("select id from fornecedores_produtos where fornecedor_id = $1", [id])
+    ).resolves.toBeNull();
+  });
+
+  // Historico nunca e apagado: com pedido, a exclusao e recusada e orienta inativar.
+  it("Deve_RecusarExclusao_Quando_FornecedorTemHistorico", async () => {
+    const id = await criarFornecedor("Fornecedor com pedido");
+    await executarSql(
+      "insert into pedidos (empresa_id, fornecedor_id, criado_por) values ($1, $2, (select usuario_id from perfis_usuarios limit 1))",
+      [idsTeste.empresaA, id]
+    );
+
+    const resposta = await excluir(id, idsTeste.empresaA);
+    expect(resposta.statusCode).toBe(409);
+    expect(json<{ code?: string }>(resposta).code).toBe("FORNECEDOR_EM_USO");
+    await expect(consultarUm("select id from fornecedores where id = $1", [id])).resolves.toBeTruthy();
+
+    await executarSql("delete from pedidos where fornecedor_id = $1", [id]);
+    await executarSql("delete from fornecedores where id = $1", [id]);
+  });
+
+  // O id de um fornecedor de outra empresa nao apaga nada: a exclusao e sempre por (id, empresa).
+  it("Deve_NaoExcluir_Quando_FornecedorEDeOutraEmpresa", async () => {
+    const id = await criarFornecedor("Fornecedor da empresa A");
+    const resposta = await excluir(id, idsTeste.empresaB);
+    expect([403, 404]).toContain(resposta.statusCode);
+    await expect(consultarUm("select id from fornecedores where id = $1", [id])).resolves.toBeTruthy();
+    await executarSql("delete from fornecedores where id = $1", [id]);
+  });
 });
 
 describe("fornecedores importacao/exportacao integration", () => {

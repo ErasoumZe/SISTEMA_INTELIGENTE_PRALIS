@@ -15,6 +15,8 @@ const props = withDefaults(
     podeEditar?: boolean;
     podeExportar?: boolean;
     podeExcluir?: boolean;
+    // Lixeira em vez do texto "Excluir" (fornecedores). Padrao desligado: as demais telas nao mudam.
+    excluirComoIcone?: boolean;
     excluindoId?: string;
     modoServidor?: boolean;
     busca?: string;
@@ -42,6 +44,7 @@ const props = withDefaults(
     podeEditar: false,
     podeExportar: false,
     podeExcluir: false,
+    excluirComoIcone: false,
     excluindoId: "",
     modoServidor: false,
     busca: "",
@@ -208,7 +211,18 @@ function proximaPagina() {
                     >Editar</v-btn
                   >
                   <v-btn
-                    v-if="podeExcluir"
+                    v-if="podeExcluir && excluirComoIcone"
+                    size="small"
+                    variant="text"
+                    color="error"
+                    icon="mdi-trash-can-outline"
+                    aria-label="Excluir"
+                    title="Excluir"
+                    :loading="excluindoId === linha.id"
+                    @click="emit('excluir', linha)"
+                  />
+                  <v-btn
+                    v-else-if="podeExcluir"
                     size="small"
                     variant="text"
                     color="error"

@@ -25,6 +25,7 @@ const props = withDefaults(
     paginaServidor?: number;
     itensPorPaginaServidor?: number;
     podeExcluir?: boolean;
+    excluirComoIcone?: boolean;
     // Editar era `true` fixo para toda tela de cadastro. Vira prop porque a partir da ADM-003 V1B
     // existe cargo que CRIA turno e nao edita: sem isto o DP veria o botao, preencheria o formulario
     // e levaria 403 no salvar — a tela oferecendo o que a rota recusa. Default `true` para as demais
@@ -118,6 +119,7 @@ const acoesExtras = computed(() => {
     :pagina-servidor="paginaServidor"
     :itens-por-pagina-servidor="itensPorPaginaServidor"
     :pode-excluir="podeExcluir"
+    :excluir-como-icone="excluirComoIcone"
     :excluindo-id="excluindoId"
     :acoes-extras="acoesExtras"
     @acionar="emit('acionar')"
