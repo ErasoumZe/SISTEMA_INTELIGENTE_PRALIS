@@ -1,8 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { erro, ok, paginadoDeResultado } from "@padaria/shared/api";
+import type { FastifyInstance } from "fastify";
+import { ok, paginadoDeResultado } from "@padaria/shared/api";
 import { vendasQuerySchema, type VendaDto } from "@padaria/shared/vendas";
-import { env } from "../env.js";
+import { empresaDoS2, limiteLeituraS2 as limiteLeitura } from "./leitura-s2.auth.js";
 import { listarPdvs } from "../pdvs/pdvs.service.js";
 import { listarFormasPagamento } from "../formas-pagamento/formas-pagamento.service.js";
 import { listarTurnos } from "../turnos/turnos.service.js";
@@ -20,42 +19,6 @@ import { listarVendasPaginadas, totaisVendas } from "./vendas.service.js";
 
 // O S2 nao escolhe empresa, cliente nem caixa: a empresa vem da configuracao e o resto nao e exposto.
 const consultaS2Schema = vendasQuerySchema.omit({ empresaId: true, clienteId: true, caixaId: true });
-
-// Limite por token (hash), nao por IP: sem trustProxy todos chegam com o IP do proxy, e quem nao tem token
-// nao pode gastar o balde do S2. Pedido sem Bearer cai num balde proprio, pequeno.
-function chaveDoLimite(request: FastifyRequest): string {
-  const bearer = /^Bearer\s+(.+)$/iu.exec(request.headers.authorization ?? "")?.[1]?.trim();
-  return bearer ? `s2:${createHash("sha256").update(bearer).digest("hex").slice(0, 16)}` : `s2-sem-token:${request.ip}`;
-}
-const limiteLeitura = {
-  config: {
-    rateLimit: {
-      max: (request: FastifyRequest) => (request.headers.authorization ? 300 : 20),
-      timeWindow: "1 minute",
-      keyGenerator: chaveDoLimite
-    }
-  }
-};
-
-function mesmoToken(recebido: string, esperado: string): boolean {
-  const a = Buffer.from(recebido);
-  const b = Buffer.from(esperado);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** Valida o Bearer do S2 e devolve a empresa configurada, ou responde o erro e devolve null. */
-function empresaDoS2(request: FastifyRequest, reply: FastifyReply): string | null {
-  if (env.S2_LEITURA_TOKEN.length < 32 || !env.S2_LEITURA_EMPRESA_ID) {
-    erro(reply, 503, "Leitura do S2 não configurada.", "S2_LEITURA_DESLIGADA");
-    return null;
-  }
-  const bearer = /^Bearer\s+(.+)$/iu.exec(request.headers.authorization ?? "")?.[1]?.trim() ?? "";
-  if (!bearer || !mesmoToken(bearer, env.S2_LEITURA_TOKEN)) {
-    erro(reply, 401, "Token de leitura inválido.", "S2_TOKEN_INVALIDO");
-    return null;
-  }
-  return env.S2_LEITURA_EMPRESA_ID;
-}
 
 // Lista BRANCA: so sai o que a tela do S2 usa. Campo novo no VendaDto nao vaza sozinho para o outro sistema.
 function paraOS2(venda: VendaDto) {

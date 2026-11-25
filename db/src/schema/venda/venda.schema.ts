@@ -1,4 +1,7 @@
 export {
+  creareComandaItens,
+  creareComandas,
+  creareComandasRetrato,
   integracoesCamposConfig,
   integracoesChaves,
   integracoesHistorico,

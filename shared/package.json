@@ -41,6 +41,11 @@
       "development": "./src/campanhas/index.ts",
       "default": "./dist/campanhas/index.js"
     },
+    "./comandas-creare": {
+      "types": "./dist/comandas-creare/index.d.ts",
+      "development": "./src/comandas-creare/index.ts",
+      "default": "./dist/comandas-creare/index.js"
+    },
     "./auditoria-pdv": {
       "types": "./dist/auditoria-pdv/index.d.ts",
       "development": "./src/auditoria-pdv/index.ts",
