@@ -87,6 +87,40 @@ test("montarComandas: data local vira instante, cancelado e S, texto vazio vira 
   assert.equal(c.itens[1].lancadoEm, null);
 });
 
+test("montarComandas: hora de puxar e venda da importacao; valor da venda so na fechada; nome do funcionario", () => {
+  const [fechada, puxada] = montarComandas(
+    [comanda(20, 5), comanda(21, 2)],
+    [
+      {
+        idItem: 9,
+        idComanda: 20,
+        descricao: "PAO",
+        quantidade: 1,
+        valorTotal: 5,
+        funcionarioCodigo: 3,
+        funcionarioNome: " ANA ",
+        itemCancelado: "N"
+      }
+    ],
+    {
+      importacoes: [
+        { idComanda: 20, puxadaEm: "2026-11-25 08:09:30", vendaCreareId: 777 },
+        { idComanda: 21, puxadaEm: "2026-11-25 09:00:00", vendaCreareId: 778 }
+      ],
+      vendas: [
+        { idVendaBalcao: 777, valorTotal: 13.4 },
+        { idVendaBalcao: 778, valorTotal: 99 }
+      ]
+    }
+  );
+  assert.equal(fechada.puxadaEm, "2026-11-25T11:09:30.000Z");
+  assert.equal(fechada.vendaCreareId, 777);
+  assert.equal(fechada.vendaValorTotal, 13.4);
+  assert.equal(fechada.itens[0].funcionarioNome, "ANA");
+  assert.equal(puxada.vendaCreareId, 778);
+  assert.equal(puxada.vendaValorTotal, null);
+});
+
 test("dividirEmLotes: no maximo 100 comandas por lote", () => {
   const muitas = Array.from({ length: 250 }, (_, i) => ({ idComanda: i + 1, itens: [] }));
   assert.deepEqual(
@@ -101,7 +135,15 @@ test("sincronizarComandas: retrato, novas pela PK, conferir e lotes — tudo em 
     ["STATUS_COMANDA IN (1, 2, 4)", () => [{ idComanda: 10 }, { idComanda: 30 }]],
     ["WHERE c.ID_COMANDA > ?", ([desde]) => (desde === 30 ? [{ idComanda: 31 }, { idComanda: 32 }] : [])],
     ["FROM comanda c\nWHERE c.ID_COMANDA IN", (ids) => ids.map((id) => comanda(id, id === 20 || id === 31 ? 5 : 1))],
-    ["FROM item_comanda", () => []]
+    ["FROM item_comanda", () => []],
+    [
+      "FROM importacao_comanda_venda_balcao",
+      (ids) =>
+        ids
+          .filter((id) => id === 20)
+          .map((id) => ({ idComanda: id, puxadaEm: "2026-11-25 08:09:00", vendaCreareId: 555 }))
+    ],
+    ["FROM venda_balcao", (ids) => ids.map((id) => ({ idVendaBalcao: id, valorTotal: 12.5 }))]
   ]);
   const lotes = [];
   const resultado = await sincronizarComandas({
@@ -114,6 +156,8 @@ test("sincronizarComandas: retrato, novas pela PK, conferir e lotes — tudo em 
       },
       lote: async (comandas) => {
         lotes.push(comandas.map((c) => c.idComanda));
+        const vinte = comandas.find((c) => c.idComanda === 20);
+        if (vinte) assert.equal(vinte.vendaValorTotal, 12.5);
         return { gravadas: comandas.length, semMudanca: 0 };
       }
     }

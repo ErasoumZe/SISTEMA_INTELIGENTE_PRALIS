@@ -9,7 +9,8 @@ import { dataHoraParaIso } from "./payload.js";
 //  1. le os IDs em aberto (status 1, 2, 4) e manda o retrato; o sistema responde o maior ID que ja tem e quais ele
 //     ainda tem em aberto e o CREARE nao (fecharam ou foram canceladas);
 //  2. le as novas (ID > maior; na 1a vez, os ultimos 7 dias, achados por busca binaria na PK), as em aberto e as
-//     de conferir, com os itens, e manda em lotes.
+//     de conferir, com os itens (e o nome de quem lancou), a hora em que o caixa puxou e a venda que nasceu delas
+//     (importacao_comanda_venda_balcao, pelo indice em ID_COMANDA; o log nao e lido, nao tem indice), e manda em lotes.
 
 export const DIAS_BACKFILL_COMANDAS = 7;
 const MAX_COMANDAS_POR_LOTE = 100;
@@ -92,7 +93,14 @@ const instante = (valor, offset) => {
   return dataHoraParaIso(texto, offset) || null;
 };
 
-export function montarComandas(comandas, itens, { offsetFuso = "-03:00" } = {}) {
+/**
+ * `importacoes`: linhas de comandas-importacao-ids.sql (hora em que o caixa puxou e a venda que nasceu da comanda).
+ * `vendas`: linhas de comandas-vendas-ids.sql (valor final da venda). O valor da venda so vai para comanda fechada
+ * (status 5): enquanto esta no caixa a venda ainda esta sendo montada.
+ */
+export function montarComandas(comandas, itens, { offsetFuso = "-03:00", importacoes = [], vendas = [] } = {}) {
+  const importacaoPorComanda = new Map(importacoes.map((linha) => [Number(linha.idComanda), linha]));
+  const valorPorVenda = new Map(vendas.map((linha) => [Number(linha.idVendaBalcao), dinheiro(linha.valorTotal)]));
   const itensPorComanda = new Map();
   for (const item of itens) {
     const lista = itensPorComanda.get(Number(item.idComanda)) ?? [];
@@ -102,6 +110,9 @@ export function montarComandas(comandas, itens, { offsetFuso = "-03:00" } = {}) 
   return comandas.map((comanda) => {
     const id = Number(comanda.idComanda);
     const brutos = itensPorComanda.get(id) ?? [];
+    const importacao = importacaoPorComanda.get(id);
+    const vendaId = importacao?.vendaCreareId ? Number(importacao.vendaCreareId) : null;
+    const status = Math.trunc(numero(comanda.status));
     if (brutos.length > MAX_ITENS_POR_COMANDA) {
       console.warn(
         `[comandas] comanda ${comanda.numero} (id ${id}) com ${brutos.length} itens: mandando os ${MAX_ITENS_POR_COMANDA} primeiros.`
@@ -111,20 +122,19 @@ export function montarComandas(comandas, itens, { offsetFuso = "-03:00" } = {}) 
       idComanda: id,
       numero: Math.max(0, Math.trunc(numero(comanda.numero))),
       mesa: comanda.mesa == null ? null : Math.max(0, Math.trunc(numero(comanda.mesa))),
-      status: Math.trunc(numero(comanda.status)),
+      status,
       abertaEm: instante(comanda.abertaEm, offsetFuso),
       ultimoLancamentoEm: instante(comanda.ultimoLancamentoEm, offsetFuso),
-      // A hora de puxar e a venda vinculada vem dos logs do CREARE (log_comanda_venda_balcao e
-      // importacao_comanda_venda_balcao), lidos quando as colunas e indices forem confirmados.
-      puxadaEm: null,
+      puxadaEm: importacao ? instante(importacao.puxadaEm, offsetFuso) : null,
       fechadaEm: instante(comanda.fechadaEm, offsetFuso),
       valorSubtotal: dinheiro(comanda.valorSubtotal),
       valorDesconto: dinheiro(comanda.valorDesconto),
       valorTotal: dinheiro(comanda.valorTotal),
       nomeCliente: textoOuNulo(comanda.nomeCliente),
       observacao: textoOuNulo(comanda.observacao),
-      vendaCreareId: null,
-      vendaValorTotal: null,
+      vendaCreareId: vendaId,
+      vendaValorTotal:
+        status === 5 && vendaId !== null && valorPorVenda.has(vendaId) ? valorPorVenda.get(vendaId) : null,
       itens: brutos.slice(0, MAX_ITENS_POR_COMANDA).map((item) => ({
         idItem: Number(item.idItem),
         produtoCodigo: textoOuNulo(item.produtoCodigo),
@@ -132,7 +142,7 @@ export function montarComandas(comandas, itens, { offsetFuso = "-03:00" } = {}) 
         quantidade: Number(numero(item.quantidade).toFixed(3)),
         valorTotal: dinheiro(item.valorTotal),
         funcionarioCodigo: textoOuNulo(item.funcionarioCodigo),
-        funcionarioNome: null,
+        funcionarioNome: textoOuNulo(item.funcionarioNome),
         cancelado:
           String(item.itemCancelado ?? "")
             .trim()
@@ -206,11 +216,12 @@ export async function sincronizarComandas({ pool, api, hoje, offsetFuso }) {
       .filter((id) => id <= teto)
       .sort((a, b) => a - b);
     if (!ids.length) return [];
-    const [linhas, itens] = [
-      await porIds(executar, "comandas-ids.sql", ids),
-      await porIds(executar, "comandas-itens-ids.sql", ids)
-    ];
-    return montarComandas(linhas, itens, { offsetFuso });
+    const linhas = await porIds(executar, "comandas-ids.sql", ids);
+    const itens = await porIds(executar, "comandas-itens-ids.sql", ids);
+    const importacoes = await porIds(executar, "comandas-importacao-ids.sql", ids);
+    const idsVendas = [...new Set(importacoes.map((linha) => Number(linha.vendaCreareId)).filter((id) => id > 0))];
+    const vendas = idsVendas.length ? await porIds(executar, "comandas-vendas-ids.sql", idsVendas) : [];
+    return montarComandas(linhas, itens, { offsetFuso, importacoes, vendas });
   });
 
   const contagem = {
