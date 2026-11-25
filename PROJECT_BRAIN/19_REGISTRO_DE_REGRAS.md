@@ -1861,3 +1861,20 @@ da folha do relatório do CREARE".
 - **Não mexe:** solicitações e rodadas (são da padaria), preço-base vigente, estoque e financeiro.
 - **Opção recusada:** "apagar tudo, inclusive dinheiro" — alteraria caixa, fechamentos conferidos, estoque e o
   preço-base futuro sem rastro.
+
+### R-248 — Comandas do CREARE no S2: painel "VND - Sistema comandas" (Marco, 25/11/2026)
+
+- **Onde:** S2 (sistema do Rodrigo), Entradas · Vendas / API, cartão **VND - Sistema comandas**, só administrador.
+- **Caminho:** robô da loja (MySQL do CREARE, **só leitura**: `START TRANSACTION READ ONLY`, nunca filtra por
+  `DTHR_ABERTURA`) → S1 (`creare_comandas`, `creare_comanda_itens`, `creare_comandas_retrato`) → S2 (Bearer do S2).
+  Comanda é só leitura e exibição: nunca vira lançamento financeiro no S1.
+- **STATUS_COMANDA do CREARE** (deduzido, não documentado): 1 aberta; 2 puxada pelo caixa, esperando pagamento;
+  3 cancelada; 4 desconhecido (antigas, nunca fechadas); 5 fechada (virou venda).
+- **Situação mostrada:** fechada (5); cancelada (3); **esquecida** = status 4, ou status 1/2 sem lançamento há
+  mais de 24 h; **conta** = status 1/2 aberta há mais de 24 h mas ainda recebendo itens (regra genérica, sem número
+  fixo; ex.: comandas 1 e 430) — fica fora do alerta; **abandonada** = status 2 puxada há mais de 1 h (hora do log
+  "IMPORTOU A COMANDA" do CREARE; sem ela, o último lançamento, e a tela avisa que é aproximação); puxada; aberta.
+- **Valor da comanda × valor da venda:** mostrar os dois e a diferença (em 145 de 393 comandas diferiram: item
+  somado no caixa ou desconto).
+- **Nome do cliente:** aparece quando preenchido. **Backfill:** últimos 7 dias. **Retenção no S1:** fechadas e
+  canceladas por 1 ano.
