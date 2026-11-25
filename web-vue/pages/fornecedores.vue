@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { permissoes } from "~/utils/domain";
+import { temPermissao } from "@padaria/shared";
+import type { Permissao } from "@padaria/shared";
+import { mensagemErro, permissoes } from "~/utils/domain";
 import { filtrarFornecedores, fornecedorPendente } from "~/utils/fornecedores-pendentes";
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
@@ -8,6 +10,40 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
 const busca = ref("");
 const filtroWhatsapp = ref<"todos" | "com" | "sem">("todos");
 const filtroSituacao = ref<"todos" | "ativos" | "inativos">("todos");
+
+// Exclusão (25/11/2026): só sai fornecedor sem histórico. Com histórico a API responde 409 e a
+// mensagem orienta marcar como inativo — histórico de compra e de lançamento nunca é apagado.
+type Linha = Record<string, string | undefined>;
+type ContextoExclusao = {
+  empresaId: string;
+  notificar: (mensagem: string, cor?: "success" | "error") => void;
+  recarregarDadosCadastro: () => Promise<void> | void;
+};
+const { apiDelete } = useApi();
+const paraExcluir = ref<{ linha: Linha; ctx: ContextoExclusao } | null>(null);
+const excluindoId = ref("");
+
+const podeExcluir = (permissoesUsuario: Permissao[] | undefined) =>
+  temPermissao(permissoesUsuario ?? [], "cadastro_fornecedores_excluir");
+
+async function confirmarExclusao() {
+  const alvo = paraExcluir.value;
+  if (!alvo?.linha.id) return;
+  excluindoId.value = alvo.linha.id;
+  try {
+    await apiDelete(
+      `/api/fornecedores/${encodeURIComponent(alvo.linha.id)}?empresaId=${encodeURIComponent(alvo.ctx.empresaId)}`
+    );
+    alvo.ctx.notificar(`"${alvo.linha.nome ?? "Fornecedor"}" excluído.`);
+    paraExcluir.value = null;
+    await alvo.ctx.recarregarDadosCadastro();
+  } catch (erro) {
+    alvo.ctx.notificar(mensagemErro(erro), "error");
+    paraExcluir.value = null;
+  } finally {
+    excluindoId.value = "";
+  }
+}
 </script>
 
 <template>
@@ -55,13 +91,35 @@ const filtroSituacao = ref<"todos" | "ativos" | "inativos">("todos");
       :colunas="ctx.colunasCadastro"
       :linhas="filtrarFornecedores(ctx.linhasCadastro, { busca, whatsapp: filtroWhatsapp, situacao: filtroSituacao })"
       :permissoes-filtro="[...permissoes]"
-      :pode-excluir="false"
+      :pode-excluir="podeExcluir(ctx.sessao?.perfil?.permissoes)"
+      excluir-como-icone
+      :excluindo-id="excluindoId"
       @acionar="ctx.abrirCadastroNovo"
       @importar="ctx.abrirImportacao"
       @exportar="ctx.abrirExportacao"
       @editar="ctx.abrirCadastroEditar"
       @extra="ctx.lidarExtraCadastro"
+      @excluir="paraExcluir = { linha: $event, ctx }"
     />
+    <v-dialog :model-value="paraExcluir !== null" max-width="460" @update:model-value="paraExcluir = null">
+      <v-card>
+        <v-card-title>Excluir fornecedor</v-card-title>
+        <v-card-text class="d-grid ga-3">
+          <p>
+            Excluir <strong>{{ paraExcluir?.linha.nome }}</strong> do cadastro? O catálogo de produtos dele sai junto.
+            Não dá para desfazer.
+          </p>
+          <p class="text-medium-emphasis text-body-2">
+            Se ele já tiver pedido, cotação ou lançamento, o sistema não exclui: nesse caso edite e marque como inativo.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="Boolean(excluindoId)" @click="paraExcluir = null">Cancelar</v-btn>
+          <v-btn color="error" variant="flat" :loading="Boolean(excluindoId)" @click="confirmarExclusao">Excluir</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </AppWorkspace>
 </template>
 
