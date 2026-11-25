@@ -11,8 +11,8 @@ const busca = ref("");
 const filtroWhatsapp = ref<"todos" | "com" | "sem">("todos");
 const filtroSituacao = ref<"todos" | "ativos" | "inativos">("todos");
 
-// Exclusão (25/11/2026): só sai fornecedor sem histórico. Com histórico a API responde 409 e a
-// mensagem orienta marcar como inativo — histórico de compra e de lançamento nunca é apagado.
+// Exclusão (25/11/2026): sai junto a "compra sem efeito" (cotações e pedidos nunca recebidos). Com
+// dinheiro, estoque ou histórico de preço a API responde 409 e a mensagem orienta marcar como inativo.
 type Linha = Record<string, string | undefined>;
 type ContextoExclusao = {
   empresaId: string;
@@ -106,11 +106,12 @@ async function confirmarExclusao() {
         <v-card-title>Excluir fornecedor</v-card-title>
         <v-card-text class="d-grid ga-3">
           <p>
-            Excluir <strong>{{ paraExcluir?.linha.nome }}</strong> do cadastro? O catálogo de produtos dele sai junto.
-            Não dá para desfazer.
+            Excluir <strong>{{ paraExcluir?.linha.nome }}</strong> do cadastro? Saem junto o catálogo de produtos dele,
+            as cotações e os pedidos que nunca foram recebidos. Não dá para desfazer.
           </p>
           <p class="text-medium-emphasis text-body-2">
-            Se ele já tiver pedido, cotação ou lançamento, o sistema não exclui: nesse caso edite e marque como inativo.
+            Se ele tiver despesa, mercadoria, retirada, nota fiscal, histórico de preço ou pedido já recebido, o sistema
+            não exclui: nesse caso edite e marque como inativo.
           </p>
         </v-card-text>
         <v-card-actions>

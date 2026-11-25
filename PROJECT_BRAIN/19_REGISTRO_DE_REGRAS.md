@@ -1848,3 +1848,16 @@ da folha do relatório do CREARE".
     turnos (Conta TNP-PC-CXPDV-1 a 4).
 - **Quem movimenta:** contas de banco e fluxo, Administrador e Tesouraria; Cofre Troco e Fluxo Caixa também o
   Gerente (origem da transferência sem lacre para os PDVs abertos).
+
+### R-247 — Excluir fornecedor leva junto só a compra sem efeito (José, 25/11/2026)
+
+- **Onde:** Fornecedores, lixeira na coluna Ações (permissão `cadastro_fornecedores_excluir`), com confirmação.
+- **Sai junto:** o catálogo fornecedor–produto e os apelidos dele, os convites de cotação (com respostas e
+  envios de WhatsApp) e os **pedidos que nunca foram recebidos**, com itens, eventos, cotação antiga por link e as
+  adjudicações da compra automática.
+- **Bloqueia** (o sistema não exclui e orienta editar e marcar como **inativo**): despesa, mercadoria, retirada,
+  nota fiscal, histórico de preço (planilha ou recebimento) e **pedido com recebimento, devolução ou entrada no
+  estoque**. São dinheiro, estoque ou referência de preço: histórico financeiro nunca é apagado pela tela.
+- **Não mexe:** solicitações e rodadas (são da padaria), preço-base vigente, estoque e financeiro.
+- **Opção recusada:** "apagar tudo, inclusive dinheiro" — alteraria caixa, fechamentos conferidos, estoque e o
+  preço-base futuro sem rastro.

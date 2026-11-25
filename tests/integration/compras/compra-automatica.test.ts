@@ -7,6 +7,7 @@ import { restaurarBaseImportada } from "../../setup/compras.js";
 
 const FORN_A = "11111111-1111-4111-8111-11111111aa01";
 const FORN_B = "11111111-1111-4111-8111-11111111aa02";
+const FORN_EXCLUIR = "11111111-1111-4111-8111-11111111aa03";
 const IMPORTACAO = "11111111-1111-4111-8111-11111111ab01";
 const IMPORTACAO_ITEM = "11111111-1111-4111-8111-11111111ab02";
 const PRECO_BASE = "11111111-1111-4111-8111-11111111ab03";
@@ -199,5 +200,49 @@ describe("compra automatica integration (E5)", () => {
         rodada.id
       ])
     ).resolves.toBeTruthy();
+  });
+
+  // Exclusao de fornecedor (decisao do Jose, 25/11/2026): quem so cotou e ganhou compra automatica,
+  // sem receber nada, sai com toda a "compra sem efeito" — convite, resposta, adjudicacao e pedido
+  // confirmado. A rodada e a solicitacao sao da padaria e ficam.
+  it("excluir fornecedor que ganhou compra automatica (nao recebida) apaga a compra sem efeito", async () => {
+    await executarSql(
+      "insert into fornecedores (id, empresa_id, nome, whatsapp, situacao) values ($1,$2,'Auto Excluir','11999992203','ativo') on conflict (id) do nothing",
+      [FORN_EXCLUIR, idsTeste.empresaA]
+    );
+    const rodada = await abrir({ fornecedores: [FORN_EXCLUIR] });
+    const token = rodada.convites[0]!.token;
+    const item = await conviteItemId(token);
+    const resp = await responder(token, { itens: [{ conviteItemId: item, indisponivel: false, valorUnitario: 8 }] });
+    expect(resp.statusCode, resp.body).toBe(200);
+    const pedido = await consultarUm<{ id: string; status: string }>(
+      "select id, status from pedidos where rodada_id = $1 and fornecedor_id = $2",
+      [rodada.id, FORN_EXCLUIR]
+    );
+    expect(pedido?.status).toBe("confirmado");
+
+    const exclusao = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/fornecedores/${FORN_EXCLUIR}?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(exclusao.statusCode, exclusao.body).toBe(204);
+
+    await expect(consultarUm("select id from fornecedores where id = $1", [FORN_EXCLUIR])).resolves.toBeNull();
+    await expect(consultarUm("select id from pedidos where id = $1", [pedido!.id])).resolves.toBeNull();
+    await expect(
+      consultarUm("select id from compras_adjudicacoes where fornecedor_id = $1", [FORN_EXCLUIR])
+    ).resolves.toBeNull();
+    await expect(
+      consultarUm("select id from compras_rodadas_convites where fornecedor_id = $1", [FORN_EXCLUIR])
+    ).resolves.toBeNull();
+    await expect(
+      consultarUm(
+        "select p.id from compras_propostas p left join compras_rodadas_convites c on c.id = p.convite_id where c.id is null",
+        []
+      )
+    ).resolves.toBeNull();
+    // A rodada (da padaria) continua.
+    await expect(consultarUm("select id from compras_rodadas where id = $1", [rodada.id])).resolves.toBeTruthy();
   });
 });
