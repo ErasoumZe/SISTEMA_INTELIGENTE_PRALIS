@@ -1,6 +1,13 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { enviarConciliacao, enviarVendaIntegracao, verificarApi } from "./api-client.js";
+import {
+  enviarConciliacao,
+  enviarLoteComandas,
+  enviarRetratoComandas,
+  enviarVendaIntegracao,
+  verificarApi
+} from "./api-client.js";
+import { sincronizarComandas } from "./comandas.js";
 import {
   buscarConciliacaoDia,
   buscarIdsVendasFechadasDia,
@@ -144,6 +151,9 @@ export async function executarCiclo(config, caminhos) {
       buscarIdsVendasFechadasDia(pool, hoje)
     ]);
     porPdvCreare = montarPorPdvConciliacao(agregado, idsLinhas);
+
+    // Comandas (best-effort): falha aqui nunca derruba o ciclo — as vendas ja foram entregues.
+    if (sync.comandas) await sincronizarComandasDoCiclo(config, pool, hoje, throttle);
   } finally {
     await pool.end();
   }
@@ -164,6 +174,36 @@ export async function executarCiclo(config, caminhos) {
   const conciliacao = await conciliarDia(config, hoje, porPdvCreare);
 
   return { ...contagem, filaPendente: falhas.length, conciliacao };
+}
+
+async function sincronizarComandasDoCiclo(config, pool, hoje, throttle) {
+  const destino = { apiUrl: config.padaria.apiUrl, codigoIntegracao: config.padaria.codigoIntegracao };
+  const opcoesRetry = { tentativas: config.sincronizacao.retryTentativas, baseMs: config.sincronizacao.retryBaseMs };
+  const comRetry = (chamada) =>
+    enviarComRetry(async () => {
+      await throttle();
+      return chamada();
+    }, opcoesRetry);
+  try {
+    const c = await sincronizarComandas({
+      pool,
+      hoje,
+      offsetFuso: config.sincronizacao.offsetFuso,
+      api: {
+        retrato: async (abertasIds) =>
+          (await comRetry(() => enviarRetratoComandas({ ...destino, abertasIds }))) ?? {
+            maiorIdComanda: null,
+            conferirIds: []
+          },
+        lote: (comandas) => comRetry(() => enviarLoteComandas({ ...destino, comandas }))
+      }
+    });
+    console.log(
+      `[comandas] abertas=${c.abertas} conferir=${c.conferir} enviadas=${c.enviadas} gravadas=${c.gravadas} sem_mudanca=${c.semMudanca}`
+    );
+  } catch (erro) {
+    console.error(`[comandas] falha no ciclo das comandas: ${erro instanceof Error ? erro.message : erro}`);
+  }
 }
 
 // Compara o agregado do CREARE com o sistema e loga PDV a PDV. A API e quem decide divergencia e

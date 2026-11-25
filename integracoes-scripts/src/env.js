@@ -43,7 +43,9 @@ export function obterConfig() {
       maxReqPorSegundo: obterNumero("SYNC_MAX_REQ_POR_SEGUNDO", 4),
       estadoDir: process.env.SYNC_ESTADO_DIR?.trim() || ".estado",
       // O CREARE fornece hora local; -03:00 converte o horario de Brasilia para o instante UTC real.
-      offsetFuso: process.env.SYNC_FUSO_OFFSET?.trim() || "-03:00"
+      offsetFuso: process.env.SYNC_FUSO_OFFSET?.trim() || "-03:00",
+      // Comandas do CREARE (R-248): ligado por padrao; SYNC_COMANDAS=0 desliga sem mexer no codigo.
+      comandas: process.env.SYNC_COMANDAS?.trim() !== "0"
     }
   };
 }

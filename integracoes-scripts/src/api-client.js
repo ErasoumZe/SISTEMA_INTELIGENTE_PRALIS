@@ -73,3 +73,41 @@ export async function enviarVendaIntegracao({ apiUrl, codigoIntegracao, payload 
 
   return corpo;
 }
+
+// Comandas do CREARE (R-248): mesma chave das vendas. O retrato devolve { maiorIdComanda, conferirIds } e o lote
+// devolve { recebidas, gravadas, semMudanca }.
+async function postarComandas({ apiUrl, codigoIntegracao, caminho, corpo, rotulo }) {
+  const resposta = await fetch(`${apiUrl}${caminho}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": codigoIntegracao },
+    body: JSON.stringify(corpo)
+  });
+  const corpoTexto = await resposta.text();
+  if (!resposta.ok) {
+    throw new ErroHttp(`Falha ao enviar ${rotulo}: HTTP ${resposta.status} ${corpoTexto.slice(0, 300)}`, {
+      status: resposta.status,
+      retryAfterMs: lerRetryAfterMs(resposta)
+    });
+  }
+  return corpoTexto ? (JSON.parse(corpoTexto)?.data ?? null) : null;
+}
+
+export function enviarRetratoComandas({ apiUrl, codigoIntegracao, abertasIds }) {
+  return postarComandas({
+    apiUrl,
+    codigoIntegracao,
+    caminho: "/api/integracoes/comandas/retrato",
+    corpo: { abertasIds },
+    rotulo: "o retrato das comandas"
+  });
+}
+
+export function enviarLoteComandas({ apiUrl, codigoIntegracao, comandas }) {
+  return postarComandas({
+    apiUrl,
+    codigoIntegracao,
+    caminho: "/api/integracoes/comandas",
+    corpo: { comandas },
+    rotulo: `o lote de ${comandas.length} comanda(s)`
+  });
+}

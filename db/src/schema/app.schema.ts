@@ -6082,3 +6082,77 @@ export const comprasAdjudicacoes = pgTable(
     index("compras_adjudicacoes_empresa_fornecedor_idx").on(table.empresaId, table.fornecedorId)
   ]
 );
+
+// Comandas do CREARE (R-248). O robo da loja manda; o S2 le pelo S1. So leitura e exibicao: comanda nunca vira
+// lancamento financeiro aqui. Chave natural = (empresa, ID_COMANDA do CREARE). Fechadas e canceladas ficam 1 ano.
+export const creareComandas = pgTable(
+  "creare_comandas",
+  {
+    empresaId,
+    idComanda: bigint("id_comanda", { mode: "number" }).notNull(),
+    numero: integer("numero").notNull(),
+    mesa: integer("mesa"),
+    // STATUS_COMANDA do CREARE: 1 aberta, 2 puxada no caixa, 3 cancelada, 4 desconhecido, 5 fechada.
+    status: smallint("status").notNull(),
+    abertaEm: timestamp("aberta_em", { withTimezone: true }),
+    ultimoLancamentoEm: timestamp("ultimo_lancamento_em", { withTimezone: true }),
+    // Do log do CREARE ("IMPORTOU A COMANDA"); null quando o log nao traz.
+    puxadaEm: timestamp("puxada_em", { withTimezone: true }),
+    fechadaEm: timestamp("fechada_em", { withTimezone: true }),
+    valorSubtotal: valorMonetario("valor_subtotal").notNull().default("0"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    valorTotal: valorMonetario("valor_total").notNull().default("0"),
+    nomeCliente: text("nome_cliente"),
+    observacao: text("observacao"),
+    // Venda do CREARE que nasceu da comanda (importacao_comanda_venda_balcao) e o valor dela: em 145 de 393
+    // comandas o valor da venda difere do da comanda (item somado no caixa ou desconto).
+    vendaCreareId: bigint("venda_creare_id", { mode: "number" }),
+    vendaValorTotal: valorMonetario("venda_valor_total"),
+    // Hash do conteudo recebido: reenvio igual nao regrava a comanda nem os itens.
+    conteudoHash: text("conteudo_hash").notNull(),
+    atualizadaEm: timestamp("atualizada_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({ columns: [table.empresaId, table.idComanda] }),
+    index("creare_comandas_status_idx").on(table.empresaId, table.status),
+    index("creare_comandas_fechada_idx").on(table.empresaId, table.fechadaEm),
+    index("creare_comandas_numero_idx").on(table.empresaId, table.numero)
+  ]
+);
+
+export const creareComandaItens = pgTable(
+  "creare_comanda_itens",
+  {
+    empresaId: uuid("empresa_id").notNull(),
+    idItem: bigint("id_item", { mode: "number" }).notNull(),
+    idComanda: bigint("id_comanda", { mode: "number" }).notNull(),
+    produtoCodigo: text("produto_codigo"),
+    descricao: text("descricao").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    valorTotal: valorMonetario("valor_total").notNull(),
+    funcionarioCodigo: text("funcionario_codigo"),
+    funcionarioNome: text("funcionario_nome"),
+    cancelado: boolean("cancelado").notNull().default(false),
+    motivoCancelamento: text("motivo_cancelamento"),
+    lancadoEm: timestamp("lancado_em", { withTimezone: true })
+  },
+  (table) => [
+    // A comanda entra na chave: nada garante que o ID_ITEM_COMANDA do CREARE seja unico fora da comanda.
+    primaryKey({ columns: [table.empresaId, table.idComanda, table.idItem] }),
+    foreignKey({
+      name: "creare_comanda_itens_comanda_fk",
+      columns: [table.empresaId, table.idComanda],
+      foreignColumns: [creareComandas.empresaId, creareComandas.idComanda]
+    }).onDelete("cascade"),
+    index("creare_comanda_itens_funcionario_idx").on(table.empresaId, table.funcionarioCodigo)
+  ]
+);
+
+// Ultimo retrato do robo por empresa: quando chegou e quantas comandas o CREARE tinha em aberto.
+export const creareComandasRetrato = pgTable("creare_comandas_retrato", {
+  empresaId: uuid("empresa_id")
+    .primaryKey()
+    .references(() => empresas.id, { onDelete: "cascade" }),
+  recebidoEm: timestamp("recebido_em", { withTimezone: true }).notNull().defaultNow(),
+  abertas: integer("abertas").notNull()
+});

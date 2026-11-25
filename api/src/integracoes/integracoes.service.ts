@@ -746,7 +746,7 @@ export async function salvarVinculoIntegracao(payload: SalvarVinculoIntegracaoPa
 
 // Autenticacao da chave de integracao de vendas: comparacao de hash em tempo constante. Extraida
 // para a ingestao e a conciliacao usarem exatamente a MESMA porta (mesma chave, mesmo erro).
-async function autenticarChaveVendas(chaveApi: string) {
+export async function autenticarChaveVendas(chaveApi: string) {
   const hashRecebido = hashChaveIntegracao(chaveApi);
   const chave = await buscarChavePorCodigoHashRepository(hashRecebido);
   if (!chave || !compararHashConstante(hashRecebido, chave.codigoHash)) {

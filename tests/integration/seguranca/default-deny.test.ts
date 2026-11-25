@@ -72,6 +72,10 @@ describe("seguranca default-deny integration", () => {
       "/api/creare/lotes/pendente",
       "/api/creare/produtos.txt",
       "/api/integracoes",
+      // R-248: o robo da loja manda as comandas do CREARE com a mesma chave das vendas (x-api-key).
+      // Testado em comandas/comandas-creare.test.ts.
+      "/api/integracoes/comandas",
+      "/api/integracoes/comandas/retrato",
       "/api/integracoes/conciliacao",
       "/api/me",
       "/api/rodada",
@@ -84,6 +88,11 @@ describe("seguranca default-deny integration", () => {
       "/api/rodada/separacao",
       // Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio (S2_LEITURA_TOKEN), so GET.
       // Testado em vendas/leitura-s2.test.ts.
+      // R-248: o S2 le as comandas do CREARE pelo mesmo Bearer das vendas. Testado em comandas/comandas-creare.test.ts.
+      "/api/s2/comandas",
+      "/api/s2/comandas/:idComanda",
+      "/api/s2/comandas/indicadores",
+      "/api/s2/comandas/opcoes",
       "/api/s2/vendas",
       "/api/s2/vendas/opcoes",
       "/api/s2/vendas/totais",

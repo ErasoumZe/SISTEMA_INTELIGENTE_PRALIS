@@ -43,6 +43,7 @@ import { registrarRotasMenuEmpresa } from "./menu-empresa/menu-empresa.controlle
 import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
 import { registrarRotasLeituraS2 } from "./vendas/vendas-s2.controller.js";
+import { registrarRotasComandasCreare } from "./comandas-creare/comandas-creare.controller.js";
 import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
 import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
 import { registrarRotasPlanilhaTesouraria } from "./planilha-tesouraria/planilha-tesouraria.controller.js";
@@ -142,7 +143,15 @@ const rotasComAutenticacaoPropria = new Set([
   // Leitura das vendas pelo S2 (sistema do Rodrigo): Bearer proprio, so GET. Ver vendas-s2.controller.ts.
   "/api/s2/vendas",
   "/api/s2/vendas/totais",
-  "/api/s2/vendas/opcoes"
+  "/api/s2/vendas/opcoes",
+  // Comandas do CREARE (R-248): o robo entra pela chave de integracao; o S2 le pelo Bearer proprio.
+  // Ver comandas-creare.controller.ts.
+  "/api/integracoes/comandas",
+  "/api/integracoes/comandas/retrato",
+  "/api/s2/comandas",
+  "/api/s2/comandas/indicadores",
+  "/api/s2/comandas/opcoes",
+  "/api/s2/comandas/:idComanda"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -321,6 +330,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasMenuEmpresa(app);
   await registrarRotasVendas(app);
   await registrarRotasLeituraS2(app);
+  await registrarRotasComandasCreare(app);
   await registrarRotasVendasComprovantes(app);
   await registrarRotasDespesas(app);
   await registrarRotasDiscriminacaoIa(app);
